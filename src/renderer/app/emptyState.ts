@@ -57,7 +57,7 @@ export function mountEmptyState(host: HTMLElement, services: ShellServices): Emp
   });
   const allRecent = button('btn btn-link', { id: 'empty-recent-all' }, 'All recent files…');
   allRecent.addEventListener('click', () => {
-    void services.run('app.backstage.open', { page: 'recent' });
+    void services.run('app.ribbon.tab.file');
   });
   recentTile.append(
     el('h3.empty-tile-title', { id: 'empty-recent-title' }, 'Recent'),

@@ -81,6 +81,22 @@ order?, when? }` where `region` is `'document' | 'tab' | 'left-pane' | 'right-pa
 - `window:getState() → { maximized, fullScreen }` for the status bar / tests.
 - `window:list() → number` for tests.
 
+### Amendment (2026-09-07, after operator review)
+
+- The File tab is a **real ribbon tab**, not a full-window backstage: the operator uses Foxit
+  daily and wants every tab to open a horizontal ribbon under the strip. The shell builds its
+  groups from the same `BackstageSpec` slots (`src/renderer/app/ribbon/fileTab.ts`): Open,
+  Recent (dropdown), New (dropdown of creators), Save, Save As, Print, Properties, Preferences,
+  Exit. A slot with a `mount` page opens it in a non-modal dialog. The backstage component stays
+  reachable from the palette (`app.backstage.open`) but nothing in the chrome opens it.
+- The ribbon body is **compact by default** — one row of icon buttons with the label in the
+  tooltip, as Foxit 14 shows it; `app.ribbon.toggleLabels` (View › Panes, or the ribbon's
+  right-click menu) switches to the labelled Office-style groups. Persisted as
+  `ui.ribbon.compact`.
+- `RibbonItemSpec` `dropdown` / `split` `menu` may be a **function** returning the items, so a
+  menu reflects the moment it opens (recent files). `button` items accept `label` / `icon` /
+  `title` overrides for shell-generated buttons.
+
 ## Consequences
 
 - Feature modules describe _what_ control they want; the shell owns how it looks, its keyboard

@@ -15,8 +15,8 @@ test('launches to the empty shell', async () => {
   await expect(app.page).toHaveTitle('ynotPDF');
   await expect(app.page.locator('#empty-state')).toBeVisible();
   await expect(app.page.locator('#statusbar')).toContainText('Ready');
-  await expect(app.page.locator('#ribbon-tabs [role="tab"]')).toHaveCount(10);
-  await expect(app.page.locator('#ribbon-file')).toHaveText('File');
+  await expect(app.page.locator('#ribbon-tabs [role="tab"]')).toHaveCount(11);
+  await expect(app.page.locator('#ribbon-tabs [data-tab="file"]')).toHaveText('File');
   expect(await app.page.evaluate(() => document.documentElement.dataset['theme'])).toBe('graphite');
   // Shortcut hints are rendered per platform, never as the raw "Mod" token.
   const hint = await app.page.locator('#empty-state kbd').first().textContent();

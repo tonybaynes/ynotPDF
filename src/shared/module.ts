@@ -116,6 +116,9 @@ export type MenuItemSpec =
 /** Large or small ribbon button. */
 export type RibbonItemSize = 'large' | 'small';
 
+/** A menu: a static list, or a function evaluated each time the menu opens (recent files). */
+export type RibbonMenu = ReadonlyArray<MenuItemSpec> | (() => ReadonlyArray<MenuItemSpec>);
+
 /** One choice in a gallery, colour picker or select input. */
 export interface RibbonOptionSpec {
   readonly value: string;
@@ -130,12 +133,20 @@ export interface RibbonOptionSpec {
  */
 export type RibbonItemSpec =
   | string
-  | { readonly kind: 'button'; readonly command: string; readonly size?: RibbonItemSize }
+  | {
+      readonly kind: 'button';
+      readonly command: string;
+      readonly size?: RibbonItemSize;
+      /** Overrides for shell-generated buttons (the File tab); commands normally supply these. */
+      readonly label?: string;
+      readonly icon?: string;
+      readonly title?: string;
+    }
   | {
       /** Main action plus an arrow that opens `menu`. */
       readonly kind: 'split';
       readonly command: string;
-      readonly menu: ReadonlyArray<MenuItemSpec>;
+      readonly menu: RibbonMenu;
       readonly size?: RibbonItemSize;
     }
   | {
@@ -144,7 +155,7 @@ export type RibbonItemSpec =
       readonly id: string;
       readonly label: string;
       readonly icon?: string;
-      readonly menu: ReadonlyArray<MenuItemSpec>;
+      readonly menu: RibbonMenu;
       readonly size?: RibbonItemSize;
       readonly when?: WhenClause;
     }

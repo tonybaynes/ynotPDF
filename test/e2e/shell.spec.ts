@@ -75,7 +75,7 @@ test.beforeEach(async () => {
 
 test('the demo tab, its groups and every widget kind render', async () => {
   const tabs = app.page.locator('#ribbon-tabs [role="tab"]');
-  await expect(tabs).toHaveCount(10);
+  await expect(tabs).toHaveCount(11);
   await expect(app.page.locator('#ribbon-tabs [role="tab"][aria-selected="true"]')).toHaveAttribute(
     'data-tab',
     'home',
@@ -86,6 +86,10 @@ test('the demo tab, its groups and every widget kind render', async () => {
   // large / small buttons, a disabled one, a toggle
   await expect(item('demo.hello')).toHaveClass(/rb-large/);
   await expect(item('demo.small')).toHaveClass(/rb-small/);
+  // Compact (Foxit) row by default: labels live in the tooltip, icons stay visible.
+  await expect(app.page.locator('#ribbon')).toHaveClass(/ribbon-compact/);
+  await expect(item('demo.hello')).toHaveAttribute('title', /Demo: Hello/);
+  await expect(item('demo.hello').locator('.icon')).toBeVisible();
   await expect(item('demo.disabled')).toBeDisabled();
   await expect(item('demo.bold')).toHaveAttribute('aria-pressed', 'false');
   // split, dropdown, gallery, colour, number input, select input
@@ -241,6 +245,7 @@ test('groups collapse into a popup button when the window is narrow', async () =
   // assertions are about the mechanism, not fixed counts: narrow → some groups collapse into a
   // button that opens the group in a popup; as wide as the screen allows → no more than before.
   await app.run('app.ribbon.showTab', { tab: 'organize' });
+  expect(await app.run('app.ribbon.toggleLabels')).toBe(true); // labelled groups are the wide ones
   const collapsed = app.page.locator('#ribbon-body .rb-collapsed');
   const size = await app.electron.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0]?.getSize(),
@@ -272,6 +277,7 @@ test('groups collapse into a popup button when the window is narrow', async () =
     },
     [size?.[0] ?? 1280, size?.[1] ?? 800] as [number, number],
   );
+  expect(await app.run('app.ribbon.toggleLabels')).toBe(false);
 });
 
 test('quick-access toolbar items come from ui.qat and persist', async () => {
@@ -486,8 +492,8 @@ test('status bar: editable page and zoom fields, slider, layout buttons', async 
 
 // ---- backstage / empty state ------------------------------------------------------------------------
 
-test('the File backstage opens, lists slots (filled and not), shows pages and closes with Escape', async () => {
-  await app.page.locator('#ribbon-file').click();
+test('the backstage (palette-only) still lists slots, shows pages and closes with Escape', async () => {
+  await app.run('app.backstage.open');
   const backstage = app.page.locator('#backstage');
   await expect(backstage).toBeVisible();
   await expect(backstage.locator('[data-slot="open"]')).toBeEnabled();
@@ -504,12 +510,42 @@ test('the File backstage opens, lists slots (filled and not), shows pages and cl
   await expect(app.page.locator('#demo-backstage-props')).toBeVisible();
   await app.page.keyboard.press('Escape');
   await expect(backstage).toBeHidden();
-  await expect(app.page.locator('#ribbon-file')).toBeFocused();
   // A command slot runs and closes.
   await app.run('app.backstage.open');
   await backstage.locator('[data-slot="print"]').click();
   await expect(backstage).toBeHidden();
   expect((await demo()).lastCommand).toBe('demo.hello');
+});
+
+test('the File tab is a horizontal ribbon: Open, Recent, New, the module slots and Exit', async () => {
+  await app.page.locator('#ribbon-tabs [data-tab="file"]').click();
+  await expect(app.page.locator('#backstage')).toBeHidden();
+  await expect(app.page.locator('#ribbon-body [data-group="file.open"]')).toBeVisible();
+  await expect(item('file.open')).toBeEnabled();
+  // Recent is a dropdown whose menu reflects the current list.
+  await item('file.recent').click();
+  const menu = app.page.locator('.menu-popup [role="menu"]');
+  await expect(menu).toBeVisible();
+  await expect(menu).toContainText('No recent files yet');
+  await app.page.keyboard.press('Escape');
+  // New lists the registered creators.
+  await item('file.new').click();
+  await expect(menu.locator('[data-command="demo.create.blank"]')).toBeVisible();
+  await app.page.keyboard.press('Escape');
+  // Unfilled slots are disabled and say so; the demo fills Print (command) and Properties (page).
+  await expect(item('file.slot.save')).toBeDisabled();
+  await expect(item('file.slot.save')).toHaveAttribute('title', /not available yet/);
+  await expect(item('file.slot.saveAs')).toBeDisabled();
+  await expect(item('file.slot.preferences')).toBeDisabled();
+  await expect(item('demo.hello')).toBeEnabled(); // Print (demo)
+  await item('file.slot.properties').click();
+  const page = app.page.locator('#file-page-properties');
+  await expect(page).toBeVisible();
+  await expect(page.locator('#demo-backstage-props')).toBeVisible();
+  await page.locator('[data-result="close"]').click();
+  await expect(page).toBeHidden();
+  await expect(item('app.quit')).toBeEnabled(); // Exit
+  await app.run('app.ribbon.showTab', { tab: 'home' });
 });
 
 test('the empty state offers Open, Recent and Create tiles', async () => {

@@ -77,6 +77,7 @@ describe('UiState helpers', () => {
   it('validates a hand-edited settings object', () => {
     const v = validatePersisted({
       ribbonMinimised: 'yes',
+      ribbonCompact: 'no',
       qat: ['a', 1],
       leftPaneWidth: 5,
       leftPaneCollapsed: true,

@@ -317,6 +317,14 @@ is colourblind: black and red read as the same colour):**
   M00's `file.openBytes` / `file.close` now go through the `documents` service, `package.json`
   (`lucide`, `axe-core` devDependencies).
 
+**Changed after operator review (2026-09-07):** the operator uses Foxit daily — File is now a
+normal tab with a horizontal ribbon (Open · Recent ▾ · New ▾ · Save · Save As · Print ·
+Properties · Preferences · Exit) built by the shell from the backstage slots
+(`app/ribbon/fileTab.ts`), and the ribbon body is Foxit's compact single row of icon buttons by
+default (labels in tooltips; `app.ribbon.toggleLabels` restores labelled groups). The
+full-window backstage is no longer opened by the chrome (still `app.backstage.open`). ADR 0004
+amended.
+
 **Lessons while building:**
 
 - `[hidden]` must be `!important` in the shell CSS: a class with `display: grid` otherwise beats
