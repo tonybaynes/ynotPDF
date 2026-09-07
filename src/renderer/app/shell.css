@@ -28,6 +28,8 @@ body {
     'left doc right'
     'status status status';
   height: 100%;
+  /* High-visibility frame around the whole client area (operator: low vision). */
+  border: var(--border-width) solid var(--fg);
 }
 
 .titlebar {

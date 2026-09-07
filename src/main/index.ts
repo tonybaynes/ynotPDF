@@ -3,7 +3,7 @@
  * handlers, recent files and `.pdf` file-association handling on all three OSes.
  */
 
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, nativeTheme } from 'electron';
 import { registerIpcHandlers } from './ipc';
 import { buildMenu } from './menu';
 import { RecentFiles } from './recent';
@@ -81,6 +81,9 @@ async function boot(): Promise<void> {
 if (gotLock) {
   void app.whenReady().then(async () => {
     app.setAppUserModelId('com.ynotpdf.app');
+    // Native chrome (Windows title bar, menu bar, dialogs) follows the app's dark default,
+    // not the OS setting. M01 switches this to 'light' when the Daylight theme is active.
+    nativeTheme.themeSource = 'dark';
     registerIpcHandlers(recent, {
       onOpenPath: openPathInRenderer,
       rebuildMenu: () => {
