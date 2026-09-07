@@ -1,4 +1,65 @@
 {
-  "$comment": "Native binaries fetched by scripts/fetch-binaries.ts. Add entries per module (M10 pdfium, M70 qpdf, M90 tesseract). sha256 is mandatory.",
-  "binaries": []
+  "$comment": "Downloads performed by scripts/fetch-binaries.ts. Add entries per module (M10 fonts, M70 qpdf, M90 tesseract). sha256 is mandatory and is checked against the downloaded archive/file. `targets` keys are `<platform>-<arch>`, `<platform>-universal`, or `any` for platform-independent data. `dir` overrides the default destination resources/bin/<name>. `extract` unpacks the listed archive members (tar.gz or zip) into `dir`.",
+  "binaries": [
+    {
+      "name": "liberation-fonts",
+      "version": "2.1.5",
+      "module": "M10",
+      "dir": "resources/fonts",
+      "targets": {
+        "any": {
+          "url": "https://github.com/liberationfonts/liberation-fonts/files/7261482/liberation-fonts-ttf-2.1.5.tar.gz",
+          "sha256": "7191c669bf38899f73a2094ed00f7b800553364f90e2637010a69c0e268f25d0",
+          "extract": {
+            "format": "tar.gz",
+            "files": {
+              "liberation-fonts-ttf-2.1.5/LiberationSans-Regular.ttf": "LiberationSans-Regular.ttf",
+              "liberation-fonts-ttf-2.1.5/LiberationSans-Bold.ttf": "LiberationSans-Bold.ttf",
+              "liberation-fonts-ttf-2.1.5/LiberationSans-Italic.ttf": "LiberationSans-Italic.ttf",
+              "liberation-fonts-ttf-2.1.5/LiberationSans-BoldItalic.ttf": "LiberationSans-BoldItalic.ttf",
+              "liberation-fonts-ttf-2.1.5/LiberationSerif-Regular.ttf": "LiberationSerif-Regular.ttf",
+              "liberation-fonts-ttf-2.1.5/LiberationSerif-Bold.ttf": "LiberationSerif-Bold.ttf",
+              "liberation-fonts-ttf-2.1.5/LiberationSerif-Italic.ttf": "LiberationSerif-Italic.ttf",
+              "liberation-fonts-ttf-2.1.5/LiberationSerif-BoldItalic.ttf": "LiberationSerif-BoldItalic.ttf",
+              "liberation-fonts-ttf-2.1.5/LiberationMono-Regular.ttf": "LiberationMono-Regular.ttf",
+              "liberation-fonts-ttf-2.1.5/LiberationMono-Bold.ttf": "LiberationMono-Bold.ttf",
+              "liberation-fonts-ttf-2.1.5/LiberationMono-Italic.ttf": "LiberationMono-Italic.ttf",
+              "liberation-fonts-ttf-2.1.5/LiberationMono-BoldItalic.ttf": "LiberationMono-BoldItalic.ttf",
+              "liberation-fonts-ttf-2.1.5/LICENSE": "LICENSE-Liberation.txt"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "dejavu-fonts",
+      "version": "2.37",
+      "module": "M10",
+      "dir": "resources/fonts",
+      "targets": {
+        "any": {
+          "url": "https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.zip",
+          "sha256": "7576310b219e04159d35ff61dd4a4ec4cdba4f35c00e002a136f00e96a908b0a",
+          "extract": {
+            "format": "zip",
+            "files": {
+              "dejavu-fonts-ttf-2.37/ttf/DejaVuSans.ttf": "DejaVuSans.ttf",
+              "dejavu-fonts-ttf-2.37/ttf/DejaVuSans-Bold.ttf": "DejaVuSans-Bold.ttf",
+              "dejavu-fonts-ttf-2.37/ttf/DejaVuSans-Oblique.ttf": "DejaVuSans-Oblique.ttf",
+              "dejavu-fonts-ttf-2.37/ttf/DejaVuSans-BoldOblique.ttf": "DejaVuSans-BoldOblique.ttf",
+              "dejavu-fonts-ttf-2.37/ttf/DejaVuSerif.ttf": "DejaVuSerif.ttf",
+              "dejavu-fonts-ttf-2.37/ttf/DejaVuSerif-Bold.ttf": "DejaVuSerif-Bold.ttf",
+              "dejavu-fonts-ttf-2.37/ttf/DejaVuSerif-Italic.ttf": "DejaVuSerif-Italic.ttf",
+              "dejavu-fonts-ttf-2.37/ttf/DejaVuSerif-BoldItalic.ttf": "DejaVuSerif-BoldItalic.ttf",
+              "dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf": "DejaVuSansMono.ttf",
+              "dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono-Bold.ttf": "DejaVuSansMono-Bold.ttf",
+              "dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono-Oblique.ttf": "DejaVuSansMono-Oblique.ttf",
+              "dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono-BoldOblique.ttf": "DejaVuSansMono-BoldOblique.ttf",
+              "dejavu-fonts-ttf-2.37/LICENSE": "LICENSE-DejaVu.txt"
+            }
+          }
+        }
+      }
+    }
+  ]
 }

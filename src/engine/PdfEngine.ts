@@ -43,6 +43,14 @@ export interface RenderOptions {
   readonly layers?: Readonly<Record<string, boolean>>;
   /** Background colour as 0xRRGGBB (default white). Themes pass their page colour here. */
   readonly background?: number;
+  /** Print-mode rendering (`FPDF_PRINTING`): print appearance streams, no screen-only marks. */
+  readonly printing?: boolean;
+  /** Anti-alias text / images / paths (default true for all three). */
+  readonly smoothText?: boolean;
+  readonly smoothImages?: boolean;
+  readonly smoothPaths?: boolean;
+  /** Sub-pixel (LCD) text rendering (default false). */
+  readonly lcdText?: boolean;
 }
 
 /**
@@ -73,6 +81,15 @@ export interface TextRun {
   readonly color: number;
   /** Index of the owning page object in `pageObjects(page)`. */
   readonly objectIndex: number;
+  /** Font style from the font descriptor / name (ADR 0005). */
+  readonly bold?: boolean;
+  readonly italic?: boolean;
+  /** Font weight (100..900) when the font declares one. */
+  readonly weight?: number;
+  /** Rotation of the run in radians, counter-clockwise; 0 for horizontal text. */
+  readonly angle?: number;
+  /** Raw PDF font descriptor flags (`/Flags`). */
+  readonly fontFlags?: number;
 }
 
 /** Kinds of content-stream objects PDFium exposes. */
@@ -94,6 +111,16 @@ export interface PageObject {
   readonly childCount?: number;
   /** Optional-content group this object belongs to, if any. */
   readonly layerId?: string;
+  /** Fill / stroke colour as 0xRRGGBB and alpha 0..1, when the object has one (ADR 0005). */
+  readonly fillColor?: number;
+  readonly fillAlpha?: number;
+  readonly strokeColor?: number;
+  readonly strokeAlpha?: number;
+  /** Stroke width in points (paths, stroked text). */
+  readonly strokeWidth?: number;
+  /** For `text`: base font name and size (after the text matrix). */
+  readonly fontName?: string;
+  readonly fontSize?: number;
 }
 
 /** Annotation subtypes (PDF 12.5.6). */
@@ -169,6 +196,12 @@ export interface Annotation {
   readonly inReplyTo?: string;
   /** Review state (`/State`) for reply annotations. */
   readonly state?: string;
+  /** `/AS` — appearance state (checkbox "Yes"/"Off", stamp variants). */
+  readonly appearanceState?: string;
+  /** `/NM` — annotation name, unique within the page when present. */
+  readonly name?: string;
+  /** `/Subj` — subject line shown in comment panels. */
+  readonly subject?: string;
   /** Any subtype-specific extras the adapter chooses to expose. */
   readonly extra?: Readonly<Record<string, unknown>>;
 }
@@ -207,6 +240,18 @@ export interface Destination {
   readonly top?: number;
   readonly zoom?: number;
   readonly rect?: PdfRect;
+}
+
+/** A link on a page: the Link annotation resolved to a destination or URI (ADR 0005). */
+export interface Link {
+  /** Active area in page space. */
+  readonly rect: PdfRect;
+  /** Quad points when the link area is not a single rectangle, 8 numbers per quad. */
+  readonly quadPoints?: ReadonlyArray<number>;
+  readonly dest?: Destination;
+  readonly uri?: string;
+  /** Id of the underlying annotation in `annotations(page)`, if it is one. */
+  readonly annotationId?: string;
 }
 
 /** An outline (bookmark) node. */
@@ -349,6 +394,8 @@ export interface PdfEngine {
   pageObjects(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<PageObject>>;
   annotations(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<Annotation>>;
   formFields(doc: DocHandle): Promise<ReadonlyArray<FormField>>;
+  /** Links on a page with their destination / URI resolved (ADR 0005). */
+  links(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<Link>>;
 
   // ---- mutation (each corresponds to a `Command`) --------------------------------------------
 
@@ -402,6 +449,7 @@ export type EngineErrorCode =
   | 'invalid-page'
   | 'invalid-argument'
   | 'permission-denied'
+  | 'cancelled'
   | 'internal';
 
 /** Error type for every engine failure. Serialisable across the worker boundary. */
@@ -478,6 +526,9 @@ export class NotImplementedEngine implements PdfEngine {
   formFields(..._args: unknown[]): Promise<ReadonlyArray<FormField>> {
     return Promise.reject(new NotImplementedError('formFields'));
   }
+  links(..._args: unknown[]): Promise<ReadonlyArray<Link>> {
+    return Promise.reject(new NotImplementedError('links'));
+  }
   setPageRotation(..._args: unknown[]): Promise<void> {
     return Promise.reject(new NotImplementedError('setPageRotation'));
   }
@@ -538,6 +589,7 @@ export const ENGINE_METHODS = [
   'pageObjects',
   'annotations',
   'formFields',
+  'links',
   'setPageRotation',
   'deletePages',
   'insertBlankPages',

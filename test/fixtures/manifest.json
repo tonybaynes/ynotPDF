@@ -1,0 +1,256 @@
+{
+  "$comment": "Expected facts for the engine corpus test (test/unit/engine/corpus.test.ts). Synthetic files live here, external (pdf.js) files under external/ and are keyed external/<name>. `error` is the EngineError code expected from open(); `text` is a substring of the page-0 text runs; counts refer to page 0 unless the field says otherwise. `notes` is documentation, not asserted.",
+  "fixtures": {
+    "blank.pdf": {
+      "pages": 1,
+      "size": [595.28, 841.89],
+      "text": "",
+      "annotations": 0,
+      "notes": "A4, no content"
+    },
+    "multipage.pdf": {
+      "pages": 5,
+      "size": [595.28, 841.89],
+      "text": "Page 1 of 5",
+      "pageSizes": { "4": [841.89, 595.28, 90] },
+      "notes": "mixed sizes, /Rotate 90 on page 5"
+    },
+    "text.pdf": {
+      "pages": 1,
+      "text": "The quick brown fox jumps over the lazy dog.",
+      "exactText": "Heading in Helvetica 24 pt",
+      "notes": "Helvetica / Times / Courier, rotated run"
+    },
+    "image.pdf": { "pages": 1, "text": "Embedded 64x64 PNG", "notes": "embedded PNG drawn twice" },
+    "form.pdf": {
+      "pages": 1,
+      "annotations": 8,
+      "fields": 6,
+      "hasForm": true,
+      "notes": "text, checkbox, radio ×3, dropdown, multiline, button"
+    },
+    "annotated.pdf": {
+      "pages": 1,
+      "annotations": 5,
+      "subtypes": ["Circle", "Highlight", "Ink", "Square", "Text"]
+    },
+    "encrypted.pdf": {
+      "pages": 1,
+      "password": "ynot",
+      "encrypted": true,
+      "text": "Encrypted with RC4-128",
+      "notes": "RC4 128-bit R3; owner password `owner`"
+    },
+    "encrypted-aes128.pdf": {
+      "pages": 1,
+      "password": "ynot",
+      "encrypted": true,
+      "text": "Encrypted with AES-128",
+      "notes": "AESV2 R4"
+    },
+    "encrypted-aes256.pdf": {
+      "pages": 1,
+      "password": "ynot",
+      "encrypted": true,
+      "text": "Encrypted with AES-256",
+      "notes": "AESV3 R6"
+    },
+    "encrypted-owner.pdf": {
+      "pages": 1,
+      "encrypted": true,
+      "text": "Opens without a password",
+      "permissions": { "print": false, "copy": false, "modify": false },
+      "notes": "empty user password; owner `owner`; restricted permissions"
+    },
+    "outline.pdf": { "pages": 3, "outline": 3, "text": "Chapter 1" },
+    "layers.pdf": { "pages": 1, "layers": 2, "text": "Layer: Base" },
+    "attachments.pdf": { "pages": 1, "attachments": 2 },
+    "rotated.pdf": {
+      "pages": 4,
+      "size": [419.53, 595.28],
+      "pageSizes": {
+        "1": [595.28, 419.53, 90],
+        "2": [419.53, 595.28, 180],
+        "3": [595.28, 419.53, 270]
+      },
+      "text": "/Rotate 0"
+    },
+    "mixed-boxes.pdf": {
+      "pages": 4,
+      "size": [500, 700],
+      "pageSizes": { "1": [400, 400, 0], "2": [500, 700, 0], "3": [595.28, 841.89, 0] },
+      "text": "CropBox origin (50, 100)"
+    },
+    "page-labels.pdf": { "pages": 6, "labels": ["i", "ii", "A-5", "A-6", "a", "b"] },
+    "links.pdf": { "pages": 2, "annotations": 3, "links": 3, "text": "Visit example.com" },
+    "forms-all.pdf": {
+      "pages": 1,
+      "annotations": 13,
+      "fields": 11,
+      "hasForm": true,
+      "fieldTypes": [
+        "text",
+        "text",
+        "text",
+        "text",
+        "checkbox",
+        "checkbox",
+        "radio",
+        "combobox",
+        "listbox",
+        "button",
+        "signature"
+      ]
+    },
+    "annotations-all.pdf": {
+      "pages": 1,
+      "annotations": 26,
+      "links": 1,
+      "attachments": 1,
+      "subtypes": [
+        "3D",
+        "Caret",
+        "Circle",
+        "FileAttachment",
+        "FreeText",
+        "Highlight",
+        "Ink",
+        "Line",
+        "Link",
+        "Movie",
+        "Polygon",
+        "PolyLine",
+        "Popup",
+        "PrinterMark",
+        "Redact",
+        "Screen",
+        "Sound",
+        "Square",
+        "Squiggly",
+        "Stamp",
+        "StrikeOut",
+        "Text",
+        "TrapNet",
+        "Underline",
+        "Watermark"
+      ]
+    },
+    "javascript.pdf": {
+      "pages": 1,
+      "fields": 1,
+      "hasForm": true,
+      "text": "document-level JavaScript"
+    },
+    "xfa.pdf": {
+      "pages": 1,
+      "hasXfa": true,
+      "hasForm": true,
+      "fields": 1,
+      "notes": "XFA packet + AcroForm fallback; must open with a warning"
+    },
+    "pdfa-1b.pdf": {
+      "pages": 1,
+      "xmpContains": "pdfaid:part",
+      "text": "PDF/A-1b structural sample"
+    },
+    "cjk-rtl.pdf": {
+      "pages": 1,
+      "text": "中文测试",
+      "textAlso": "שלום",
+      "notes": "non-embedded CJK via UniGB-UCS2-H and Hebrew via glyph names"
+    },
+    "broken-xref.pdf": {
+      "pages": 1,
+      "size": [595.28, 841.89],
+      "notes": "wrong startxref: PDFium rebuilds the table"
+    },
+    "truncated.pdf": { "error": "corrupt", "notes": "text.pdf cut at 70 %: not recoverable" },
+    "corrupt.pdf": { "error": "corrupt" },
+    "huge-page-count.pdf": { "pages": 1000, "size": [200, 280], "text": "1", "renderPages": 1 },
+    "scanned.pdf": { "pages": 1, "text": "", "objects": ["image"] },
+
+    "external/issue15893_reduced.pdf": {
+      "pages": 1,
+      "password": "test",
+      "encrypted": true,
+      "text": "Issue 15893"
+    },
+    "external/issue3371.pdf": { "pages": 1, "password": "ELXRTQWS", "encrypted": true },
+    "external/bug1782186.pdf": {
+      "password": "Hello",
+      "error": "wrong-password",
+      "notes": "pdf.js accepts this password; PDFium 2.1.13 wasm rejects it — recorded, not hidden"
+    },
+    "external/issue6010_1.pdf": {
+      "pages": 1,
+      "password": "abc",
+      "encrypted": true,
+      "text": "Issue 6010"
+    },
+    "external/empty_protected.pdf": {
+      "pages": 1,
+      "encrypted": true,
+      "notes": "owner password only"
+    },
+    "external/annotation-highlight.pdf": { "pages": 1, "subtypes": ["Highlight", "Popup"] },
+    "external/annotation-line.pdf": { "pages": 1, "subtypes": ["Line", "Popup"] },
+    "external/annotation-square-circle.pdf": {
+      "pages": 1,
+      "subtypes": ["Circle", "Popup", "Square"]
+    },
+    "external/annotation-fileattachment.pdf": {
+      "pages": 1,
+      "attachments": 1,
+      "subtypes": ["FileAttachment"]
+    },
+    "external/annotation-text-widget.pdf": { "pages": 1, "fields": 7, "hasForm": true },
+    "external/annotation-choice-widget.pdf": { "pages": 1, "fields": 5, "hasForm": true },
+    "external/annotation-button-widget.pdf": { "pages": 1, "fields": 6, "hasForm": true },
+    "external/annotation-polyline-polygon.pdf": {
+      "pages": 1,
+      "subtypes": ["Polygon", "PolyLine", "Popup"]
+    },
+    "external/annotation-caret-ink.pdf": { "pages": 1, "subtypes": ["Caret", "Ink", "Popup"] },
+    "external/annotation-freetext.pdf": { "pages": 1, "subtypes": ["FreeText"] },
+    "external/annotation-stamp.pdf": { "pages": 1, "subtypes": ["Popup", "Stamp"] },
+    "external/annotation-link-text-popup.pdf": {
+      "pages": 1,
+      "links": 1,
+      "subtypes": ["Link", "Popup", "Text"]
+    },
+    "external/rotation.pdf": { "pages": 2 },
+    "external/rotated.pdf": { "pages": 1, "text": "Rotated text" },
+    "external/xref_command_missing.pdf": {
+      "pages": 1,
+      "text": "Reduced test-case",
+      "notes": "broken xref, reconstructed"
+    },
+    "external/helloworld-bad.pdf": { "pages": 1, "text": "Hello, world!" },
+    "external/pdfjsbad1586.pdf": { "pages": 1, "text": "pdf.js test" },
+    "external/boundingBox_invalid.pdf": {
+      "pages": 3,
+      "size": [612, 792],
+      "notes": "empty /MediaBox → Letter"
+    },
+    "external/vertical.pdf": {
+      "pages": 3,
+      "text": "日",
+      "notes": "vertical Japanese; CJK glyphs need a CJK font (none bundled)"
+    },
+    "external/noembed-jis7.pdf": { "pages": 1, "text": "ABC" },
+    "external/ArabicCIDTrueType.pdf": { "pages": 1, "text": "الخطوط" },
+    "external/ccitt_EndOfBlock_false.pdf": { "pages": 1, "objects": ["image"] },
+    "external/jbig2_symbol_offset.pdf": { "pages": 1 },
+    "external/jpx_smaskindata.pdf": { "pages": 1 },
+    "external/alphatrans.pdf": { "pages": 1, "links": 1, "xmpContains": "x:xmpmeta" },
+    "external/xfa_issue14315.pdf": { "pages": 1, "hasXfa": true },
+    "external/issue14130.pdf": { "pages": 1, "hasXfa": true },
+    "external/mesh_shading_empty.pdf": { "pages": 1 },
+    "external/annotation_hidden_print.pdf": {
+      "pages": 1,
+      "subtypes": ["Ink", "Popup"],
+      "annotationFlags": { "0": { "hidden": true, "print": true } }
+    },
+    "external/multiline.pdf": { "pages": 1, "fields": 1 }
+  }
+}

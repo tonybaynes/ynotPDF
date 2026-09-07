@@ -39,6 +39,8 @@ export default defineConfig({
   renderer: {
     resolve: { alias: aliases },
     worker: { format: 'es' },
+    // M10: the PDFium wasm is inlined into the engine worker bundle (`?inline`).
+    assetsInclude: ['**/*.wasm'],
     build: {
       rollupOptions: { input: { index: resolve(import.meta.dirname, 'src/renderer/index.html') } },
     },

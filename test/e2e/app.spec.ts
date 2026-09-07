@@ -66,5 +66,6 @@ test('unknown commands reject', async () => {
 
 test('the engine worker answers over RPC', async () => {
   const info = await app.run('dev.engineInfo');
-  expect(info).toEqual({ name: 'none', version: '0' });
+  // M10: the worker now serves PDFium (WASM); M00 shipped the NotImplemented stub here.
+  expect(info).toMatchObject({ name: 'pdfium' });
 });

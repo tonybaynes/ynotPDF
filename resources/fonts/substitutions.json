@@ -1,0 +1,161 @@
+{
+  "$comment": "Font substitution table for non-embedded fonts (M10). Aliases are normalised face names: lowercase, no spaces/hyphens, style words stripped (see src/engine/pdfium/fonts.ts normalizeFaceName). Files are fetched by `npm run fetch-binaries` into this folder and are git-ignored. charsetFallback keys are PDFium FX_Charset ids.",
+  "version": 1,
+  "families": [
+    {
+      "name": "Liberation Sans",
+      "generic": "sans",
+      "aliases": [
+        "arial",
+        "arialmt",
+        "helvetica",
+        "helveticaneue",
+        "liberationsans",
+        "arialnarrow",
+        "arialunicodems",
+        "swiss",
+        "swiss721",
+        "univers",
+        "nimbussans",
+        "nimbussansl",
+        "freesans",
+        "sansserif"
+      ],
+      "files": {
+        "regular": "LiberationSans-Regular.ttf",
+        "bold": "LiberationSans-Bold.ttf",
+        "italic": "LiberationSans-Italic.ttf",
+        "boldItalic": "LiberationSans-BoldItalic.ttf"
+      }
+    },
+    {
+      "name": "Liberation Serif",
+      "generic": "serif",
+      "aliases": [
+        "times",
+        "timesnewroman",
+        "timesnewromanps",
+        "timesnewromanpsmt",
+        "liberationserif",
+        "nimbusroman",
+        "nimbusromanno9l",
+        "freeserif",
+        "serif",
+        "bookantiqua",
+        "palatino",
+        "palatinolinotype",
+        "bookman",
+        "garamond",
+        "cambria"
+      ],
+      "files": {
+        "regular": "LiberationSerif-Regular.ttf",
+        "bold": "LiberationSerif-Bold.ttf",
+        "italic": "LiberationSerif-Italic.ttf",
+        "boldItalic": "LiberationSerif-BoldItalic.ttf"
+      }
+    },
+    {
+      "name": "Liberation Mono",
+      "generic": "mono",
+      "aliases": [
+        "courier",
+        "couriernew",
+        "couriernewps",
+        "couriernewpsmt",
+        "liberationmono",
+        "nimbusmono",
+        "nimbusmonol",
+        "freemono",
+        "monospace",
+        "lucidaconsole",
+        "consolas",
+        "menlo",
+        "monaco",
+        "andalemono"
+      ],
+      "files": {
+        "regular": "LiberationMono-Regular.ttf",
+        "bold": "LiberationMono-Bold.ttf",
+        "italic": "LiberationMono-Italic.ttf",
+        "boldItalic": "LiberationMono-BoldItalic.ttf"
+      }
+    },
+    {
+      "name": "DejaVu Sans",
+      "generic": "sans",
+      "aliases": [
+        "dejavusans",
+        "verdana",
+        "tahoma",
+        "segoeui",
+        "trebuchetms",
+        "lucidasans",
+        "lucidagrande",
+        "bitstreamverasans",
+        "verasans",
+        "opensans",
+        "sourcesanspro",
+        "calibri",
+        "candara",
+        "corbel",
+        "geneva",
+        "microsoftsansserif"
+      ],
+      "files": {
+        "regular": "DejaVuSans.ttf",
+        "bold": "DejaVuSans-Bold.ttf",
+        "italic": "DejaVuSans-Oblique.ttf",
+        "boldItalic": "DejaVuSans-BoldOblique.ttf"
+      }
+    },
+    {
+      "name": "DejaVu Serif",
+      "generic": "serif",
+      "aliases": [
+        "dejavuserif",
+        "georgia",
+        "bitstreamveraserif",
+        "veraserif",
+        "constantia",
+        "centuryschoolbook",
+        "newcenturyschlbk"
+      ],
+      "files": {
+        "regular": "DejaVuSerif.ttf",
+        "bold": "DejaVuSerif-Bold.ttf",
+        "italic": "DejaVuSerif-Italic.ttf",
+        "boldItalic": "DejaVuSerif-BoldItalic.ttf"
+      }
+    },
+    {
+      "name": "DejaVu Sans Mono",
+      "generic": "mono",
+      "aliases": [
+        "dejavusansmono",
+        "bitstreamverasansmono",
+        "verasansmono",
+        "sourcecodepro",
+        "firamono",
+        "inconsolata"
+      ],
+      "files": {
+        "regular": "DejaVuSansMono.ttf",
+        "bold": "DejaVuSansMono-Bold.ttf",
+        "italic": "DejaVuSansMono-Oblique.ttf",
+        "boldItalic": "DejaVuSansMono-BoldOblique.ttf"
+      }
+    }
+  ],
+  "charsetFallback": {
+    "161": "DejaVu Sans",
+    "162": "DejaVu Sans",
+    "163": "DejaVu Sans",
+    "177": "DejaVu Sans",
+    "178": "DejaVu Sans",
+    "186": "DejaVu Sans",
+    "204": "DejaVu Sans",
+    "238": "DejaVu Sans"
+  },
+  "unknown": "builtin"
+}

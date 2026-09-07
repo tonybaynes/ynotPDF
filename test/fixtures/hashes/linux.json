@@ -1,0 +1,242 @@
+{
+  "annotated.pdf": {
+    "render": ["00d3828cc0800000"],
+    "text": "This sentence is highlighted in the annotation layer."
+  },
+  "annotations-all.pdf": {
+    "render": ["b0801c9880800000"],
+    "text": "Highlight Underline Squiggly StrikeOut Redacted words here"
+  },
+  "attachments.pdf": {
+    "render": ["d000000000000000"],
+    "text": "This document carries two embedded files."
+  },
+  "blank.pdf": {
+    "render": ["0000000000000000"],
+    "text": ""
+  },
+  "broken-xref.pdf": {
+    "render": ["0000000000000000"],
+    "text": ""
+  },
+  "cjk-rtl.pdf": {
+    "render": ["c880000000000000"],
+    "text": "Non-embedded CJK (Type0 / UniGB-UCS2-H) and Hebrew (glyph names): 中文测试 שלום"
+  },
+  "encrypted-aes128.pdf": {
+    "render": ["00d0000000000000"],
+    "text": "Encrypted with AES-128 (AESV2). User password: ynot Owner password: owner. Standard security handler, R4."
+  },
+  "encrypted-aes256.pdf": {
+    "render": ["00d0000000000000"],
+    "text": "Encrypted with AES-256 (AESV3). User password: ynot Owner password: owner. Standard security handler, R6."
+  },
+  "encrypted-owner.pdf": {
+    "render": ["00d0000000000000"],
+    "text": "Opens without a password; owner password: owner Printing and copying are denied by the permissions."
+  },
+  "encrypted.pdf": {
+    "render": ["00d0000000000000"],
+    "text": "Encrypted with RC4-128. User password: ynot Owner password: owner. Standard security handler, R3."
+  },
+  "external/ArabicCIDTrueType.pdf": {
+    "render": ["7878300000000000"],
+    "text": "انواع   الخطوط   العربية انواع   الخطوط   العربية انواع   الخطوط   العربية انواع   الخطوط   العربية"
+  },
+  "external/alphatrans.pdf": {
+    "render": ["80cce07030000000"],
+    "text": "Red: stroke=1, fill=1.  Green: stroke=.5, fill=.5.  Blue: stroke=1, fill=.5 Image: .5 Gradient: .5 Powered by TCPDF (www.tcpdf.org)"
+  },
+  "external/annotation-button-widget.pdf": {
+    "render": ["80a0000000000000"],
+    "text": "Check box, unchecked Check box, read-only Check box, checked Radio buton, selected   Radio button, selected Radio button, unselected   Radio button, unselected Radio button, read-only   Radio button, "
+  },
+  "external/annotation-caret-ink.pdf": {
+    "render": ["8080000000000000"],
+    "text": "Caret Continue this Ink"
+  },
+  "external/annotation-choice-widget.pdf": {
+    "render": ["1000000000000000"],
+    "text": "Combo box Combo box, read-only List box, single selection List box, multiple selection List box, read-only"
+  },
+  "external/annotation-fileattachment.pdf": {
+    "render": ["8080000000000000"],
+    "text": "FileAttachment"
+  },
+  "external/annotation-freetext.pdf": {
+    "render": ["8000000000000000"],
+    "text": "FreeText"
+  },
+  "external/annotation-highlight.pdf": {
+    "render": ["8080000000000000"],
+    "text": "Highlight Lorem ipsum dolor sit amet"
+  },
+  "external/annotation-line.pdf": {
+    "render": ["80c0000000000000"],
+    "text": "Line"
+  },
+  "external/annotation-link-text-popup.pdf": {
+    "render": ["8080000000000000"],
+    "text": "Link m ozilla. org Text"
+  },
+  "external/annotation-polyline-polygon.pdf": {
+    "render": ["8080a0a000000000"],
+    "text": "Polygon Polyline"
+  },
+  "external/annotation-square-circle.pdf": {
+    "render": ["8090808000000000"],
+    "text": "Square Circle"
+  },
+  "external/annotation-stamp.pdf": {
+    "render": ["8080000000000000"],
+    "text": "Stamp"
+  },
+  "external/annotation-text-widget.pdf": {
+    "render": ["d0bc600000000000"],
+    "text": "Single line, unlimited length Single line, length 10 Single line, center aligned Single line, right aligned Single line, read-only Single line, combs Multiline"
+  },
+  "external/annotation_hidden_print.pdf": {
+    "render": ["0000000000000000"],
+    "text": ""
+  },
+  "external/boundingBox_invalid.pdf": {
+    "render": ["c000000000000000", "0080000000000000", "0000000000000000"],
+    "text": "Empty /MediaBox"
+  },
+  "external/ccitt_EndOfBlock_false.pdf": {
+    "render": ["d454d45454545454"],
+    "text": ""
+  },
+  "external/empty_protected.pdf": {
+    "render": ["0000000000000000"],
+    "text": ""
+  },
+  "external/helloworld-bad.pdf": {
+    "render": ["0000000000283000"],
+    "text": "Hello, world!"
+  },
+  "external/issue14130.pdf": {
+    "render": ["b8a4000000000000"],
+    "text": "The document you are trying to load requires Adobe Reader 8 or higher. You may not have the  Adobe Reader installed or your viewing environment may not be properly configured to use  Adobe Reader.    "
+  },
+  "external/issue15893_reduced.pdf": {
+    "render": ["000061a5ad080000"],
+    "text": "Issue 15893 - password"
+  },
+  "external/issue3371.pdf": {
+    "render": ["c000000000000000"],
+    "text": ""
+  },
+  "external/issue6010_1.pdf": {
+    "render": ["000060e0a0000000"],
+    "text": "Issue 6010"
+  },
+  "external/jbig2_symbol_offset.pdf": {
+    "render": ["00008c0000000000"],
+    "text": ""
+  },
+  "external/jpx_smaskindata.pdf": {
+    "render": ["00e4e4e4e4e4e400"],
+    "text": ""
+  },
+  "external/mesh_shading_empty.pdf": {
+    "render": ["0000000000000000"],
+    "text": ""
+  },
+  "external/multiline.pdf": {
+    "render": ["8282828282828282"],
+    "text": ""
+  },
+  "external/noembed-jis7.pdf": {
+    "render": ["0040000000000010"],
+    "text": "ABC   あいうえお   123 1"
+  },
+  "external/pdfjsbad1586.pdf": {
+    "render": ["8000000000000000"],
+    "text": "pdf.js test"
+  },
+  "external/rotated.pdf": {
+    "render": ["1090000000000010"],
+    "text": "Rotated text Page  1 test t e s t t e s t e t s t"
+  },
+  "external/rotation.pdf": {
+    "render": ["00c0000000000000", "00a0000000000000"],
+    "text": "This is my first page with normal layout.  This is the second line on the page. "
+  },
+  "external/vertical.pdf": {
+    "render": ["0203000000000000", "0000000000000000", "0000000000000000"],
+    "text": "日 本 語 あ い う え お"
+  },
+  "external/xfa_issue14315.pdf": {
+    "render": ["b8a4000000000000"],
+    "text": "The document you are trying to load requires Adobe Reader 8 or higher. You may not have the  Adobe Reader installed or your viewing environment may not be properly configured to use  Adobe Reader.    "
+  },
+  "external/xref_command_missing.pdf": {
+    "render": ["000020a4d4000000"],
+    "text": "Reduced test-case"
+  },
+  "form.pdf": {
+    "render": ["e4e0e46400000000"],
+    "text": "Name Subscribe Size Country Notes"
+  },
+  "forms-all.pdf": {
+    "render": ["e0e0e0e0e0000000"],
+    "text": "Text Multiline Password Required + read-only Checkbox Radio Combo box List box (multi) Push button Signature"
+  },
+  "huge-page-count.pdf": {
+    "render": ["8080000000000000"],
+    "text": "1"
+  },
+  "image.pdf": {
+    "render": ["808080800c080000"],
+    "text": "Embedded 64x64 PNG, scaled to 256 pt"
+  },
+  "javascript.pdf": {
+    "render": ["e080000000000000"],
+    "text": "This file carries document-level JavaScript."
+  },
+  "layers.pdf": {
+    "render": ["e000000000000000"],
+    "text": "Layer: Base (visible by default) Layer: Overlay (hidden by default)"
+  },
+  "links.pdf": {
+    "render": ["0080000000000000", "00c0000000000000"],
+    "text": "Visit example.com Go to page 2"
+  },
+  "mixed-boxes.pdf": {
+    "render": ["0000000000000000", "000000c080000000", "8000000000000000"],
+    "text": "CropBox origin (50, 100) Outside the crop box"
+  },
+  "multipage.pdf": {
+    "render": ["8080808080808080", "8080808080808080", "8080808080808080"],
+    "text": "Page 1 of 5"
+  },
+  "outline.pdf": {
+    "render": ["8000000080000000", "8000000080000000", "8000000080000000"],
+    "text": "Chapter 1 Section 1.1"
+  },
+  "page-labels.pdf": {
+    "render": ["00c0000000000000", "00c0000000000000", "00c0000000000000"],
+    "text": "Physical page 1"
+  },
+  "pdfa-1b.pdf": {
+    "render": ["e000000000000000"],
+    "text": "PDF/A-1b structural sample (XMP + OutputIntent)."
+  },
+  "rotated.pdf": {
+    "render": ["0010301010100080", "0101006c6c000000", "0600101010301003"],
+    "text": "/Rotate 0"
+  },
+  "scanned.pdf": {
+    "render": ["a8e29490d490a8a8"],
+    "text": ""
+  },
+  "text.pdf": {
+    "render": ["a2b0c40000000000"],
+    "text": "Heading in Helvetica 24 pt The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. Sphinx of  black quartz, judge my vow. How vexingly quick daft zebras jump! Monospaced:"
+  },
+  "xfa.pdf": {
+    "render": ["c080000000000000"],
+    "text": "AcroForm fallback for an XFA form"
+  }
+}

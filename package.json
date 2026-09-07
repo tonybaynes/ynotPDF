@@ -31,10 +31,15 @@
     "package": "npm run build && electron-builder --publish never",
     "postinstall": "install-electron",
     "icon": "node scripts/make-icon.ts",
-    "gallery": "vite src/renderer/theme --host 127.0.0.1 --port 5199 --strictPort --open /gallery.html"
+    "gallery": "vite src/renderer/theme --host 127.0.0.1 --port 5199 --strictPort --open /gallery.html",
+    "fetch-fixtures": "node scripts/fetch-fixtures.ts",
+    "bench": "node scripts/bench-engine.ts",
+    "hashes": "node scripts/update-render-hashes.ts"
   },
   "dependencies": {
-    "electron-store": "^11.0.2"
+    "@hyzyla/pdfium": "2.1.13",
+    "electron-store": "^11.0.2",
+    "pdf-lib": "1.17.1"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",
@@ -52,7 +57,6 @@
     "license-checker": "^25.0.1",
     "lint-staged": "^17.5.0",
     "lucide": "^1.42.0",
-    "pdf-lib": "^1.17.1",
     "prettier": "^3.9.6",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.69.0",

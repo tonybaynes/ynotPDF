@@ -17,6 +17,7 @@ import scaffoldManifest from '@modules/M00-scaffold/manifest';
 import themeManifest, { THEME_SERVICE } from '@modules/M01-theme-system/manifest';
 import { ipcThemeStorage } from '@modules/M01-theme-system/storage';
 import shellManifest from '@modules/M02-app-shell/manifest';
+import engineManifest from '@modules/M10-engine-layer/manifest';
 import { ThemeManager } from '@theme/ThemeManager';
 
 /**
@@ -52,6 +53,7 @@ registry.provide('platform', { isMac });
 registry.register(scaffoldManifest);
 registry.register(themeManifest);
 registry.register(shellManifest);
+registry.register(engineManifest);
 
 const e2e = hasBridge() && getBridge().e2e;
 if (e2e) {

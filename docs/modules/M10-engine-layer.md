@@ -214,8 +214,115 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **Adapter: PDFium WASM, driven raw.** `@hyzyla/pdfium` 2.1.13 (MIT, pinned exact) supplies the
+  wasm + emscripten glue; we use only its `PDFiumModule` factory and drive the C API ourselves
+  through a small FFI layer (`src/engine/pdfium/ffi.ts`). Its wrapper classes are not used — they
+  cover a fraction of the API and pass a JS object where PDFium expects a pointer.
+- **The shipped wasm has a fixed function table** (`min = max = 3023`), so JS callbacks are
+  impossible out of the box: no font registration, no `FPDF_SaveAsCopy`, no pause/cancel. We
+  patch the table limits at load time (`src/engine/pdfium/wasm.ts`: rewrite one section of the
+  binary, verified by magic + structure) and implement `addFunction` with the standard tiny
+  wrapper-module trick. Measured cost: none. Recorded in ADR 0006 with the benchmarks.
+- **Loading inside Electron.** `fetch()` of `file://` fails under `loadFile`, so the wasm is
+  inlined into the worker chunk (`?inline`, base64) and font files are lazy chunks via
+  `import.meta.glob(..., { query: '?inline' })`. Node unit tests read the same bytes from disk.
+- **Fonts.** Liberation 2.1.5 + DejaVu 2.37 (OFL / Bitstream Vera licence, both permissive) are
+  fetched at build time by `scripts/fetch-binaries.ts` (which learns to extract `.tar.gz` and
+  `.zip`) into git-ignored `resources/fonts/`; the committed data file
+  `resources/fonts/substitutions.json` maps PDF family names → files. They are registered through
+  `FPDF_SetSystemFontInfo` callbacks. Without the files PDFium falls back to its built-in Foxit
+  fonts — still identical on every OS, just less faithful for Arial/Verdana/Cyrillic.
+- **Geometry.** `PageGeometry` (`src/engine/geometry.ts`) is the one place that knows
+  `/Rotate` + CropBox offset; it agrees with M00's `PageTransform` (cross-checked by a test).
+  Tiles: `FPDF_RenderPageBitmap` with a negative start offset into a tile-sized bitmap,
+  `FPDF_REVERSE_BYTE_ORDER` so the buffer is RGBA. `RenderResult.rect` is the page rect the
+  integer tile actually covers.
+- **Forms** render with values: zeroed `FPDF_FORMFILLINFO` v1, `FORM_OnAfterLoadPage`,
+  `FPDF_FFLDraw` after the page, field highlight removed (Foxit-faithful raster).
+- **Layers and XMP have no PDFium API.** The catalog is read with pdf-lib (now a runtime dep,
+  MIT): `/OCProperties` → layers, `/Metadata` → raw XMP. Encrypted files are first copied
+  without security via `FPDF_SaveAsCopy(FPDF_REMOVE_SECURITY)` so strings are readable.
+  `RenderOptions.layers` overrides are accepted but not applied in M10 (M12 can use
+  `FPDFPageObj_SetIsActive` per marked object).
+- **Cancellation.** The worker serialises requests in its own queue; `{ kind: 'cancel', id }`
+  drops a queued request or aborts an in-flight render, which uses the progressive
+  `FPDF_RenderPageBitmap_Start`/`Continue` API with an `IFSDK_PAUSE` that yields to the event
+  loop every ~20 ms. Cancelled calls reject with code `cancelled`. `EngineClient.request()`
+  returns a handle with `cancel()`; `cancelRenders(doc?)` drops every pending render.
+- **Error taxonomy.** `FPDF_ERR_PASSWORD` → `password-required` (no password given) or
+  `wrong-password`; `FILE`/`FORMAT`/`UNKNOWN` → `corrupt`; `SECURITY` → `unsupported`.
+  XFA files open (AcroForm fallback) with `metadata.hasXfa = true` for the UI to warn.
+- **Ids.** Annotations `a<page>.<index>`, FileAttachment annots `annot.<page>.<index>`,
+  embedded files `att.<n>`, layers `ocg.<objnum>`. Stable while the document is open and
+  unmodified; M20/M30 own reassignment after mutations.
+- **Contract additions** (ADR 0005, additive): `links(doc, page)`, render flags
+  (`printing`, `smoothText/Images/Paths`, `lcdText`), page-object colours/stroke/font,
+  text-run style (`bold`, `italic`, `weight`, `angle`), annotation `appearanceState`/`name`/
+  `subject`, error code `cancelled`, RPC `cancel` message.
+- **Tests** run the engine in Node through `renderRaw()` (RGBA buffer) and a 64-bit dHash;
+  hashes live in `test/fixtures/hashes/<platform>.json` with a Hamming tolerance of 6 bits.
+  Benchmarks: `node scripts/bench-engine.ts` (documents generated on the fly, not committed).
+- **Module folder** `M10-engine-layer/manifest.ts` registers `dev.engineOpen` and
+  `dev.engineBenchmark` (palette, Developer) — the e2e proves the WASM worker inside the app.
+- Mutation methods stay `NotImplementedError` in `PdfiumEngine` (M20+ add them additively).
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-07 on `mod/M10-engine-layer` (worktree `../ynotPDF-M10`).** Not yet pushed:
+the operator's GitHub Actions minutes were exhausted that day, so push, CI on the three OSes,
+PR and the §0 ☑ tick wait for the next billing cycle (1 October 2026) or an explicit go-ahead.
+§0 shows ◐ meanwhile. Everything below is green locally on Windows.
+
+**Shipped:**
+
+- `PdfiumEngine` (`src/engine/pdfium/`) on `@hyzyla/pdfium` 2.1.13 WASM, driven through our own
+  FFI layer: open with the error taxonomy (`password-required` / `wrong-password` / `corrupt` /
+  `unsupported`), close, pageCount, pageSize (MediaBox/CropBox/`/Rotate`, degenerate boxes fall
+  back to PDFium's Letter), pageLabels, metadata (+ raw XMP, linearized, tagged, form/XFA flags),
+  permissions, outline (destinations + URI/launch actions), layers (via pdf-lib catalog read),
+  attachments (+ FileAttachment annotations) and attachmentData, render (tiles, extra rotation,
+  annotations/forms/grayscale/print/smoothing/LCD flags, background colour, progressive and
+  cancellable), textRuns (runs with per-glyph boxes, font name/size/style/weight/angle, colour,
+  generated spaces boxed between neighbours), pageObjects (kind, bbox, matrix, fill/stroke, font,
+  image size, form child count, optional-content layer id), annotations (all subtypes, flags,
+  colours with raw fallback, quad points, ink/vertex/line paths, IRT/popup links, `/AS`, widgets'
+  field name/type), formFields (grouped by name, values, options, checkbox/radio export values),
+  links, and `save` via `FPDF_SaveAsCopy`. Mutations remain `NotImplementedError` (M20+).
+- Wasm table patch + `addFunction` (`wasm.ts`) making callbacks possible in the stock build;
+  `FontRegistry` (`fonts.ts`) implementing `FPDF_SYSFONTINFO` from `resources/fonts/substitutions.json`.
+- `PageGeometry` (`src/engine/geometry.ts`) with tile snapping; agrees with `PageTransform`.
+- Worker: serialised queue, `cancel` message, boot-failure reporting; assets inlined
+  (`worker-assets.ts`). `EngineClient.request()`/`cancel()`/`cancelRenders()`.
+- Contract additions per ADR 0005; `src/shared/module.ts` untouched.
+- Fonts: Liberation 2.1.5 + DejaVu 2.37 fetched by `fetch-binaries` (now extracts tar.gz/zip),
+  git-ignored; substitution data file; CI caches them.
+- Fixtures: 18 new synthetic files (AES-128/256/owner-only encryption written by hand, rotated,
+  mixed boxes, page labels, links, all field types, all annotation subtypes, JavaScript, XFA,
+  PDF/A-1b structure, CJK + Hebrew, broken xref, truncated, corrupt, 1000 pages, scan);
+  `form.pdf` and `layers.pdf` fixed (checkbox `/AS`, real BDC/EMC). 35 pinned pdf.js files via
+  `fetch-fixtures`. `test/fixtures/manifest.json` (63 entries) + `hashes/{win32,darwin,linux}.json`.
+- Tests: 100+ unit tests across `test/unit/engine/` (smoke, corpus, geometry, fonts, wasm patch,
+  worker queue/cancel incl. the 50-render scroll test) and `fetch-binaries` archive readers;
+  Playwright `test/e2e/engine.spec.ts` drives the WASM worker in the built app through
+  `dev.engineOpen`. Benchmarks in `docs/bench/engine-win32-x64.json` (ADR 0006).
+- Module folder `M10-engine-layer` with the `dev.engineOpen` palette command.
+- Docs: ADR 0005 (contract additions), ADR 0006 (adapter decision + measurements), README.
+
+**Shared files touched (minimal, additive):** `src/engine/PdfEngine.ts` (new optional fields,
+`links`, `cancelled`), `src/engine/rpc.ts` (`cancel`), `src/engine/EngineClient.ts`,
+`src/engine/worker.ts`, `src/renderer/main.ts` (register M10 manifest), `package.json`
+(runtime deps `@hyzyla/pdfium`, `pdf-lib`; scripts `fetch-fixtures`, `bench`, `hashes`),
+`tsconfig.node.json` (`vite/client` types for `?inline`), `.gitignore`, `.github/workflows/ci.yml`
+(fetch + cache step), `scripts/fetch-binaries.ts`, `scripts/make-fixtures.ts`, `PLAN.md` §0.
+
+**Deferred / notes:**
+
+- `RenderOptions.layers` overrides are not applied (no PDFium OCG API); M12 can use
+  `FPDFPageObj_SetIsActive` per marked object or reload after editing `/OCProperties`.
+- No CJK font bundled: CJK text extracts correctly, glyphs render with PDFium's fallback.
+- `external/bug1782186.pdf`: PDFium rejects the password pdf.js accepts; recorded as
+  `wrong-password` in the manifest rather than hidden.
+- Render hashes for macOS/Linux are copies of the Windows set (the wasm is byte-identical); the
+  first CI run confirms or the corpus test prints the actual values to paste in.
+- Suggested CI economy for when Actions resume: run the three-OS matrix on pull requests and
+  `main` only, Linux-only on other branch pushes (macOS minutes cost 10×).

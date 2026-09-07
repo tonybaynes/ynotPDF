@@ -46,6 +46,23 @@ jobs:
       - name: Install
         run: npm ci
 
+      # M10: fonts for PDFium (inlined into the worker bundle) and the pinned pdf.js corpus for
+      # the engine tests. Both are downloads with SHA-256 checks, cached between runs.
+      - name: Cache fetched fonts and fixtures
+        uses: actions/cache@v4
+        with:
+          path: |
+            resources/fonts/*.ttf
+            resources/fonts/LICENSE-*.txt
+            resources/fonts/.*.sha256
+            test/fixtures/external/*.pdf
+          key: fetched-${{ hashFiles('resources/binaries.json', 'test/fixtures/external/manifest.json') }}
+
+      - name: Fetch fonts and external fixtures
+        run: |
+          npm run fetch-binaries
+          npm run fetch-fixtures
+
       - name: Lint (eslint, prettier, colour/opacity rules, tsc)
         run: npm run lint
 
