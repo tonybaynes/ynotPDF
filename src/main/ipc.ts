@@ -1,24 +1,38 @@
 /**
  * IPC handlers (M00). One entry per channel in `IpcInvokeMap`; the `IpcHandlers` type makes a
  * missing or mistyped handler a compile error.
+ *
+ * Window channels act on the window that sent the request (`BrowserWindow.fromWebContents`), so
+ * they stay correct once a tab has been dragged out into a second window (M02).
  */
 
-import { app, dialog, ipcMain, nativeTheme, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron';
 import type { IpcHandlers, IpcInvokeChannel } from '../shared/ipc';
 import { readFileForRenderer, writeBytes } from './files';
 import type { RecentFiles } from './recent';
 import type { Settings } from './settings';
-import { getMainWindow, sendToRenderer } from './window';
+import { allWindows, broadcast, getMainWindow } from './window';
 
 export interface IpcDeps {
   onOpenPath(path: string): Promise<void>;
   rebuildMenu(): void;
+  /** Opens another app window, optionally loading `path` into it once ready (M02). */
+  openWindow(path: string | undefined, from: BrowserWindow | null): void;
+}
+
+function windowOf(event: { readonly sender: unknown }): BrowserWindow | null {
+  const win = BrowserWindow.fromWebContents(event.sender as Electron.WebContents);
+  return win && !win.isDestroyed() ? win : getMainWindow();
 }
 
 export function registerIpcHandlers(recent: RecentFiles, settings: Settings, deps: IpcDeps): void {
+  const recentChanged = (): void => {
+    broadcast('recent:changed', recent.list());
+    deps.rebuildMenu();
+  };
   const handlers: IpcHandlers = {
-    'file:openDialog': async () => {
-      const win = getMainWindow();
+    'file:openDialog': async (e) => {
+      const win = windowOf(e);
       const options: Electron.OpenDialogOptions = {
         title: 'Open PDF',
         properties: ['openFile'],
@@ -34,20 +48,18 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       if (result.canceled || !path) return null;
       const file = await readFileForRenderer(path);
       recent.add(path);
-      sendToRenderer('recent:changed', recent.list());
-      deps.rebuildMenu();
+      recentChanged();
       return file;
     },
     'file:read': async (_e, path) => {
       const file = await readFileForRenderer(path);
       recent.add(path);
-      sendToRenderer('recent:changed', recent.list());
-      deps.rebuildMenu();
+      recentChanged();
       return file;
     },
     'file:write': (_e, path, bytes) => writeBytes(path, bytes),
-    'file:saveDialog': async (_e, defaultPath) => {
-      const win = getMainWindow();
+    'file:saveDialog': async (e, defaultPath) => {
+      const win = windowOf(e);
       const options: Electron.SaveDialogOptions = {
         title: 'Save PDF',
         ...(defaultPath !== undefined ? { defaultPath } : {}),
@@ -61,12 +73,22 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     'recent:list': () => recent.list(),
     'recent:add': (_e, path) => {
       const list = recent.add(path);
-      deps.rebuildMenu();
+      recentChanged();
       return list;
     },
     'recent:clear': () => {
       const list = recent.clear();
-      deps.rebuildMenu();
+      recentChanged();
+      return list;
+    },
+    'recent:pin': (_e, path, pinned) => {
+      const list = recent.pin(path, pinned);
+      recentChanged();
+      return list;
+    },
+    'recent:remove': (_e, path) => {
+      const list = recent.remove(path);
+      recentChanged();
       return list;
     },
     'settings:get': (_e, key) => settings.get(key),
@@ -91,21 +113,33 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     'app:quit': () => {
       app.quit();
     },
-    'window:minimize': () => {
-      getMainWindow()?.minimize();
+    'window:minimize': (e) => {
+      windowOf(e)?.minimize();
     },
-    'window:toggleMaximize': () => {
-      const win = getMainWindow();
+    'window:toggleMaximize': (e) => {
+      const win = windowOf(e);
       if (!win) return;
       if (win.isMaximized()) win.unmaximize();
       else win.maximize();
     },
-    'window:close': () => {
-      getMainWindow()?.close();
+    'window:close': (e) => {
+      windowOf(e)?.close();
     },
-    'window:setTitle': (_e, title) => {
-      getMainWindow()?.setTitle(title);
+    'window:setTitle': (e, title) => {
+      windowOf(e)?.setTitle(title);
     },
+    'window:new': (e, path) => {
+      deps.openWindow(path, windowOf(e));
+    },
+    'window:getState': (e) => {
+      const win = windowOf(e);
+      return {
+        maximized: win?.isMaximized() ?? false,
+        fullScreen: win?.isFullScreen() ?? false,
+        focused: win?.isFocused() ?? false,
+      };
+    },
+    'window:count': () => allWindows().length,
     'shell:openExternal': async (_e, url) => {
       if (!/^https?:\/\//.test(url)) throw new Error('Only http(s) URLs may be opened');
       await shell.openExternal(url);
@@ -113,8 +147,8 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     'shell:showItemInFolder': (_e, path) => {
       shell.showItemInFolder(path);
     },
-    'devtools:toggle': () => {
-      getMainWindow()?.webContents.toggleDevTools();
+    'devtools:toggle': (e) => {
+      windowOf(e)?.webContents.toggleDevTools();
     },
   };
 
