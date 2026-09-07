@@ -25,6 +25,15 @@ export interface RecentFile {
   readonly name: string;
   /** Unix ms of the last open. */
   readonly openedAt: number;
+  /** Pinned entries stay at the top of the backstage Recent list and are never evicted (M02). */
+  readonly pinned?: boolean;
+}
+
+/** Window state reported by main (M02). */
+export interface WindowState {
+  readonly maximized: boolean;
+  readonly fullScreen: boolean;
+  readonly focused: boolean;
 }
 
 /** OS platform as reported by Node's `process.platform`. */
@@ -71,6 +80,9 @@ export interface IpcInvokeMap {
   'recent:list': { args: []; result: RecentFile[] };
   'recent:add': { args: [path: string]; result: RecentFile[] };
   'recent:clear': { args: []; result: RecentFile[] };
+  /** Pins or unpins a recent file (M02). */
+  'recent:pin': { args: [path: string, pinned: boolean]; result: RecentFile[] };
+  'recent:remove': { args: [path: string]; result: RecentFile[] };
   /**
    * Reads one persisted setting by dotted key (M01). Returns `undefined` when unset. Settings
    * live in `settings.json` in the OS user-data dir; M130 owns the preferences UI on top.
@@ -89,6 +101,11 @@ export interface IpcInvokeMap {
   'window:toggleMaximize': { args: []; result: void };
   'window:close': { args: []; result: void };
   'window:setTitle': { args: [title: string]; result: void };
+  /** Opens another top-level window, optionally loading a file into it (tab drag-out, M02). */
+  'window:new': { args: [path?: string]; result: void };
+  'window:getState': { args: []; result: WindowState };
+  /** Number of open app windows (tests). */
+  'window:count': { args: []; result: number };
   'shell:openExternal': { args: [url: string]; result: void };
   'shell:showItemInFolder': { args: [path: string]; result: void };
   'devtools:toggle': { args: []; result: void };
@@ -102,6 +119,8 @@ export interface IpcEventMap {
   'menu:command': { readonly id: string; readonly args?: Readonly<Record<string, unknown>> };
   'recent:changed': RecentFile[];
   'window:focusChanged': { readonly focused: boolean };
+  /** Maximised / full-screen changed (M02). */
+  'window:stateChanged': WindowState;
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeMap;
@@ -132,6 +151,8 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'recent:list',
   'recent:add',
   'recent:clear',
+  'recent:pin',
+  'recent:remove',
   'settings:get',
   'settings:set',
   'theme:setNative',
@@ -141,6 +162,9 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'window:toggleMaximize',
   'window:close',
   'window:setTitle',
+  'window:new',
+  'window:getState',
+  'window:count',
   'shell:openExternal',
   'shell:showItemInFolder',
   'devtools:toggle',
@@ -152,6 +176,7 @@ export const EVENT_CHANNELS: readonly IpcEventChannel[] = [
   'menu:command',
   'recent:changed',
   'window:focusChanged',
+  'window:stateChanged',
 ];
 
 /**

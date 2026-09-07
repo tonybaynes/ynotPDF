@@ -19,6 +19,7 @@ import type {
   ModuleManifest,
   PanelSpec,
   RibbonGroupSpec,
+  RibbonTabSpec,
   ServiceContext,
   ShortcutSpec,
   ToolSpec,
@@ -193,6 +194,13 @@ export class Registry {
     const groups: RibbonGroupSpec[] = [];
     for (const m of this.manifests.values()) groups.push(...(m.ribbon ?? []));
     return groups.sort((a, b) => (a.order ?? 100) - (b.order ?? 100) || a.id.localeCompare(b.id));
+  }
+
+  /** Contextual ribbon tabs from every manifest (M02, ADR 0004). */
+  ribbonTabs(): ReadonlyArray<RibbonTabSpec> {
+    const tabs: RibbonTabSpec[] = [];
+    for (const m of this.manifests.values()) tabs.push(...(m.ribbonTabs ?? []));
+    return tabs.sort((a, b) => (a.order ?? 100) - (b.order ?? 100) || a.id.localeCompare(b.id));
   }
 
   panels(): ReadonlyArray<PanelSpec> {
