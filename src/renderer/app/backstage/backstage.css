@@ -1,0 +1,134 @@
+/* File backstage (M02): full-window, opaque, rail + page. */
+.backstage {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  grid-template-columns: 16rem 1fr;
+  background: var(--bg-panel);
+  color: var(--fg);
+}
+
+body.backstage-open #ribbon,
+body.backstage-open #tabstrip,
+body.backstage-open #pane-left,
+body.backstage-open #pane-right,
+body.backstage-open #doc-area,
+body.backstage-open #statusbar,
+body.backstage-open .pane-resizer {
+  visibility: hidden;
+}
+
+.backstage-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--bg-ribbon);
+  border-right: var(--border-width) solid var(--border);
+  overflow: auto;
+}
+
+.backstage-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-4);
+  border: var(--border-width) solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--fg-on-accent);
+  font-weight: var(--fw-heading);
+  cursor: pointer;
+}
+
+.backstage-back .icon {
+  color: var(--fg-on-accent);
+}
+
+.backstage-back:hover {
+  background: var(--accent-hover);
+}
+
+.backstage-slots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.backstage-slot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  font-size: var(--fs-4);
+  cursor: pointer;
+  flex-wrap: wrap;
+}
+
+.backstage-slot:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+
+.backstage-slot[aria-current='page'] {
+  background: var(--bg-active);
+  border-color: var(--border-strong);
+  box-shadow: inset 4px 0 0 0 var(--accent);
+  font-weight: var(--fw-heading);
+}
+
+.backstage-slot:disabled {
+  cursor: default;
+  color: var(--fg-muted);
+}
+
+.backstage-unavailable {
+  flex-basis: 100%;
+  padding-left: calc(var(--icon-size) + var(--sp-3));
+  font-size: var(--fs-2);
+  font-style: italic;
+  color: var(--fg-muted);
+}
+
+.backstage-page {
+  padding: var(--sp-6);
+  overflow: auto;
+}
+
+.backstage-title {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-5);
+  font-weight: var(--fw-heading);
+}
+
+.backstage-subtitle {
+  margin: var(--sp-6) 0 var(--sp-3);
+  font-size: var(--fs-4);
+  font-weight: var(--fw-heading);
+}
+
+.backstage-hint {
+  margin: 0 0 var(--sp-4);
+  color: var(--fg-muted);
+}
+
+.backstage-actions {
+  display: flex;
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0;
+}
+
+.backstage-page .recent-list {
+  max-width: 48rem;
+}

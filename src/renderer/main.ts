@@ -1,7 +1,8 @@
 /**
- * Renderer entry (M00): boots the Registry, registers module manifests, mounts the empty
- * shell frame, wires keyboard shortcuts and native-menu commands, and (only when launched
- * with `YNOT_E2E=1`) installs the `window.__ynot` test harness.
+ * Renderer entry (M00): boots the Registry, registers module manifests, mounts the shell
+ * (M02), wires keyboard shortcuts and native-menu commands, and (only when launched with
+ * `YNOT_E2E=1`) installs the `window.__ynot` test harness plus the demo module that exercises
+ * every shell widget.
  */
 
 import { Registry } from '@core/Registry';
@@ -15,6 +16,7 @@ import { installTestHarness } from '@app/testHarness';
 import scaffoldManifest from '@modules/M00-scaffold/manifest';
 import themeManifest, { THEME_SERVICE } from '@modules/M01-theme-system/manifest';
 import { ipcThemeStorage } from '@modules/M01-theme-system/storage';
+import shellManifest from '@modules/M02-app-shell/manifest';
 import { ThemeManager } from '@theme/ThemeManager';
 
 /**
@@ -44,17 +46,29 @@ registry.provide('engine', engineClient.engine);
 registry.provide('engineClient', engineClient);
 registry.provide(THEME_SERVICE, themes);
 
-registry.register(scaffoldManifest);
-registry.register(themeManifest);
-
 const isMac = hasBridge() ? getBridge().platform === 'darwin' : navigator.userAgent.includes('Mac');
 registry.provide('platform', { isMac });
 
+registry.register(scaffoldManifest);
+registry.register(themeManifest);
+registry.register(shellManifest);
+
+const e2e = hasBridge() && getBridge().e2e;
+if (e2e) {
+  // The demo module is the shell's regression suite; it exists only in e2e runs.
+  const { default: demoManifest } = await import('../../test/e2e/demo-module/manifest');
+  registry.register(demoManifest);
+}
+
 const root = document.getElementById('app');
 if (!root) throw new Error('#app root missing');
-mountShell(root, registry, shell);
+const shellHandle = await mountShell(root, { registry, selection, isMac, shellState: shell });
 registry.activateAll();
-installShortcuts(registry, isMac);
+installShortcuts(registry, isMac, {
+  onAltTap: () => {
+    shellHandle.ribbon.toggleKeyTips();
+  },
+});
 
 if (hasBridge()) {
   on('menu:command', ({ id, args }) => {
@@ -67,5 +81,5 @@ if (hasBridge()) {
       console.error('open request failed', error);
     });
   });
-  if (getBridge().e2e) installTestHarness(registry);
+  if (e2e) installTestHarness(registry);
 }
