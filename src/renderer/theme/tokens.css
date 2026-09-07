@@ -180,8 +180,13 @@ html {
   box-shadow: 0 0 0 var(--focus-width) var(--focus-contrast);
 }
 
-/* Body weight comes from the theme (see --fw-body). */
-body {
+/*
+ * Body weight comes from the theme (see --fw-body). It hangs off [data-theme] rather than
+ * `body` so it follows the theme wherever that attribute is set: on <html> in the app, and on
+ * each preview column in the gallery. On `body` the gallery's Daylight column would inherit the
+ * page's own weight instead of its own.
+ */
+[data-theme] {
   font-weight: var(--fw-body);
 }
 
