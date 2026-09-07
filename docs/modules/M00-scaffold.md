@@ -217,8 +217,80 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **Node 26 / npm 11 realities.** npm 11 gates third-party install scripts; `package.json`
+  `allowScripts` approves `electron`, `esbuild`, `electron-winstaller`. Electron 44 no longer
+  downloads its binary on install — `postinstall` runs `install-electron`. Scripts run as plain
+  `node scripts/x.ts` (native TS, `erasableSyntaxOnly`), so no tsx/ts-node.
+- **ESM everywhere, CJS preload.** `"type": "module"`; main and renderer are ESM. The window
+  runs `sandbox: true`, and sandboxed preloads must be plain CommonJS, so the preload build
+  emits `out/preload/index.cjs`.
+- **Core file names are capitalised** (`Store.ts`, not `store.ts` as PLAN.md §2 once wrote):
+  Linux CI is case-sensitive, so imports must match exactly. Aliases: `@shared`, `@engine`,
+  `@core`, `@app`, `@view`, `@modules`.
+- **Command / UndoStack semantics.** `do()`/`undo()` may be async; the stack serialises them.
+  `merge(next)` returns a combined command or `null`; merging is blocked after undo/redo or
+  `breakMerge()`. `group(label, fn)` records a `CompositeCommand`. Dirty tracking survives
+  merges and branching. `SetPropertyCommand` is the reference mergeable command.
+- **Registry as the single command table.** Manifests → commands, shortcuts (normalised
+  `Mod+Shift+P` form), ribbon groups, panels, tools; tools/panels get auto-generated
+  `<tool>.activate` / `panel.<id>` commands. Services (`selection`, `shell`, `engine`,
+  `engineClient`, `registry`) are looked up by name to avoid import cycles.
+- **Engine RPC.** `EngineClient.spawn()` starts `src/engine/worker.ts` (Vite emits it as a
+  module worker). Every `PdfEngine` method is async; results are transferred (bitmaps,
+  buffers); errors cross as `EngineError { code }`. A trailing function argument is treated
+  as a progress callback (`save`). The worker serves `NotImplementedEngine` until M10.
+- **Typed IPC.** `IpcInvokeMap` / `IpcEventMap` in `src/shared/ipc.ts`; preload whitelists
+  channel names; main implements `IpcHandlers` so a missing handler is a compile error.
+- **e2e harness gating.** Main adds `--ynot-e2e` to `additionalArguments` only when
+  `YNOT_E2E=1`; preload reports `e2e: true`; the renderer installs `window.__ynot` only then.
+  Playwright launches `out/main/index.js` (or `YNOT_E2E_EXECUTABLE` for a packaged binary).
+- **Style rules as a script, not an ESLint plugin.** `scripts/lib/style-rules.ts` scans
+  CSS/HTML/TS for colour literals outside `src/renderer/theme/` and for alpha < 1,
+  `opacity` < 1, `backdrop-filter` anywhere; unit-tested; runs in `npm run lint`.
+- **Pre-commit hook = husky pointing at `.githooks/`.** `prepare` runs `husky .githooks`;
+  the hook refuses certificates, `.env*`, PDFs outside `test/fixtures/`, binaries, files > 5 MB
+  and secret-looking content, then runs lint-staged. Tested by spawning real git repos.
+- **Encrypted fixture is hand-written.** pdf-lib cannot encrypt, so `make-fixtures.ts`
+  contains a tiny writer with the standard security handler (RC4 128-bit, R3).
+- **Minimal palette and About dialog ship in M00** so every registered command is reachable
+  from day one and the acceptance test has something to open. M02 replaces the shell.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Shipped (2026-09-07):**
+- Repo initialised on `main` from the planning docs; `mod/M00-scaffold` built in worktree
+  `../ynotPDF-M00`. `.gitignore`, `.gitattributes` (LF everywhere), `.editorconfig`.
+- Toolchain: `package.json` scripts `dev/build/test/e2e/lint/format/fixtures/fetch-binaries/
+  licenses/package/typecheck`; electron-vite 5 (main, preload, renderer + engine worker);
+  TypeScript 5.9 strict with path aliases; ESLint 10 flat config (typescript-eslint strict +
+  stylistic, `no-explicit-any`, disable-comments must carry a description); Prettier; husky +
+  lint-staged; vitest 5 with per-file coverage gates; Playwright 1.63.
+- Custom lint: `scripts/check-styles.ts` (+ unit tests for `#fff` outside theme/,
+  `rgba(0,0,0,.5)`, `opacity: .9`, `backdrop-filter`).
+- Folder skeleton per PLAN.md §7 with a README in every folder.
+- Contract stubs: `PdfEngine` (+ `NotImplementedEngine`, `EngineError`), `EngineClient` +
+  `worker.ts` + `rpc.ts`, `module.ts`, `ipc.ts`, `testApi.ts`, `pdf.ts`; core `Store`,
+  `Command`, `UndoStack`, `Registry`, `Selection`, `Document`; view `Viewport`
+  (`PageTransform`), `Layers`, `PageView`.
+- Main: single instance, one sandboxed `BrowserWindow`, native menu (File/Edit/View/Window/
+  Help with Open Recent), open/save dialogs, recent files (`electron-store`), `.pdf`
+  association (electron-builder `fileAssociations`, argv + `open-file` + second-instance).
+- Renderer: empty shell frame, placeholder Graphite theme, About dialog, minimal command
+  palette, keyboard dispatcher, M00 manifest (`file.open`, `file.openRecent`, `file.close`,
+  `edit.undo/redo`, `app.commandPalette`, `app.about`, `app.quit`, `dev.toggleDevTools`,
+  `dev.engineInfo`).
+- Fixtures: 10 synthetic PDFs generated by `scripts/make-fixtures.ts`.
+- Tests: 73 unit tests (Store 100 % lines, UndoStack 100 %), 6 Playwright tests including
+  `__ynot.run('app.about')` and an engine-worker round trip. All green locally on Windows.
+- CI: `.github/workflows/ci.yml` matrix windows/macos/ubuntu → lint, unit, licences, build,
+  e2e (xvfb on Linux), electron-builder installers uploaded as artifacts.
+- Docs: `README.md`, `docs/adr/0001-stack.md`.
+
+**Deferred / notes:**
+- App icon: none yet (electron-builder default). Needs the operator's logo (PLAN.md §10.1);
+  M131 adds it under `resources/build/`.
+- `file.open` only reflects the file name in the shell; rendering arrives with M10/M11.
+- `Document` and `Selection` are typed shells with minimal behaviour (no unit tests yet);
+  M20 owns them.
+- The e2e gate is a runtime env flag, not a separate build flavour; M131 may compile the
+  harness out of release builds with a build-time define if wanted.

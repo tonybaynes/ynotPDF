@@ -1,0 +1,267 @@
+/* Empty shell frame (M00). M02 replaces this with the real ribbon/panes/tabs/status bar. */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg-app);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: calc(14px * var(--ui-scale));
+}
+
+:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: 1px;
+}
+
+#app {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    'title title title'
+    'ribbon ribbon ribbon'
+    'left doc right'
+    'status status status';
+  height: 100%;
+}
+
+.titlebar {
+  grid-area: title;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: var(--bg-ribbon);
+  border-bottom: var(--border-width) solid var(--border);
+}
+
+.titlebar h1 {
+  margin: 0;
+  font-size: 1em;
+  font-weight: 600;
+}
+
+.ribbon {
+  grid-area: ribbon;
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--bg-ribbon);
+  border-bottom: var(--border-width) solid var(--border);
+}
+
+.ribbon [role='tab'] {
+  padding: 4px 10px;
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ribbon [role='tab'][aria-selected='true'] {
+  background: var(--bg-active);
+  border-color: var(--border);
+}
+
+.pane {
+  background: var(--bg-panel);
+  border-right: var(--border-width) solid var(--border);
+  min-width: 48px;
+}
+
+.pane-left {
+  grid-area: left;
+  width: 220px;
+}
+
+.pane-right {
+  grid-area: right;
+  width: 220px;
+  border-right: 0;
+  border-left: var(--border-width) solid var(--border);
+}
+
+.pane h2 {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--fg-muted);
+  border-bottom: var(--border-width) solid var(--border);
+}
+
+.doc-area {
+  grid-area: doc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  background: var(--bg-page-area);
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--fg-muted);
+}
+
+.empty-state p {
+  margin: 4px 0;
+}
+
+.statusbar {
+  grid-area: status;
+  display: flex;
+  gap: 16px;
+  padding: 4px 12px;
+  background: var(--bg-ribbon);
+  border-top: var(--border-width) solid var(--border);
+  font-size: 0.9em;
+}
+
+kbd {
+  font-family: var(--font-mono);
+  padding: 1px 4px;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--fg);
+}
+
+button.btn {
+  font: inherit;
+  padding: 6px 12px;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+button.btn:hover {
+  background: var(--bg-hover);
+}
+
+button.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+
+/* Dialogs are fully opaque - no backdrop transparency, ever. */
+dialog {
+  background: var(--bg-panel);
+  color: var(--fg);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  min-width: 320px;
+  max-width: 90vw;
+}
+
+dialog::backdrop {
+  background: var(--shadow);
+  opacity: 1;
+}
+
+dialog h2 {
+  margin: 0 0 8px;
+  font-size: 1.1em;
+}
+
+dialog .actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+dialog dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 8px 0 0;
+}
+
+dialog dt {
+  color: var(--fg-muted);
+}
+
+dialog dd {
+  margin: 0;
+  font-family: var(--font-mono);
+}
+
+/* Command palette */
+.palette {
+  width: min(640px, 90vw);
+  padding: 0;
+}
+
+.palette input {
+  width: 100%;
+  font: inherit;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: var(--border-width) solid var(--border);
+  background: var(--bg-input);
+  color: var(--fg);
+}
+
+.palette ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.palette li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.palette li[aria-selected='true'] {
+  background: var(--bg-active);
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: -2px;
+}
+
+.palette .cat {
+  color: var(--fg-muted);
+  margin-right: 8px;
+}
+
+.palette .key {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+}
+
+.page {
+  position: relative;
+  background: var(--bg-panel);
+  border: var(--border-width) solid var(--border);
+}
+
+.page .layer {
+  position: absolute;
+  inset: 0;
+}
+
+.page .layer-raster {
+  width: 100%;
+  height: 100%;
+}
+
+.page .layer-text {
+  color: transparent;
+}

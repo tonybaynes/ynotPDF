@@ -1,0 +1,4 @@
+{
+  "$comment": "Native binaries fetched by scripts/fetch-binaries.ts. Add entries per module (M10 pdfium, M70 qpdf, M90 tesseract). sha256 is mandatory.",
+  "binaries": []
+}

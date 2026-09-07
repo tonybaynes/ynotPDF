@@ -1,0 +1,36 @@
+/*
+ * Semantic colour tokens (M00). Every theme file assigns ALL of these under
+ * [data-theme="<name>"]. Application CSS uses only var(--token); never a literal.
+ *
+ * Contrast rules (CLAUDE.md): --fg and --fg-muted >= 4.5:1 on every --bg-*; --icon and
+ * --border >= 3:1; status colours (--danger/--warning/--success/--info) are never the only
+ * signal — pair with a word and an icon; never rely on red vs green.
+ *
+ * Tokens:
+ *   --bg-app        window background behind everything
+ *   --bg-panel      side panes, dialogs, palette
+ *   --bg-ribbon     ribbon / toolbar strip
+ *   --bg-input      text inputs, list rows
+ *   --bg-hover      hover state for rows/buttons
+ *   --bg-active     pressed / selected row
+ *   --bg-page-area  the scrolling document area behind pages
+ *   --fg            primary text
+ *   --fg-muted      secondary text (still >= 4.5:1)
+ *   --icon          stroke colour for Lucide icons
+ *   --accent        primary action / active tab
+ *   --accent-fg     text on --accent
+ *   --border        1px separators and control outlines
+ *   --focus         2px focus ring (keyboard)
+ *   --selection     text/object selection fill (opaque; the view uses blend modes, not alpha)
+ *   --danger / --warning / --success / --info   status colours (word + icon always)
+ *   --shadow        opaque shadow colour for elevated surfaces (borders preferred)
+ */
+:root {
+  color-scheme: dark;
+  --font-ui: system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, 'Liberation Mono', monospace;
+  --radius: 4px;
+  --focus-width: 2px;
+  --border-width: 1px;
+  --ui-scale: 1;
+}

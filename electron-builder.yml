@@ -1,0 +1,51 @@
+# electron-builder configuration - M00 baseline. M131 adds signing, notarisation and auto-update.
+appId: com.ynotpdf.app
+productName: ynotPDF
+copyright: Copyright 2026 Tony Baynes
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+directories:
+  output: release
+  buildResources: resources/build
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+extraResources:
+  - from: resources/bin
+    to: bin
+    filter: ['**/*', '!README.md']
+asar: true
+fileAssociations:
+  - ext: pdf
+    name: PDF Document
+    description: Portable Document Format
+    mimeType: application/pdf
+    role: Editor
+win:
+  target:
+    - nsis
+    - msi
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+msi:
+  perMachine: false
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: [universal]
+  hardenedRuntime: false
+  identity: null
+linux:
+  category: Office
+  maintainer: Tony Baynes <tonybaynes@gmail.com>
+  target:
+    - AppImage
+    - deb
+    - rpm
+  desktop:
+    entry:
+      MimeType: application/pdf
+publish: null

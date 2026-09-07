@@ -1,0 +1,27 @@
+/*
+ * Graphite (default dark) - M00 PLACEHOLDER palette so the shell renders.
+ * M01 owns the real four themes and the contrast test; values here come from PLAN.md 3.2.
+ */
+[data-theme='graphite'] {
+  color-scheme: dark;
+  --bg-app: #121212;
+  --bg-panel: #1c1c1e;
+  --bg-ribbon: #232326;
+  --bg-input: #2a2a2e;
+  --bg-hover: #303036;
+  --bg-active: #3a3a42;
+  --bg-page-area: #0e0e0e;
+  --fg: #f2f2f2;
+  --fg-muted: #c8c8cc;
+  --icon: #ffffff;
+  --accent: #4da3ff;
+  --accent-fg: #0b1220;
+  --border: #4a4a4f;
+  --focus: #ffd166;
+  --selection: #2a5c99;
+  --danger: #ff8fa3;
+  --warning: #ffd166;
+  --success: #7fd7ff;
+  --info: #9ec5ff;
+  --shadow: #000000;
+}
