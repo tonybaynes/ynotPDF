@@ -35,7 +35,7 @@ Native engine binaries (PDFium, qpdf, Tesseract) are fetched per OS by
 | `npm run format`         | prettier --write                                                          |
 | `npm run fixtures`       | Regenerate the synthetic PDF corpus in `test/fixtures/`                   |
 | `npm run icon`           | Regenerate the placeholder app icon (`resources/build/icon.png`)          |
-| `npm run gallery`        | Dev-only theme gallery: all four palettes, every contrast number          |
+| `npm run gallery`        | Dev-only theme gallery on <http://localhost:5199/gallery.html>            |
 | `npm run fetch-binaries` | Download pinned native binaries into `resources/bin/`                     |
 | `npm run licenses`       | Fail on GPL/AGPL/LGPL/commercial production dependencies                  |
 | `npm run package`        | Build + electron-builder installers into `release/` (unsigned until M131) |
