@@ -3,7 +3,7 @@
  * Pure black app, dark-blue panels, gold text, white borders and icons, blue accent.
  */
 [data-theme='midnight'] {
-  color-scheme: dark;
+  color-scheme: dark only;
 
   /* Surfaces */
   --bg-app: #000000;

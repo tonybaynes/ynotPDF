@@ -7,6 +7,11 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      The app themes itself; never let a browser-level auto-dark feature repaint it.
+      Each theme also declares its own `color-scheme` (see theme/tokens.css).
+    -->
+    <meta name="color-scheme" content="dark light" />
     <title>ynotPDF</title>
     <!--
       All four themes are linked at once and scoped by [data-theme]; ThemeManager switches by

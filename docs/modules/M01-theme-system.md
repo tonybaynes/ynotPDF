@@ -237,6 +237,13 @@ is colourblind: black and red read as the same colour):**
 - **Nothing here is a `Command`.** Theme and UI scale are view preferences, not document
   changes, so there is nothing to undo. Every action is still a registered command with a
   palette entry, so the palette, shortcuts and the e2e harness all drive the same code.
+- **Every theme declares `color-scheme: <scheme> only`, never a bare `light`/`dark`.** The
+  `only` keyword forbids the browser substituting a scheme of its own. Without it, Chrome's
+  "Auto Dark Mode for Web Contents" (`chrome://flags`, which the operator runs) repaints any
+  subtree declaring `color-scheme: light` — so the Daylight column of the gallery rendered
+  dark and the palette under review was not the palette that ships. Probed in the operator's
+  own Chrome: a bare `light` is repainted, `light only` is not. The contrast and e2e tests
+  both assert the keyword so it cannot regress.
 - **Annotation colours are theme-independent.** They are document content, not UI: the same
   values in all four themes, checked against the page paper rather than the app surfaces.
 
@@ -272,6 +279,13 @@ is colourblind: black and red read as the same colour):**
   `theme:setNative`), `src/main/settings.ts`, the `@theme` path alias, `reuseUserData` in the
   Playwright harness, the ThemeManager boot in `renderer/main.ts`, and the switcher mounted in
   M00's status bar.
+
+**Fixed after first merge (2026-09-07):**
+- The operator reported the gallery's Daylight column rendering dark in Chrome. Cause: Chrome's
+  Auto Dark Mode repaints subtrees that declare `color-scheme: light`. All four themes now use
+  `color-scheme: <scheme> only`, which is the standards-defined opt-out; verified in the
+  operator's own browser with the flag enabled. `gallery.html` and `index.html` also carry
+  `<meta name="color-scheme" content="dark light">` so the very first paint is covered too.
 
 **Deferred / notes:**
 - **The operator still has to approve the palettes** (`CHECKLIST.txt`, "Things only Tony can

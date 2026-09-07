@@ -37,7 +37,12 @@ describe('theme tokens', () => {
 
       it('declares the right selector and color-scheme', () => {
         expect(parsed.name).toBe(theme.name);
-        expect(parsed.colorScheme).toBe(theme.scheme);
+        /*
+         * The `only` keyword is required, not cosmetic: it forbids the browser substituting a
+         * scheme of its own. Without it, Chrome's Auto Dark Mode repaints any subtree that says
+         * `color-scheme: light`, which made the Daylight palette render dark in the gallery.
+         */
+        expect(parsed.colorScheme).toBe(`${theme.scheme} only`);
       });
 
       it('defines every documented colour token as a plain hex value', () => {

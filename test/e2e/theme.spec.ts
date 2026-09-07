@@ -56,7 +56,8 @@ test('every theme applies live, with the right colours and colour-scheme', async
     expect(applied.attribute, theme.name).toBe(theme.name);
     expect(applied.body, `${theme.name} --bg-app`).toBe(toRgb(token(theme.name, '--bg-app')));
     expect(applied.fg, `${theme.name} --fg`).toBe(toRgb(token(theme.name, '--fg')));
-    expect(applied.scheme, `${theme.name} color-scheme`).toBe(theme.scheme);
+    // `only` stops a browser-level auto-dark feature repainting the app's own colours.
+    expect(applied.scheme, `${theme.name} color-scheme`).toBe(`${theme.scheme} only`);
   }
 });
 

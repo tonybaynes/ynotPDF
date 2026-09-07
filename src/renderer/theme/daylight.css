@@ -3,7 +3,7 @@
  * Off-white app, white panels, near-black text, deep-blue accent, amber focus ring.
  */
 [data-theme='daylight'] {
-  color-scheme: light;
+  color-scheme: light only;
 
   /* Surfaces */
   --bg-app: #f5f5f7;

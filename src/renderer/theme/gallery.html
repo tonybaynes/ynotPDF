@@ -3,6 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      Opt out of Chrome's "Auto Dark Mode for Web Contents" (chrome://flags). That feature
+      re-darkens light-coloured elements at paint time, which would repaint the Daylight
+      column and every white page sample — the exact colours this page exists to show.
+      Declaring support for both schemes here tells Chrome the page handles its own theming.
+      This meta tag is the reliable signal: it is parsed before any stylesheet loads.
+    -->
+    <meta name="color-scheme" content="dark light" />
     <title>ynotPDF theme gallery</title>
     <!--
       Development page (M01). Not part of the app bundle: it is served by `npm run gallery`
