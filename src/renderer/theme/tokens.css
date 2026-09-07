@@ -103,6 +103,13 @@
   --fs-5: 1.429rem; /* 20px    page headings */
   --fs-6: 1.857rem; /* 26px    hero / empty state */
   --lh: 1.4;
+  /*
+   * Font weight is a theme token, not a constant. Dark-on-light text renders visually thinner
+   * than light-on-dark at the same weight — the light background bleeds into the glyph edges —
+   * so Daylight sets these heavier to match the perceived weight of the dark themes.
+   */
+  --fw-body: 400;
+  --fw-heading: 600;
 
   /* Spacing scale (rem, so it scales with the UI). */
   --sp-1: 0.143rem; /* 2px */
@@ -171,6 +178,11 @@ html {
   outline: var(--focus-width) solid var(--focus);
   outline-offset: var(--focus-offset);
   box-shadow: 0 0 0 var(--focus-width) var(--focus-contrast);
+}
+
+/* Body weight comes from the theme (see --fw-body). */
+body {
+  font-weight: var(--fw-body);
 }
 
 /* Placeholder hints are the one permitted low-contrast text: italic so they read as hints. */

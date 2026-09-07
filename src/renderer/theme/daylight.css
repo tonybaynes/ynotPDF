@@ -7,6 +7,13 @@
   color-scheme: light only;
 
   /*
+   * Heavier than the dark themes on purpose (operator, 2026-09-07): black-on-grey looks
+   * thinner than white-on-black at the same weight, and the operator was losing the text.
+   */
+  --fw-body: 600;
+  --fw-heading: 700;
+
+  /*
    * Surfaces. Deliberately no pure white anywhere in the chrome (operator request,
    * 2026-09-07): a full-screen #ffffff reads as glare. Panels are a soft off-white and the
    * app sits a step below them, which also gives the panels a visible edge without a border.

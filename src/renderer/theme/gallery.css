@@ -137,7 +137,7 @@ tr.bad td,
 td.bad,
 p.bad {
   color: var(--danger);
-  font-weight: 600;
+  font-weight: var(--fw-heading);
 }
 
 .sample {

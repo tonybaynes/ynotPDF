@@ -47,7 +47,7 @@ body {
 .titlebar h1 {
   margin: 0;
   font-size: 1em;
-  font-weight: 600;
+  font-weight: var(--fw-heading);
 }
 
 .ribbon {
@@ -96,7 +96,7 @@ body {
   margin: 0;
   padding: 8px 12px;
   font-size: 0.9em;
-  font-weight: 600;
+  font-weight: var(--fw-heading);
   color: var(--fg-muted);
   border-bottom: var(--border-width) solid var(--border);
 }
