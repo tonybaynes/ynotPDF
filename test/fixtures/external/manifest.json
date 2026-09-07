@@ -1,0 +1,222 @@
+{
+  "$comment": "Real-world test PDFs from the pdf.js test suite (github.com/mozilla/pdf.js, Apache-2.0), pinned to one commit and one SHA-256 each. Downloaded by `npm run fetch-fixtures` into this folder; never committed. Passwords are those recorded in pdf.js's test_manifest.json.",
+  "source": "https://github.com/mozilla/pdf.js/tree/e67b540fc9241deb884f9a0fc23aecce5f8b33b6/test/pdfs",
+  "base": "https://raw.githubusercontent.com/mozilla/pdf.js/e67b540fc9241deb884f9a0fc23aecce5f8b33b6/test/pdfs/",
+  "commit": "e67b540fc9241deb884f9a0fc23aecce5f8b33b6",
+  "files": [
+    {
+      "file": "issue15893_reduced.pdf",
+      "sha256": "3c2815853e6fe5c34feb76bb14402cbc46bbd484ecd57b672fc03577d0458ee8",
+      "size": 1610,
+      "password": "test",
+      "notes": "encrypted, reduced test case"
+    },
+    {
+      "file": "issue3371.pdf",
+      "sha256": "0c3fb45d9b61ea762b4b3298c8c47e5375e83d151d356d87d740bcb85d953473",
+      "size": 12323,
+      "password": "ELXRTQWS",
+      "notes": "encrypted"
+    },
+    {
+      "file": "bug1782186.pdf",
+      "sha256": "4c021f37d739c8231cecab5ddd1a93db692f7ba81026315ae1ca39b9b710e86e",
+      "size": 5879,
+      "password": "Hello",
+      "notes": "encrypted"
+    },
+    {
+      "file": "issue6010_1.pdf",
+      "sha256": "d7fd95e016b7d43bc9eed1041b0cdd6ee00e3dd902e50d0307b0a428782c543c",
+      "size": 1116,
+      "password": "abc",
+      "notes": "encrypted"
+    },
+    {
+      "file": "empty_protected.pdf",
+      "sha256": "69556af04215faec7da3e93e823c64f1b74679e52fd10379176f0e0462dd4b6c",
+      "size": 5605,
+      "notes": "owner-password only"
+    },
+    {
+      "file": "annotation-highlight.pdf",
+      "sha256": "72b6387356ccfdfb95a0a5eff5e1ceb9b7667019807d7b04abaf64dad7ea143a",
+      "size": 92397,
+      "notes": "Highlight annotations with appearance streams"
+    },
+    {
+      "file": "annotation-line.pdf",
+      "sha256": "cea9ed8cf5726fa643da0c083bc8db8df790ab5e7ee9a2b62224aab73d9fa742",
+      "size": 84943,
+      "notes": "Line annotations"
+    },
+    {
+      "file": "annotation-square-circle.pdf",
+      "sha256": "88ed9ed813c3585b3098b9f4eef5107426f7829044117cd87f77bdc38a8e3f72",
+      "size": 88740,
+      "notes": "Square and Circle annotations"
+    },
+    {
+      "file": "annotation-fileattachment.pdf",
+      "sha256": "b2f3751cd63e2402d95673f763e52fb105e6ce8e0b41406ca6d9965f5c894d43",
+      "size": 93322,
+      "notes": "FileAttachment annotation"
+    },
+    {
+      "file": "annotation-text-widget.pdf",
+      "sha256": "9f091ceb368ad0406094efaa6c50d5033735ee52f383e0973dc53a7467089d7c",
+      "size": 93171,
+      "notes": "text field widgets"
+    },
+    {
+      "file": "annotation-choice-widget.pdf",
+      "sha256": "2fcab2aed82afe9775359c1d166fb7aae77e99d25fe03be177e233d02d572538",
+      "size": 91556,
+      "notes": "combo/list widgets"
+    },
+    {
+      "file": "annotation-button-widget.pdf",
+      "sha256": "f7b1c9c7b2ecb909f6b168cc1b137230076533f977a205472b212b7f0d3a78d7",
+      "size": 23785,
+      "notes": "checkbox/radio/push-button widgets"
+    },
+    {
+      "file": "annotation-polyline-polygon.pdf",
+      "sha256": "66303646dd550366994f6715678863536617093335825dda3c123616555b69e2",
+      "size": 88691,
+      "notes": "PolyLine and Polygon annotations"
+    },
+    {
+      "file": "annotation-caret-ink.pdf",
+      "sha256": "afdc6fb72e8dcb8f0796a48388fc011e9db212e18d1d7b8cf95b327e88cf6ce9",
+      "size": 93680,
+      "notes": "Caret and Ink annotations"
+    },
+    {
+      "file": "annotation-freetext.pdf",
+      "sha256": "318ed4bead93fa6ff023571b17ddca41e82fe2347b497ea24903a11e1892fb71",
+      "size": 86024,
+      "notes": "FreeText annotations"
+    },
+    {
+      "file": "annotation-stamp.pdf",
+      "sha256": "76d566c092c23ccbec4bb488c40dc6daec8a381cb5386452b186728652436704",
+      "size": 88903,
+      "notes": "Stamp annotation"
+    },
+    {
+      "file": "annotation-link-text-popup.pdf",
+      "sha256": "06917202feda6b6bb8b57b048655f946f749bdff5a8bfcb35eb0116f38910312",
+      "size": 98997,
+      "notes": "Link, Text and Popup annotations"
+    },
+    {
+      "file": "rotation.pdf",
+      "sha256": "5087c2afe763d145537d652bb3bc6c321ace3a267b2679ae2c178add3ba7f1d9",
+      "size": 6605,
+      "notes": "pages with /Rotate"
+    },
+    {
+      "file": "rotated.pdf",
+      "sha256": "08c31db1ebd2345d1dcdcd3ee2baffe47845db76e9911a823ad9ed8638b5a294",
+      "size": 12963,
+      "notes": "rotated text"
+    },
+    {
+      "file": "xref_command_missing.pdf",
+      "sha256": "88d3905774607b3f529e369db122b2d14051417993c9a704472c91c6702ccff6",
+      "size": 631,
+      "notes": "broken xref"
+    },
+    {
+      "file": "helloworld-bad.pdf",
+      "sha256": "c3e22ea5d7e6f5b7218d76abce4284728889df516a93c1b74a82c4fd69aa1639",
+      "size": 745,
+      "notes": "damaged hello world"
+    },
+    {
+      "file": "pdfjsbad1586.pdf",
+      "sha256": "4625f06d2a8796cb76999b5d450cf41bbb41b00ffe0196a9954b20bfa7d916fe",
+      "size": 7911,
+      "notes": "damaged file"
+    },
+    {
+      "file": "boundingBox_invalid.pdf",
+      "sha256": "f85be7aaf217f8f1864b910501d4aeea53f3d7a503df5b81dd6aaa267e5968ad",
+      "size": 1263,
+      "notes": "invalid MediaBox"
+    },
+    {
+      "file": "vertical.pdf",
+      "sha256": "514511143db12309893fb69cdf98c76f2361c20da394f79fdff2c119ed7a4393",
+      "size": 6905,
+      "notes": "vertical CJK writing"
+    },
+    {
+      "file": "noembed-jis7.pdf",
+      "sha256": "812493361351a703b3a1c34830115df762024229aac8e41d9a16b8a075761691",
+      "size": 15306,
+      "notes": "non-embedded Japanese font"
+    },
+    {
+      "file": "ArabicCIDTrueType.pdf",
+      "sha256": "1cad1de912ba29f89a6d8b08bc5b0f84382874ffedab2c8f9e05ef608c265bb1",
+      "size": 39370,
+      "notes": "Arabic (RTL) CID TrueType"
+    },
+    {
+      "file": "ccitt_EndOfBlock_false.pdf",
+      "sha256": "f2289b94e7e3f05f9e37754c399d3f525edf9444fb32c3279959cf64b575fe62",
+      "size": 3256,
+      "notes": "CCITT fax image (scan)"
+    },
+    {
+      "file": "jbig2_symbol_offset.pdf",
+      "sha256": "305b71c67829ef0bb8bddab9fa3ee763dcecd173f5fd996740d17212888fa97d",
+      "size": 1157,
+      "notes": "JBIG2 image (scan)"
+    },
+    {
+      "file": "jpx_smaskindata.pdf",
+      "sha256": "a82813559c74f074b0caf92c80875fc018acb737269a2af5508c7e083b2a5fd3",
+      "size": 2515,
+      "notes": "JPEG 2000 image"
+    },
+    {
+      "file": "alphatrans.pdf",
+      "sha256": "234c0ab8e9458f4d17133b08d2b66170eeb92be2a80e1508aa5117a2bf568f63",
+      "size": 16910,
+      "notes": "transparency groups"
+    },
+    {
+      "file": "xfa_issue14315.pdf",
+      "sha256": "d039a40ea28384bae8d1a24929a4288aae1aeb433c441fd39c04fad618fa6f19",
+      "size": 11568,
+      "notes": "XFA form"
+    },
+    {
+      "file": "issue14130.pdf",
+      "sha256": "0ca0a6e1cd50de1b930b764ca7b276fba87f78c06689b6d88cf8b8055392b782",
+      "size": 79706,
+      "notes": "XFA form"
+    },
+    {
+      "file": "mesh_shading_empty.pdf",
+      "sha256": "90f2cdfedeb307e40806d6089b333bc276bf24fd7bba829572ce78ed129901f7",
+      "size": 1407,
+      "notes": "mesh shading edge case"
+    },
+    {
+      "file": "annotation_hidden_print.pdf",
+      "sha256": "d084450dfbb7d5c53593ed8f0a005553bd0ae797e34b3a1c8c00c7eec2fc5a9d",
+      "size": 6539,
+      "notes": "hidden / print-only annotation flags"
+    },
+    {
+      "file": "multiline.pdf",
+      "sha256": "a320198cf4bf28eaeb99080afcd92e5c2f864af1620b1b394a7bea44fb01c93c",
+      "size": 6455,
+      "notes": "multiline text field"
+    }
+  ]
+}

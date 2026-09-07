@@ -47,3 +47,4 @@ resources/fonts/.*.sha256
 # external fixtures fetched by scripts/fetch-fixtures.ts (pinned, never committed)
 test/fixtures/external/**
 !test/fixtures/external/README.md
+!test/fixtures/external/manifest.json
