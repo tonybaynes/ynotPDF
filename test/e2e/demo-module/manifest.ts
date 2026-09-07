@@ -526,7 +526,7 @@ export default defineModule({
     },
     {
       id: 'demo.wide1',
-      tab: 'home',
+      tab: 'organize',
       label: 'Demo wide one',
       order: 50,
       items: ['demo.hello', 'demo.small', 'demo.hello', 'demo.small'].map((c, i) => ({
@@ -537,25 +537,31 @@ export default defineModule({
     },
     {
       id: 'demo.wide2',
-      tab: 'home',
+      tab: 'organize',
       label: 'Demo wide two',
       order: 51,
-      items: ['demo.hello', 'demo.small', 'demo.hello', 'demo.small'].map((c) => ({
-        kind: 'button' as const,
-        command: c,
-        size: 'large' as const,
-      })),
+      items: [
+        'demo.hello',
+        'demo.small',
+        'demo.hello',
+        'demo.small',
+        'demo.hello',
+        'demo.small',
+      ].map((c) => ({ kind: 'button' as const, command: c, size: 'large' as const })),
     },
     {
       id: 'demo.wide3',
-      tab: 'home',
+      tab: 'organize',
       label: 'Demo wide three',
       order: 52,
-      items: ['demo.hello', 'demo.small', 'demo.hello', 'demo.small'].map((c) => ({
-        kind: 'button' as const,
-        command: c,
-        size: 'large' as const,
-      })),
+      items: [
+        'demo.hello',
+        'demo.small',
+        'demo.hello',
+        'demo.small',
+        'demo.hello',
+        'demo.small',
+      ].map((c) => ({ kind: 'button' as const, command: c, size: 'large' as const })),
     },
     {
       id: 'demo.ink.tools',

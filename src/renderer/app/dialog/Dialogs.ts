@@ -100,6 +100,8 @@ export class Dialogs {
         const handle = (existing as HTMLDialogElement & { __handle?: DialogHandle }).__handle;
         if (handle) return handle;
       }
+      // A closed dialog whose `close` event has not run yet must not share the id.
+      existing?.remove();
     }
     const modal = options.modal !== false;
     const dialog = el('dialog.dlg', {
@@ -142,11 +144,18 @@ export class Dialogs {
     let isOpen = true;
     const buttonEls = new Map<string, HTMLButtonElement>();
 
+    const finish = (): void => {
+      openDialogs.delete(dialog);
+      dialog.remove();
+      resolveResult(dialog.returnValue || 'cancel');
+    };
     const close = (r = 'cancel'): void => {
       if (!isOpen) return;
       isOpen = false;
       dialog.returnValue = r;
       dialog.close();
+      // Do not wait for the asynchronous `close` event: the caller may open another dialog at once.
+      finish();
     };
 
     const handle: DialogHandle = {
@@ -215,10 +224,10 @@ export class Dialogs {
       }
     });
     dialog.addEventListener('close', () => {
+      // Native close paths (e.g. the browser closing a modal itself); `close()` already finished.
+      if (!isOpen) return;
       isOpen = false;
-      openDialogs.delete(dialog);
-      dialog.remove();
-      resolveResult(dialog.returnValue || 'cancel');
+      finish();
     });
 
     document.body.append(dialog);

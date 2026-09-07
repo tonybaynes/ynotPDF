@@ -237,9 +237,13 @@ test('the ribbon minimises, peeks and expands', async () => {
 });
 
 test('groups collapse into a popup button when the window is narrow', async () => {
-  // The demo tab is deliberately wider than a 1280 px window, so some groups start collapsed;
-  // narrowing collapses more, restoring goes back to the same number.
+  // The demo's Organize tab is deliberately wider than any window, so some groups start
+  // collapsed there; narrowing collapses more, restoring the size goes back to the same number.
+  await app.run('app.ribbon.showTab', { tab: 'organize' });
   const collapsed = app.page.locator('#ribbon-body .rb-collapsed');
+  const size = await app.electron.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0]?.getSize(),
+  );
   const wideCount = await collapsed.count();
   await app.electron.evaluate(({ BrowserWindow }) => {
     BrowserWindow.getAllWindows()[0]?.setSize(760, 600);
@@ -249,9 +253,12 @@ test('groups collapse into a popup button when the window is narrow', async () =
   await opener.click();
   await expect(app.page.locator('.ribbon-group-popup .rb-btn').first()).toBeVisible();
   await app.page.keyboard.press('Escape');
-  await app.electron.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0]?.setSize(1280, 800);
-  });
+  await app.electron.evaluate(
+    ({ BrowserWindow }, [w, h]) => {
+      BrowserWindow.getAllWindows()[0]?.setSize(w, h);
+    },
+    [size?.[0] ?? 1280, size?.[1] ?? 800] as [number, number],
+  );
   await expect(collapsed).toHaveCount(wideCount);
 });
 

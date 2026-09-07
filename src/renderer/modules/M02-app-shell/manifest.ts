@@ -637,6 +637,9 @@ export default defineModule({
   shortcuts: [
     { key: 'Mod+Plus', command: 'view.zoom.in' },
     { key: 'Mod+Minus', command: 'view.zoom.out' },
+    // Cmd+Tab is the macOS app switcher, so tab cycling is also plain Ctrl+Tab everywhere.
+    { key: 'Ctrl+Tab', command: 'app.tabs.next', scope: 'global' },
+    { key: 'Ctrl+Shift+Tab', command: 'app.tabs.previous', scope: 'global' },
   ],
   ribbon: [
     {
