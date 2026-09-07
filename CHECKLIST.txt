@@ -289,7 +289,7 @@ THINGS ONLY TONY CAN DO
 [x] Create private GitHub repo tonybaynes/ynotPDF (before M00)
 [ ] Confirm app name / supply logo (M00)
 [ ] Approve tier list in PLAN.md section 1 (wave 1)
-[ ] Approve the four theme palettes (M01 gallery page)
+[✔] Approve the four theme palettes (M01 gallery page)   - approved 2026-09-07
 [ ] Provide a few non-confidential real PDFs for the test corpus (M10)
 [ ] Windows code-signing certificate + Apple Developer account (M131)
 [ ] Decide: is LibreOffice acceptable for Office conversion? (M93)

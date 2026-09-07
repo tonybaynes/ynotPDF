@@ -288,9 +288,9 @@ is colourblind: black and red read as the same colour):**
   `<meta name="color-scheme" content="dark light">` so the very first paint is covered too.
 
 **Deferred / notes:**
-- **The operator still has to approve the palettes** (`CHECKLIST.txt`, "Things only Tony can
-  do"). Run `npm run gallery`. Changing a value is a one-line edit in the theme file; the test
-  says immediately whether it still passes.
+- **Palettes approved by the operator on 2026-09-07**, all four, from the gallery page
+  (`CHECKLIST.txt` and PLAN.md §10 item 4 ticked). To revisit one later: `npm run gallery`,
+  edit the single value in its theme file, and `npm test` says at once whether it still passes.
 - Tritanopia is simulated by `contrast.ts` and unit-tested, but the status rule only asserts
   protanopia and deuteranopia, as the brief specified.
 - The status-bar switcher is a plain `<select>`; M02 restyles the status bar and may replace it
