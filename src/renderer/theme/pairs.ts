@@ -4,8 +4,9 @@
  * surface that is not listed here, add the pair — the rule is "no untested combination".
  *
  * Thresholds (CLAUDE.md / PLAN.md §3.2): text ≥ 4.5:1, icons and borders ≥ 3:1,
- * `--fg-muted` ≥ 4.5:1 (no dim grey on dark). `--fg-placeholder` is the one permitted
- * low-contrast text and must still reach 3:1.
+ * `--fg-muted` ≥ 4.5:1 (no dim grey on dark). `--fg-placeholder` is held to the same 4.5:1
+ * as any other text: the operator found the 3:1 the plan first allowed too faint to read, and
+ * a hint you cannot read is not a hint. Italics carry the "this is a hint" signal instead.
  */
 
 export interface ContrastPair {
@@ -66,7 +67,7 @@ function pairs(
 export const CONTRAST_PAIRS: ReadonlyArray<ContrastPair> = [
   // Text on every surface.
   ...pairs(['--fg', '--fg-muted'], SURFACES, TEXT_MIN, 'text'),
-  ...pairs(['--fg-placeholder'], ['--bg-input'], GRAPHIC_MIN, 'text'),
+  ...pairs(['--fg-placeholder'], ['--bg-input'], TEXT_MIN, 'text'),
   ...pairs(['--fg-on-accent'], ['--accent', '--accent-hover'], TEXT_MIN, 'text'),
   // Icons on every surface (Lucide strokes use currentColor = --icon).
   ...pairs(['--icon', '--icon-disabled'], SURFACES, GRAPHIC_MIN, 'icon'),

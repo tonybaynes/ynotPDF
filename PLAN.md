@@ -173,7 +173,7 @@ so the white focus ring keeps 3:1 on them, and the borders lightened to reach
 |---|---|---|
 | 1 | **Graphite** (default) | Dark: app `#121212`, panels `#1c1c1e`, ribbon `#232326`, text `#f2f2f2`, icons `#ffffff`, accent `#3392ff`, borders `#767680`. Text ≥ 7:1, icons ≥ 4.5:1 on every surface. |
 | 2 | **Midnight** | Black `#000000` app, dark-blue `#0a0a2e` panels, gold `#ffd700` text, white borders — the logistics-hub palette. |
-| 3 | **Daylight** | Light: app `#f5f5f7`, panels `#ffffff`, text `#1a1a1a`, accent `#082a68`. |
+| 3 | **Daylight** | Light grey, no pure white in the chrome: app `#dcdce3`, panels `#e6e6ec`, ribbon `#d5d5de`, text `#1a1a1a`, accent `#082a68`. |
 | 4 | **High Contrast** | Pure black / white / yellow, 2 px borders, no greys. |
 
 Accessibility rules baked into every theme (non-negotiable — the operator's
@@ -187,8 +187,10 @@ own requirements):
   still separates by lightness (ΔL\* ≥ 20) **or** blue↔yellow (Δb\* ≥ 45), never
   by red↔green alone. The two channels are needed because a flat ΔL\* rule is
   impossible next to the 4.5:1 floor — see `docs/adr/0002-status-colour-separation.md`.
-- Muted/secondary text is still ≥ 4.5:1 — no dim grey on dark. The only
-  low-contrast text permitted is italic placeholder hints in empty inputs.
+- Muted/secondary text is still ≥ 4.5:1 — no dim grey on dark. **Placeholder
+  hints are too** (operator, 2026-09-07): the 3:1 this plan first allowed for
+  them proved too faint to read, and a hint you cannot read is not a hint. The
+  italics carry the "this is a hint" signal instead of low contrast.
 - **Modals and overlays are fully opaque.** No `rgba()` with alpha < 1, no
   `opacity` < 1, no `backdrop-filter`. Lint rule.
 - `color-scheme: <scheme> only` declared per theme. The `only` keyword is what
@@ -210,7 +212,9 @@ the tokens, the command and the `data-night-mode` attribute; M11 applies the mat
 to the rendered page raster.
 
 The Daylight chrome contains no pure white (operator requirement): a full-screen `#ffffff`
-reads as glare. Panels are a soft off-white and the app background sits a step below them.
+reads as glare. It is light grey throughout — panels the lightest, the app a step below, the
+ribbon darker again, and the page backdrop darkest so a page stands out against it. The page
+itself stays white, because that is the document rather than the interface.
 
 ### 3.3 UI layout (Foxit-style)
 - **Ribbon** tabs: File · Home · Edit · Comment · View · Form · Protect ·

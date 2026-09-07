@@ -9,8 +9,8 @@
  * using the pair table in pairs.ts:
  *   text (--fg, --fg-muted, status text, --fg-on-accent)   >= 4.5:1
  *   icons, borders, focus ring, selection fill              >= 3:1
- *   secondary text is still >= 4.5:1 (no dim grey on dark); placeholder hints are the only
- *   low-contrast text permitted and must still reach 3:1.
+ *   secondary text is still >= 4.5:1 (no dim grey on dark), and so are placeholder hints —
+ *   the italics say "hint", the contrast stays readable.
  *   No rgba()/hsla() alpha < 1, no opacity < 1, no backdrop-filter — overlays are opaque.
  *   Every theme declares `color-scheme: <scheme> only`. The `only` keyword forbids the browser
  *   substituting a scheme of its own: without it, Chrome's "Auto Dark Mode for Web Contents"
@@ -41,7 +41,7 @@
  *   --fg             primary text
  *   --fg-muted       secondary text, still >= 4.5:1
  *   --fg-on-accent   text and icons on --accent / --accent-hover
- *   --fg-placeholder placeholder hint in empty inputs (italic, >= 3:1)
+ *   --fg-placeholder placeholder hint in empty inputs (italic, and still >= 4.5:1)
  *
  * Icons and accent
  *   --icon           stroke colour for Lucide icons (currentColor)
