@@ -1,0 +1,32 @@
+# CLAUDE.md — ynotPDF
+
+Cross-platform PDF editor (Electron + TypeScript, PDFium engine). Target:
+Foxit PDF Editor 14 feature parity. Four themes, dark ("Graphite") default.
+
+**Every session:** read `PLAN.md` §0 (progress) and §12 (parallel
+protocol). If the operator names a module, open `docs/modules/<Mid>-*.md`
+and follow the **"Your task"** section at the top — it is the complete
+brief. Otherwise pick the next unchecked module whose dependencies are ☑.
+
+## Non-negotiables
+- TypeScript everywhere. No frontend framework — vanilla DOM plus the
+  in-house store. Node 26.
+- Colours only through theme tokens (`src/renderer/theme/`). Never a literal.
+- **Operator accessibility:** colourblind (red and black read the same — no
+  red/green or gold/green differentiation), low vision. Text ≥ 4.5:1,
+  icons ≥ 3:1, no grey-on-dark text, status = word + icon. Modals/overlays
+  fully opaque: no `rgba()` alpha < 1, no `opacity` < 1, no `backdrop-filter`.
+- Every document change is an undoable `Command`.
+- Data that can change (stamps, font substitutes, presets) lives in
+  `resources/` data files, not in code.
+- Permissive licences only (MIT/BSD/Apache/ISC). No MuPDF, iText, Ghostscript.
+- Never commit real customer PDFs, binaries, or secrets.
+- Own branch + worktree per module (`mod/<Mid>-<name>`); write only in your
+  module's folders; shared-file edits minimal, additive, and called out.
+- Installing build toolchains (Rust, C++, emsdk) is pre-approved — record it
+  in `docs/adr/` and `README.md`. **Never Docker**, build or runtime: the
+  installer must be self-contained.
+
+## Toolchain
+`npm run dev` · `npm test` · `npm run e2e` · `npm run build` · `npm run lint`
+— all defined by M00. Replies to the operator: short, plain — eyesight.

@@ -1,0 +1,295 @@
+ynotPDF - MODULE CHECKLIST
+==========================
+Tick a box when the module is merged to main with CI green.
+Start a module only when everything in its "needs" list is ticked.
+Modules in the same wave can run at the same time (3-4 conversations).
+Order is easiest-first, hardest-last: a usable app exists after wave 4,
+the hard modules (text editing, redaction, signatures...) are waves 8-9.
+
+
+Full plan: PLAN.md    Briefs: docs\modules\
+
+
+HOW TO START A MODULE  (do exactly this every time)
+----------------------------------------------------
+1. Check the module's "needs" line. Every module named there must
+   already be ticked [x] below. If not, wait - do not start it.
+2. Open a NEW Claude Code conversation.
+3. Set its working folder to  D:\Projects\ynotPDF
+   (in the app: choose the folder when creating the session, or run
+   /cwd D:\Projects\ynotPDF  if you are already in one).
+   The folder's CLAUDE.md then loads automatically.
+4. Select the model shown on the module's "model:" line (/model in the
+   conversation, or the model picker) BEFORE sending anything.
+5. Paste the module's "prompt:" line below as the first message, exactly
+   as written. Nothing else is needed - the .md file holds the full brief.
+6. Run up to 3-4 modules from the SAME wave at once, one conversation
+   each. Never two conversations on the same module.
+7. When a conversation reports "merged to main, CI green", tick the
+   module [x] here AND check it shows as done in PLAN.md section 0.
+8. If a conversation says a dependency is not finished, it will stop by
+   itself - finish that dependency first, then re-run the prompt.
+
+Special cases:
+  M00 must run completely ALONE - nothing else until it is ticked.
+  Before M00: create the private GitHub repo  tonybaynes/ynotPDF
+  (empty, no README) and tell the M00 conversation it exists.
+  M51 starts with a spike; its conversation may report back before
+  building - answer its question, then let it continue.
+
+WAVE 0  (run ALONE first)
+-------------------------
+[ ] M00  Scaffold, CI & packaging smoke
+      model:  Fable 5.1  (hard - use the strongest model)
+      needs: -
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M00-scaffold.md and carry out the "Your task" section in full.
+
+
+WAVE 1
+------
+[ ] M01  Theme system (four themes)
+      model:  Opus
+      needs: M00
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M01-theme-system.md and carry out the "Your task" section in full.
+
+[ ] M02  Application shell (ribbon, panes, tabs, status bar, dialogs)
+      model:  Opus
+      needs: M00 M01
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M02-app-shell.md and carry out the "Your task" section in full.
+
+[ ] M10  PDF engine layer & PDFium adapter
+      model:  Fable 5.1  (hard - use the strongest model)
+      needs: M00
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M10-engine-layer.md and carry out the "Your task" section in full.
+
+[ ] M20  Document model, commands & undo stack
+      model:  Opus
+      needs: M00 M10
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M20-document-model.md and carry out the "Your task" section in full.
+
+
+WAVE 2
+------
+[ ] M11  Viewer — rendering, navigation, zoom, layouts
+      model:  Opus
+      needs: M02 M10
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M11-viewer.md and carry out the "Your task" section in full.
+
+[ ] M21  Save, Save As, autosave & recovery
+      model:  Opus
+      needs: M20 M11
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M21-save.md and carry out the "Your task" section in full.
+
+[ ] M70  Encryption, permissions & certificate security
+      model:  Opus
+      needs: M21
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M70-encryption.md and carry out the "Your task" section in full.
+
+[ ] M91  Create PDF from images, web pages, clipboard, HTML/Markdown & text
+      model:  Opus
+      needs: M21
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M91-create-pdf.md and carry out the "Your task" section in full.
+
+
+WAVE 3
+------
+[ ] M12  Navigation panels — thumbnails, bookmarks, layers, attachments, destinations
+      model:  Opus
+      needs: M11 M20
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M12-navigation-panels.md and carry out the "Your task" section in full.
+
+[ ] M13  Text selection, find, copy, snapshot & print
+      model:  Opus
+      needs: M11
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M13-select-find-print.md and carry out the "Your task" section in full.
+
+[ ] M30  Annotations — text markup, notes, typewriter, text box, callout
+      model:  Opus
+      needs: M21 M11 M13
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M30-markup-annotations.md and carry out the "Your task" section in full.
+
+[ ] M40  Organise pages — insert, delete, extract, replace, rotate, move, labels
+      model:  Opus
+      needs: M21 M12
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M40-organise-pages.md and carry out the "Your task" section in full.
+
+
+WAVE 4
+------
+[ ] M31  Annotations — shapes, ink & eraser, stamps, file attachments
+      model:  Opus
+      needs: M30
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M31-shapes-ink-stamps.md and carry out the "Your task" section in full.
+
+[ ] M32  Comments panel, replies & status, FDF/XFDF, summarise
+      model:  Opus
+      needs: M30
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M32-comments-panel.md and carry out the "Your task" section in full.
+
+[ ] M41  Merge, split, extract to files, crop & flatten
+      model:  Opus
+      needs: M40
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M41-merge-split-crop.md and carry out the "Your task" section in full.
+
+[ ] M72  Document properties, metadata & XMP, initial view
+      model:  Opus
+      needs: M21
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M72-properties-metadata.md and carry out the "Your task" section in full.
+
+[ ] M130  Preferences, keyboard shortcuts editor, ribbon/QAT customisation, UI scale, i18n framework
+      model:  Opus
+      needs: M02 M01
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M130-preferences.md and carry out the "Your task" section in full.
+
+  >>> MILESTONE 1 — usable viewer & annotator (v0.1)
+      open, view, search, print, annotate, comment, organise pages, merge/split, save, encrypt, create PDFs, preferences
+
+
+WAVE 5
+------
+[ ] M33  Measuring tools — distance, perimeter, area, calibration
+      model:  Opus
+      needs: M31
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M33-measuring-tools.md and carry out the "Your task" section in full.
+
+[ ] M50  Page-object model — select, move, resize, align, arrange
+      model:  Fable 5.1  (hard - use the strongest model)
+      needs: M21 M11
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M50-object-model.md and carry out the "Your task" section in full.
+
+[ ] M60  Form fill & AcroForm field designer
+      model:  Opus
+      needs: M21 M30
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M60-forms.md and carry out the "Your task" section in full.
+
+[ ] M92  Export to images, text, HTML & RTF
+      model:  Opus
+      needs: M11 M13
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M92-export.md and carry out the "Your task" section in full.
+
+[ ] M100  Optimise (reduce size), linearise, repair, remove duplicates
+      model:  Opus
+      needs: M21
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M100-optimise-repair.md and carry out the "Your task" section in full.
+
+
+WAVE 6
+------
+[ ] M53  Header/footer, Bates numbering, watermark, background & links
+      model:  Opus
+      needs: M50 M21
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M53-headers-bates-watermarks-links.md and carry out the "Your task" section in full.
+
+[ ] M61  Field logic — validation, formatting, calculation, actions; data import/export; flatten
+      model:  Opus
+      needs: M60
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M61-form-logic-data.md and carry out the "Your task" section in full.
+
+[ ] M82  Handwritten signatures & initials
+      model:  Opus
+      needs: M30 M60
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M82-handwritten-signatures.md and carry out the "Your task" section in full.
+
+[ ] M90  OCR — searchable image, image+text, editable text
+      model:  Opus
+      needs: M21
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M90-ocr.md and carry out the "Your task" section in full.
+
+[ ] M110  Compare documents
+      model:  Opus
+      needs: M11 M13
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M110-compare.md and carry out the "Your task" section in full.
+
+
+WAVE 7
+------
+[ ] M52  Image & path object editing
+      model:  Opus
+      needs: M50
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M52-image-path-editing.md and carry out the "Your task" section in full.
+
+[ ] M111  Read aloud, accessibility check & alt text
+      model:  Opus
+      needs: M13
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M111-read-aloud-accessibility.md and carry out the "Your task" section in full.
+
+[ ] M120  Batch processing & action wizard
+      model:  Opus
+      needs: M21 M41 M53 M61 M70 M90 M92 M100
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M120-batch-actions.md and carry out the "Your task" section in full.
+
+  >>> MILESTONE 2 — everyday editor (v0.5)
+      forms fill & design, measuring, object move/resize, watermarks/Bates/headers, OCR (searchable), compare, export, batch, image editing
+
+
+WAVE 8
+------
+[ ] M51  Text editing with reflow (spike first)
+      model:  Fable 5.1  (hard - use the strongest model)
+      needs: M50 M13
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M51-text-editing.md and carry out the "Your task" section in full.
+
+[ ] M62  Automatic form-field recognition
+      model:  Fable 5.1  (hard - use the strongest model)
+      needs: M60
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M62-field-recognition.md and carry out the "Your task" section in full.
+
+[ ] M80  Incremental-update writer
+      model:  Fable 5.1  (hard - use the strongest model)
+      needs: M21 M20
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M80-incremental-writer.md and carry out the "Your task" section in full.
+
+[ ] M93  Office ↔ PDF via LibreOffice bridge
+      model:  Opus
+      needs: M21 M91
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M93-office-bridge.md and carry out the "Your task" section in full.
+
+[ ] M121  Command-line interface
+      model:  Opus
+      needs: M120
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M121-cli.md and carry out the "Your task" section in full.
+
+
+WAVE 9
+------
+[ ] M54  Find & replace, spell-check
+      model:  Opus
+      needs: M51 M13
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M54-find-replace-spellcheck.md and carry out the "Your task" section in full.
+
+[ ] M71  Redaction & sanitise (remove hidden information)
+      model:  Fable 5.1  (hard - use the strongest model)
+      needs: M50 M51 M30
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M71-redaction.md and carry out the "Your task" section in full.
+
+[ ] M81  Digital signatures — sign, certify, timestamp, LTV, validate, trust
+      model:  Fable 5.1  (hard - use the strongest model)
+      needs: M80 M60
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M81-digital-signatures.md and carry out the "Your task" section in full.
+
+[ ] M94  PDF/A conversion & basic validation
+      model:  Fable 5.1  (hard - use the strongest model)
+      needs: M100 M72
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M94-pdfa.md and carry out the "Your task" section in full.
+
+
+WAVE 10
+-------
+[ ] M131  Installers, code signing, auto-update, crash reporting, help & first run
+      model:  Opus
+      needs: M00 M130
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M131-release.md and carry out the "Your task" section in full.
+
+  >>> MILESTONE 3 — full editor (v1.0)
+      text editing with reflow, redaction, digital signatures, incremental saves, PDF/A, Office bridge, CLI, signed installers & auto-update
+
+
+THINGS ONLY TONY CAN DO
+-----------------------
+[ ] Create private GitHub repo tonybaynes/ynotPDF (before M00)
+[ ] Confirm app name / supply logo (M00)
+[ ] Approve tier list in PLAN.md section 1 (wave 1)
+[ ] Approve the four theme palettes (M01 gallery page)
+[ ] Provide a few non-confidential real PDFs for the test corpus (M10)
+[ ] Windows code-signing certificate + Apple Developer account (M131)
+[ ] Decide: is LibreOffice acceptable for Office conversion? (M93)
