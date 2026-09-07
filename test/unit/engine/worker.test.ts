@@ -106,6 +106,8 @@ describe('engine worker queue and cancellation', () => {
     await client.ready();
     const doc = await client.engine.open(fixture('scanned.pdf'));
     const handles = Array.from({ length: 50 }, () => client.request('render', [doc, 0, 2]));
+    // Attach handlers now: cancellation rejects synchronously and must not count as unhandled.
+    const settled = Promise.allSettled(handles.map((h) => h.promise));
     await new Promise((r) => setTimeout(r, 30)); // a couple of renders complete, the rest queue
     const t0 = performance.now();
     const cancelled = client.cancelRenders(doc);
@@ -114,7 +116,7 @@ describe('engine worker queue and cancellation', () => {
     expect(count).toBe(1);
     expect(cancelled).toBeGreaterThan(40);
     expect(elapsed).toBeLessThan(100);
-    const results = await Promise.allSettled(handles.map((h) => h.promise));
+    const results = await settled;
     const rejected = results.filter((r) => r.status === 'rejected');
     expect(rejected.length).toBeGreaterThanOrEqual(cancelled);
     expect(rejected.every((r) => (r.reason as EngineError).code === 'cancelled')).toBe(true);
