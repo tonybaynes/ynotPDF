@@ -25,6 +25,14 @@ function readTheme(file: string): string {
  */
 const DOCUMENTED_TOKENS = tokenNamesFromDocs(readTheme('tokens.css'));
 
+/**
+ * Non-colour tokens a theme is allowed to override. They are defined on `:root` in tokens.css
+ * rather than in the colour catalogue, so they are not expected to be hex values: High Contrast
+ * thickens its borders, and Daylight carries heavier text because dark-on-light renders thinner
+ * than light-on-dark at the same weight.
+ */
+const NON_COLOUR_OVERRIDES = new Set(['--border-width', '--fw-body', '--fw-heading']);
+
 describe('theme tokens', () => {
   it('documents at least the tokens the pair table uses', () => {
     const used = new Set(CONTRAST_PAIRS.flatMap((p) => [p.fg, p.bg]));
@@ -55,7 +63,7 @@ describe('theme tokens', () => {
 
       it('defines no tokens the catalogue does not document', () => {
         for (const token of parsed.tokens.keys()) {
-          if (token === '--border-width') continue; // themes may thicken borders
+          if (NON_COLOUR_OVERRIDES.has(token)) continue;
           expect(DOCUMENTED_TOKENS, `${theme.name} declares undocumented ${token}`).toContain(
             token,
           );

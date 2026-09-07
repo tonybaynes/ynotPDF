@@ -173,7 +173,7 @@ so the white focus ring keeps 3:1 on them, and the borders lightened to reach
 |---|---|---|
 | 1 | **Graphite** (default) | Dark: app `#121212`, panels `#1c1c1e`, ribbon `#232326`, text `#f2f2f2`, icons `#ffffff`, accent `#3392ff`, borders `#767680`. Text ≥ 7:1, icons ≥ 4.5:1 on every surface. |
 | 2 | **Midnight** | Black `#000000` app, dark-blue `#0a0a2e` panels, gold `#ffd700` text, white borders — the logistics-hub palette. |
-| 3 | **Daylight** | Mid grey, **no white anywhere in the chrome**: panels `#d9d9e3`, app and ribbon `#d2d2dc`, inputs `#d5d5df`, page backdrop `#9e9eb0`, black text, accent `#082a68`. Only the PDF page is white. |
+| 3 | **Daylight** | Mid grey, **no white anywhere in the chrome**: panels `#d9d9e3`, app and ribbon `#d2d2dc`, inputs `#d5d5df`, page backdrop `#9e9eb0`, black text set heavier (`--fw-body: 600`), accent `#082a68`. Only the PDF page is white. |
 | 4 | **High Contrast** | Pure black / white / yellow, 2 px borders, no greys. |
 
 Accessibility rules baked into every theme (non-negotiable — the operator's
@@ -203,6 +203,9 @@ own requirements):
   control) because one colour cannot clear 3:1 against both a pale surface and a
   dark accent fill.
 - UI scale 100–200 % in Preferences.
+- **Font weight is a theme token** (`--fw-body`, `--fw-heading`), not a constant.
+  Dark-on-light text renders visually thinner than light-on-dark at the same
+  weight, so Daylight sets 600/700 against the dark themes' 400/600.
 
 Theme switch is live (no restart) and persisted.
 

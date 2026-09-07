@@ -277,6 +277,11 @@ is colourblind: black and red read as the same colour):**
   same ratio as `--fg-muted` on `--bg-input`. A fixed number would drift again the next time a
   surface moves; tying the hint to the theme's own secondary text cannot. The italics carry the
   "this is a hint" meaning instead of low contrast.
+- **Font weight is a theme token** (`--fw-body`, `--fw-heading`), applied on `[data-theme]`
+  rather than `body` so it follows the theme wherever the attribute is set — `<html>` in the
+  app, each preview column in the gallery. Daylight sets 600/700 against the dark themes'
+  400/600: black-on-grey reads thinner than white-on-black at the same weight, and the operator
+  was losing the text (2026-09-07).
 - **Annotation colours are theme-independent.** They are document content, not UI: the same
   values in all four themes, checked against the page paper rather than the app surfaces.
 
