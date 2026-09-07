@@ -1,0 +1,122 @@
+/* Navigation and properties panes (M02). */
+.pane {
+  display: flex;
+  background: var(--bg-panel);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pane-left {
+  border-right: var(--border-width) solid var(--border);
+}
+
+.pane-right {
+  border-left: var(--border-width) solid var(--border);
+  flex-direction: column;
+}
+
+.pane-collapsed {
+  width: auto;
+}
+
+.pane-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-1);
+  border-right: var(--border-width) solid var(--border);
+  background: var(--bg-ribbon);
+  flex: none;
+}
+
+.pane-collapsed .pane-strip {
+  border-right: 0;
+}
+
+.pane-strip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.3rem;
+  height: 2.3rem;
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+}
+
+.pane-strip-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+
+.pane-strip-btn[aria-pressed='true'] {
+  background: var(--bg-active);
+  border-color: var(--border-strong);
+  box-shadow: inset 3px 0 0 0 var(--accent);
+}
+
+.pane-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pane-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: var(--border-width) solid var(--border);
+  flex: none;
+}
+
+.pane-title {
+  margin: 0;
+  flex: 1;
+  font-size: var(--fs-3);
+  font-weight: var(--fw-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-host {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.panel {
+  padding: var(--sp-3);
+}
+
+.panel-error {
+  color: var(--danger);
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.panel-error .icon {
+  color: var(--danger);
+}
+
+.pane-resizer {
+  width: 6px;
+  cursor: col-resize;
+  background: var(--bg-app);
+  flex: none;
+}
+
+.pane-resizer:hover,
+.pane-resizer.dragging {
+  background: var(--accent);
+}
+
+.pane-resizer:focus-visible {
+  background: var(--accent);
+  outline-offset: 0;
+}

@@ -6,6 +6,7 @@
 import { openPalette } from '@app/palette';
 import { showAbout, showMessage } from '@app/dialogs';
 import type { ShellState } from '@app/shell';
+import type { Documents } from '@app/tabs/Documents';
 import type { Registry } from '@core/Registry';
 import type { EngineClient } from '@engine/EngineClient';
 import type { Store } from '@core/Store';
@@ -61,9 +62,15 @@ export default defineModule({
         const file = ctx.args[FILE_ARG] as OpenedFile | undefined;
         if (!file) throw new Error('file.openBytes needs { file }');
         const shell = ctx.service<Store<ShellState>>('shell');
-        // M10/M11 turn this into a real Document + viewer; M00 only reflects the name.
+        const registry = ctx.service<Registry>('registry');
+        // M10/M11 turn this into a real Document + viewer; until then the shell (M02) opens a
+        // tab for it and M00 only reflects the name.
+        if (registry.hasService('documents')) {
+          registry.service<Documents>('documents').open({ title: file.name, path: file.path });
+        } else {
+          shell.set({ documentTitle: file.name });
+        }
         shell.set({
-          documentTitle: file.name,
           statusMessage: `Loaded ${file.name} (${file.bytes.byteLength.toLocaleString('en-GB')} bytes) — rendering arrives with M10/M11`,
         });
         return { name: file.name, size: file.bytes.byteLength };
@@ -75,11 +82,25 @@ export default defineModule({
       category: 'File',
       icon: 'x',
       shortcut: 'Mod+W',
-      when: (ctx) => ctx.service<Store<ShellState>>('shell').get().documentTitle !== null,
-      run: (ctx) => {
-        ctx
-          .service<Store<ShellState>>('shell')
-          .set({ documentTitle: null, statusMessage: 'Ready' });
+      when: (ctx) => {
+        const registry = ctx.service<Registry>('registry');
+        if (registry.hasService('documents'))
+          return registry.service<Documents>('documents').tabs.length > 0;
+        return ctx.service<Store<ShellState>>('shell').get().documentTitle !== null;
+      },
+      run: async (ctx) => {
+        const registry = ctx.service<Registry>('registry');
+        const shell = ctx.service<Store<ShellState>>('shell');
+        if (registry.hasService('documents')) {
+          const docs = registry.service<Documents>('documents');
+          const id = typeof ctx.args['id'] === 'string' ? ctx.args['id'] : docs.active?.id;
+          if (!id) return false;
+          const closed = await docs.close(id);
+          if (closed && docs.tabs.length === 0) shell.set({ statusMessage: 'Ready' });
+          return closed;
+        }
+        shell.set({ documentTitle: null, statusMessage: 'Ready' });
+        return true;
       },
     },
     {

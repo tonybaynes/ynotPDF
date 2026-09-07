@@ -1,6 +1,7 @@
 /**
- * Electron main entry (M00): single-instance lock, one BrowserWindow, native menu, IPC
- * handlers, recent files and `.pdf` file-association handling on all three OSes.
+ * Electron main entry (M00): single-instance lock, app windows, native menu, IPC handlers,
+ * recent files and `.pdf` file-association handling on all three OSes. M02 adds remembered
+ * window bounds and a second window for tabs dragged out of the strip.
  */
 
 import { app, BrowserWindow, nativeTheme } from 'electron';
@@ -8,7 +9,7 @@ import { registerIpcHandlers } from './ipc';
 import { buildMenu } from './menu';
 import { RecentFiles } from './recent';
 import { Settings, THEME_KEY } from './settings';
-import { createMainWindow, getMainWindow, sendToRenderer } from './window';
+import { broadcast, createMainWindow, getMainWindow, sendTo } from './window';
 import { readFileForRenderer } from './files';
 
 const E2E = process.env['YNOT_E2E'] === '1';
@@ -21,21 +22,36 @@ function pdfPathsFromArgv(argv: string[]): string[] {
   return argv.slice(1).filter((a) => !a.startsWith('-') && /\.pdf$/i.test(a));
 }
 
+async function openPathIn(win: BrowserWindow, path: string): Promise<void> {
+  try {
+    const file = await readFileForRenderer(path);
+    recent.add(path);
+    sendTo(win, 'file:openRequested', file);
+    broadcast('recent:changed', recent.list());
+    buildMenu(recent);
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  } catch (error) {
+    console.error(`could not open ${path}`, error);
+  }
+}
+
 async function openPathInRenderer(path: string): Promise<void> {
   const win = getMainWindow();
   if (!win || !rendererReady) {
     pendingOpens.push(path);
     return;
   }
-  try {
-    const file = await readFileForRenderer(path);
-    recent.add(path);
-    sendToRenderer('file:openRequested', file);
-    sendToRenderer('recent:changed', recent.list());
-    if (win.isMinimized()) win.restore();
-    win.focus();
-  } catch (error) {
-    console.error(`could not open ${path}`, error);
+  await openPathIn(win, path);
+}
+
+/** Opens another window; `path` (if any) is loaded once its renderer is up (tab drag-out). */
+function openWindow(path: string | undefined, from: BrowserWindow | null): void {
+  const win = createMainWindow({ e2e: E2E, settings, parent: from });
+  if (path !== undefined) {
+    win.webContents.once('did-finish-load', () => {
+      void openPathIn(win, path);
+    });
   }
 }
 
@@ -71,7 +87,7 @@ app.on('activate', () => {
 });
 
 async function boot(): Promise<void> {
-  const win = createMainWindow({ e2e: E2E });
+  const win = createMainWindow({ e2e: E2E, settings });
   buildMenu(recent);
   win.webContents.on('did-finish-load', () => {
     rendererReady = true;
@@ -92,6 +108,7 @@ if (gotLock) {
       rebuildMenu: () => {
         buildMenu(recent);
       },
+      openWindow,
     });
     pendingOpens.push(...pdfPathsFromArgv(process.argv));
     await boot();

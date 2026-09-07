@@ -86,22 +86,151 @@ export interface CommandSpec {
   readonly when?: WhenClause;
   /** If true the palette hides it (still runnable by id, e.g. internal or e2e-only commands). */
   readonly hidden?: boolean;
+  /**
+   * Ribbon key tip (the letters shown after Alt), e.g. `"FO"`. Generated from the label when
+   * absent (M02, ADR 0004).
+   */
+  readonly keyTip?: string;
   /** Runs the command. May be async. Return value is passed back to the caller (e2e harness). */
   run(ctx: CommandContext): unknown;
 }
+
+/**
+ * A menu entry inside a dropdown, split button or context menu (M02, ADR 0004). A plain string
+ * is a command id (`"-"` is a separator); the object form adds a label override, arguments, a
+ * submenu or a check state.
+ */
+export type MenuItemSpec =
+  | string
+  | {
+      readonly label?: string;
+      readonly command?: string;
+      readonly args?: CommandArgs;
+      readonly icon?: string;
+      readonly submenu?: ReadonlyArray<MenuItemSpec>;
+      /** Shown as a checked item (tick icon + "on" for screen readers) when true. */
+      readonly checked?: (ctx: ServiceContext) => boolean;
+      readonly when?: WhenClause;
+    };
+
+/** Large or small ribbon button. */
+export type RibbonItemSize = 'large' | 'small';
+
+/** One choice in a gallery, colour picker or select input. */
+export interface RibbonOptionSpec {
+  readonly value: string;
+  readonly label: string;
+  readonly icon?: string;
+}
+
+/**
+ * One control in a ribbon group (M02, ADR 0004). A plain string is a command id rendered as a
+ * button (`"-"` inserts a separator); the object forms describe richer controls. The shell owns
+ * the DOM, keyboard behaviour and theme of every kind.
+ */
+export type RibbonItemSpec =
+  | string
+  | { readonly kind: 'button'; readonly command: string; readonly size?: RibbonItemSize }
+  | {
+      /** Main action plus an arrow that opens `menu`. */
+      readonly kind: 'split';
+      readonly command: string;
+      readonly menu: ReadonlyArray<MenuItemSpec>;
+      readonly size?: RibbonItemSize;
+    }
+  | {
+      /** Button that opens `menu`. */
+      readonly kind: 'dropdown';
+      readonly id: string;
+      readonly label: string;
+      readonly icon?: string;
+      readonly menu: ReadonlyArray<MenuItemSpec>;
+      readonly size?: RibbonItemSize;
+      readonly when?: WhenClause;
+    }
+  | {
+      /** Button with `aria-pressed` driven by `pressed(ctx)`; clicking runs `command`. */
+      readonly kind: 'toggle';
+      readonly command: string;
+      readonly pressed: (ctx: ServiceContext) => boolean;
+      readonly size?: RibbonItemSize;
+    }
+  | {
+      /** Grid popup of options; choosing one runs `command` with `{ value }`. */
+      readonly kind: 'gallery';
+      readonly id: string;
+      readonly label: string;
+      readonly icon?: string;
+      readonly command: string;
+      readonly options: ReadonlyArray<RibbonOptionSpec>;
+      readonly selected?: (ctx: ServiceContext) => string;
+      readonly size?: RibbonItemSize;
+      readonly when?: WhenClause;
+    }
+  | {
+      /**
+       * Colour picker: a swatch button showing `value(ctx)`; the popup offers `swatches` (theme
+       * tokens like `"var(--annot-highlight)"` or PDF-content hex values) and a custom input.
+       * Choosing runs `command` with `{ value }`.
+       */
+      readonly kind: 'color';
+      readonly id: string;
+      readonly label: string;
+      readonly icon?: string;
+      readonly command: string;
+      readonly value: (ctx: ServiceContext) => string;
+      readonly swatches?: ReadonlyArray<RibbonOptionSpec>;
+      readonly size?: RibbonItemSize;
+      readonly when?: WhenClause;
+    }
+  | {
+      /** Inline text / number / select input; committing runs `command` with `{ value }`. */
+      readonly kind: 'input';
+      readonly id: string;
+      readonly label: string;
+      readonly command: string;
+      readonly value: (ctx: ServiceContext) => string;
+      readonly type?: 'text' | 'number' | 'select';
+      readonly options?: ReadonlyArray<RibbonOptionSpec>;
+      /** Width in `ch`. */
+      readonly width?: number;
+      readonly min?: number;
+      readonly max?: number;
+      readonly step?: number;
+      readonly when?: WhenClause;
+    };
 
 /** A group of controls on a ribbon tab. */
 export interface RibbonGroupSpec {
   /** Unique id, e.g. `"comment.markup"`. */
   readonly id: string;
-  readonly tab: RibbonTabId;
+  /** A built-in tab, or the id of a contextual tab declared in `ModuleManifest.ribbonTabs`. */
+  readonly tab: RibbonTabId | (string & {});
   readonly label: string;
   /** Lower first. Groups from different modules interleave by order, then by id. */
   readonly order?: number;
-  /** Command ids shown as buttons, in order. The literal `"-"` inserts a separator. */
-  readonly items: ReadonlyArray<string>;
+  /**
+   * Controls in order. Command ids render as buttons; the literal `"-"` inserts a separator;
+   * object items describe richer controls (M02, ADR 0004).
+   */
+  readonly items: ReadonlyArray<RibbonItemSpec>;
   /** Command ids shown as "large" buttons (the rest render small). */
   readonly large?: ReadonlyArray<string>;
+  /** Hides the whole group while false (M02). */
+  readonly when?: WhenClause;
+}
+
+/**
+ * A contextual ribbon tab (M02, ADR 0004) such as "Ink Tools": shown, with its groups, only
+ * while `when(ctx)` holds. Groups target it by `RibbonGroupSpec.tab = id`.
+ */
+export interface RibbonTabSpec {
+  /** Unique id, not one of the built-in {@link RibbonTabId}s. */
+  readonly id: string;
+  readonly label: string;
+  readonly when: WhenClause;
+  /** Lower first among contextual tabs. */
+  readonly order?: number;
 }
 
 /** Where a panel docks. */
@@ -117,6 +246,11 @@ export interface PanelSpec {
   readonly order?: number;
   /** Command that toggles this panel; auto-generated as `panel.<id>` if absent. */
   readonly toggleCommand?: string;
+  /**
+   * For `dock: 'right'`: the properties pane shows the first panel (by `order`) whose `when`
+   * passes and hides itself when none does (M02, ADR 0004). Ignored for other docks.
+   */
+  readonly when?: WhenClause;
   /**
    * Mounts the panel's DOM into `host`. Returns a disposer. Called lazily the first time the
    * panel becomes visible; the panel keeps its own state via the Store.
@@ -206,6 +340,64 @@ export type SettingSpec =
       readonly options: ReadonlyArray<{ readonly value: string; readonly label: string }>;
     };
 
+/** Status-bar slot. */
+export type StatusSlot = 'left' | 'centre' | 'right';
+
+/** A control mounted into the status bar (M02, ADR 0004). */
+export interface StatusItemSpec {
+  readonly id: string;
+  readonly slot: StatusSlot;
+  /** Lower first within the slot. */
+  readonly order?: number;
+  /** Mounts the control into `host`; returns a disposer. */
+  mount(host: HTMLElement, ctx: ServiceContext): () => void;
+}
+
+/** The fixed list of File-backstage slots, in display order (Foxit 14). */
+export type BackstageSlot =
+  'open' | 'recent' | 'new' | 'save' | 'saveAs' | 'print' | 'properties' | 'preferences' | 'exit';
+
+/**
+ * Fills one backstage slot (M02, ADR 0004). Either `command` (activating the slot runs it and
+ * closes the backstage) or `mount` (the slot opens a page rendered into the backstage body).
+ */
+export interface BackstageSpec {
+  readonly slot: BackstageSlot;
+  /** Label override; the slot's default name is used when absent. */
+  readonly label?: string;
+  readonly icon?: string;
+  readonly command?: string;
+  readonly when?: WhenClause;
+  mount?(host: HTMLElement, ctx: ServiceContext): () => void;
+}
+
+/** A way to create a new document, shown as a tile on the New page and the empty state. */
+export interface CreatorSpec {
+  readonly id: string;
+  readonly label: string;
+  readonly description?: string;
+  readonly icon?: string;
+  readonly command: string;
+  readonly order?: number;
+  readonly when?: WhenClause;
+}
+
+/**
+ * Where a context menu contribution applies (M02, ADR 0004): a shell region, `'any'`, or a CSS
+ * selector matched against the right-clicked element and its ancestors.
+ */
+export type ContextMenuRegion =
+  'document' | 'tab' | 'left-pane' | 'right-pane' | 'ribbon' | 'any' | (string & {});
+
+/** Right-click menu contribution (M02, ADR 0004). Items are appended in `order`. */
+export interface ContextMenuSpec {
+  readonly id: string;
+  readonly region: ContextMenuRegion;
+  readonly items: ReadonlyArray<MenuItemSpec>;
+  readonly order?: number;
+  readonly when?: WhenClause;
+}
+
 /** The manifest every module exports from `manifest.ts`. All arrays default to empty. */
 export interface ModuleManifest {
   readonly id: ModuleId;
@@ -218,6 +410,16 @@ export interface ModuleManifest {
   /** Extra bindings beyond `CommandSpec.shortcut` (e.g. secondary keys, tool activation). */
   readonly shortcuts?: ReadonlyArray<ShortcutSpec>;
   readonly settings?: SettingsSchema;
+  /** Contextual ribbon tabs (M02, ADR 0004). */
+  readonly ribbonTabs?: ReadonlyArray<RibbonTabSpec>;
+  /** Status-bar contributions (M02, ADR 0004). */
+  readonly statusBar?: ReadonlyArray<StatusItemSpec>;
+  /** File backstage slots this module fills (M02, ADR 0004). */
+  readonly backstage?: ReadonlyArray<BackstageSpec>;
+  /** "New document" creators listed on the backstage New page and the empty state (M02). */
+  readonly creators?: ReadonlyArray<CreatorSpec>;
+  /** Right-click menu contributions (M02, ADR 0004). */
+  readonly contextMenus?: ReadonlyArray<ContextMenuSpec>;
   /**
    * Called once after all manifests are registered and the shell is mounted. Use it to register
    * services or subscribe to the store. Returns an optional disposer.

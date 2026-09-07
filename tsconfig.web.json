@@ -4,5 +4,11 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["vite/client"]
   },
-  "include": ["src/renderer/**/*", "src/engine/**/*", "src/shared/**/*", "src/preload/index.d.ts"]
+  "include": [
+    "src/renderer/**/*",
+    "src/engine/**/*",
+    "src/shared/**/*",
+    "src/preload/index.d.ts",
+    "test/e2e/demo-module/**/*"
+  ]
 }

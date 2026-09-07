@@ -215,8 +215,136 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **Contract additions are additive and recorded in [ADR 0004](../adr/0004-shell-contribution-points.md).**
+  New optional manifest keys: `ribbonTabs` (contextual tabs with a `when()`), `statusBar`
+  (left/centre/right slots), `backstage` (File-menu slots), `contextMenus`. `RibbonGroupSpec.items`
+  accepts rich `RibbonItemSpec` objects (split, dropdown, toggle, gallery, colour, input) beside the
+  plain command-id strings M00 defined; `RibbonGroupSpec.tab` may name a contextual tab;
+  `PanelSpec.when` picks the properties panel; `CommandSpec.keyTip` overrides the generated key tip;
+  `RecentFile.pinned` backs the backstage pin. M00's and M01's manifests compile and render
+  unchanged.
+- **The shell is a pure function of manifests + one `UiState` store** (`app/ui/UiState.ts`).
+  Every region subscribes to its own slice. `when()` predicates are re-evaluated only on an explicit
+  `ui.invalidate()` (fired by selection, tab, registry and document changes), and each ribbon group
+  computes a small signature (visible / enabled / pressed / value per item) and patches only when
+  it changes — never a whole-ribbon re-render.
+- **Persistence goes through `settings:get` / `settings:set`** (ADR 0003) under `ui.*` keys,
+  debounced: pane widths, collapsed state, last-open panel, QAT items, ribbon minimised, layout.
+  Window bounds are saved by *main* (`window.bounds.<displayKey>`) because it needs them before
+  the renderer exists; they are keyed by the display's id + size so a laptop docked to a monitor
+  keeps two remembered positions.
+- **One popup primitive, positioned DOM in the same document** (`app/popup.ts`): anchor rect →
+  placement with flip and clamp, opaque `--bg-panel` with `--border-strong` and the solid
+  `--elevation`, closes on Esc / outside click / focus loss, returns focus to its anchor.
+  Dropdowns, split menus, galleries, colour pickers, context menus, key tips and the palette all
+  build on it. Modal dialogs are native `<dialog>` (browser focus trap, `::backdrop` painted solid
+  `--shadow`); non-modal ones are the same element opened with `show()`.
+- **Documents are tab entries, not `Document`s yet** (`app/tabs/Documents.ts`): `{ id, title,
+  path, dirty }` plus a `beforeClose` hook that M21's Save/Don't save/Cancel plugs into. M00's
+  `file.openBytes` now opens a tab; M20/M11 attach the real `Document` and `Viewport` by tab id.
+- **Drag is pointer events with capture, not HTML5 drag-and-drop.** HTML5 DnD is unreliable under
+  Playwright on Linux; pointer drags are deterministic on all three OSes. Releasing a tab outside
+  the window sends `window:new` over IPC, which detaches it into a second window.
+- **Icons come from the `lucide` package (ISC) as a devDependency**, bundled by Vite, never fetched
+  at runtime. `app/icons.ts` maps kebab-case names to an explicit set of icon nodes (tree-shaken)
+  and renders inline `<svg>` with `currentColor`; `registerIcon()` lets modules add theirs. An
+  unknown name renders a labelled placeholder glyph, never nothing.
+- **Key tips are assigned by a pure function** (`ribbon/keytips.ts`): first letter, then first two
+  letters, then digits, unique per level — unit-tested. Alt shows them, letters navigate, Esc backs
+  out.
+- **Shortcut conflicts: last binding wins and dev builds warn** with both command ids;
+  `ShortcutManager.conflicts()` exposes the list for M130's editor. `Mod` is Cmd on macOS, Ctrl
+  elsewhere, resolved once from the preload's `platform`.
+- **Focus model**: F6 / Shift+F6 cycle the regions ribbon → document → left pane → right pane →
+  status bar (`data-region`), every toolbar is a roving-tabindex group (one tab stop, arrows move),
+  and the two-ring focus style from M01 is never removed.
+- **The status bar's page / zoom / layout controls are the shell's, and M11 drives them through
+  the store.** M02 registers `view.page.*`, `view.zoom.*` and `view.layout.set`, which only write
+  `ui.view`; M11 subscribes to that slice and applies it to the viewport, so the status bar,
+  ribbon toggles and tests read one source (as M11's brief asks) and no command id is registered
+  twice.
+- **The demo module lives in `test/e2e/demo-module/`** and is registered by the renderer only in
+  e2e mode (dynamic import behind the existing `e2e` flag). It exercises every widget kind and is
+  the shell's regression suite; nothing is deleted from it later.
+- **Unit tests cover the pure logic in Node** (ribbon model, key tips, fuzzy search, documents
+  service, popup placement, UiState reducers, shortcut conflicts); DOM behaviour is Playwright.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Shipped (2026-09-07):**
+
+- **Contracts** — [ADR 0004](../adr/0004-shell-contribution-points.md): rich `RibbonItemSpec`
+  (button / split / dropdown / toggle / gallery / colour / input), contextual `ribbonTabs`,
+  `PanelSpec.when`, `statusBar`, `backstage`, `creators`, `contextMenus`, `CommandSpec.keyTip`,
+  `RecentFile.pinned`; IPC `recent:pin`, `recent:remove`, `window:new`, `window:getState`,
+  `window:count`, event `window:stateChanged`. All additive; `Registry.ribbonTabs()` added.
+- **Main**: multi-window (`window:new`, cascaded; IPC acts on the sender's window), remembered
+  bounds per display arrangement (`src/main/windowBounds.ts` + `windowState.ts`), pinned recent
+  files that survive `clear()`.
+- **Renderer shell** (`src/renderer/app/`): `UiState` store + settings persistence; ribbon
+  (`ribbon/`: pure model, widgets, key tips, QAT, minimise/peek, overflow collapse into popup
+  groups, roving keyboard navigation); `popup.ts` + `menu.ts` (one opaque positioned-DOM primitive
+  for dropdowns, submenus, galleries, colour pickers, context menus); `panes/` (nav pane with icon
+  strip, lazy panel mounting, keyboard/pointer resizer, persisted width + last panel; properties
+  pane driven by `PanelSpec.when`); `tabs/` (`Documents` service with close hooks, tab strip with
+  dirty dot + word, middle-click close, pointer-drag reorder, drag-out → `window:new`); `statusbar/`
+  (three slots; page field, zoom field + slider + fit, layout radio group, M01 theme switch);
+  `backstage/` (nine Foxit slots, unfilled ones say "Not available yet"; Open / Recent with pin /
+  New with creator tiles); `dialog/` (native `<dialog>` service: message box with icon + word,
+  confirm, prompt, progress with cancel, non-modal, form helpers; opaque toasts); fuzzy command
+  palette with match highlighting and recent-first ordering; `ShortcutManager` (conflict report,
+  Alt tap → key tips, modal-aware); focus regions (F6 / Shift+F6) and roving tabindex; context-menu
+  service; empty state with Open / Recent / Create tiles; drop-a-PDF-on-the-window.
+- **Icons**: `lucide` (ISC) as a devDependency, 137 icons mapped in `app/icons.ts`, inline SVG with
+  `currentColor`; unknown names render a visible placeholder glyph.
+- **M02 manifest**: 50 commands (backstage, ribbon, QAT, panes, tabs, windows, recent, focus,
+  context menu, tools, page / zoom / layout view state, notify / message / state for tests), View
+  ribbon groups (Panes, Page layout, Zoom), Help group, three status-bar items, the shell's
+  backstage pages, three context-menu contributions, a settings schema.
+- **Demo module** `test/e2e/demo-module/manifest.ts` (e2e only): every widget kind, a contextual
+  "Ink Tools" tab, a demo tool, left and right panels, status item, backstage page + command slot,
+  a creator, context menus, dialogs / progress / toast / form commands.
+- **Tests**: 9 new unit files (ribbon model, key tips, fuzzy, documents, popup placement, UiState,
+  shortcut conflicts, window bounds, M02 manifest) — 858 unit tests green; `test/e2e/shell.spec.ts`
+  with 29 Playwright tests covering every acceptance line (widgets, dropdown by mouse and keyboard,
+  contextual tab, key tips, minimise/peek, overflow collapse, QAT, nav panels + width across
+  restart, properties pane, tabs drag/cycle/dirty prompt, detach to a new window, status bar,
+  backstage, empty state, dialogs, toasts, context menus, palette, F6, focus ring + axe in all four
+  themes, the opacity walk). `axe-core` (MPL-2.0, dev only) drives the accessibility check.
+- **Shared-file edits, all additive**: `src/shared/module.ts`, `src/shared/ipc.ts`,
+  `src/renderer/core/Registry.ts` (`ribbonTabs()`), `src/main/{ipc,index,window,recent}.ts`,
+  `src/renderer/main.ts`, `test/e2e/app.spec.ts` (tab count), `tsconfig.web.json` (demo module),
+  M00's `file.openBytes` / `file.close` now go through the `documents` service, `package.json`
+  (`lucide`, `axe-core` devDependencies).
+
+**Lessons while building:**
+
+- `[hidden]` must be `!important` in the shell CSS: a class with `display: grid` otherwise beats
+  the attribute, and an invisible full-window backstage swallowed every click.
+- Moving a dragged tab in the DOM mid-drag releases its pointer capture; the strip now only
+  shows an insertion marker and reorders on release.
+- A middle-click starts Chromium's autoscroll on Windows, which then swallows every key until it
+  ends — `pointerdown` prevents it. Synthetic input never fires `auxclick`, so middle-close is on
+  `pointerup`.
+- Releasing a tab drag over the ribbon clicked the button underneath; the strip swallows the
+  click that follows a drag.
+- `BrowserWindow.getAllWindows()` is not in creation order — pick by id.
+
+**Deferred / notes for later modules:**
+
+- **M11** should drive `ui.view` (page, pageCount, zoom, fit, layout) through the existing
+  `view.*` commands / the `ui` store rather than registering those ids again; the status bar and
+  the View ribbon already read from it. `Documents.attach(id, viewport)` is where the per-tab
+  viewport goes; `Documents.onClosed` disposes it.
+- **M21** registers a `beforeClose` hook (`documents.onBeforeClose`) for Save / Don't save /
+  Cancel; until then the shell asks "Close without saving?". Save / Save As backstage slots stay
+  "Not available yet" until M21 declares `backstage: [{ slot: 'save', command: 'file.save' }]`.
+- **M13** fills `print`, **M72** `properties`, **M130** `preferences`; M130's ribbon/QAT
+  customisation reads `ui.qat` and `ShortcutManager.conflicts()`.
+- Tab drag-out needs the pointer released outside the window; on Linux under xvfb Playwright
+  cannot do that, so the e2e proves the "detaching" state and the `app.tabs.detach` command
+  (which is what the gesture calls).
+- Key tips cover the tab strip, QAT and the active tab's controls; the status bar and panes are
+  reached with F6 instead (as in Foxit).
+- The native menu (M00) still lists only M00's commands; M130's shortcut editor is the right
+  place to generate it from the command table.

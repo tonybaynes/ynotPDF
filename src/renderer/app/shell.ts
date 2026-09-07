@@ -1,138 +1,324 @@
 /**
- * Empty shell frame (M00): title bar, ribbon tab strip (no groups yet), left/right panes,
- * document area with an empty state, status bar. M02 replaces this file with the real shell.
+ * Application shell (M02): mounts the ribbon, document tabs, left navigation pane, document
+ * area (empty state / document host / toasts), right properties pane, status bar and the File
+ * backstage; creates the shared services (UiState store, Documents, Dialogs, Toasts, context
+ * menus, focus regions) and registers them on the Registry by name so module commands reach
+ * them through `ctx.service(...)`. The shell knows no features: everything it draws comes from
+ * module manifests.
  */
 
-import { formatShortcut, type Registry } from '@core/Registry';
+import type { Registry } from '@core/Registry';
+import type { Selection } from '@core/Selection';
 import { bind, type Store } from '@core/Store';
+import type { ToolSpec } from '@shared/module';
+import { hasBridge, on, type OpenedFile } from '@shared/ipc';
 import { createThemeSwitcher } from '@modules/M01-theme-system/switcher';
 import { THEME_SERVICE } from '@modules/M01-theme-system/manifest';
 import type { ThemeManager } from '@theme/ThemeManager';
+import { mountBackstage, type BackstageHandle } from './backstage/Backstage';
+import { ContextMenus } from './contextMenu';
+import { Dialogs } from './dialog/Dialogs';
+import { Toasts } from './dialog/toast';
+import { el } from './dom';
+import { mountEmptyState } from './emptyState';
+import { cycleRegion, installFocusTracking } from './focus';
+import { notePaletteUse } from './palette';
+import { mountNavPane, type NavPaneHandle } from './panes/NavPane';
+import { mountPropertiesPane, type PropertiesPaneHandle } from './panes/PropertiesPane';
+import { closeAllPopups } from './popup';
+import { mountRibbon, type RibbonHandle } from './ribbon/Ribbon';
+import { SERVICE, type ShellServices } from './services';
+import { mountStatusBar, type StatusBarHandle } from './statusbar/StatusBar';
+import { Documents } from './tabs/Documents';
+import { mountTabStrip, type TabStripHandle } from './tabs/TabStrip';
+import {
+  createUiStore,
+  invalidate,
+  ipcUiStorage,
+  persistUi,
+  type UiStorage,
+  type UiStore,
+} from './ui/UiState';
 
+/** Legacy M00 shell store, still fed so M00's manifest keeps working. */
 export interface ShellState {
   readonly documentTitle: string | null;
   readonly statusMessage: string;
   readonly theme: string;
 }
 
-const RIBBON_TABS = [
-  'File',
-  'Home',
-  'Edit',
-  'Comment',
-  'View',
-  'Form',
-  'Protect',
-  'Organize',
-  'Convert',
-  'Accessibility',
-  'Help',
-] as const;
+export interface ShellOptions {
+  readonly registry: Registry;
+  readonly selection: Selection;
+  readonly isMac: boolean;
+  readonly shellState: Store<ShellState>;
+  /** Persistence for pane widths etc.; defaults to the settings IPC. */
+  readonly uiStorage?: UiStorage;
+}
 
-export function mountShell(root: HTMLElement, registry: Registry, shell: Store<ShellState>): void {
+export interface ToolsService {
+  activate(toolId: string): void;
+  deactivate(): void;
+  readonly active: string | null;
+}
+
+export interface FocusService {
+  cycle(direction: 1 | -1): void;
+}
+
+export interface ShellHandle {
+  readonly services: ShellServices;
+  readonly ui: UiStore;
+  readonly ribbon: RibbonHandle;
+  readonly navPane: NavPaneHandle;
+  readonly propertiesPane: PropertiesPaneHandle;
+  readonly tabStrip: TabStripHandle;
+  readonly statusBar: StatusBarHandle;
+  readonly backstage: BackstageHandle;
+  readonly documents: Documents;
+  readonly dialogs: Dialogs;
+  readonly toasts: Toasts;
+  readonly tools: ToolsService;
+  dispose(): void;
+}
+
+export async function mountShell(root: HTMLElement, options: ShellOptions): Promise<ShellHandle> {
+  const { registry, selection, isMac, shellState } = options;
+  const storage = options.uiStorage ?? ipcUiStorage();
+  let persisted = {};
+  try {
+    persisted = await storage.read();
+  } catch (error) {
+    console.warn('ui: could not read the saved layout', error);
+  }
+  const ui = createUiStore(persisted);
+  const documents = new Documents();
+  const dialogs = new Dialogs();
+  const toasts = new Toasts();
+  const contextMenus = new ContextMenus(registry, isMac);
+
+  const services: ShellServices = {
+    registry,
+    ui,
+    documents,
+    dialogs,
+    toasts,
+    contextMenus,
+    selection,
+    isMac,
+    invalidate: () => {
+      invalidate(ui);
+    },
+    run: async (id, args = {}) => {
+      closeAllPopups('select');
+      const st = ui.get().ribbon;
+      if (st.minimised && st.peek) ui.set({ ribbon: { ...st, peek: false } });
+      notePaletteUse(id);
+      try {
+        return await registry.run(id, args);
+      } catch (error) {
+        console.error(`command ${id} failed`, error);
+        toasts.show({
+          kind: 'error',
+          title: id,
+          text: error instanceof Error ? error.message : String(error),
+        });
+        return undefined;
+      }
+    },
+  };
+
+  // ---- tools service --------------------------------------------------------------------------
+  let activeTool: ToolSpec | null = null;
+  const tools: ToolsService = {
+    activate: (toolId) => {
+      const spec = registry.tools().find((t) => t.id === toolId);
+      if (!spec) throw new Error(`Unknown tool: ${toolId}`);
+      if (activeTool?.id === toolId) return;
+      activeTool?.deactivate?.();
+      activeTool = spec;
+      ui.set({ activeTool: toolId });
+      spec.activate?.(registry.context());
+      services.invalidate();
+    },
+    deactivate: () => {
+      activeTool?.deactivate?.();
+      activeTool = null;
+      ui.set({ activeTool: null });
+      services.invalidate();
+    },
+    get active() {
+      return ui.get().activeTool;
+    },
+  };
+
+  const focus: FocusService = {
+    cycle: (direction) => {
+      closeAllPopups();
+      cycleRegion(ui, direction);
+    },
+  };
+
+  // Services by name, for `ctx.service(...)` in module commands.
+  registry.provide(SERVICE.ui, ui);
+  registry.provide(SERVICE.documents, documents);
+  registry.provide(SERVICE.dialogs, dialogs);
+  registry.provide(SERVICE.toasts, toasts);
+  registry.provide(SERVICE.contextMenu, contextMenus);
+  registry.provide(SERVICE.tools, tools);
+  registry.provide(SERVICE.focus, focus);
+  registry.provide('shellServices', services);
+
+  // ---- DOM ----------------------------------------------------------------------------------
   root.replaceChildren();
-
-  const title = el('header', 'titlebar');
-  const h1 = el('h1');
-  h1.textContent = 'ynotPDF';
-  const docName = el('span', 'doc-title');
-  docName.id = 'doc-title';
-  title.append(h1, docName);
-
-  const ribbon = el('nav', 'ribbon');
-  ribbon.setAttribute('role', 'tablist');
-  ribbon.setAttribute('aria-label', 'Ribbon');
-  RIBBON_TABS.forEach((name, i) => {
-    const tab = document.createElement('button');
-    tab.type = 'button';
-    tab.setAttribute('role', 'tab');
-    tab.setAttribute('aria-selected', i === 1 ? 'true' : 'false');
-    tab.textContent = name;
-    tab.addEventListener('click', () => {
-      for (const t of ribbon.querySelectorAll('[role="tab"]'))
-        t.setAttribute('aria-selected', 'false');
-      tab.setAttribute('aria-selected', 'true');
-    });
-    ribbon.append(tab);
+  const ribbon = mountRibbon(root, services);
+  const tabStrip = mountTabStrip(root, services);
+  const navPane = mountNavPane(root, services);
+  registry.provide(SERVICE.panels, navPane.service);
+  const docArea = el('main.doc-area', {
+    id: 'doc-area',
+    'data-region': 'document',
+    tabindex: -1,
+    'aria-label': 'Document',
   });
+  root.append(docArea);
+  const docHost = el('div.doc-host', { id: 'doc-host' });
+  docArea.append(docHost);
+  const emptyState = mountEmptyState(docArea, services);
+  toasts.mount(docArea);
+  const propertiesPane = mountPropertiesPane(root, services);
+  const statusBar = mountStatusBar(root, services);
+  registry.provide(SERVICE.tabs, tabStrip);
+  registry.provide(SERVICE.ribbon, ribbon);
+  registry.provide(SERVICE.statusBar, statusBar);
+  const backstage = mountBackstage(root, services);
+  registry.provide(SERVICE.backstage, backstage);
 
-  const left = el('aside', 'pane pane-left');
-  left.id = 'pane-left';
-  const leftTitle = el('h2');
-  leftTitle.textContent = 'Navigation';
-  left.append(leftTitle);
-
-  const right = el('aside', 'pane pane-right');
-  right.id = 'pane-right';
-  const rightTitle = el('h2');
-  rightTitle.textContent = 'Properties';
-  right.append(rightTitle);
-
-  const doc = el('main', 'doc-area');
-  doc.id = 'doc-area';
-  const empty = el('div', 'empty-state');
-  empty.id = 'empty-state';
-  const p1 = el('p');
-  p1.textContent = 'No document open.';
-  const p2 = el('p');
-  p2.append('Open a PDF with ');
-  const isMac = registry.service<{ isMac: boolean }>('platform').isMac;
-  p2.append(kbd(formatShortcut(registry.shortcutFor('file.open') ?? 'Mod+O', isMac)));
-  p2.append(' or the command palette ');
-  p2.append(
-    kbd(formatShortcut(registry.shortcutFor('app.commandPalette') ?? 'Mod+Shift+P', isMac)),
-  );
-  p2.append('.');
-  const openBtn = document.createElement('button');
-  openBtn.type = 'button';
-  openBtn.className = 'btn btn-primary';
-  openBtn.textContent = 'Open PDF';
-  openBtn.addEventListener('click', () => {
-    void registry.run('file.open');
-  });
-  empty.append(p1, p2, openBtn);
-  doc.append(empty);
-
-  const status = el('footer', 'statusbar');
-  status.id = 'statusbar';
-  const statusMsg = el('span');
-  statusMsg.id = 'status-message';
-  statusMsg.setAttribute('role', 'status');
-  status.append(statusMsg);
-  // M01 puts a live theme switcher here; without the service (unit tests) the status bar is
-  // simply one item shorter.
+  // M01's theme switcher lives in the status bar's right slot.
   if (registry.hasService(THEME_SERVICE)) {
-    status.append(
-      createThemeSwitcher(registry, registry.service<ThemeManager>(THEME_SERVICE)).element,
+    const switcher = createThemeSwitcher(registry, registry.service<ThemeManager>(THEME_SERVICE));
+    statusBar.element.querySelector('.status-right')?.append(switcher.element);
+    registry.service<ThemeManager>(THEME_SERVICE).onChange(() => {
+      // UI scale changes every natural width; re-measure the ribbon.
+      ribbon.rebuild();
+    });
+  }
+
+  // ---- wiring ---------------------------------------------------------------------------------
+  const disposers: (() => void)[] = [];
+  disposers.push(persistUi(ui, storage));
+  disposers.push(installFocusTracking(ui));
+  disposers.push(contextMenus.install(root));
+  disposers.push(
+    selection.subscribe(() => {
+      services.invalidate();
+    }),
+  );
+  disposers.push(
+    documents.subscribe((s) => {
+      const active = s.tabs.find((t) => t.id === s.active) ?? null;
+      shellState.set({ documentTitle: active ? active.title : null });
+      docHost.hidden = s.tabs.length === 0;
+      services.invalidate();
+    }),
+  );
+  disposers.push(
+    bind(
+      shellState,
+      (s) => s.statusMessage,
+      statusBar.element.querySelector<HTMLElement>('#status-message') ?? statusBar.element,
+      'textContent',
+    ),
+  );
+  disposers.push(
+    shellState.select(
+      (s) => s.documentTitle,
+      (t) => {
+        document.title = t ? `${t} — ynotPDF` : 'ynotPDF';
+      },
+    ),
+  );
+  disposers.push(
+    registry.subscribe(() => {
+      services.invalidate();
+    }),
+  );
+
+  // Default close hook: only used while no module (M21) has registered one.
+  documents.setDefaultCloseHook(async (tab) => {
+    if (!tab.dirty) return 'close';
+    const ok = await dialogs.confirm({
+      title: 'Close document',
+      text: `"${tab.title}" has unsaved changes. Close it without saving?`,
+      confirmLabel: 'Close without saving',
+      cancelLabel: 'Cancel',
+      danger: true,
+      kind: 'warning',
+      id: 'close-unsaved-dialog',
+    });
+    return ok ? 'close' : 'cancel';
+  });
+
+  // Drop a PDF anywhere on the window to open it.
+  root.addEventListener('dragover', (e) => {
+    if (e.dataTransfer?.types.includes('Files')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  });
+  root.addEventListener('drop', (e) => {
+    const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => /\.pdf$/i.test(f.name));
+    if (files.length === 0) return;
+    e.preventDefault();
+    for (const f of files) {
+      void f.arrayBuffer().then((buf) => {
+        const withPath = f as File & { path?: string };
+        const file: OpenedFile = {
+          path: withPath.path ?? f.name,
+          name: f.name,
+          bytes: new Uint8Array(buf),
+        };
+        void services.run('file.openBytes', { file });
+      });
+    }
+  });
+
+  if (hasBridge()) {
+    disposers.push(
+      on('window:focusChanged', ({ focused }) => {
+        ui.set((s) => ({ window: { ...s.window, focused } }));
+      }),
+    );
+    disposers.push(
+      on('window:stateChanged', (state) => {
+        ui.set({ window: state });
+      }),
     );
   }
 
-  root.append(title, ribbon, left, doc, right, status);
-
-  bind(
-    shell,
-    (s) => s.documentTitle,
-    docName,
-    'textContent',
-    (t) => (t ? `— ${t}` : ''),
-  );
-  bind(shell, (s) => s.statusMessage, statusMsg, 'textContent');
-  shell.select(
-    (s) => s.documentTitle,
-    (t) => {
-      document.title = t ? `${t} — ynotPDF` : 'ynotPDF';
+  return {
+    services,
+    ui,
+    ribbon,
+    navPane,
+    propertiesPane,
+    tabStrip,
+    statusBar,
+    backstage,
+    documents,
+    dialogs,
+    toasts,
+    tools,
+    dispose: () => {
+      for (const d of disposers) d();
+      backstage.dispose();
+      statusBar.dispose();
+      propertiesPane.dispose();
+      emptyState.dispose();
+      navPane.dispose();
+      tabStrip.dispose();
+      ribbon.dispose();
+      root.replaceChildren();
     },
-  );
-}
-
-function el(tag: string, className?: string): HTMLElement {
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  return e;
-}
-
-function kbd(text: string): HTMLElement {
-  const k = document.createElement('kbd');
-  k.textContent = text;
-  return k;
+  };
 }

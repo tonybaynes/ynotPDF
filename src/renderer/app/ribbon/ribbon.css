@@ -1,0 +1,339 @@
+/* Ribbon (M02): quick-access toolbar, tab strip, body of groups. */
+.ribbon {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-ribbon);
+  border-bottom: var(--border-width) solid var(--border);
+  min-width: 0;
+}
+
+.ribbon-top {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  padding: var(--sp-1) var(--sp-3) 0;
+}
+
+/* ---- quick access toolbar ---- */
+.qat {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding-bottom: var(--sp-1);
+  border-right: var(--border-width) solid var(--border);
+  padding-right: var(--sp-3);
+}
+
+.qat .rb-btn {
+  padding: var(--sp-1);
+}
+
+.qat .rb-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+/* ---- tab strip ---- */
+.ribbon-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-1);
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ribbon-file,
+.ribbon-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-4);
+  border: var(--border-width) solid transparent;
+  border-bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  white-space: nowrap;
+  font-weight: var(--fw-body);
+}
+
+.ribbon-file {
+  background: var(--accent);
+  color: var(--fg-on-accent);
+  border-color: var(--accent);
+  font-weight: var(--fw-heading);
+  padding-inline: var(--sp-5);
+}
+
+.ribbon-file:hover {
+  background: var(--accent-hover);
+}
+
+.ribbon-tab:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+
+.ribbon-tab[aria-selected='true'] {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  font-weight: var(--fw-heading);
+  /* Sits on top of the body border so the tab reads as attached. */
+  margin-bottom: calc(-1 * var(--border-width));
+  padding-bottom: calc(var(--sp-2) + var(--border-width));
+  box-shadow: inset 0 3px 0 0 var(--accent);
+}
+
+.ribbon-minimised .ribbon-tab[aria-selected='true'] {
+  margin-bottom: 0;
+  padding-bottom: var(--sp-2);
+  box-shadow: none;
+}
+
+.ribbon-peek .ribbon-tab[aria-selected='true'] {
+  box-shadow: inset 0 3px 0 0 var(--accent);
+}
+
+.ribbon-tab-contextual {
+  border-color: var(--info);
+  background: var(--bg-input);
+}
+
+.ribbon-tab-contextual .icon {
+  color: var(--info);
+}
+
+.ribbon-minimise {
+  margin-bottom: var(--sp-1);
+}
+
+/* ---- body ---- */
+.ribbon-body {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-panel);
+  border-top: var(--border-width) solid var(--border);
+  min-height: 5.5rem;
+  overflow: hidden;
+}
+
+.ribbon-peek .ribbon-body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  border-bottom: var(--border-width) solid var(--border-strong);
+  box-shadow: var(--elevation);
+}
+
+.ribbon-minimised {
+  position: relative;
+}
+
+.ribbon-empty {
+  margin: auto 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--fg-muted);
+}
+
+.rb-group {
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--sp-2);
+  border-right: var(--border-width) solid var(--border);
+  flex: none;
+}
+
+.rb-group:last-child {
+  border-right: 0;
+}
+
+/*
+ * Column flow, as in Office/Foxit: small controls stack up to three high beside the large
+ * buttons, then wrap into the next column. That keeps groups narrow so fewer collapse.
+ */
+.rb-items {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  flex: 1;
+  height: 4.6rem;
+  max-height: 4.6rem;
+}
+
+.rb-group-label {
+  text-align: center;
+  font-size: var(--fs-1);
+  color: var(--fg-muted);
+  padding-top: var(--sp-1);
+  white-space: nowrap;
+}
+
+.rb-collapsed .rb-group-label {
+  display: none;
+}
+
+.rb-group-popup {
+  border: 0;
+  padding: var(--sp-2);
+}
+
+/* ---- widgets ---- */
+.rb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.2;
+  position: relative;
+}
+
+.rb-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+
+.rb-btn:active {
+  background: var(--bg-active);
+}
+
+.rb-btn:disabled {
+  cursor: default;
+  color: var(--fg-muted);
+}
+
+.rb-btn:disabled:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.rb-btn[aria-pressed='true'],
+.rb-btn[aria-expanded='true'] {
+  background: var(--bg-active);
+  border-color: var(--border-strong);
+}
+
+.rb-large {
+  flex-direction: column;
+  justify-content: flex-start;
+  min-width: 4rem;
+  max-width: 6rem;
+  height: 4.4rem;
+  padding: var(--sp-2) var(--sp-2) var(--sp-1);
+  text-align: center;
+}
+
+.rb-label-large {
+  white-space: normal;
+  font-size: var(--fs-2);
+  line-height: 1.15;
+}
+
+.rb-small .rb-label {
+  font-size: var(--fs-2);
+}
+
+.rb-chevron {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.rb-value {
+  font-size: var(--fs-1);
+  color: var(--fg-muted);
+}
+
+.rb-separator {
+  width: var(--border-width);
+  height: 4.4rem;
+  background: var(--border);
+  margin: 0 var(--sp-1);
+}
+
+.rb-split {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.rb-split.rb-large {
+  flex-direction: column;
+  height: auto;
+  padding: 0;
+  max-width: none;
+}
+
+.rb-split-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.rb-split.rb-large .rb-split-main {
+  border-radius: var(--radius) var(--radius) 0 0;
+  height: auto;
+}
+
+.rb-split-arrow {
+  padding: 0 var(--sp-1);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left-color: var(--border);
+}
+
+.rb-split.rb-large .rb-split-arrow {
+  border-radius: 0 0 var(--radius) var(--radius);
+  justify-content: center;
+}
+
+.rb-swatch {
+  display: inline-block;
+  width: var(--icon-size);
+  height: 0.4rem;
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: 2px;
+  order: 2;
+}
+
+.rb-large .rb-swatch {
+  width: var(--icon-size-lg);
+}
+
+.rb-input {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1);
+  font-size: var(--fs-2);
+}
+
+.rb-input input,
+.rb-input select {
+  font-size: var(--fs-2);
+  width: 6ch;
+}
+
+.rb-input select {
+  width: auto;
+}
+
+.rb-input-label {
+  color: var(--fg);
+}

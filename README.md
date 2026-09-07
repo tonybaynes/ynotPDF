@@ -55,6 +55,18 @@ See PLAN.md §7. Every folder has a `README.md` saying what belongs there.
   `Command`.
 - Never commit real customer PDFs, binaries or secrets — the pre-commit hook refuses them.
 
+## Application shell (M02)
+
+The chrome is data-driven from module manifests (`src/shared/module.ts`, ADR 0004): ribbon
+groups and contextual tabs, panels on either side, status-bar slots, File-backstage slots,
+creators and context menus. Nothing outside `src/renderer/app/` builds ribbon DOM. Every widget
+kind is exercised by the demo module in `test/e2e/demo-module/` (registered only in e2e runs)
+and `test/e2e/shell.spec.ts` — extend the demo when you add a widget; never delete from it.
+
+Icons are Lucide (ISC) via the `lucide` devDependency, tree-shaken through
+`src/renderer/app/icons.ts`; register extra icons with `registerIcon()`. `axe-core` (dev only)
+checks contrast and focus in the shell e2e for all four themes.
+
 ## Testing the app from Playwright
 
 ```ts
