@@ -173,7 +173,7 @@ so the white focus ring keeps 3:1 on them, and the borders lightened to reach
 |---|---|---|
 | 1 | **Graphite** (default) | Dark: app `#121212`, panels `#1c1c1e`, ribbon `#232326`, text `#f2f2f2`, icons `#ffffff`, accent `#3392ff`, borders `#767680`. Text ≥ 7:1, icons ≥ 4.5:1 on every surface. |
 | 2 | **Midnight** | Black `#000000` app, dark-blue `#0a0a2e` panels, gold `#ffd700` text, white borders — the logistics-hub palette. |
-| 3 | **Daylight** | Light grey, **no white anywhere in the chrome**: panels `#e0e0e8`, app `#d8d8e2`, inputs `#dcdce6`, ribbon `#d5d5de`, page backdrop `#a9a9b8`, black text, accent `#082a68`. Only the PDF page is white. |
+| 3 | **Daylight** | Mid grey, **no white anywhere in the chrome**: panels `#d9d9e3`, app and ribbon `#d2d2dc`, inputs `#d5d5df`, page backdrop `#9e9eb0`, black text, accent `#082a68`. Only the PDF page is white. |
 | 4 | **High Contrast** | Pure black / white / yellow, 2 px borders, no greys. |
 
 Accessibility rules baked into every theme (non-negotiable — the operator's
@@ -222,9 +222,12 @@ document rather than the interface.
 There is a floor on how dark that grey can go, and it is set by the status colours rather than
 by taste. Every status must clear 4.5:1 on the darkest surface that carries text, which caps
 its lightness; the four then have to stay distinguishable to a dichromat inside whatever band
-is left. A search of the colour space shows a workable set exists down to a ribbon of about
-`#d0d0db`, below which no semantically sensible palette survives — a "danger" that is still
-readable and still separable becomes a muddy brown. `#d5d5de` keeps a comfortable margin.
+is left. Searching the colour space under semantic hue constraints puts the floor at a
+text-bearing surface of about `#ccccd8`; below that nothing works. At the current `#d2d2dc`
+the band is already narrow enough to force a choice, and the one taken is: **all four statuses
+stay clearly lighter than body text, at the cost of `--danger` being a burnt orange rather than
+a vivid red-orange.** Discrimination is what the operator actually needs; how red the red looks
+is not something he can use. Going darker again means giving up one of those two.
 
 ### 3.3 UI layout (Foxit-style)
 - **Ribbon** tabs: File · Home · Edit · Comment · View · Form · Protect ·
