@@ -4,7 +4,7 @@
  * Hover/active/selected fills are dark blues so they never read as grey.
  */
 [data-theme='high-contrast'] {
-  color-scheme: dark;
+  color-scheme: dark only;
   --border-width: 2px;
 
   /* Surfaces */

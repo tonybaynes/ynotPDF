@@ -12,6 +12,10 @@
  *   secondary text is still >= 4.5:1 (no dim grey on dark); placeholder hints are the only
  *   low-contrast text permitted and must still reach 3:1.
  *   No rgba()/hsla() alpha < 1, no opacity < 1, no backdrop-filter — overlays are opaque.
+ *   Every theme declares `color-scheme: <scheme> only`. The `only` keyword forbids the browser
+ *   substituting a scheme of its own: without it, Chrome's "Auto Dark Mode for Web Contents"
+ *   (chrome://flags) repaints any subtree that says `color-scheme: light` — which silently
+ *   falsified the Daylight palette in the theme gallery.
  *   Status is never colour alone: word + icon. Status colours separate on blue<->yellow and
  *   lightness (test/unit/theme-colour-vision.test.ts), never red<->green. Red on black is
  *   forbidden.
@@ -113,7 +117,7 @@
   --icon-size: 1.143rem; /* 16px */
   --icon-size-lg: 1.714rem; /* 24px */
 
-  color-scheme: dark;
+  color-scheme: dark only;
 }
 
 /* --ui-scale drives the root font size; everything in rem/em follows. */

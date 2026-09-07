@@ -156,16 +156,24 @@ tests pass on all three.
 
 ### 3.2 Themes — four, dark default
 All colours are **semantic tokens** (`--bg-app`, `--bg-panel`, `--bg-ribbon`,
-`--fg`, `--fg-muted`, `--icon`, `--accent`, `--accent-fg`, `--border`,
+`--fg`, `--fg-muted`, `--icon`, `--accent`, `--fg-on-accent`, `--border`,
 `--focus`, `--selection`, `--danger`, `--warning`, `--success`, `--info`, …)
 defined once per theme in `src/renderer/theme/<name>.css`. **No colour
 literal anywhere else in the codebase** — a lint rule enforces it.
 
+**Built and approved by the operator on 2026-09-07 (M01).** The character of
+each theme is below; `src/renderer/theme/*.css` and the token catalogue in
+`tokens.css` are the source of truth for exact values, and
+`test/unit/theme-contrast.test.ts` fails the build if any of them breaks a rule.
+A few values moved during M01 to clear the contrast floor — the accents darkened
+so the white focus ring keeps 3:1 on them, and the borders lightened to reach
+3:1 on their surfaces.
+
 | # | Name | Character |
 |---|---|---|
-| 1 | **Graphite** (default) | Dark: app `#121212`, panels `#1c1c1e`, ribbon `#232326`, text `#f2f2f2`, icons `#ffffff`, accent `#4da3ff`, borders `#3a3a3d`. Text ≥ 7:1, icons ≥ 4.5:1 on every surface. |
-| 2 | **Midnight** | Black `#000000` app, dark-blue `#0a0a2e` panels, gold `#FFD700` text, white borders — the logistics-hub palette. |
-| 3 | **Daylight** | Light: app `#f5f5f7`, panels `#ffffff`, text `#1a1a1a`, accent `#0b5cd6`. |
+| 1 | **Graphite** (default) | Dark: app `#121212`, panels `#1c1c1e`, ribbon `#232326`, text `#f2f2f2`, icons `#ffffff`, accent `#3392ff`, borders `#767680`. Text ≥ 7:1, icons ≥ 4.5:1 on every surface. |
+| 2 | **Midnight** | Black `#000000` app, dark-blue `#0a0a2e` panels, gold `#ffd700` text, white borders — the logistics-hub palette. |
+| 3 | **Daylight** | Light: app `#f5f5f7`, panels `#ffffff`, text `#1a1a1a`, accent `#082a68`. |
 | 4 | **High Contrast** | Pure black / white / yellow, 2 px borders, no greys. |
 
 Accessibility rules baked into every theme (non-negotiable — the operator's
@@ -175,12 +183,21 @@ own requirements):
 - **Never differentiate by red/green or gold/green alone** — the operator is
   colourblind and black and red read as one colour. Status uses a word + icon;
   the palette separates on blue↔yellow and lightness. No red text on black.
+  A test simulates protanopia and deuteranopia and asserts every status pair
+  still separates by lightness (ΔL\* ≥ 20) **or** blue↔yellow (Δb\* ≥ 45), never
+  by red↔green alone. The two channels are needed because a flat ΔL\* rule is
+  impossible next to the 4.5:1 floor — see `docs/adr/0002-status-colour-separation.md`.
 - Muted/secondary text is still ≥ 4.5:1 — no dim grey on dark. The only
   low-contrast text permitted is italic placeholder hints in empty inputs.
 - **Modals and overlays are fully opaque.** No `rgba()` with alpha < 1, no
   `opacity` < 1, no `backdrop-filter`. Lint rule.
-- `color-scheme` declared per theme so OS/browser auto-dark never re-inverts.
-- Every control has a keyboard path and a visible 2 px accent focus ring.
+- `color-scheme: <scheme> only` declared per theme. The `only` keyword is what
+  actually stops a browser-level auto-dark feature repainting the app (Chrome's
+  Auto Dark Mode ignores a bare `light`); the tests assert it.
+- Every control has a keyboard path and a visible 2 px focus ring, drawn as two
+  solid rings (`--focus` outside on the surface, `--focus-contrast` inside on the
+  control) because one colour cannot clear 3:1 against both a pale surface and a
+  dark accent fill.
 - UI scale 100–200 % in Preferences.
 
 Theme switch is live (no restart) and persisted.
@@ -437,7 +454,7 @@ D:\Projects\ynotPDF\
 | 1 | App name/branding confirmed as **ynotPDF**; icon/logo | M00 |
 | 2 | GitHub repo for CI (private) — create `tonybaynes/ynotPDF` and tell the M00 session | M00 |
 | 3 | Approve the Tier list in §1 (anything to promote from Parked?) | Wave 1 |
-| 4 | Theme names/palettes in §3.2 — tweak before M01 | M01 |
+| 4 | ~~Theme names/palettes in §3.2 — tweak before M01~~ **Approved as built, 2026-09-07** (all four, via the M01 gallery) | M01 |
 | 5 | A few real-world non-confidential PDFs typical of your use, for the corpus | M10 |
 | 6 | Windows code-signing certificate and Apple Developer account (paid) | M131 |
 | 7 | Is LibreOffice acceptable as the Office-conversion dependency? | M93 |

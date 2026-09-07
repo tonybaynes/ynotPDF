@@ -4,7 +4,7 @@
  * test/unit/theme-contrast.test.ts can check every pair in pairs.ts. No alpha, no opacity.
  */
 [data-theme='graphite'] {
-  color-scheme: dark;
+  color-scheme: dark only;
 
   /* Surfaces */
   --bg-app: #121212;
