@@ -1,27 +1,61 @@
 /*
- * Graphite (default dark) - M00 PLACEHOLDER palette so the shell renders.
- * M01 owns the real four themes and the contrast test; values here come from PLAN.md 3.2.
+ * Graphite — default dark theme (M01, PLAN.md §3.2).
+ * Near-black surfaces, white text and icons, blue accent. Every value is a plain hex colour so
+ * test/unit/theme-contrast.test.ts can check every pair in pairs.ts. No alpha, no opacity.
  */
 [data-theme='graphite'] {
   color-scheme: dark;
+
+  /* Surfaces */
   --bg-app: #121212;
   --bg-panel: #1c1c1e;
   --bg-ribbon: #232326;
   --bg-input: #2a2a2e;
   --bg-hover: #303036;
   --bg-active: #3a3a42;
-  --bg-page-area: #0e0e0e;
+  --bg-selected: #1f3d66;
+  --bg-modal: #1c1c1e;
+  --bg-canvas: #0e0e0e;
+  --page-paper: #ffffff;
+  --page-ink: #000000;
+
+  /* Text */
   --fg: #f2f2f2;
-  --fg-muted: #c8c8cc;
+  --fg-muted: #b8b8be;
+  --fg-on-accent: #000000;
+  --fg-placeholder: #8e8e96;
+
+  /* Icons and accent */
   --icon: #ffffff;
-  --accent: #4da3ff;
-  --accent-fg: #0b1220;
-  --border: #4a4a4f;
-  --focus: #ffd166;
-  --selection: #2a5c99;
-  --danger: #ff8fa3;
-  --warning: #ffd166;
-  --success: #7fd7ff;
-  --info: #9ec5ff;
-  --shadow: #000000;
+  --icon-disabled: #9a9aa2;
+  --accent: #3392ff;
+  --accent-hover: #1f7ae0;
+
+  /* Borders and lines */
+  --border: #767680;
+  --border-strong: #8c8c96;
+  --shadow: #8c8c96;
+  --focus: #ffffff;
+  --focus-contrast: #000000;
+  --selection: #2a7fd4;
+
+  /* Status — word + icon always; separated on blue<->yellow and lightness */
+  --danger: #ff6a3d;
+  --danger-fg: #000000;
+  --warning: #ffe14d;
+  --warning-fg: #000000;
+  --success: #b3f0e0;
+  --success-fg: #000000;
+  --info: #5aa9ff;
+  --info-fg: #000000;
+
+  /* Annotation defaults (drawn on the page) */
+  --annot-highlight: #ffe14d;
+  --annot-underline: #0b5cd6;
+  --annot-strikeout: #c2185b;
+  --annot-note: #b35900;
+  --annot-ink: #0b5cd6;
+  --annot-shape: #c2185b;
+  --annot-redact: #000000;
+  --annot-redact-fg: #ffffff;
 }

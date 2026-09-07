@@ -1,0 +1,282 @@
+/*
+ * Gallery styling (M01, dev only). The page itself renders in Graphite; each theme column sets
+ * its own [data-theme], so the swatches and samples inside show that theme's real tokens.
+ */
+body {
+  margin: 0;
+  padding: var(--sp-5);
+  background: var(--bg-app);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--fs-3);
+  line-height: var(--lh);
+}
+
+header h1 {
+  font-size: var(--fs-6);
+  margin: 0 0 var(--sp-3);
+}
+
+header p {
+  color: var(--fg-muted);
+  max-width: 70ch;
+}
+
+.toc {
+  display: flex;
+  gap: var(--sp-4);
+  padding: var(--sp-3) 0;
+  border-block: var(--border-width) solid var(--border);
+  margin-bottom: var(--sp-5);
+}
+
+.toc a {
+  color: var(--accent);
+}
+
+section {
+  margin-bottom: var(--sp-6);
+}
+
+section h2 {
+  font-size: var(--fs-5);
+  border-bottom: var(--border-width) solid var(--border);
+  padding-bottom: var(--sp-2);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--sp-5);
+}
+
+.column h3 {
+  font-size: var(--fs-4);
+  margin: 0 0 var(--sp-1);
+}
+
+.note {
+  color: var(--fg-muted);
+  font-size: var(--fs-2);
+  margin: 0 0 var(--sp-3);
+}
+
+/* Swatches ------------------------------------------------------------------------------- */
+.swatches {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3);
+  background: var(--bg-panel);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+}
+
+.swatch {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr auto;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.chip {
+  display: inline-block;
+  width: 2.5rem;
+  height: 1.25rem;
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.token,
+.value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2);
+}
+
+.value {
+  color: var(--fg-muted);
+}
+
+.swatch .meta {
+  grid-column: 2 / -1;
+  color: var(--fg-muted);
+  font-size: var(--fs-1);
+}
+
+/* Tables --------------------------------------------------------------------------------- */
+.scroll {
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  font-size: var(--fs-2);
+  width: 100%;
+}
+
+th,
+td {
+  text-align: left;
+  padding: var(--sp-1) var(--sp-3);
+  border-bottom: var(--border-width) solid var(--border);
+  white-space: nowrap;
+}
+
+th {
+  color: var(--fg-muted);
+}
+
+td.ok,
+p.ok {
+  color: var(--success);
+}
+
+tr.bad td,
+td.bad,
+p.bad {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.sample {
+  display: inline-block;
+  padding: 0 var(--sp-2);
+  border: var(--border-width) solid;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+}
+
+/* UI sample ------------------------------------------------------------------------------ */
+.ui-sample {
+  background: var(--bg-app);
+  color: var(--fg);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.ui-ribbon {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-ribbon);
+  border-bottom: var(--border-width) solid var(--border);
+}
+
+.ui-tab {
+  font: inherit;
+  padding: var(--sp-1) var(--sp-3);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--fg);
+}
+
+.ui-tab.active {
+  background: var(--bg-active);
+  border-color: var(--border);
+}
+
+.ui-body {
+  padding: var(--sp-4);
+  background: var(--bg-panel);
+}
+
+.ui-body h4 {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-4);
+}
+
+.ui-body p {
+  margin: 0 0 var(--sp-2);
+}
+
+.ui-body .muted {
+  color: var(--fg-muted);
+}
+
+.ui-controls {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+  margin: var(--sp-3) 0;
+  flex-wrap: wrap;
+}
+
+.ui-btn {
+  font: inherit;
+  padding: var(--sp-2) var(--sp-4);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--fg);
+}
+
+.ui-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--fg-on-accent);
+}
+
+.ui-btn.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.ui-controls input {
+  font: inherit;
+  padding: var(--sp-2);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--fg);
+}
+
+.ui-status {
+  display: flex;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-2);
+}
+
+.badge.filled {
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--radius);
+}
+
+.badge-icon {
+  font-weight: 700;
+}
+
+.ui-page {
+  padding: var(--sp-4);
+  background: var(--bg-canvas);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+}
+
+.paper {
+  padding: var(--sp-4);
+  background: var(--page-paper);
+  color: var(--page-ink);
+  border: var(--border-width) solid var(--border-strong);
+}
+
+.paper .hl {
+  background: var(--annot-highlight);
+  color: var(--page-ink);
+}
+
+.paper .sel {
+  background: var(--selection);
+  color: var(--page-ink);
+}

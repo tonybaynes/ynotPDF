@@ -7,15 +7,17 @@ html,
 body {
   height: 100%;
   margin: 0;
+}
+
+/*
+ * The root font size carries --ui-scale (theme/tokens.css) and must not be restated here:
+ * `html { font-size: 1rem }` would be self-referential and reset the scale.
+ */
+body {
   background: var(--bg-app);
   color: var(--fg);
   font-family: var(--font-ui);
-  font-size: calc(14px * var(--ui-scale));
-}
-
-:focus-visible {
-  outline: var(--focus-width) solid var(--focus);
-  outline-offset: 1px;
+  font-size: var(--fs-3);
 }
 
 #app {
@@ -105,7 +107,7 @@ body {
   align-items: center;
   justify-content: center;
   overflow: auto;
-  background: var(--bg-page-area);
+  background: var(--bg-canvas);
 }
 
 .empty-state {
@@ -152,7 +154,7 @@ button.btn:hover {
 
 button.btn-primary {
   background: var(--accent);
-  color: var(--accent-fg);
+  color: var(--fg-on-accent);
   border-color: var(--accent);
 }
 
@@ -266,4 +268,25 @@ dialog dd {
 
 .page .layer-text {
   color: transparent;
+}
+
+/* Status-bar theme quick-switch (M01). */
+.theme-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-left: auto;
+}
+
+.theme-switcher label {
+  color: var(--fg-muted);
+}
+
+.theme-switcher select {
+  font: inherit;
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--fg);
 }

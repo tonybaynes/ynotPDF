@@ -7,6 +7,7 @@ import { app, BrowserWindow, nativeTheme } from 'electron';
 import { registerIpcHandlers } from './ipc';
 import { buildMenu } from './menu';
 import { RecentFiles } from './recent';
+import { Settings, THEME_KEY } from './settings';
 import { createMainWindow, getMainWindow, sendToRenderer } from './window';
 import { readFileForRenderer } from './files';
 
@@ -44,6 +45,7 @@ if (!gotLock) {
 }
 
 const recent = new RecentFiles();
+const settings = new Settings();
 
 app.on('second-instance', (_event, argv) => {
   const win = getMainWindow();
@@ -81,10 +83,11 @@ async function boot(): Promise<void> {
 if (gotLock) {
   void app.whenReady().then(async () => {
     app.setAppUserModelId('com.ynotpdf.app');
-    // Native chrome (Windows title bar, menu bar, dialogs) follows the app's dark default,
-    // not the OS setting. M01 switches this to 'light' when the Daylight theme is active.
-    nativeTheme.themeSource = 'dark';
-    registerIpcHandlers(recent, {
+    // Native chrome (Windows title bar, menu bar, dialogs) follows the *app's* theme, never the
+    // OS setting. Read the saved theme here so the window opens in the right chrome; the
+    // renderer confirms it through `theme:setNative` once ThemeManager has applied the theme.
+    nativeTheme.themeSource = settings.get(THEME_KEY) === 'daylight' ? 'light' : 'dark';
+    registerIpcHandlers(recent, settings, {
       onOpenPath: openPathInRenderer,
       rebuildMenu: () => {
         buildMenu(recent);

@@ -28,8 +28,24 @@ export interface App {
   close(): Promise<void>;
 }
 
-export async function launchApp(): Promise<App> {
-  const userData = mkdtempSync(join(tmpdir(), 'ynot-e2e-'));
+/** Options for {@link launchApp}. */
+export interface LaunchOptions {
+  /**
+   * Reuse the previous launch's user-data directory instead of a fresh one, so persisted
+   * settings (theme, UI scale, recent files) survive a restart within one test file (M01).
+   */
+  readonly reuseUserData?: boolean;
+}
+
+/** The user-data dir of the most recent launch, for `reuseUserData`. */
+let lastUserData: string | undefined;
+
+export async function launchApp(options: LaunchOptions = {}): Promise<App> {
+  const userData =
+    options.reuseUserData && lastUserData !== undefined
+      ? lastUserData
+      : mkdtempSync(join(tmpdir(), 'ynot-e2e-'));
+  lastUserData = userData;
   const executable = process.env['YNOT_E2E_EXECUTABLE'];
   const app = await electron.launch({
     ...(executable ? { executablePath: executable } : {}),

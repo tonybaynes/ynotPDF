@@ -71,6 +71,18 @@ export interface IpcInvokeMap {
   'recent:list': { args: []; result: RecentFile[] };
   'recent:add': { args: [path: string]; result: RecentFile[] };
   'recent:clear': { args: []; result: RecentFile[] };
+  /**
+   * Reads one persisted setting by dotted key (M01). Returns `undefined` when unset. Settings
+   * live in `settings.json` in the OS user-data dir; M130 owns the preferences UI on top.
+   */
+  'settings:get': { args: [key: string]; result: unknown };
+  /** Writes one persisted setting. `undefined` deletes the key. */
+  'settings:set': { args: [key: string, value: unknown]; result: void };
+  /**
+   * Tells the main process which native colour scheme to use for title bars, menus and native
+   * dialogs, so the OS chrome follows the active theme (M01).
+   */
+  'theme:setNative': { args: [scheme: 'dark' | 'light']; result: void };
   'app:info': { args: []; result: AppInfo };
   'app:quit': { args: []; result: void };
   'window:minimize': { args: []; result: void };
@@ -120,6 +132,9 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'recent:list',
   'recent:add',
   'recent:clear',
+  'settings:get',
+  'settings:set',
+  'theme:setNative',
   'app:info',
   'app:quit',
   'window:minimize',

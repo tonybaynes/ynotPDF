@@ -47,7 +47,7 @@ WAVE 0  (run ALONE first)
 
 WAVE 1
 ------
-[ ] M01  Theme system (four themes)
+[x] M01  Theme system (four themes)
       model:  Opus
       needs: M00
       prompt: Read D:\Projects\ynotPDF\docs\modules\M01-theme-system.md and carry out the "Your task" section in full.

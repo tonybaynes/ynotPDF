@@ -23,6 +23,7 @@
       "@core/*": ["src/renderer/core/*"],
       "@app/*": ["src/renderer/app/*"],
       "@view/*": ["src/renderer/view/*"],
+      "@theme/*": ["src/renderer/theme/*"],
       "@modules/*": ["src/renderer/modules/*"]
     }
   }

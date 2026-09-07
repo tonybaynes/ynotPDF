@@ -3,10 +3,11 @@
  * missing or mistyped handler a compile error.
  */
 
-import { app, dialog, ipcMain, shell } from 'electron';
+import { app, dialog, ipcMain, nativeTheme, shell } from 'electron';
 import type { IpcHandlers, IpcInvokeChannel } from '../shared/ipc';
 import { readFileForRenderer, writeBytes } from './files';
 import type { RecentFiles } from './recent';
+import type { Settings } from './settings';
 import { getMainWindow, sendToRenderer } from './window';
 
 export interface IpcDeps {
@@ -14,7 +15,7 @@ export interface IpcDeps {
   rebuildMenu(): void;
 }
 
-export function registerIpcHandlers(recent: RecentFiles, deps: IpcDeps): void {
+export function registerIpcHandlers(recent: RecentFiles, settings: Settings, deps: IpcDeps): void {
   const handlers: IpcHandlers = {
     'file:openDialog': async () => {
       const win = getMainWindow();
@@ -67,6 +68,14 @@ export function registerIpcHandlers(recent: RecentFiles, deps: IpcDeps): void {
       const list = recent.clear();
       deps.rebuildMenu();
       return list;
+    },
+    'settings:get': (_e, key) => settings.get(key),
+    'settings:set': (_e, key, value) => {
+      settings.set(key, value);
+    },
+    // Keeps the OS chrome (title bar, menus, native dialogs) in step with the active theme.
+    'theme:setNative': (_e, scheme) => {
+      nativeTheme.themeSource = scheme;
     },
     'app:info': () => ({
       name: app.getName(),

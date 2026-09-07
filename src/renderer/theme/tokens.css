@@ -1,36 +1,147 @@
 /*
- * Semantic colour tokens (M00). Every theme file assigns ALL of these under
- * [data-theme="<name>"]. Application CSS uses only var(--token); never a literal.
+ * ynotPDF semantic design tokens (M01).
  *
- * Contrast rules (CLAUDE.md): --fg and --fg-muted >= 4.5:1 on every --bg-*; --icon and
- * --border >= 3:1; status colours (--danger/--warning/--success/--info) are never the only
- * signal — pair with a word and an icon; never rely on red vs green.
+ * Every theme file (graphite.css, midnight.css, daylight.css, high-contrast.css) assigns ALL
+ * of the colour tokens below under `[data-theme="<name>"]`. Application CSS uses only
+ * `var(--token)`; colour literals are allowed in src/renderer/theme/ only (lint rule).
  *
- * Tokens:
- *   --bg-app        window background behind everything
- *   --bg-panel      side panes, dialogs, palette
- *   --bg-ribbon     ribbon / toolbar strip
- *   --bg-input      text inputs, list rows
- *   --bg-hover      hover state for rows/buttons
- *   --bg-active     pressed / selected row
- *   --bg-page-area  the scrolling document area behind pages
- *   --fg            primary text
- *   --fg-muted      secondary text (still >= 4.5:1)
- *   --icon          stroke colour for Lucide icons
- *   --accent        primary action / active tab
- *   --accent-fg     text on --accent
- *   --border        1px separators and control outlines
- *   --focus         2px focus ring (keyboard)
- *   --selection     text/object selection fill (opaque; the view uses blend modes, not alpha)
- *   --danger / --warning / --success / --info   status colours (word + icon always)
- *   --shadow        opaque shadow colour for elevated surfaces (borders preferred)
+ * Contrast rules (CLAUDE.md, PLAN.md §3.2) — enforced by test/unit/theme-contrast.test.ts
+ * using the pair table in pairs.ts:
+ *   text (--fg, --fg-muted, status text, --fg-on-accent)   >= 4.5:1
+ *   icons, borders, focus ring, selection fill              >= 3:1
+ *   secondary text is still >= 4.5:1 (no dim grey on dark); placeholder hints are the only
+ *   low-contrast text permitted and must still reach 3:1.
+ *   No rgba()/hsla() alpha < 1, no opacity < 1, no backdrop-filter — overlays are opaque.
+ *   Status is never colour alone: word + icon. Status colours separate on blue<->yellow and
+ *   lightness (test/unit/theme-colour-vision.test.ts), never red<->green. Red on black is
+ *   forbidden.
+ *
+ * ---- Colour tokens (one line each; the gallery and tests read this list) ------------------
+ *
+ * Surfaces
+ *   --bg-app         window background behind everything
+ *   --bg-panel       side panes, dialogs, palette, cards
+ *   --bg-ribbon      ribbon / toolbar / title bar / status bar strip
+ *   --bg-input       text inputs, selects, list rows, kbd
+ *   --bg-hover       hover state for rows and buttons
+ *   --bg-active      pressed state and the active ribbon tab
+ *   --bg-selected    selected row / item (text on it stays --fg)
+ *   --bg-modal       modal dialog body (opaque)
+ *   --bg-canvas      the scrolling document area behind the pages
+ *   --page-paper     paper colour of a rendered page placeholder / empty page
+ *   --page-ink       default ink on the page (text colour PDFs are assumed to use)
+ *
+ * Text
+ *   --fg             primary text
+ *   --fg-muted       secondary text, still >= 4.5:1
+ *   --fg-on-accent   text and icons on --accent / --accent-hover
+ *   --fg-placeholder placeholder hint in empty inputs (italic, >= 3:1)
+ *
+ * Icons and accent
+ *   --icon           stroke colour for Lucide icons (currentColor)
+ *   --icon-disabled  disabled icon / control stroke, still >= 3:1
+ *   --accent         primary action, active tab marker, links
+ *   --accent-hover   hover state of accent controls
+ *
+ * Borders and lines
+ *   --border         1 px separators and control outlines on calm surfaces
+ *   --border-strong  emphasised outline; also the solid "shadow" colour of elevated surfaces
+ *   --shadow         solid offset border under popups (never translucent)
+ *   --focus          2 px keyboard focus ring drawn on the surface (>= 3:1 on every surface)
+ *   --focus-contrast inner ring drawn against the control's own fill (>= 3:1 on the accent and
+ *                    on --focus); the two rings together guarantee a visible focus on any
+ *                    control, which one colour cannot do on a light theme with a dark accent
+ *   --selection      text/object selection fill on the page (opaque; drawn with blend modes)
+ *
+ * Status (each with a -fg partner for text drawn on top of a filled badge)
+ *   --danger         errors, destructive actions — orange-red with an icon, never red on black
+ *   --danger-fg
+ *   --warning        warnings — yellow/amber with an icon
+ *   --warning-fg
+ *   --success        success — light blue-green with an icon
+ *   --success-fg
+ *   --info           neutral information — blue with an icon
+ *   --info-fg
+ *
+ * Annotation defaults (drawn on the page; modules read these for new annotations)
+ *   --annot-highlight   text highlight fill (page ink must stay readable on it)
+ *   --annot-underline   underline stroke
+ *   --annot-strikeout   strike-out stroke
+ *   --annot-note        sticky-note icon fill
+ *   --annot-ink         freehand ink stroke
+ *   --annot-shape       shape / line / arrow stroke
+ *   --annot-redact      redaction box fill (applied redactions are always this)
+ *   --annot-redact-fg   overlay text on a redaction box
+ *
+ * ---- Non-colour tokens (defined once here, themes may override e.g. border width) ----------
  */
 :root {
-  color-scheme: dark;
+  /* Typography */
   --font-ui: system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, 'Cascadia Mono', Consolas, 'Liberation Mono', monospace;
+  /* Type scale in rem so --ui-scale (applied to html font-size) scales everything. */
+  --fs-1: 0.75rem; /* 10.5px  captions, status bar */
+  --fs-2: 0.857rem; /* 12px    secondary UI text */
+  --fs-3: 1rem; /* 14px    body / controls */
+  --fs-4: 1.143rem; /* 16px    dialog titles, panel headings */
+  --fs-5: 1.429rem; /* 20px    page headings */
+  --fs-6: 1.857rem; /* 26px    hero / empty state */
+  --lh: 1.4;
+
+  /* Spacing scale (rem, so it scales with the UI). */
+  --sp-1: 0.143rem; /* 2px */
+  --sp-2: 0.286rem; /* 4px */
+  --sp-3: 0.571rem; /* 8px */
+  --sp-4: 0.857rem; /* 12px */
+  --sp-5: 1.143rem; /* 16px */
+  --sp-6: 1.714rem; /* 24px */
+
+  /* Shape */
   --radius: 4px;
+  --radius-lg: 8px;
+  --border-width: 1px; /* high-contrast sets 2px */
   --focus-width: 2px;
-  --border-width: 1px;
+  --focus-offset: 2px;
+  /* Elevation is a solid offset border, never a blurred/translucent shadow. */
+  --elevation: 0 0 0 var(--border-width) var(--border-strong), 3px 3px 0 0 var(--shadow);
+
+  /* UI scale: 1 = 100 %, 2 = 200 %. ThemeManager sets this on <html>. */
   --ui-scale: 1;
+  --font-base: 14px;
+
+  /* Icon sizes (rem, scale with the UI). */
+  --icon-size: 1.143rem; /* 16px */
+  --icon-size-lg: 1.714rem; /* 24px */
+
+  color-scheme: dark;
+}
+
+/* --ui-scale drives the root font size; everything in rem/em follows. */
+html {
+  font-size: calc(var(--font-base) * var(--ui-scale));
+  line-height: var(--lh);
+}
+
+/*
+ * Focus ring: two solid rings, never removed. The outer ring (`outline`, offset so it sits on
+ * the surface) uses --focus; the inner ring (`box-shadow`, hugging the control) uses
+ * --focus-contrast so a filled accent button still shows a ring. Both are solid: no blur,
+ * no alpha.
+ */
+:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+  box-shadow: 0 0 0 var(--focus-width) var(--focus-contrast);
+}
+
+/* Placeholder hints are the one permitted low-contrast text: italic so they read as hints. */
+::placeholder {
+  color: var(--fg-placeholder);
+  font-style: italic;
+}
+
+/* Native text selection inside the UI (not the page) uses the accent pair. */
+::selection {
+  background: var(--accent);
+  color: var(--fg-on-accent);
 }

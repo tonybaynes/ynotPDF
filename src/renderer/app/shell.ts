@@ -5,6 +5,9 @@
 
 import { formatShortcut, type Registry } from '@core/Registry';
 import { bind, type Store } from '@core/Store';
+import { createThemeSwitcher } from '@modules/M01-theme-system/switcher';
+import { THEME_SERVICE } from '@modules/M01-theme-system/manifest';
+import type { ThemeManager } from '@theme/ThemeManager';
 
 export interface ShellState {
   readonly documentTitle: string | null;
@@ -95,9 +98,14 @@ export function mountShell(root: HTMLElement, registry: Registry, shell: Store<S
   const statusMsg = el('span');
   statusMsg.id = 'status-message';
   statusMsg.setAttribute('role', 'status');
-  const statusTheme = el('span');
-  statusTheme.id = 'status-theme';
-  status.append(statusMsg, statusTheme);
+  status.append(statusMsg);
+  // M01 puts a live theme switcher here; without the service (unit tests) the status bar is
+  // simply one item shorter.
+  if (registry.hasService(THEME_SERVICE)) {
+    status.append(
+      createThemeSwitcher(registry, registry.service<ThemeManager>(THEME_SERVICE)).element,
+    );
+  }
 
   root.append(title, ribbon, left, doc, right, status);
 
@@ -109,19 +117,6 @@ export function mountShell(root: HTMLElement, registry: Registry, shell: Store<S
     (t) => (t ? `— ${t}` : ''),
   );
   bind(shell, (s) => s.statusMessage, statusMsg, 'textContent');
-  bind(
-    shell,
-    (s) => s.theme,
-    statusTheme,
-    'textContent',
-    (t) => `Theme: ${t}`,
-  );
-  shell.select(
-    (s) => s.theme,
-    (t) => {
-      document.documentElement.setAttribute('data-theme', t);
-    },
-  );
   shell.select(
     (s) => s.documentTitle,
     (t) => {

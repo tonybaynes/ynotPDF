@@ -13,13 +13,25 @@ import { installShortcuts } from '@app/shortcuts';
 import { mountShell, type ShellState } from '@app/shell';
 import { installTestHarness } from '@app/testHarness';
 import scaffoldManifest from '@modules/M00-scaffold/manifest';
+import themeManifest, { THEME_SERVICE } from '@modules/M01-theme-system/manifest';
+import { ipcThemeStorage } from '@modules/M01-theme-system/storage';
+import { ThemeManager } from '@theme/ThemeManager';
+
+/**
+ * Boot order: the theme is applied before the shell mounts so the first paint is already in the
+ * user's chosen theme (M01).
+ */
+const themes = await ThemeManager.create({ storage: ipcThemeStorage() });
 
 const registry = new Registry();
 const selection = new Selection();
 const shell = createStore<ShellState>({
   documentTitle: null,
   statusMessage: 'Ready',
-  theme: 'graphite',
+  theme: themes.current,
+});
+themes.onChange((state) => {
+  shell.set({ theme: state.theme });
 });
 
 // The engine Worker starts at boot; M10 makes it a real PDFium engine.
@@ -30,8 +42,10 @@ registry.provide('shell', shell);
 registry.provide('registry', registry);
 registry.provide('engine', engineClient.engine);
 registry.provide('engineClient', engineClient);
+registry.provide(THEME_SERVICE, themes);
 
 registry.register(scaffoldManifest);
+registry.register(themeManifest);
 
 const isMac = hasBridge() ? getBridge().platform === 'darwin' : navigator.userAgent.includes('Mac');
 registry.provide('platform', { isMac });
