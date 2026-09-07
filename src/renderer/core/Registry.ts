@@ -306,3 +306,19 @@ export function keyFromEvent(e: KeyboardEvent, isMac: boolean): string | null {
   const name = key === ' ' ? 'Space' : key.length === 1 ? key.toUpperCase() : key;
   return normalizeKey([...mods, name].join('+'));
 }
+
+/**
+ * Formats a normalised shortcut for display: `Mod` becomes `Ctrl` (Windows/Linux) or `⌘`
+ * (macOS); `Alt` becomes `⌥` and `Meta` becomes `⌘` on macOS. `"Mod+Shift+P"` → `"Ctrl+Shift+P"`.
+ */
+export function formatShortcut(key: string, isMac: boolean): string {
+  return key
+    .split('+')
+    .map((part) => {
+      if (part === 'Mod') return isMac ? '⌘' : 'Ctrl';
+      if (part === 'Meta') return isMac ? '⌘' : 'Win';
+      if (part === 'Alt' && isMac) return '⌥';
+      return part;
+    })
+    .join('+');
+}

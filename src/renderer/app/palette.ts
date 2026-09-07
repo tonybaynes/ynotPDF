@@ -3,7 +3,7 @@
  * command from the Registry, filters as you type, Enter runs, Escape closes. Fully opaque.
  */
 
-import type { PaletteEntry, Registry } from '@core/Registry';
+import { formatShortcut, type PaletteEntry, type Registry } from '@core/Registry';
 
 let current: HTMLDialogElement | null = null;
 
@@ -29,6 +29,9 @@ export function openPalette(registry: Registry): HTMLDialogElement {
   list.id = 'palette-list';
   list.setAttribute('role', 'listbox');
 
+  const isMac = registry.hasService('platform')
+    ? registry.service<{ isMac: boolean }>('platform').isMac
+    : false;
   let entries: PaletteEntry[] = registry.paletteEntries();
   let selected = 0;
 
@@ -51,7 +54,7 @@ export function openPalette(registry: Registry): HTMLDialogElement {
         left.append(cat, e.label);
         const key = document.createElement('span');
         key.className = 'key';
-        key.textContent = e.shortcut ?? '';
+        key.textContent = e.shortcut ? formatShortcut(e.shortcut, isMac) : '';
         li.append(left, key);
         li.addEventListener('click', () => {
           void run(e.id);

@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CommandNotFoundError, keyFromEvent, normalizeKey, Registry } from '@core/Registry';
+import {
+  CommandNotFoundError,
+  formatShortcut,
+  keyFromEvent,
+  normalizeKey,
+  Registry,
+} from '@core/Registry';
 import { defineModule } from '@shared/module';
 
 describe('Registry', () => {
@@ -194,5 +200,15 @@ describe('normalizeKey / keyFromEvent', () => {
     expect(keyFromEvent(ev({ ctrlKey: true, metaKey: true }), true)).toBe('Mod+Ctrl+P');
     expect(keyFromEvent(ev({ key: ' ', altKey: true }), false)).toBe('Alt+Space');
     expect(keyFromEvent(ev({ key: 'Shift' }), false)).toBeNull();
+  });
+});
+
+describe('formatShortcut', () => {
+  it('renders Mod per platform', () => {
+    expect(formatShortcut('Mod+Shift+P', false)).toBe('Ctrl+Shift+P');
+    expect(formatShortcut('Mod+O', true)).toBe('⌘+O');
+    expect(formatShortcut('Alt+Meta+F', true)).toBe('⌥+⌘+F');
+    expect(formatShortcut('Alt+Meta+F', false)).toBe('Alt+Win+F');
+    expect(formatShortcut('F11', true)).toBe('F11');
   });
 });

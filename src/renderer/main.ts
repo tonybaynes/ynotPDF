@@ -33,12 +33,13 @@ registry.provide('engineClient', engineClient);
 
 registry.register(scaffoldManifest);
 
+const isMac = hasBridge() ? getBridge().platform === 'darwin' : navigator.userAgent.includes('Mac');
+registry.provide('platform', { isMac });
+
 const root = document.getElementById('app');
 if (!root) throw new Error('#app root missing');
 mountShell(root, registry, shell);
 registry.activateAll();
-
-const isMac = hasBridge() ? getBridge().platform === 'darwin' : navigator.userAgent.includes('Mac');
 installShortcuts(registry, isMac);
 
 if (hasBridge()) {

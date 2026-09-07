@@ -3,7 +3,7 @@
  * document area with an empty state, status bar. M02 replaces this file with the real shell.
  */
 
-import type { Registry } from '@core/Registry';
+import { formatShortcut, type Registry } from '@core/Registry';
 import { bind, type Store } from '@core/Store';
 
 export interface ShellState {
@@ -73,9 +73,12 @@ export function mountShell(root: HTMLElement, registry: Registry, shell: Store<S
   p1.textContent = 'No document open.';
   const p2 = el('p');
   p2.append('Open a PDF with ');
-  p2.append(kbd(registry.shortcutFor('file.open') ?? 'Mod+O'));
+  const isMac = registry.service<{ isMac: boolean }>('platform').isMac;
+  p2.append(kbd(formatShortcut(registry.shortcutFor('file.open') ?? 'Mod+O', isMac)));
   p2.append(' or the command palette ');
-  p2.append(kbd(registry.shortcutFor('app.commandPalette') ?? 'Mod+Shift+P'));
+  p2.append(
+    kbd(formatShortcut(registry.shortcutFor('app.commandPalette') ?? 'Mod+Shift+P', isMac)),
+  );
   p2.append('.');
   const openBtn = document.createElement('button');
   openBtn.type = 'button';

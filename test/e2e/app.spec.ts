@@ -17,6 +17,9 @@ test('launches to the empty shell', async () => {
   await expect(app.page.locator('#statusbar')).toContainText('Ready');
   await expect(app.page.locator('[role="tab"]')).toHaveCount(11);
   expect(await app.page.evaluate(() => document.documentElement.dataset['theme'])).toBe('graphite');
+  // Shortcut hints are rendered per platform, never as the raw "Mod" token.
+  const hint = await app.page.locator('#empty-state kbd').first().textContent();
+  expect(hint).toMatch(/^(Ctrl|⌘)\+O$/);
 });
 
 test('registers the core commands', async () => {
