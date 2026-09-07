@@ -1,0 +1,57 @@
+{
+  "date": "2026-09-07T18:52:50.766Z",
+  "platform": "win32",
+  "arch": "x64",
+  "node": "v26.7.0",
+  "fonts": 24,
+  "timings": [
+    {
+      "name": "open 300-dpi scan",
+      "ms": 2.060899999999947,
+      "detail": "250067 bytes"
+    },
+    {
+      "name": "scan: 1× tile set (4 × 512 px)",
+      "ms": 18.350900000000138,
+      "target": 150
+    },
+    {
+      "name": "scan: full page at 2×",
+      "ms": 35.03800000000001
+    },
+    {
+      "name": "open CAD page (20k lines)",
+      "ms": 0.1813999999999396,
+      "detail": "1692783 bytes"
+    },
+    {
+      "name": "CAD: 1× tile set (4 × 512 px)",
+      "ms": 62.765499999999975,
+      "target": 150
+    },
+    {
+      "name": "CAD: pageObjects",
+      "ms": 39.19749999999999,
+      "detail": "20400 objects"
+    },
+    {
+      "name": "open 500-page text doc",
+      "ms": 1.2060999999998785,
+      "detail": "522204 bytes"
+    },
+    {
+      "name": "textRuns per page (500-page avg)",
+      "ms": 1.5435757999999997,
+      "target": 30,
+      "detail": "12500 runs"
+    },
+    {
+      "name": "text page: full page at 1×",
+      "ms": 6.865099999999984
+    },
+    {
+      "name": "pageLabels (500 pages)",
+      "ms": 0.4904999999998836
+    }
+  ]
+}

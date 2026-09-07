@@ -20,8 +20,15 @@ npm install
 (`prepare` → husky → `.githooks/`). npm 11 gates third-party install scripts; the ones we need
 (`electron`, `esbuild`, `electron-winstaller`) are approved in `package.json` → `allowScripts`.
 
-Native engine binaries (PDFium, qpdf, Tesseract) are fetched per OS by
-`npm run fetch-binaries` from `resources/binaries.json` — empty until M10.
+Build-time downloads come from `resources/binaries.json` via `npm run fetch-binaries` (pinned
+SHA-256, git-ignored): today that is the Liberation and DejaVu font files PDFium uses for
+non-embedded fonts (M10). Run it once before `npm run build` / `npm run dev`; without the fonts
+the app still works and PDFium falls back to its built-in Foxit fonts. Later modules add qpdf and
+Tesseract the same way. The PDF engine itself is PDFium compiled to WebAssembly (`@hyzyla/pdfium`,
+plain npm dependency, no native binary).
+
+`npm run fetch-fixtures` downloads the pinned pdf.js test PDFs into `test/fixtures/external/`
+for the engine corpus test; when they are absent those entries are skipped.
 
 ## Scripts
 
@@ -80,4 +87,17 @@ await app.run('app.about');
 ## Installing local toolchains
 
 None needed yet. When a module installs one (Rust, C++, emsdk), it records why in `docs/adr/`
-and adds the install step here.
+and adds the install step here. M10 evaluated native PDFium (koffi FFI) and a custom emscripten
+build and needed neither: the npm wasm build passes every performance target (ADR 0006).
+
+## PDF engine (M10)
+
+PDFium runs as WebAssembly inside the renderer's engine Worker (`src/engine/`). Useful commands:
+
+- `npm run fetch-binaries` — fonts for non-embedded text (once; git-ignored).
+- `npm run fetch-fixtures` — pinned pdf.js test PDFs for the corpus test (git-ignored).
+- `npm run bench` — engine benchmarks; writes `docs/bench/engine-<platform>-<arch>.json`.
+- `npm run hashes` — regenerate `test/fixtures/hashes/<platform>.json` after an intentional
+  rendering change (new PDFium, fonts or fixtures). Review the diff.
+- In the app: **Engine: probe a PDF** (command palette, `dev.engineOpen`) opens a file in the
+  worker and reports what the engine sees.

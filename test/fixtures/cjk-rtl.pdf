@@ -1,0 +1,172 @@
+%PDF-1.7
+%
+
+1 0 obj
+<<
+/Type /Pages
+/Kids [ 5 0 R ]
+/Count 1
+>>
+endobj
+
+2 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+>>
+endobj
+
+3 0 obj
+<<
+/Producer <FEFF0079006E006F00740050004400460020006D0061006B0065002D00660069007800740075007200650073>
+/ModDate (D:20260101000000Z)
+/Creator <FEFF0079006E006F00740050004400460020006D0061006B0065002D00660069007800740075007200650073>
+/CreationDate (D:20260101000000Z)
+/Title <FEFF0043004A004B00200061006E0064002000520054004C00200074006500780074>
+/Author <FEFF0079006E006F0074005000440046002000660069007800740075007200650073>
+>>
+endobj
+
+4 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+/Encoding /WinAnsiEncoding
+>>
+endobj
+
+5 0 obj
+<<
+/Type /Page
+/Parent 1 0 R
+/Resources <<
+/Font <<
+/Helvetica-7098480789 4 0 R
+/FCJK 9 0 R
+/FHeb 11 0 R
+>>
+/XObject <<
+>>
+/ExtGState <<
+>>
+>>
+/MediaBox [ 0 0 595.28 841.89 ]
+/Annots [ ]
+/Contents [ 6 0 R ]
+>>
+endobj
+
+6 0 obj
+<<
+/Filter /FlateDecode
+/Length 214
+>>
+stream
+xœEİJA…ïós-”f2ù™Úî,E½æÜîV{Ñ">¿™E‘@Èó9¹Â¾†^·7Ø—Ïïåëıôº1,™3Z.!ÆĞÎ@Ú3ÄUƒQ0ÅĞ.pÏUG­4¨è ä½¼râï	)[1TIè¯‘PD«6&D8IJ>q¦B¨ÑwÎîBæfİCM«KvMu•ÿh‰JÚ=„öíjƒ—~Ïv<<>…ø=(zĞÙƒ.4«dÓ™§<Í²bÎ¬Äq™ş	å_‚ıâø§üQ­BZ
+endstream
+endobj
+
+7 0 obj
+<<
+/Type /FontDescriptor
+/FontName /STSong-Light
+/Flags 4
+/FontBBox [ -25 -254 1000 880 ]
+/ItalicAngle 0
+/Ascent 880
+/Descent -120
+/CapHeight 626
+/StemV 78
+>>
+endobj
+
+8 0 obj
+<<
+/Type /Font
+/Subtype /CIDFontType0
+/BaseFont /STSong-Light
+/CIDSystemInfo <<
+/Registry (Adobe)
+/Ordering (GB1)
+/Supplement 2
+>>
+/FontDescriptor 7 0 R
+/DW 1000
+>>
+endobj
+
+9 0 obj
+<<
+/Type /Font
+/Subtype /Type0
+/BaseFont /STSong-Light-UniGB-UCS2-H
+/Encoding /UniGB-UCS2-H
+/DescendantFonts [ 8 0 R ]
+>>
+endobj
+
+10 0 obj
+<<
+/Length 274
+>>
+stream
+/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CMapName /Custom-Hebrew def
+1 begincodespacerange
+<00> <FF>
+endcodespacerange
+4 beginbfchar
+<41> <05E9>
+<42> <05DC>
+<43> <05D5>
+<44> <05DD>
+endbfchar
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end
+
+endstream
+endobj
+
+11 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+/Encoding <<
+/Type /Encoding
+/Differences [ 65 /afii57689 /afii57676 /afii57669 /afii57677 ]
+>>
+/ToUnicode 10 0 R
+>>
+endobj
+
+xref
+0 12
+0000000000 65535 f 
+0000000016 00000 n 
+0000000076 00000 n 
+0000000126 00000 n 
+0000000569 00000 n 
+0000000667 00000 n 
+0000000893 00000 n 
+0000001180 00000 n 
+0000001355 00000 n 
+0000001536 00000 n 
+0000001674 00000 n 
+0000002001 00000 n 
+
+trailer
+<<
+/Size 12
+/Root 2 0 R
+/Info 3 0 R
+>>
+
+startxref
+2187
+%%EOF

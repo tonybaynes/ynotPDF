@@ -1,30 +1,44 @@
 /**
- * `EngineClient` — the renderer-side proxy to the engine Worker (M00 shell).
+ * `EngineClient` — the renderer-side proxy to the engine Worker.
  *
  * Usage:
  * ```ts
- * const engine = EngineClient.spawn();        // starts src/engine/worker.ts
- * const doc = await engine.open(bytes);
- * const { bitmap } = await engine.render(doc, 0, 2);
+ * const client = EngineClient.spawn();        // starts src/engine/worker.ts
+ * const doc = await client.engine.open(bytes);
+ * const { bitmap } = await client.engine.render(doc, 0, 2);
  * ```
  * Every `PdfEngine` method is forwarded as a request over `postMessage`; results come back by
  * id. `ImageBitmap` / `ArrayBuffer` payloads are transferred, not copied. Rejections arrive as
  * `EngineError` with the original `code`.
+ *
+ * M10 (ADR 0005): `request()` returns a cancellable handle and `cancelRenders()` drops every
+ * pending render — the viewer calls it on scroll so superseded tiles never reach PDFium.
  */
 
 import {
   ENGINE_METHODS,
   EngineError,
+  type DocHandle,
   type EngineMethod,
   type PdfEngine,
   type ProgressCallback,
 } from './PdfEngine';
-import { collectTransferables, type RpcFromWorker, type RpcRequest } from './rpc';
+import { collectTransferables, type RpcFromWorker, type RpcRequest, type RpcToWorker } from './rpc';
 
 interface Pending {
+  readonly method: EngineMethod;
+  /** Document handle of the call, when its first argument is one. */
+  readonly doc: number | undefined;
   resolve(value: unknown): void;
   reject(error: Error): void;
   progress?: ProgressCallback | undefined;
+}
+
+/** A request in flight. `cancel()` rejects it with `EngineError('cancelled')`. */
+export interface RequestHandle<T> {
+  readonly id: number;
+  readonly promise: Promise<T>;
+  cancel(): void;
 }
 
 /** Minimal worker surface we rely on (so tests can pass a fake). */
@@ -79,6 +93,11 @@ export class EngineClient {
     return this.readyPromise;
   }
 
+  /** Number of requests awaiting a reply. */
+  get pendingCount(): number {
+    return this.pending.size;
+  }
+
   /** Stops the worker. All in-flight calls reject. */
   terminate(): void {
     this.terminated = true;
@@ -93,10 +112,22 @@ export class EngineClient {
     method: M,
     args: Parameters<PdfEngine[M]>,
   ): Promise<Awaited<ReturnType<PdfEngine[M]>>> {
-    if (this.terminated) {
-      return Promise.reject(new EngineError('internal', 'engine client terminated'));
-    }
+    return this.request(method, args).promise;
+  }
+
+  /** Like {@link call} but returns a handle that can cancel the request (ADR 0005). */
+  request<M extends EngineMethod>(
+    method: M,
+    args: Parameters<PdfEngine[M]>,
+  ): RequestHandle<Awaited<ReturnType<PdfEngine[M]>>> {
     const id = this.nextId++;
+    if (this.terminated) {
+      return {
+        id,
+        promise: Promise.reject(new EngineError('internal', 'engine client terminated')),
+        cancel: () => undefined,
+      };
+    }
     // A trailing function argument is a progress callback: keep it here, do not post it.
     const plainArgs = [...(args as ReadonlyArray<unknown>)];
     let progress: ProgressCallback | undefined;
@@ -106,20 +137,56 @@ export class EngineClient {
       plainArgs.pop();
     }
     const request: RpcRequest = { kind: 'request', id, method, args: plainArgs };
-    return new Promise((resolve, reject) => {
+    const first = plainArgs[0];
+    const promise = new Promise<Awaited<ReturnType<PdfEngine[M]>>>((resolve, reject) => {
       this.pending.set(id, {
-        resolve: resolve,
+        method,
+        doc: typeof first === 'number' && method !== 'info' ? first : undefined,
+        resolve,
         reject,
         progress,
       });
       this.worker.postMessage(request, collectTransferables(plainArgs));
     });
+    return {
+      id,
+      promise,
+      cancel: () => {
+        this.cancel(id);
+      },
+    };
+  }
+
+  /** Cancels one request. No-op when it already settled. */
+  cancel(id: number): void {
+    const p = this.pending.get(id);
+    if (!p) return;
+    this.pending.delete(id);
+    const msg: RpcToWorker = { kind: 'cancel', id };
+    if (!this.terminated) this.worker.postMessage(msg);
+    p.reject(new EngineError('cancelled', `${p.method} was cancelled`));
+  }
+
+  /** Cancels every pending render (optionally only those of `doc`). Returns how many. */
+  cancelRenders(doc?: DocHandle): number {
+    let n = 0;
+    for (const [id, p] of [...this.pending]) {
+      if (p.method !== 'render') continue;
+      if (doc !== undefined && p.doc !== doc) continue;
+      this.cancel(id);
+      n++;
+    }
+    return n;
   }
 
   private dispatch(msg: RpcFromWorker): void {
     if (msg.kind === 'ready') return;
     const p = this.pending.get(msg.id);
-    if (!p) return;
+    if (!p) {
+      // Cancelled locally after the worker finished: release any bitmap it sent.
+      if (msg.kind === 'ok') closeBitmaps(msg.result);
+      return;
+    }
     if (msg.kind === 'progress') {
       p.progress?.(msg.fraction);
       return;
@@ -136,5 +203,13 @@ export class EngineClient {
         this.call(method, args as Parameters<PdfEngine[typeof method]>);
     }
     return proxy as unknown as PdfEngine;
+  }
+}
+
+function closeBitmaps(value: unknown): void {
+  if (typeof ImageBitmap === 'undefined') return;
+  if (value instanceof ImageBitmap) value.close();
+  else if (value && typeof value === 'object') {
+    for (const v of Object.values(value as Record<string, unknown>)) closeBitmaps(v);
   }
 }

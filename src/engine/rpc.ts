@@ -2,6 +2,9 @@
  * Wire format for the engine Worker RPC (shared by `EngineClient.ts` and `worker.ts`).
  * Requests carry a method name and arguments; responses carry a result or a serialised error.
  * `ImageBitmap` and `ArrayBuffer` results are passed in the transfer list.
+ *
+ * M10 (ADR 0005) adds `cancel`: a queued request is dropped, an in-flight render is aborted at
+ * its next pause point, and the request rejects with `EngineError('cancelled')`.
  */
 
 import type { EngineErrorCode, EngineMethod } from './PdfEngine';
@@ -11,6 +14,12 @@ export interface RpcRequest {
   readonly id: number;
   readonly method: EngineMethod;
   readonly args: ReadonlyArray<unknown>;
+}
+
+/** Cancels request `id` (ADR 0005). Ignored when the request already finished. */
+export interface RpcCancel {
+  readonly kind: 'cancel';
+  readonly id: number;
 }
 
 export interface RpcOk {
@@ -37,7 +46,7 @@ export interface RpcReady {
   readonly kind: 'ready';
 }
 
-export type RpcToWorker = RpcRequest;
+export type RpcToWorker = RpcRequest | RpcCancel;
 export type RpcFromWorker = RpcOk | RpcFail | RpcProgress | RpcReady;
 
 /** Collects transferable objects (bitmaps, buffers) from a value for `postMessage`. */

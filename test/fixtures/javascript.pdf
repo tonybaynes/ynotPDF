@@ -1,0 +1,206 @@
+%PDF-1.7
+%
+
+1 0 obj
+<<
+/Type /Pages
+/Kids [ 5 0 R ]
+/Count 1
+>>
+endobj
+
+2 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+/OpenAction 7 0 R
+/Names <<
+/JavaScript <<
+/Names [ (init) 8 0 R ]
+>>
+>>
+/AcroForm 9 0 R
+>>
+endobj
+
+3 0 obj
+<<
+/Producer <FEFF0079006E006F00740050004400460020006D0061006B0065002D00660069007800740075007200650073>
+/ModDate (D:20260101000000Z)
+/Creator <FEFF0079006E006F00740050004400460020006D0061006B0065002D00660069007800740075007200650073>
+/CreationDate (D:20260101000000Z)
+/Title <FEFF004A006100760061005300630072006900700074002D00620065006100720069006E0067>
+/Author <FEFF0079006E006F0074005000440046002000660069007800740075007200650073>
+>>
+endobj
+
+4 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+/Encoding /WinAnsiEncoding
+>>
+endobj
+
+5 0 obj
+<<
+/Type /Page
+/Parent 1 0 R
+/Resources <<
+/Font <<
+/Helvetica-7098480789 4 0 R
+>>
+/XObject <<
+>>
+/ExtGState <<
+>>
+>>
+/MediaBox [ 0 0 595.28 841.89 ]
+/Annots [ 13 0 R ]
+/Contents [ 6 0 R ]
+>>
+endobj
+
+6 0 obj
+<<
+/Filter /FlateDecode
+/Length 139
+>>
+stream
+xœËA
+1Ğ}NÑµ ¦iúÓ‚:3âÂĞˆŒ¢èBÏof„|şË›v8Ló¹Ñê0>ã÷~9/kÑÂVjˆÚ•Ä÷‘âLc0	¦Ú‹ÖYQP-	¨èıJˆ&&óÜ(öH–Ñ#c0•~rO°n]1'7şcìbØ„ö ¶ ¡Ñ‰ş^˜$~
+endstream
+endobj
+
+7 0 obj
+<<
+/S /JavaScript
+/JS (app.alert("Hello from ynotPDF fixtures");)
+>>
+endobj
+
+8 0 obj
+<<
+/S /JavaScript
+/JS (var total = 0;)
+>>
+endobj
+
+9 0 obj
+<<
+/Fields [ 11 0 R ]
+>>
+endobj
+
+10 0 obj
+<<
+/T <FEFF00630061006C0063>
+/Kids [ 12 0 R ]
+>>
+endobj
+
+11 0 obj
+<<
+/T <FEFF00630061006C0063>
+/Kids [ 12 0 R ]
+>>
+endobj
+
+12 0 obj
+<<
+/FT /Tx
+/Kids [ 13 0 R ]
+/T <FEFF0074006F00740061006C>
+/Parent 11 0 R
+/DA (0 0 0 rg
+/Helvetica 17 Tf)
+/AA <<
+/F <<
+/S /JavaScript
+/JS (AFNumber_Format(2, 0, 0, 0, "", true);)
+>>
+>>
+>>
+endobj
+
+13 0 obj
+<<
+/Type /Annot
+/Subtype /Widget
+/Rect [ 71.5 679.5 272.5 702.5 ]
+/Parent 12 0 R
+/P 5 0 R
+/MK <<
+/BG [ 1 1 1 ]
+/R 0
+/BC [ 0 0 0 ]
+>>
+/BS <<
+/W 1
+>>
+/F 4
+/AP <<
+/N 15 0 R
+>>
+>>
+endobj
+
+14 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+/Encoding /WinAnsiEncoding
+>>
+endobj
+
+15 0 obj
+<<
+/BBox [ 0 0 201 23 ]
+/Matrix [ 1 0 0 1 0 0 ]
+/Resources <<
+/Font <<
+/Helvetica 14 0 R
+>>
+>>
+/Type /XObject
+/Subtype /Form
+/Filter /FlateDecode
+/Length 152
+>>
+stream
+xœeNA
+Â@¼Ï+ò‚v³RdA<TŠ^<T<ˆ©Õ*­ ˆú|gÑª™L†!‰Š!4rÕA¿Ç3¡pÙÃDw1¥sÇjM½ıä“,ÖÿŠŸ1´ÀÖJkzÂ°7ÈQÂŠe†¬´Ô¹ˆ™%NHıCòù„ÿåşõ_Lgu{«¯‡j#:¿{_·’%G«Ãh,şˆÂóPÁ%lÆ4
+endstream
+endobj
+
+xref
+0 16
+0000000000 65535 f 
+0000000016 00000 n 
+0000000076 00000 n 
+0000000215 00000 n 
+0000000666 00000 n 
+0000000764 00000 n 
+0000000972 00000 n 
+0000001184 00000 n 
+0000001269 00000 n 
+0000001327 00000 n 
+0000001368 00000 n 
+0000001434 00000 n 
+0000001500 00000 n 
+0000001704 00000 n 
+0000001897 00000 n 
+0000001996 00000 n 
+
+trailer
+<<
+/Size 16
+/Root 2 0 R
+/Info 3 0 R
+>>
+
+startxref
+2344
+%%EOF
