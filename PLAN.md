@@ -17,7 +17,7 @@ commit. Sub-conversations working in parallel follow **§12**.
 | 0 | M00 Scaffold, CI & packaging smoke | [M00-scaffold.md](docs/modules/M00-scaffold.md) | ☑ |
 | 1 | M01 Theme system (four themes) | [M01-theme-system.md](docs/modules/M01-theme-system.md) | ☑ |
 | 1 | M02 Application shell (ribbon, panes, tabs, status bar, dialogs) | [M02-app-shell.md](docs/modules/M02-app-shell.md) | ☑ |
-| 1 | M10 PDF engine layer & PDFium adapter | [M10-engine-layer.md](docs/modules/M10-engine-layer.md) | ◐ |
+| 1 | M10 PDF engine layer & PDFium adapter | [M10-engine-layer.md](docs/modules/M10-engine-layer.md) | ☑ |
 | 1 | M20 Document model, commands & undo stack | [M20-document-model.md](docs/modules/M20-document-model.md) | ☐ |
 | 2 | M11 Viewer — rendering, navigation, zoom, layouts | [M11-viewer.md](docs/modules/M11-viewer.md) | ☐ |
 | 2 | M21 Save, Save As, autosave & recovery | [M21-save.md](docs/modules/M21-save.md) | ☐ |

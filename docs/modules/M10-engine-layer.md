@@ -268,10 +268,10 @@ is colourblind: black and red read as the same colour):**
 
 ## Build log (fill in at merge)
 
-**Built 2026-09-07 on `mod/M10-engine-layer` (worktree `../ynotPDF-M10`).** Not yet pushed:
-the operator's GitHub Actions minutes were exhausted that day, so push, CI on the three OSes,
-PR and the §0 ☑ tick wait for the next billing cycle (1 October 2026) or an explicit go-ahead.
-§0 shows ◐ meanwhile. Everything below is green locally on Windows.
+**Built 2026-09-07 on `mod/M10-engine-layer` (worktree `../ynotPDF-M10`); pushed and merged
+via PR on 2026-09-08** once the operator made the repository public (GitHub Actions minutes had
+run out on the private repo the day before). Green locally on Windows: lint, 949 unit tests,
+50 Playwright tests.
 
 **Shipped:**
 
