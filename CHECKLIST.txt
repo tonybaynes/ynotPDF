@@ -39,7 +39,7 @@ Special cases:
 
 WAVE 0  (run ALONE first)
 -------------------------
-[x] M00  Scaffold, CI & packaging smoke
+[✔] M00  Scaffold, CI & packaging smoke
       model:  Fable 5.1  (hard - use the strongest model)
       needs: -
       prompt: Read D:\Projects\ynotPDF\docs\modules\M00-scaffold.md and carry out the "Your task" section in full.
@@ -47,7 +47,7 @@ WAVE 0  (run ALONE first)
 
 WAVE 1
 ------
-[x] M01  Theme system (four themes)
+[✔] M01  Theme system (four themes)
       model:  Opus
       needs: M00
       prompt: Read D:\Projects\ynotPDF\docs\modules\M01-theme-system.md and carry out the "Your task" section in full.
