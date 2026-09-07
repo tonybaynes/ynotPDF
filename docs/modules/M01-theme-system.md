@@ -204,8 +204,85 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **Themes are attribute-scoped, not swapped stylesheets.** All four CSS files are linked at
+  once and every rule is scoped to `[data-theme="<name>"]`, so switching is one attribute write
+  on `<html>`. No stylesheet load, no flash, no reload — the e2e test proves the window is not
+  reloaded by leaving a value on `window` across a switch.
+- **One source of truth per concern.** `themes.ts` lists the four themes (name, label,
+  `color-scheme`, file); `tokens.css` documents every token in a comment block; `pairs.ts` says
+  which token sits on which. The tests, the gallery and the ThemeManager all read those three,
+  so a palette change cannot drift from its documentation.
+- **The contrast test parses the CSS itself** (`parse.ts`, a 40-line regex reader) instead of
+  trusting a duplicated table of values. Themes must therefore use plain hex — the test asserts
+  that too, which also rules out `rgba()`/`hsla()` by construction.
+- **Status separation is "ΔL\* ≥ 20 **or** Δb\* ≥ 45", never red↔green alone.** The brief's flat
+  ΔL\* ≥ 20 for all four statuses is arithmetically impossible next to the 4.5:1 text floor:
+  on black every status must sit above L\* 48.9, leaving 51 points of range where four colours
+  20 apart need 60. Blue↔yellow is the axis both red-green deficiencies keep, so it carries the
+  pairs lightness cannot. See [ADR 0002](../adr/0002-status-colour-separation.md).
+- **Palette layout that makes that work.** Each theme puts one warm and one cool status at each
+  end of its usable lightness band: same-family pairs (danger/warning, success/info) separate by
+  lightness, cross-family pairs by blue↔yellow. On Daylight that means a bright orange-red
+  danger with a dark amber warning, and a mid teal success with a dark navy info — every status
+  is dark because text on white cannot exceed L\* 49.9.
+- **The focus ring is two solid rings**, `--focus` (outer, offset onto the surface) and
+  `--focus-contrast` (inner, hugging the control). One colour cannot be ≥ 3:1 against both a
+  white panel and a dark accent button; two can, and both are solid with no alpha.
+- **Settings go through the typed IPC**, not `localStorage`: `settings:get` / `settings:set`
+  plus `theme:setNative` so the OS chrome follows the theme. Main also reads the saved theme
+  before the window opens so the title bar is right on the first frame.
+  See [ADR 0003](../adr/0003-settings-ipc.md).
+- **`--ui-scale` drives `html { font-size }`** and the whole type and spacing scale is in `rem`,
+  so 100–200 % scales everything including icons. `--font-base` (14 px) is the anchor.
+- **Nothing here is a `Command`.** Theme and UI scale are view preferences, not document
+  changes, so there is nothing to undo. Every action is still a registered command with a
+  palette entry, so the palette, shortcuts and the e2e harness all drive the same code.
+- **Annotation colours are theme-independent.** They are document content, not UI: the same
+  values in all four themes, checked against the page paper rather than the app surfaces.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Shipped (2026-09-07):**
+- `theme/tokens.css` — 41 documented colour tokens plus the type scale (`--fs-1…6`, `--lh`),
+  spacing scale (`--sp-1…6`), radii, border and focus widths, `--elevation` (a solid offset
+  border, never a blur), icon sizes and `--ui-scale`. Also the global `:focus-visible`,
+  `::placeholder` and `::selection` rules.
+- Four themes: `graphite.css` (default), `midnight.css`, `daylight.css`, `high-contrast.css`,
+  each setting `color-scheme` and all 41 tokens as plain hex.
+- `theme/contrast.ts` — in-house colour maths: sRGB↔linear, WCAG relative luminance and
+  contrast, CIE L\* and L\*a\*b\*, and the Machado 2009 dichromacy matrices.
+- `theme/separation.ts` — the status-separation rule and its thresholds (ADR 0002).
+- `theme/pairs.ts` — 136 documented foreground/background pairs with their thresholds.
+- `theme/parse.ts` — the theme-file reader used by the tests, the gallery and the e2e spec.
+- `theme/ThemeManager.ts` — `current`, `list`, `set`, `next`, `previous`, `setScale`,
+  `stepScale`, `onChange`, persistence through injectable storage.
+- `modules/M01-theme-system/` — manifest (11 commands), IPC-backed storage, status-bar switcher.
+  Commands: `view.theme.set`, `view.theme.set.<name>` ×4, `view.theme.next` (`Mod+Alt+T`),
+  `view.theme.previous`, `view.theme.current` (hidden), `view.uiScale.increase` / `.decrease` /
+  `.reset` / `.set`. Plus an Appearance group on the View ribbon tab and a settings schema.
+- `theme/gallery.html` + `gallery.ts` + `gallery.css` — dev-only page (`npm run gallery`)
+  showing all four themes side by side: a real UI sample, every token as a swatch with L\* and
+  b\*, all 136 contrast pairs with measured ratios, and the status colours simulated under
+  protanopia and deuteranopia with the separating channel named.
+- Tests: 772 unit assertions (contrast ×4 themes, colour vision ×4 themes, colour maths against
+  published WCAG reference values, ThemeManager, the manifest) and 7 Playwright tests (live
+  switching with computed colours matching the tokens, no reload, the switcher following the
+  commands, UI scale changing the root font size, the two-ring focus, survival across restart).
+- Shared-file edits, all additive: three IPC channels (`settings:get`, `settings:set`,
+  `theme:setNative`), `src/main/settings.ts`, the `@theme` path alias, `reuseUserData` in the
+  Playwright harness, the ThemeManager boot in `renderer/main.ts`, and the switcher mounted in
+  M00's status bar.
+
+**Deferred / notes:**
+- **The operator still has to approve the palettes** (`CHECKLIST.txt`, "Things only Tony can
+  do"). Run `npm run gallery`. Changing a value is a one-line edit in the theme file; the test
+  says immediately whether it still passes.
+- Tritanopia is simulated by `contrast.ts` and unit-tested, but the status rule only asserts
+  protanopia and deuteranopia, as the brief specified.
+- The status-bar switcher is a plain `<select>`; M02 restyles the status bar and may replace it
+  with a ribbon control. `switcher.ts` is excluded from the unit-coverage gate because it is
+  pure DOM wiring covered by Playwright.
+- No high-contrast *system* setting is honoured yet (`prefers-contrast`): the theme is an
+  explicit choice. M130 can add "follow the OS" as a fifth option.
+- Icons are not part of M01: Lucide arrives with M02, and it inherits `--icon` through
+  `currentColor`.

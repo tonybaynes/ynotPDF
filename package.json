@@ -30,7 +30,8 @@
     "licenses": "node scripts/check-licenses.ts",
     "package": "npm run build && electron-builder --publish never",
     "postinstall": "install-electron",
-    "icon": "node scripts/make-icon.ts"
+    "icon": "node scripts/make-icon.ts",
+    "gallery": "vite src/renderer/theme --port 5199 --open /gallery.html"
   },
   "dependencies": {
     "electron-store": "^11.0.2"

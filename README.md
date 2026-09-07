@@ -35,6 +35,7 @@ Native engine binaries (PDFium, qpdf, Tesseract) are fetched per OS by
 | `npm run format`         | prettier --write                                                          |
 | `npm run fixtures`       | Regenerate the synthetic PDF corpus in `test/fixtures/`                   |
 | `npm run icon`           | Regenerate the placeholder app icon (`resources/build/icon.png`)          |
+| `npm run gallery`        | Dev-only theme gallery: all four palettes, every contrast number          |
 | `npm run fetch-binaries` | Download pinned native binaries into `resources/bin/`                     |
 | `npm run licenses`       | Fail on GPL/AGPL/LGPL/commercial production dependencies                  |
 | `npm run package`        | Build + electron-builder installers into `release/` (unsigned until M131) |
@@ -47,8 +48,9 @@ See PLAN.md §7. Every folder has a `README.md` saying what belongs there.
 
 - Branch `mod/<Mid>-<slug>` in its own worktree; merge to `main` when CI is green on all three
   OSes. Commits `<Mid>: <what>` with the Claude co-author trailer.
-- Colours only through theme tokens. No `rgba()` alpha < 1, no `opacity` < 1, no
-  `backdrop-filter` — the lint fails otherwise.
+- Colours only through theme tokens (`src/renderer/theme/`, four themes, Graphite default).
+  No `rgba()` alpha < 1, no `opacity` < 1, no `backdrop-filter` — the lint fails otherwise,
+  and `npm test` fails if any theme breaks the contrast rules. `npm run gallery` shows them.
 - Every user action is a registered command (palette); every document change is an undoable
   `Command`.
 - Never commit real customer PDFs, binaries or secrets — the pre-commit hook refuses them.

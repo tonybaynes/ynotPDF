@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en-GB" data-theme="graphite">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ynotPDF theme gallery</title>
+    <!--
+      Development page (M01). Not part of the app bundle: it is served by `npm run gallery`
+      so the operator can approve the four palettes. Every number on it comes from the same
+      code the contrast test uses.
+    -->
+    <link rel="stylesheet" href="./tokens.css" />
+    <link rel="stylesheet" href="./graphite.css" />
+    <link rel="stylesheet" href="./midnight.css" />
+    <link rel="stylesheet" href="./daylight.css" />
+    <link rel="stylesheet" href="./high-contrast.css" />
+    <link rel="stylesheet" href="./gallery.css" />
+  </head>
+  <body>
+    <header>
+      <h1>ynotPDF theme gallery</h1>
+      <p>
+        All four themes side by side. Every contrast number is computed by
+        <code>theme/contrast.ts</code> — the same code the build-failing test uses.
+      </p>
+    </header>
+    <main id="gallery"></main>
+    <script type="module" src="./gallery.ts"></script>
+  </body>
+</html>

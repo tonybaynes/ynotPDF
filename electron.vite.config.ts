@@ -13,6 +13,7 @@ const aliases = {
   '@core': resolve(import.meta.dirname, 'src/renderer/core'),
   '@app': resolve(import.meta.dirname, 'src/renderer/app'),
   '@view': resolve(import.meta.dirname, 'src/renderer/view'),
+  '@theme': resolve(import.meta.dirname, 'src/renderer/theme'),
   '@modules': resolve(import.meta.dirname, 'src/renderer/modules'),
 };
 

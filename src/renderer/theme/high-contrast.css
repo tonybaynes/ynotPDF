@@ -1,0 +1,62 @@
+/*
+ * High Contrast (M01, PLAN.md §3.2).
+ * Pure black surfaces, white text and borders, yellow accent, 2 px borders, no greys.
+ * Hover/active/selected fills are dark blues so they never read as grey.
+ */
+[data-theme='high-contrast'] {
+  color-scheme: dark;
+  --border-width: 2px;
+
+  /* Surfaces */
+  --bg-app: #000000;
+  --bg-panel: #000000;
+  --bg-ribbon: #000000;
+  --bg-input: #000000;
+  --bg-hover: #10104a;
+  --bg-active: #1a1a80;
+  --bg-selected: #1a1a80;
+  --bg-modal: #000000;
+  --bg-canvas: #000000;
+  --page-paper: #ffffff;
+  --page-ink: #000000;
+
+  /* Text */
+  --fg: #ffffff;
+  --fg-muted: #ffffff;
+  --fg-on-accent: #000000;
+  --fg-placeholder: #ffffff;
+
+  /* Icons and accent */
+  --icon: #ffffff;
+  --icon-disabled: #ffffff;
+  --accent: #ffff00;
+  --accent-hover: #ffffff;
+
+  /* Borders and lines */
+  --border: #ffffff;
+  --border-strong: #ffffff;
+  --shadow: #ffffff;
+  --focus: #0d85f5;
+  --focus-contrast: #000000;
+  --selection: #2a7fd4;
+
+  /* Status */
+  --danger: #ff6a3d;
+  --danger-fg: #000000;
+  --warning: #ffff00;
+  --warning-fg: #000000;
+  --success: #b3f0e0;
+  --success-fg: #000000;
+  --info: #5aa9ff;
+  --info-fg: #000000;
+
+  /* Annotation defaults */
+  --annot-highlight: #ffff00;
+  --annot-underline: #0000ff;
+  --annot-strikeout: #c2185b;
+  --annot-note: #b35900;
+  --annot-ink: #0000ff;
+  --annot-shape: #c2185b;
+  --annot-redact: #000000;
+  --annot-redact-fg: #ffffff;
+}

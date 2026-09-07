@@ -1,0 +1,60 @@
+/*
+ * Daylight — light theme (M01, PLAN.md §3.2).
+ * Off-white app, white panels, near-black text, deep-blue accent, amber focus ring.
+ */
+[data-theme='daylight'] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg-app: #f5f5f7;
+  --bg-panel: #ffffff;
+  --bg-ribbon: #ececf1;
+  --bg-input: #ffffff;
+  --bg-hover: #e9e9ef;
+  --bg-active: #e2e2e8;
+  --bg-selected: #d6e4ff;
+  --bg-modal: #ffffff;
+  --bg-canvas: #dcdce2;
+  --page-paper: #ffffff;
+  --page-ink: #000000;
+
+  /* Text */
+  --fg: #1a1a1a;
+  --fg-muted: #4a4a52;
+  --fg-on-accent: #ffffff;
+  --fg-placeholder: #6e6e78;
+
+  /* Icons and accent */
+  --icon: #1a1a1a;
+  --icon-disabled: #6e6e78;
+  --accent: #082a68;
+  --accent-hover: #061d4d;
+
+  /* Borders and lines */
+  --border: #767680;
+  --border-strong: #4a4a52;
+  --shadow: #4a4a52;
+  --focus: #a85c00;
+  --focus-contrast: #ffffff;
+  --selection: #2a7fd4;
+
+  /* Status */
+  --danger: #c23500;
+  --danger-fg: #ffffff;
+  --warning: #2f2200;
+  --warning-fg: #ffffff;
+  --success: #00707e;
+  --success-fg: #ffffff;
+  --info: #10306b;
+  --info-fg: #ffffff;
+
+  /* Annotation defaults */
+  --annot-highlight: #ffe14d;
+  --annot-underline: #0b5cd6;
+  --annot-strikeout: #c2185b;
+  --annot-note: #b35900;
+  --annot-ink: #0b5cd6;
+  --annot-shape: #c2185b;
+  --annot-redact: #000000;
+  --annot-redact-fg: #ffffff;
+}
