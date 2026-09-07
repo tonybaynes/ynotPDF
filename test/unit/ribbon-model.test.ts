@@ -56,6 +56,7 @@ describe('ribbon model', () => {
   it('lists the ten built-in tabs in Foxit order', () => {
     expect(BUILT_IN_TABS.map((t) => t.id)).toEqual(
       [
+        'file',
         'home',
         'edit',
         'comment',
@@ -71,9 +72,10 @@ describe('ribbon model', () => {
           BUILT_IN_TABS.findIndex((t) => t.id === a) - BUILT_IN_TABS.findIndex((t) => t.id === b),
       ),
     );
-    expect(BUILT_IN_TABS[0]?.id).toBe('home');
+    expect(BUILT_IN_TABS[0]?.id).toBe('file');
+    expect(BUILT_IN_TABS[1]?.id).toBe('home');
     expect(BUILT_IN_TABS[BUILT_IN_TABS.length - 1]?.id).toBe('help');
-    expect(BUILT_IN_TABS).toHaveLength(10);
+    expect(BUILT_IN_TABS).toHaveLength(11);
   });
 
   it('normalises string items using the command spec and the large list', () => {

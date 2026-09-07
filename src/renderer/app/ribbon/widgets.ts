@@ -6,13 +6,17 @@
  */
 
 import { formatShortcut } from '@core/Registry';
-import type { RibbonOptionSpec } from '@shared/module';
+import type { MenuItemSpec, RibbonMenu, RibbonOptionSpec } from '@shared/module';
 import { button, el, srOnly } from '../dom';
 import { icon } from '../icons';
 import { openMenu } from '../menu';
 import { openPopup, type PopupHandle } from '../popup';
 import type { ShellServices } from '../services';
 import type { ItemState, RibbonItemModel } from './model';
+
+/** A menu may be a function so its items reflect the moment it opens (recent files). */
+const resolveMenu = (menu: RibbonMenu): ReadonlyArray<MenuItemSpec> =>
+  typeof menu === 'function' ? menu() : menu;
 
 export interface Widget {
   readonly element: HTMLElement;
@@ -46,7 +50,10 @@ function baseButton(item: RibbonItemModel, services: ShellServices, extra = ''):
   const b = button(`rb-btn rb-${size}${extra ? ` ${extra}` : ''}`, {
     'data-item': item.id,
     'data-command': item.command,
-    title: commandTitle(services, item.command, item.label),
+    title:
+      item.spec?.kind === 'button' && item.spec.title
+        ? item.spec.title
+        : commandTitle(services, item.command, item.label),
   });
   b.append(icon(item.icon, { size: size === 'large' ? 'lg' : 'sm', fallbackText: item.label }));
   b.append(labelNode(item, size));
@@ -115,7 +122,7 @@ function renderDropdown(item: RibbonItemModel, services: ShellServices): Widget 
     if (spec?.kind !== 'dropdown') return;
     openMenu({
       anchor: b,
-      items: spec.menu,
+      items: resolveMenu(spec.menu),
       registry: services.registry,
       isMac: services.isMac,
       label: item.label,
@@ -157,7 +164,7 @@ function renderSplit(item: RibbonItemModel, services: ShellServices): Widget {
     if (spec?.kind !== 'split') return;
     openMenu({
       anchor: arrow,
-      items: spec.menu,
+      items: resolveMenu(spec.menu),
       registry: services.registry,
       isMac: services.isMac,
       label: item.label,

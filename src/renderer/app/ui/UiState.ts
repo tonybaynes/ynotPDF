@@ -58,6 +58,8 @@ export interface UiState {
     readonly minimised: boolean;
     /** Minimised ribbon temporarily expanded (until a command runs or focus leaves). */
     readonly peek: boolean;
+    /** Foxit-style single row of icon buttons (labels in tooltips) instead of labelled groups. */
+    readonly compact: boolean;
   };
   /** Command ids on the quick-access toolbar, in order. */
   readonly qat: ReadonlyArray<string>;
@@ -88,6 +90,7 @@ export interface UiState {
 /** The subset that survives a restart. */
 export interface PersistedUi {
   readonly ribbonMinimised: boolean;
+  readonly ribbonCompact: boolean;
   readonly qat: ReadonlyArray<string>;
   readonly leftPaneWidth: number;
   readonly leftPaneCollapsed: boolean;
@@ -104,6 +107,7 @@ export const DEFAULT_RIGHT_WIDTH = 280;
 
 export const DEFAULT_PERSISTED: PersistedUi = {
   ribbonMinimised: false,
+  ribbonCompact: true,
   qat: DEFAULT_QAT,
   leftPaneWidth: DEFAULT_LEFT_WIDTH,
   leftPaneCollapsed: false,
@@ -115,7 +119,7 @@ export const DEFAULT_PERSISTED: PersistedUi = {
 export function initialUiState(persisted: Partial<PersistedUi> = {}): UiState {
   const p = { ...DEFAULT_PERSISTED, ...persisted };
   return {
-    ribbon: { tab: 'home', minimised: p.ribbonMinimised, peek: false },
+    ribbon: { tab: 'home', minimised: p.ribbonMinimised, peek: false, compact: p.ribbonCompact },
     qat: p.qat,
     leftPane: {
       width: clampPaneWidth(p.leftPaneWidth),
@@ -185,6 +189,7 @@ export function formatZoom(view: ViewState): string {
 export function persistedFrom(state: UiState): PersistedUi {
   return {
     ribbonMinimised: state.ribbon.minimised,
+    ribbonCompact: state.ribbon.compact,
     qat: state.qat,
     leftPaneWidth: state.leftPane.width,
     leftPaneCollapsed: state.leftPane.collapsed,
@@ -215,6 +220,7 @@ export function memoryUiStorage(initial: Partial<PersistedUi> = {}): UiStorage {
 /** Settings keys — dotted so `electron-store` namespaces them under `ui`. */
 const KEYS: Record<keyof PersistedUi, string> = {
   ribbonMinimised: 'ui.ribbon.minimised',
+  ribbonCompact: 'ui.ribbon.compact',
   qat: 'ui.qat',
   leftPaneWidth: 'ui.leftPane.width',
   leftPaneCollapsed: 'ui.leftPane.collapsed',
@@ -233,6 +239,7 @@ export function validatePersisted(
 ): Partial<PersistedUi> {
   const out: { -readonly [K in keyof PersistedUi]?: PersistedUi[K] } = {};
   if (typeof raw.ribbonMinimised === 'boolean') out.ribbonMinimised = raw.ribbonMinimised;
+  if (typeof raw.ribbonCompact === 'boolean') out.ribbonCompact = raw.ribbonCompact;
   if (Array.isArray(raw.qat) && raw.qat.every((x) => typeof x === 'string')) out.qat = raw.qat;
   if (typeof raw.leftPaneWidth === 'number') out.leftPaneWidth = clampPaneWidth(raw.leftPaneWidth);
   if (typeof raw.leftPaneCollapsed === 'boolean') out.leftPaneCollapsed = raw.leftPaneCollapsed;

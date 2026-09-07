@@ -42,6 +42,8 @@ import {
   type ViewState,
 } from '@app/ui/UiState';
 import { BUILT_IN_TABS } from '@app/ribbon/model';
+import { openSlotPage, slotState } from '@app/ribbon/fileTab';
+import { BACKSTAGE_SLOTS } from '@app/backstage/Backstage';
 
 const ui = (ctx: ServiceContext): UiStore => ctx.service<UiStore>(SERVICE.ui);
 const docs = (ctx: ServiceContext): Documents => ctx.service<Documents>(SERVICE.documents);
@@ -53,6 +55,32 @@ const setView = (ctx: ServiceContext, patch: Partial<ViewState>): ViewState => {
   store.set((s) => ({ view: { ...s.view, ...patch } }));
   return store.get().view;
 };
+
+/**
+ * One command per File-tab slot a module can fill with a page or a command. Hidden from the
+ * palette (modules register their own real commands); disabled while the slot is empty.
+ */
+const slotCommands: CommandSpec[] = BACKSTAGE_SLOTS.filter((s) =>
+  ['save', 'saveAs', 'print', 'properties', 'preferences', 'exit'].includes(s.id),
+).map((s) => ({
+  id: `file.slot.${s.id}`,
+  label: s.label,
+  category: 'File',
+  icon: s.icon,
+  hidden: true,
+  when: (ctx) => slotState(ctx.service<Registry>('registry'), s.id).filled,
+  run: (ctx) => {
+    const registry = ctx.service<Registry>('registry');
+    const { spec } = slotState(registry, s.id);
+    if (!spec) return false;
+    if (spec.mount) {
+      openSlotPage(registry, ctx.service<Dialogs>(SERVICE.dialogs), s.id, spec);
+      return true;
+    }
+    if (spec.command) return ctx.run(spec.command);
+    return false;
+  },
+}));
 
 const tabCommands: CommandSpec[] = BUILT_IN_TABS.map((t) => ({
   id: `app.ribbon.tab.${t.id}`,
@@ -117,6 +145,18 @@ export default defineModule({
       },
     },
     {
+      id: 'app.ribbon.toggleLabels',
+      label: 'Ribbon Button Labels',
+      category: 'View',
+      icon: 'type',
+      description: 'Show labelled button groups instead of the compact icon row (as in Foxit)',
+      run: (ctx) => {
+        const store = ui(ctx);
+        store.set((s) => ({ ribbon: { ...s.ribbon, compact: !s.ribbon.compact } }));
+        return !store.get().ribbon.compact;
+      },
+    },
+    {
       id: 'app.ribbon.showTab',
       label: 'Show ribbon tab…',
       category: 'View',
@@ -130,6 +170,7 @@ export default defineModule({
       },
     },
     ...tabCommands,
+    ...slotCommands,
     {
       id: 'app.keyTips',
       label: 'Show key tips',
@@ -666,6 +707,11 @@ export default defineModule({
           command: 'app.ribbon.toggleMinimised',
           pressed: (ctx) => ui(ctx).get().ribbon.minimised,
         },
+        {
+          kind: 'toggle',
+          command: 'app.ribbon.toggleLabels',
+          pressed: (ctx) => !ui(ctx).get().ribbon.compact,
+        },
       ],
     },
     {
@@ -932,6 +978,11 @@ export default defineModule({
           command: 'app.ribbon.toggleMinimised',
           checked: (ctx) => ui(ctx).get().ribbon.minimised,
         },
+        {
+          label: 'Button labels',
+          command: 'app.ribbon.toggleLabels',
+          checked: (ctx) => !ui(ctx).get().ribbon.compact,
+        },
         { label: 'Show key tips', command: 'app.keyTips' },
       ],
     },
@@ -964,6 +1015,11 @@ export default defineModule({
     namespace: 'ui',
     properties: {
       'ribbon.minimised': { type: 'boolean', title: 'Minimise the ribbon', default: false },
+      'ribbon.compact': {
+        type: 'boolean',
+        title: 'Compact ribbon (one row of icons)',
+        default: true,
+      },
       'view.layout': {
         type: 'enum',
         title: 'Default page layout',

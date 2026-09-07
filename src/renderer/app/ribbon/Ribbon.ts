@@ -27,6 +27,7 @@ import {
   type RibbonGroupModel,
   type RibbonTabModel,
 } from './model';
+import { fileTabGroups, RecentCache } from './fileTab';
 import { mountQat } from './qat';
 import { renderItem, type Widget } from './widgets';
 
@@ -56,6 +57,18 @@ interface GroupView {
 
 export function mountRibbon(host: HTMLElement, services: ShellServices): RibbonHandle {
   const { registry, ui } = services;
+  // The File tab's groups are built by the shell from the backstage slots modules fill.
+  const recent = new RecentCache();
+  recent.start();
+  const source = {
+    ribbonGroups: () => [
+      ...registry.ribbonGroups(),
+      ...fileTabGroups({ registry, recent, dialogs: services.dialogs }),
+    ],
+    ribbonTabs: () => registry.ribbonTabs(),
+    get: (id: string) => registry.get(id),
+    context: () => registry.context(),
+  };
 
   const root = el('div.ribbon', { id: 'ribbon', 'data-region': 'ribbon' });
   const top = el('div.ribbon-top');
@@ -64,10 +77,6 @@ export function mountRibbon(host: HTMLElement, services: ShellServices): RibbonH
     role: 'tablist',
     'aria-label': 'Ribbon tabs',
     id: 'ribbon-tabs',
-  });
-  const fileBtn = button('ribbon-file', { id: 'ribbon-file', 'aria-haspopup': 'dialog' }, 'File');
-  fileBtn.addEventListener('click', () => {
-    void services.run('app.backstage.open');
   });
   const minimiseBtn = button('icon-btn ribbon-minimise', {
     id: 'ribbon-minimise',
@@ -81,7 +90,7 @@ export function mountRibbon(host: HTMLElement, services: ShellServices): RibbonH
   root.append(top, body);
   host.append(root);
 
-  const tabRoving = makeRoving(tablist, { selector: '[role="tab"], .ribbon-file' });
+  const tabRoving = makeRoving(tablist, { selector: '[role="tab"]' });
   const bodyRoving = makeRoving(body, { selector: '[data-rb-focus]:not([disabled])' });
 
   let tabs: RibbonTabModel[] = [];
@@ -89,11 +98,12 @@ export function mountRibbon(host: HTMLElement, services: ShellServices): RibbonH
   let activeTabId = ui.get().ribbon.tab;
   let groups: GroupView[] = [];
   let disposed = false;
+  let compactApplied = ui.get().ribbon.compact;
 
   // ---- tab strip -----------------------------------------------------------------------------
 
   const renderTabs = (): void => {
-    tablist.replaceChildren(fileBtn);
+    tablist.replaceChildren();
     for (const t of tabs) {
       const tab = button(`ribbon-tab${t.contextual ? ' ribbon-tab-contextual' : ''}`, {
         role: 'tab',
@@ -277,7 +287,7 @@ export function mountRibbon(host: HTMLElement, services: ShellServices): RibbonH
 
   const refresh = (): void => {
     if (disposed) return;
-    const next = buildRibbon(registry);
+    const next = buildRibbon(source);
     const sig = ribbonSignature(next);
     const st = ui.get().ribbon;
     const tabChanged = st.tab !== activeTabId;
@@ -307,7 +317,16 @@ export function mountRibbon(host: HTMLElement, services: ShellServices): RibbonH
   };
 
   const applyMinimised = (): void => {
-    const { minimised, peek } = ui.get().ribbon;
+    const { minimised, peek, compact } = ui.get().ribbon;
+    if (compactApplied !== compact) {
+      // Natural widths change with the layout: apply the class first, then measure again.
+      compactApplied = compact;
+      root.classList.toggle('ribbon-compact', compact);
+      structure = '';
+      refresh();
+      return;
+    }
+    root.classList.toggle('ribbon-compact', ui.get().ribbon.compact);
     root.classList.toggle('ribbon-minimised', minimised);
     root.classList.toggle('ribbon-peek', minimised && peek);
     body.hidden = minimised && !peek;
@@ -368,8 +387,7 @@ export function mountRibbon(host: HTMLElement, services: ShellServices): RibbonH
   const level1 = (): void => {
     tipLevel = 1;
     const targets = new Map<string, HTMLElement>();
-    const specs: KeyTipTarget[] = [{ id: 'file', label: 'File', keyTip: 'F' }];
-    targets.set('file', fileBtn);
+    const specs: KeyTipTarget[] = [];
     for (const t of tabs) {
       const e = tablist.querySelector<HTMLElement>(`[data-tab="${t.id}"]`);
       if (!e) continue;
@@ -501,6 +519,7 @@ export function mountRibbon(host: HTMLElement, services: ShellServices): RibbonH
       document.removeEventListener('pointerdown', onDocPointer, true);
       document.removeEventListener('keydown', onTipKey, true);
       window.removeEventListener('blur', onTipBlur);
+      recent.dispose();
       qat.dispose();
       tabRoving.dispose();
       bodyRoving.dispose();

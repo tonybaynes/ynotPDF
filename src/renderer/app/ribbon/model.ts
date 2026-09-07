@@ -15,8 +15,9 @@ import type {
   ServiceContext,
 } from '@shared/module';
 
-/** The built-in tabs in Foxit order. `file` is the backstage button, not a real tab. */
+/** The built-in tabs in Foxit order. File is a real tab; the shell builds its groups (`fileTab.ts`). */
 export const BUILT_IN_TABS: ReadonlyArray<{ id: RibbonTabId; label: string }> = [
+  { id: 'file', label: 'File' },
   { id: 'home', label: 'Home' },
   { id: 'edit', label: 'Edit' },
   { id: 'comment', label: 'Comment' },

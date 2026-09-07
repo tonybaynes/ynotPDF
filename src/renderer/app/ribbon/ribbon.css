@@ -47,7 +47,6 @@
   scrollbar-width: none;
 }
 
-.ribbon-file,
 .ribbon-tab {
   display: inline-flex;
   align-items: center;
@@ -63,16 +62,11 @@
   font-weight: var(--fw-body);
 }
 
-.ribbon-file {
-  background: var(--accent);
-  color: var(--fg-on-accent);
-  border-color: var(--accent);
+/* File is a real tab like the others; a heavier, accent-coloured label marks it as Foxit does. */
+.ribbon-tab[data-tab='file'] {
+  color: var(--accent);
   font-weight: var(--fw-heading);
   padding-inline: var(--sp-5);
-}
-
-.ribbon-file:hover {
-  background: var(--accent-hover);
 }
 
 .ribbon-tab:hover {
@@ -336,4 +330,74 @@
 
 .rb-input-label {
   color: var(--fg);
+}
+
+/*
+ * Compact layout (default) — what Foxit 14 shows: one row of icon buttons under the tabs,
+ * labels in the tooltips, thin separators between groups. `app.ribbon.toggleLabels` switches
+ * back to the labelled Office-style groups.
+ */
+.ribbon-compact .ribbon-body {
+  min-height: 0;
+  padding: var(--sp-1) var(--sp-3);
+}
+
+.ribbon-compact .rb-group {
+  padding: 0 var(--sp-1);
+}
+
+.ribbon-compact .rb-items {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  height: auto;
+  max-height: none;
+}
+
+.ribbon-compact .rb-group-label,
+.ribbon-compact .rb-label,
+.ribbon-compact .rb-value {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.ribbon-compact .rb-large,
+.ribbon-compact .rb-btn {
+  flex-direction: row;
+  height: 2.2rem;
+  min-width: 2.2rem;
+  max-width: none;
+  padding: var(--sp-1) var(--sp-2);
+  justify-content: center;
+}
+
+.ribbon-compact .rb-btn .icon {
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
+}
+
+.ribbon-compact .rb-separator {
+  height: 1.8rem;
+}
+
+.ribbon-compact .rb-split.rb-large {
+  flex-direction: row;
+}
+
+.ribbon-compact .rb-split.rb-large .rb-split-main {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.ribbon-compact .rb-split.rb-large .rb-split-arrow {
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.ribbon-compact .rb-swatch {
+  order: 0;
+  width: 0.4rem;
+  height: var(--icon-size-lg);
 }
