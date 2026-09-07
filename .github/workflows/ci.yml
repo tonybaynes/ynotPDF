@@ -16,17 +16,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      # Keep caches OUTSIDE the workspace: package.json has "type": "module", which would make
-      # Node treat electron-builder's CommonJS helper scripts (icon-tool.js) as ESM.
-      # (`runner.temp` is only available at job level, not in top-level env.)
-      ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
-      ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/electron-builder-cache
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v5
+
+      # Keep Electron/electron-builder caches OUTSIDE the workspace: package.json has
+      # "type": "module", which would make Node treat electron-builder's CommonJS helper
+      # scripts (icon-tool.js) as ESM. The `runner` context is not usable in `env:`.
+      - name: Point Electron caches outside the workspace
+        shell: bash
+        run: |
+          echo "ELECTRON_CACHE=$RUNNER_TEMP/electron-cache" >> "$GITHUB_ENV"
+          echo "ELECTRON_BUILDER_CACHE=$RUNNER_TEMP/electron-builder-cache" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v5
         with:
