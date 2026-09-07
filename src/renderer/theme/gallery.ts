@@ -55,22 +55,44 @@ function themed(theme: string, className: string): HTMLElement {
   return box;
 }
 
+/**
+ * The surface each token is judged against in the swatch list. Most tokens are drawn on the app
+ * background; the ones that live on the page or inside a filled control are measured against
+ * what actually sits behind them.
+ */
+function referenceSurface(token: string): string {
+  if (token.startsWith('--annot-') || token === '--selection' || token === '--page-ink') {
+    return '--page-paper';
+  }
+  if (token === '--page-paper') return '--page-ink';
+  if (token === '--fg-on-accent') return '--accent';
+  if (token.endsWith('-fg')) return token.slice(0, -3);
+  if (token === '--focus-contrast') return '--accent';
+  return '--bg-app';
+}
+
 function swatchGrid(loaded: Loaded, tokenNames: readonly string[]): HTMLElement {
   const grid = themed(loaded.info.name, 'swatches');
   for (const token of tokenNames) {
     const value = loaded.tokens.get(token);
     if (!value) continue;
+    const against = referenceSurface(token);
+    const surface = loaded.tokens.get(against);
     const cell = el('div', 'swatch');
     const chip = el('span', 'chip');
     chip.style.background = `var(${token})`;
+    if (surface) chip.style.borderColor = `var(${against})`;
     const name = el('code', 'token', token);
     const hex = el('code', 'value', value);
-    const l = el(
+    const meta = el(
       'span',
       'meta',
-      `L* ${lightness(value).toFixed(0)}  b* ${toLab(value).b.toFixed(0)}`,
+      surface
+        ? `${formatRatio(contrastRatio(value, surface))} on ${against}  ·  ` +
+            `L* ${lightness(value).toFixed(0)}  b* ${toLab(value).b.toFixed(0)}`
+        : `L* ${lightness(value).toFixed(0)}  b* ${toLab(value).b.toFixed(0)}`,
     );
-    cell.append(chip, name, hex, l);
+    cell.append(chip, name, hex, meta);
     grid.append(cell);
   }
   return grid;
