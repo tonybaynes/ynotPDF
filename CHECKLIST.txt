@@ -39,7 +39,7 @@ Special cases:
 
 WAVE 0  (run ALONE first)
 -------------------------
-[ ] M00  Scaffold, CI & packaging smoke
+[x] M00  Scaffold, CI & packaging smoke
       model:  Fable 5.1  (hard - use the strongest model)
       needs: -
       prompt: Read D:\Projects\ynotPDF\docs\modules\M00-scaffold.md and carry out the "Your task" section in full.
@@ -286,7 +286,7 @@ WAVE 10
 
 THINGS ONLY TONY CAN DO
 -----------------------
-[ ] Create private GitHub repo tonybaynes/ynotPDF (before M00)
+[x] Create private GitHub repo tonybaynes/ynotPDF (before M00)
 [ ] Confirm app name / supply logo (M00)
 [ ] Approve tier list in PLAN.md section 1 (wave 1)
 [ ] Approve the four theme palettes (M01 gallery page)
