@@ -92,6 +92,8 @@ export const CONTRAST_PAIRS: ReadonlyArray<ContrastPair> = [
   // Text selection fill against the page paper; selected rows keep readable text.
   ...pairs(['--selection'], ['--page-paper'], GRAPHIC_MIN, 'fill'),
   ...pairs(['--page-ink'], ['--page-paper', '--selection'], TEXT_MIN, 'text'),
+  // Night Mode swaps the page pair; the document must stay just as readable.
+  ...pairs(['--page-ink-night'], ['--page-paper-night'], TEXT_MIN, 'text'),
   // Status colours: readable as text on the main surfaces, and their -fg pairs on top of them.
   ...pairs(STATUS, TEXT_SURFACES, TEXT_MIN, 'text'),
   ...pairs(
@@ -113,4 +115,18 @@ export const CONTRAST_PAIRS: ReadonlyArray<ContrastPair> = [
     'fill',
   ),
   ...pairs(['--annot-redact-fg'], ['--annot-redact'], TEXT_MIN, 'text'),
+  // The same contracts again with Night Mode on, against the darkened page.
+  ...pairs(['--page-ink-night'], ['--annot-highlight-night'], TEXT_MIN, 'text'),
+  ...pairs(
+    [
+      '--annot-note-night',
+      '--annot-ink-night',
+      '--annot-shape-night',
+      '--annot-underline-night',
+      '--annot-strikeout-night',
+    ],
+    ['--page-paper-night'],
+    GRAPHIC_MIN,
+    'fill',
+  ),
 ];

@@ -5,18 +5,25 @@
 [data-theme='daylight'] {
   color-scheme: light only;
 
-  /* Surfaces */
-  --bg-app: #f5f5f7;
-  --bg-panel: #ffffff;
-  --bg-ribbon: #ececf1;
-  --bg-input: #ffffff;
-  --bg-hover: #e9e9ef;
-  --bg-active: #e2e2e8;
-  --bg-selected: #d6e4ff;
-  --bg-modal: #ffffff;
-  --bg-canvas: #dcdce2;
+  /*
+   * Surfaces. Deliberately no pure white anywhere in the chrome (operator request,
+   * 2026-09-07): a full-screen #ffffff reads as glare. Panels are a soft off-white and the
+   * app sits a step below them, which also gives the panels a visible edge without a border.
+   * The page itself stays true white — that is the document, not the interface.
+   */
+  --bg-app: #e6e6ec;
+  --bg-panel: #f4f4f7;
+  --bg-ribbon: #dcdce3;
+  --bg-input: #fbfbfd;
+  --bg-hover: #dcdce3;
+  --bg-active: #cfcfd8;
+  --bg-selected: #cadcf7;
+  --bg-modal: #f4f4f7;
+  --bg-canvas: #c8c8d0;
   --page-paper: #ffffff;
   --page-ink: #000000;
+  --page-paper-night: #1b1b1d;
+  --page-ink-night: #e8e8ea;
 
   /* Text */
   --fg: #1a1a1a;
@@ -31,7 +38,7 @@
   --accent-hover: #061d4d;
 
   /* Borders and lines */
-  --border: #767680;
+  --border: #66666f;
   --border-strong: #4a4a52;
   --shadow: #4a4a52;
   --focus: #a85c00;
@@ -39,13 +46,13 @@
   --selection: #2a7fd4;
 
   /* Status */
-  --danger: #c23500;
+  --danger: #b33100;
   --danger-fg: #ffffff;
-  --warning: #2f2200;
+  --warning: #2a1e00;
   --warning-fg: #ffffff;
-  --success: #00707e;
+  --success: #00636f;
   --success-fg: #ffffff;
-  --info: #10306b;
+  --info: #0c2455;
   --info-fg: #ffffff;
 
   /* Annotation defaults */
@@ -57,4 +64,12 @@
   --annot-shape: #c2185b;
   --annot-redact: #000000;
   --annot-redact-fg: #ffffff;
+
+  /* Night Mode variants (identical in every theme: this is document ink, not chrome). */
+  --annot-highlight-night: #5a4600;
+  --annot-underline-night: #7fb3ff;
+  --annot-strikeout-night: #ff8fb0;
+  --annot-note-night: #ffb84d;
+  --annot-ink-night: #7fb3ff;
+  --annot-shape-night: #ff8fb0;
 }

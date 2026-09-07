@@ -244,6 +244,21 @@ is colourblind: black and red read as the same colour):**
   dark and the palette under review was not the palette that ships. Probed in the operator's
   own Chrome: a bare `light` is repainted, `light only` is not. The contrast and e2e tests
   both assert the keyword so it cannot regress.
+- **Night Mode is a separate toggle, not a property of the dark themes** (operator decision,
+  2026-09-07). A theme colours the *interface*; a PDF page is the *document* and renders as its
+  author made it, which is nearly always white paper. Foxit puts Night Mode under View and so do
+  we: `view.nightMode.toggle` (`Mod+Alt+N`), off by default in every theme, persisted like the
+  theme itself. ThemeManager writes `data-night-mode` on `<html>` and the token layer swaps the
+  page pair; M11 applies the matching inversion to the rendered page raster.
+- **Night Mode swaps the annotation colours too.** Inverting only the paper is not enough: a
+  daylight highlight is a pale yellow that near-white ink cannot sit on (1.06:1 measured), and a
+  dark blue ink stroke drops to 2.88:1 against dark paper. Each annotation colour therefore has
+  a `-night` partner, and the pair table asserts them against the darkened page.
+- **No pure white in the Daylight chrome** (operator request, 2026-09-07). A full-screen
+  `#ffffff` reads as glare. Panels are a soft off-white (`#f4f4f7`) and the app sits a step
+  below (`#e6e6ec`), which also gives panels a visible edge without a border. Darkening the
+  surfaces cost contrast at the other end, so `--danger`, `--success`, `--info`, `--warning`
+  and `--border` were re-tuned until every pair and the colour-vision rule passed again.
 - **Annotation colours are theme-independent.** They are document content, not UI: the same
   values in all four themes, checked against the page paper rather than the app surfaces.
 
@@ -286,6 +301,15 @@ is colourblind: black and red read as the same colour):**
   `color-scheme: <scheme> only`, which is the standards-defined opt-out; verified in the
   operator's own browser with the flag enabled. `gallery.html` and `index.html` also carry
   `<meta name="color-scheme" content="dark light">` so the very first paint is covered too.
+
+**Added after review (2026-09-07):**
+- **Night Mode** — `view.nightMode.toggle` (`Mod+Alt+N`) and `view.nightMode.set { on }`, a
+  ribbon entry, a settings-schema flag, `--page-paper-night` / `--page-ink-night` and a `-night`
+  partner for every annotation colour, persisted under `view.nightMode`. The gallery shows each
+  theme's page sample twice, Night Mode off and on, so the two can be compared directly.
+  **M11 must apply the same inversion to the rendered page raster** — the tokens and the
+  `data-night-mode` attribute are the contract it codes against.
+- **Daylight softened** at the operator's request: no pure white in the chrome.
 
 **Deferred / notes:**
 - **Palettes approved by the operator on 2026-09-07**, all four, from the gallery page

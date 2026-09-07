@@ -89,6 +89,27 @@ export default defineModule({
       run: (ctx) => manager(ctx).state,
     },
     {
+      id: 'view.nightMode.toggle',
+      label: 'Night Mode',
+      category: 'View',
+      icon: 'moon',
+      shortcut: 'Mod+Alt+N',
+      description: 'Darken the document itself, not just the interface',
+      run: (ctx) => manager(ctx).toggleNightMode(),
+    },
+    {
+      id: 'view.nightMode.set',
+      label: 'Set Night Mode…',
+      category: 'View',
+      icon: 'moon',
+      description: 'Turn Night Mode on or off (pass { on: true | false })',
+      run: (ctx) => {
+        const on = ctx.args['on'];
+        if (typeof on !== 'boolean') throw new Error('view.nightMode.set needs { on: boolean }');
+        return manager(ctx).setNightMode(on);
+      },
+    },
+    {
       id: 'view.uiScale.increase',
       label: 'Increase UI Scale',
       category: 'View',
@@ -138,6 +159,7 @@ export default defineModule({
       order: 10,
       items: [
         'view.theme.next',
+        'view.nightMode.toggle',
         '-',
         'view.uiScale.decrease',
         'view.uiScale.reset',
@@ -154,6 +176,11 @@ export default defineModule({
         title: 'Colour theme',
         default: 'graphite',
         options: THEMES.map((t) => ({ value: t.name, label: t.label })),
+      },
+      nightMode: {
+        type: 'boolean',
+        title: 'Night Mode (darken the document, not just the interface)',
+        default: false,
       },
       scale: {
         type: 'number',

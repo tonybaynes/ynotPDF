@@ -202,6 +202,16 @@ own requirements):
 
 Theme switch is live (no restart) and persisted.
 
+**Night Mode** (`view.nightMode.toggle`, `Mod+Alt+N`) is a separate toggle, not a property of
+the dark themes: a theme colours the interface, while a PDF page renders as its author made it.
+Turning it on darkens the page and every annotation colour with it. Off by default in every
+theme, persisted, and available whichever theme is active — as in Foxit's View menu. M01 owns
+the tokens, the command and the `data-night-mode` attribute; M11 applies the matching inversion
+to the rendered page raster.
+
+The Daylight chrome contains no pure white (operator requirement): a full-screen `#ffffff`
+reads as glare. Panels are a soft off-white and the app background sits a step below them.
+
 ### 3.3 UI layout (Foxit-style)
 - **Ribbon** tabs: File · Home · Edit · Comment · View · Form · Protect ·
   Organize · Convert · Accessibility · Help. Each module registers its own

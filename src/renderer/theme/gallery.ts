@@ -249,18 +249,30 @@ function uiSample(loaded: Loaded): HTMLElement {
     filled.append(badge);
   }
 
-  const page = el('div', 'ui-page');
-  const paper = el('div', 'paper');
-  paper.append(
-    el('span', undefined, 'Page text with '),
-    el('mark', 'hl', 'a highlight'),
-    el('span', undefined, ' and '),
-    el('mark', 'sel', 'a selection'),
-    el('span', undefined, '.'),
-  );
-  page.append(paper);
+  /*
+   * The page sample twice: as the document actually renders (true white paper — that is the
+   * file, not the interface) and with Night Mode on, which is the explicit opt-in that darkens
+   * the document too. Night Mode is set on the page element itself, not the document, so all
+   * four themes can show both states side by side.
+   */
+  const makePage = (night: boolean): HTMLElement => {
+    const page = el('div', 'ui-page');
+    if (night) page.dataset['nightMode'] = 'on';
+    page.dataset['theme'] = loaded.info.name;
+    const caption = el('span', 'page-caption', night ? 'Night Mode on' : 'Night Mode off');
+    const paper = el('div', 'paper');
+    paper.append(
+      el('span', undefined, 'Page text with '),
+      el('mark', 'hl', 'a highlight'),
+      el('span', undefined, ' and '),
+      el('mark', 'sel', 'a selection'),
+      el('span', undefined, '.'),
+    );
+    page.append(caption, paper);
+    return page;
+  };
 
-  body.append(heading, para, muted, controls, statuses, filled, page);
+  body.append(heading, para, muted, controls, statuses, filled, makePage(false), makePage(true));
   box.append(ribbon, body);
   return box;
 }

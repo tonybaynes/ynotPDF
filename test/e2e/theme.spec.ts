@@ -133,18 +133,65 @@ test('the focus ring is a solid two-ring outline with no transparency', async ()
   expect(style.shadow).not.toContain('rgba');
 });
 
+test('Night Mode darkens the page and is off by default', async () => {
+  await app.run('view.theme.set', { theme: 'graphite' });
+  await app.run('view.nightMode.set', { on: false });
+
+  const pagePair = (): Promise<{ paper: string; ink: string; attribute: string | undefined }> =>
+    app.page.evaluate(() => {
+      const style = getComputedStyle(document.documentElement);
+      return {
+        paper: style.getPropertyValue('--page-paper').trim(),
+        ink: style.getPropertyValue('--page-ink').trim(),
+        attribute: document.documentElement.dataset['nightMode'],
+      };
+    });
+
+  // Off: the page is the document's own white paper.
+  const day = await pagePair();
+  expect(day.attribute).toBeUndefined();
+  expect(day.paper).toBe(token('graphite', '--page-paper'));
+
+  expect(await app.run('view.nightMode.toggle')).toBe(true);
+  const night = await pagePair();
+  expect(night.attribute).toBe('on');
+  expect(night.paper).toBe(token('graphite', '--page-paper-night'));
+  expect(night.ink).toBe(token('graphite', '--page-ink-night'));
+
+  expect(await app.run('view.nightMode.toggle')).toBe(false);
+  expect((await pagePair()).attribute).toBeUndefined();
+});
+
+test('Night Mode is independent of the theme', async () => {
+  await app.run('view.nightMode.set', { on: true });
+  for (const theme of THEMES) {
+    await app.run('view.theme.set', { theme: theme.name });
+    const paper = await app.page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--page-paper').trim(),
+    );
+    expect(paper, theme.name).toBe(token(theme.name, '--page-paper-night'));
+  }
+  await app.run('view.nightMode.set', { on: false });
+});
+
 test('the theme and scale survive a restart', async () => {
   await app.run('view.theme.set', { theme: 'high-contrast' });
   await app.run('view.uiScale.set', { percent: 130 });
+  await app.run('view.nightMode.set', { on: true });
   // Give the settings write a moment to reach the main process before we close the window.
   await expect
     .poll(async () => app.run('view.theme.current'))
-    .toEqual({ theme: 'high-contrast', scale: 130 });
+    .toEqual({ theme: 'high-contrast', scale: 130, nightMode: true });
   await app.close();
 
   app = await launchApp({ reuseUserData: true });
   await expect(app.page.locator('html')).toHaveAttribute('data-theme', 'high-contrast');
-  expect(await app.run('view.theme.current')).toEqual({ theme: 'high-contrast', scale: 130 });
+  expect(await app.run('view.theme.current')).toEqual({
+    theme: 'high-contrast',
+    scale: 130,
+    nightMode: true,
+  });
+  expect(await app.page.evaluate(() => document.documentElement.dataset['nightMode'])).toBe('on');
   expect(await app.page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe(
     '18.2px',
   );
@@ -152,4 +199,5 @@ test('the theme and scale survive a restart', async () => {
   // Leave the app in the default theme for anything that runs after this file.
   await app.run('view.theme.set', { theme: 'graphite' });
   await app.run('view.uiScale.reset');
+  await app.run('view.nightMode.set', { on: false });
 });

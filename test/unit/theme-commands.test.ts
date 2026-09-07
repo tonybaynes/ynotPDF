@@ -101,6 +101,7 @@ describe('M01 manifest', () => {
     await expect(registry.run('view.theme.current')).resolves.toEqual({
       theme: 'midnight',
       scale: 120,
+      nightMode: false,
     });
   });
 
@@ -114,6 +115,34 @@ describe('M01 manifest', () => {
     expect(registry.isEnabled('view.uiScale.increase')).toBe(false);
     await expect(registry.run('view.uiScale.reset')).resolves.toBe(100);
     expect(themes.uiScale).toBe(100);
+  });
+
+  it('registers Night Mode as a command with a shortcut', async () => {
+    const { registry } = await setup();
+    expect(registry.allCommands().map((c) => c.id)).toContain('view.nightMode.toggle');
+    expect(registry.shortcutFor('view.nightMode.toggle')).toBe('Mod+Alt+N');
+    expect(registry.paletteEntries().map((e) => e.id)).toContain('view.nightMode.toggle');
+    const group = registry.ribbonGroups().find((g) => g.id === 'view.appearance');
+    expect(group?.items).toContain('view.nightMode.toggle');
+  });
+
+  it('toggles and sets Night Mode through the command table', async () => {
+    const { registry, themes } = await setup();
+    expect(themes.nightMode).toBe(false);
+    await expect(registry.run('view.nightMode.toggle')).resolves.toBe(true);
+    expect(themes.nightMode).toBe(true);
+    await expect(registry.run('view.nightMode.set', { on: false })).resolves.toBe(false);
+    expect(themes.nightMode).toBe(false);
+    await expect(registry.run('view.nightMode.set', { on: 'yes' })).rejects.toThrow(
+      /needs \{ on: boolean \}/,
+    );
+  });
+
+  it('offers Night Mode in the settings schema', () => {
+    expect(themeManifest.settings?.properties['nightMode']).toMatchObject({
+      type: 'boolean',
+      default: false,
+    });
   });
 
   it('rejects a UI scale that is not a number', async () => {

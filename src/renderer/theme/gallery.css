@@ -258,10 +258,18 @@ p.bad {
 }
 
 .ui-page {
-  padding: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  margin-bottom: var(--sp-3);
   background: var(--bg-canvas);
   border: var(--border-width) solid var(--border);
   border-radius: var(--radius);
+}
+
+.page-caption {
+  display: block;
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-1);
+  color: var(--fg-muted);
 }
 
 .paper {

@@ -16,7 +16,12 @@ import {
   UI_SCALE_MAX,
   UI_SCALE_MIN,
 } from '@theme/themes';
-import { ipcThemeStorage, THEME_KEY, UI_SCALE_KEY } from '@modules/M01-theme-system/storage';
+import {
+  ipcThemeStorage,
+  NIGHT_MODE_KEY,
+  THEME_KEY,
+  UI_SCALE_KEY,
+} from '@modules/M01-theme-system/storage';
 import type { YnotBridge } from '@shared/ipc';
 
 /**
@@ -129,7 +134,7 @@ describe('ThemeManager', () => {
     themes.set('daylight');
     expect(stub.dataset['theme']).toBe('daylight');
     await vi.waitFor(async () => {
-      expect(await storage.read()).toEqual({ theme: 'daylight', scale: 100 });
+      expect(await storage.read()).toEqual({ theme: 'daylight', scale: 100, nightMode: false });
     });
   });
 
@@ -172,12 +177,55 @@ describe('ThemeManager', () => {
     expect(themes.stepScale(-1)).toBe(100); // already at the bottom
   });
 
+  it('starts with Night Mode off and toggles it', async () => {
+    const themes = await ThemeManager.create({ root: stub.root, storage: memoryStorage() });
+    expect(themes.nightMode).toBe(false);
+    expect(stub.dataset['nightMode']).toBeUndefined();
+
+    expect(themes.toggleNightMode()).toBe(true);
+    expect(stub.dataset['nightMode']).toBe('on');
+
+    expect(themes.toggleNightMode()).toBe(false);
+    expect(stub.dataset['nightMode']).toBeUndefined();
+  });
+
+  it('sets Night Mode directly and ignores a no-op', async () => {
+    const themes = await ThemeManager.create({ root: stub.root, storage: memoryStorage() });
+    const seen: boolean[] = [];
+    themes.onChange((state) => {
+      seen.push(state.nightMode);
+    });
+    expect(themes.setNightMode(false)).toBe(false); // already off — no notification
+    expect(themes.setNightMode(true)).toBe(true);
+    expect(themes.setNightMode(true)).toBe(true); // already on — no notification
+    expect(seen).toEqual([true]);
+  });
+
+  it('restores and persists Night Mode', async () => {
+    const storage = memoryStorage({ theme: 'graphite', scale: 100, nightMode: true });
+    const themes = await ThemeManager.create({ root: stub.root, storage });
+    expect(themes.nightMode).toBe(true);
+    expect(stub.dataset['nightMode']).toBe('on');
+    themes.setNightMode(false);
+    await vi.waitFor(async () => {
+      expect((await storage.read()).nightMode).toBe(false);
+    });
+  });
+
+  it('survives a saved Night Mode value of the wrong type', async () => {
+    const themes = await ThemeManager.create({
+      root: stub.root,
+      storage: memoryStorage({ nightMode: 'yes' as never }),
+    });
+    expect(themes.nightMode).toBe(false);
+  });
+
   it('reports its state to the palette command', async () => {
     const themes = await ThemeManager.create({
       root: stub.root,
       storage: memoryStorage({ theme: 'high-contrast', scale: 120 }),
     });
-    expect(themes.state).toEqual({ theme: 'high-contrast', scale: 120 });
+    expect(themes.state).toEqual({ theme: 'high-contrast', scale: 120, nightMode: false });
   });
 
   it('tells the caller when a theme has been applied', async () => {
@@ -219,13 +267,25 @@ describe('ipcThemeStorage', () => {
   it('returns nothing when there is no Electron bridge', async () => {
     expect(await ipcThemeStorage().read()).toEqual({});
     await expect(
-      ipcThemeStorage().write({ theme: 'graphite', scale: 100 }),
+      ipcThemeStorage().write({ theme: 'graphite', scale: 100, nightMode: false }),
     ).resolves.toBeUndefined();
   });
 
-  it('reads the saved theme and scale', async () => {
-    bridge((key) => (key === THEME_KEY ? 'daylight' : key === UI_SCALE_KEY ? 130 : undefined));
-    expect(await ipcThemeStorage().read()).toEqual({ theme: 'daylight', scale: 130 });
+  it('reads the saved theme, scale and night mode', async () => {
+    bridge((key) =>
+      key === THEME_KEY
+        ? 'daylight'
+        : key === UI_SCALE_KEY
+          ? 130
+          : key === NIGHT_MODE_KEY
+            ? true
+            : undefined,
+    );
+    expect(await ipcThemeStorage().read()).toEqual({
+      theme: 'daylight',
+      scale: 130,
+      nightMode: true,
+    });
   });
 
   it('drops values of the wrong shape', async () => {
@@ -241,7 +301,11 @@ describe('ipcThemeStorage', () => {
         written[k] = v;
       },
     );
-    await ipcThemeStorage().write({ theme: 'midnight', scale: 150 });
-    expect(written).toEqual({ [THEME_KEY]: 'midnight', [UI_SCALE_KEY]: 150 });
+    await ipcThemeStorage().write({ theme: 'midnight', scale: 150, nightMode: true });
+    expect(written).toEqual({
+      [THEME_KEY]: 'midnight',
+      [UI_SCALE_KEY]: 150,
+      [NIGHT_MODE_KEY]: true,
+    });
   });
 });
