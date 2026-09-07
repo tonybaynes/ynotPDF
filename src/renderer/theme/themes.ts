@@ -37,7 +37,7 @@ export const THEMES: ReadonlyArray<ThemeInfo> = [
     name: 'daylight',
     label: 'Daylight',
     scheme: 'light',
-    description: 'Light. Off-white app, white panels, near-black text, deep-blue accent.',
+    description: 'Light grey, no pure white. Near-black text, deep-blue accent.',
     file: 'daylight.css',
   },
   {

@@ -18,12 +18,14 @@
   --bg-canvas: #0e0e0e;
   --page-paper: #ffffff;
   --page-ink: #000000;
+  --page-paper-night: #1b1b1d;
+  --page-ink-night: #e8e8ea;
 
   /* Text */
   --fg: #f2f2f2;
   --fg-muted: #b8b8be;
   --fg-on-accent: #000000;
-  --fg-placeholder: #8e8e96;
+  --fg-placeholder: #c8c8ce;
 
   /* Icons and accent */
   --icon: #ffffff;
@@ -58,4 +60,12 @@
   --annot-shape: #c2185b;
   --annot-redact: #000000;
   --annot-redact-fg: #ffffff;
+
+  /* Night Mode variants (identical in every theme: this is document ink, not chrome). */
+  --annot-highlight-night: #5a4600;
+  --annot-underline-night: #7fb3ff;
+  --annot-strikeout-night: #ff8fb0;
+  --annot-note-night: #ffb84d;
+  --annot-ink-night: #7fb3ff;
+  --annot-shape-night: #ff8fb0;
 }

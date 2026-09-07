@@ -173,7 +173,7 @@ so the white focus ring keeps 3:1 on them, and the borders lightened to reach
 |---|---|---|
 | 1 | **Graphite** (default) | Dark: app `#121212`, panels `#1c1c1e`, ribbon `#232326`, text `#f2f2f2`, icons `#ffffff`, accent `#3392ff`, borders `#767680`. Text ≥ 7:1, icons ≥ 4.5:1 on every surface. |
 | 2 | **Midnight** | Black `#000000` app, dark-blue `#0a0a2e` panels, gold `#ffd700` text, white borders — the logistics-hub palette. |
-| 3 | **Daylight** | Light: app `#f5f5f7`, panels `#ffffff`, text `#1a1a1a`, accent `#082a68`. |
+| 3 | **Daylight** | Light grey, **no white anywhere in the chrome**: panels `#e0e0e8`, app `#d8d8e2`, inputs `#dcdce6`, ribbon `#d5d5de`, page backdrop `#a9a9b8`, black text, accent `#082a68`. Only the PDF page is white. |
 | 4 | **High Contrast** | Pure black / white / yellow, 2 px borders, no greys. |
 
 Accessibility rules baked into every theme (non-negotiable — the operator's
@@ -187,8 +187,12 @@ own requirements):
   still separates by lightness (ΔL\* ≥ 20) **or** blue↔yellow (Δb\* ≥ 45), never
   by red↔green alone. The two channels are needed because a flat ΔL\* rule is
   impossible next to the 4.5:1 floor — see `docs/adr/0002-status-colour-separation.md`.
-- Muted/secondary text is still ≥ 4.5:1 — no dim grey on dark. The only
-  low-contrast text permitted is italic placeholder hints in empty inputs.
+- Muted/secondary text is still ≥ 4.5:1 — no dim grey on dark. **There is no
+  low-contrast text anywhere** (operator, 2026-09-07): the 3:1 this plan first
+  allowed for placeholder hints proved unreadable, and so did 4.5:1. A hint is
+  now never fainter than the theme's own muted text, which the tests enforce as
+  a relative rule so it cannot drift when a surface moves. The italics carry
+  the "this is a hint" signal instead of low contrast.
 - **Modals and overlays are fully opaque.** No `rgba()` with alpha < 1, no
   `opacity` < 1, no `backdrop-filter`. Lint rule.
 - `color-scheme: <scheme> only` declared per theme. The `only` keyword is what
@@ -201,6 +205,26 @@ own requirements):
 - UI scale 100–200 % in Preferences.
 
 Theme switch is live (no restart) and persisted.
+
+**Night Mode** (`view.nightMode.toggle`, `Mod+Alt+N`) is a separate toggle, not a property of
+the dark themes: a theme colours the interface, while a PDF page renders as its author made it.
+Turning it on darkens the page and every annotation colour with it. Off by default in every
+theme, persisted, and available whichever theme is active — as in Foxit's View menu. M01 owns
+the tokens, the command and the `data-night-mode` attribute; M11 applies the matching inversion
+to the rendered page raster.
+
+The Daylight chrome contains **no white at all** (operator requirement): a full-screen
+`#ffffff` reads as glare, and so do white input fields. It is grey throughout, with black
+text — panels lightest, then the app, inputs and ribbon, and the page backdrop darkest so a
+page stands out against it. The only white in the window is the PDF page, because that is the
+document rather than the interface.
+
+There is a floor on how dark that grey can go, and it is set by the status colours rather than
+by taste. Every status must clear 4.5:1 on the darkest surface that carries text, which caps
+its lightness; the four then have to stay distinguishable to a dichromat inside whatever band
+is left. A search of the colour space shows a workable set exists down to a ribbon of about
+`#d0d0db`, below which no semantically sensible palette survives — a "danger" that is still
+readable and still separable becomes a muddy brown. `#d5d5de` keeps a comfortable margin.
 
 ### 3.3 UI layout (Foxit-style)
 - **Ribbon** tabs: File · Home · Edit · Comment · View · Form · Protect ·

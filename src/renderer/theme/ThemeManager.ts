@@ -24,6 +24,12 @@ export interface ThemeState {
   readonly theme: ThemeName;
   /** UI scale in percent (100–200). */
   readonly scale: number;
+  /**
+   * Night Mode: darken the *document* as well as the interface. Off by default in every theme,
+   * because a PDF page renders as its author made it; this is the explicit opt-in (Foxit puts
+   * the same switch under View). M11 applies the matching inversion to the page raster.
+   */
+  readonly nightMode: boolean;
 }
 
 export type ThemeListener = (state: ThemeState) => void;
@@ -65,6 +71,7 @@ export class ThemeManager {
   private readonly listeners = new Set<ThemeListener>();
   private theme: ThemeName = DEFAULT_THEME;
   private scale: number = UI_SCALE_DEFAULT;
+  private night = false;
 
   constructor(options: ThemeManagerOptions = {}) {
     this.root = options.root ?? document.documentElement;
@@ -89,6 +96,7 @@ export class ThemeManager {
     }
     this.theme = isThemeName(saved.theme) ? saved.theme : DEFAULT_THEME;
     this.scale = clampUiScale(saved.scale ?? UI_SCALE_DEFAULT);
+    this.night = saved.nightMode === true;
     this.apply();
   }
 
@@ -102,8 +110,13 @@ export class ThemeManager {
     return this.scale;
   }
 
+  /** True while Night Mode is on. */
+  get nightMode(): boolean {
+    return this.night;
+  }
+
   get state(): ThemeState {
-    return { theme: this.theme, scale: this.scale };
+    return { theme: this.theme, scale: this.scale, nightMode: this.night };
   }
 
   /** Every theme, in menu order. A getter keeps the call sites uniform with `current`. */
@@ -148,6 +161,20 @@ export class ThemeManager {
     return next;
   }
 
+  /** Turns Night Mode on or off. Returns the new state. */
+  setNightMode(on: boolean): boolean {
+    if (on === this.night) return this.night;
+    this.night = on;
+    this.apply();
+    void this.persist();
+    return this.night;
+  }
+
+  /** Flips Night Mode. Returns the new state. */
+  toggleNightMode(): boolean {
+    return this.setNightMode(!this.night);
+  }
+
   /** Nudges the UI scale by one step (`+1` bigger, `-1` smaller). */
   stepScale(direction: 1 | -1): number {
     return this.setScale(this.scale + direction * 10);
@@ -161,9 +188,11 @@ export class ThemeManager {
     };
   }
 
-  /** Writes `data-theme` and `--ui-scale`, then notifies. */
+  /** Writes `data-theme`, `data-night-mode` and `--ui-scale`, then notifies. */
   private apply(): void {
     this.root.dataset['theme'] = this.theme;
+    if (this.night) this.root.dataset['nightMode'] = 'on';
+    else delete this.root.dataset['nightMode'];
     this.root.style.setProperty('--ui-scale', String(this.scale / 100));
     const state = this.state;
     this.onApplied?.(state);

@@ -9,8 +9,8 @@
  * using the pair table in pairs.ts:
  *   text (--fg, --fg-muted, status text, --fg-on-accent)   >= 4.5:1
  *   icons, borders, focus ring, selection fill              >= 3:1
- *   secondary text is still >= 4.5:1 (no dim grey on dark); placeholder hints are the only
- *   low-contrast text permitted and must still reach 3:1.
+ *   secondary text is still >= 4.5:1 (no dim grey on dark), and so are placeholder hints —
+ *   the italics say "hint", the contrast stays readable.
  *   No rgba()/hsla() alpha < 1, no opacity < 1, no backdrop-filter — overlays are opaque.
  *   Every theme declares `color-scheme: <scheme> only`. The `only` keyword forbids the browser
  *   substituting a scheme of its own: without it, Chrome's "Auto Dark Mode for Web Contents"
@@ -34,12 +34,14 @@
  *   --bg-canvas      the scrolling document area behind the pages
  *   --page-paper     paper colour of a rendered page placeholder / empty page
  *   --page-ink       default ink on the page (text colour PDFs are assumed to use)
+ *   --page-paper-night  paper colour while Night Mode is on (view.nightMode.toggle)
+ *   --page-ink-night    ink colour while Night Mode is on
  *
  * Text
  *   --fg             primary text
  *   --fg-muted       secondary text, still >= 4.5:1
  *   --fg-on-accent   text and icons on --accent / --accent-hover
- *   --fg-placeholder placeholder hint in empty inputs (italic, >= 3:1)
+ *   --fg-placeholder placeholder hint in empty inputs (italic, and still >= 4.5:1)
  *
  * Icons and accent
  *   --icon           stroke colour for Lucide icons (currentColor)
@@ -76,6 +78,16 @@
  *   --annot-shape       shape / line / arrow stroke
  *   --annot-redact      redaction box fill (applied redactions are always this)
  *   --annot-redact-fg   overlay text on a redaction box
+ *
+ * Night Mode variants of the page and its annotations. Night Mode darkens the *document*, so
+ * everything drawn on the page flips with it: a daylight highlight is a pale yellow that white
+ * ink cannot sit on, and a dark blue stroke disappears against dark paper.
+ *   --annot-highlight-night  text highlight fill under Night Mode
+ *   --annot-underline-night  underline stroke under Night Mode
+ *   --annot-strikeout-night  strike-out stroke under Night Mode
+ *   --annot-note-night       sticky-note fill under Night Mode
+ *   --annot-ink-night        freehand ink stroke under Night Mode
+ *   --annot-shape-night      shape / line / arrow stroke under Night Mode
  *
  * ---- Non-colour tokens (defined once here, themes may override e.g. border width) ----------
  */
@@ -118,6 +130,29 @@
   --icon-size-lg: 1.714rem; /* 24px */
 
   color-scheme: dark only;
+}
+
+/*
+ * Night Mode (`view.nightMode.toggle`, M01). Themes colour the *interface*; a PDF page is the
+ * document and renders as its author made it, which is nearly always white paper. Night Mode is
+ * the separate, explicit opt-in that darkens the page as well — Foxit puts it under View, and so
+ * do we. ThemeManager sets `data-night-mode` on <html>; anything drawing page-like surfaces
+ * swaps to the -night pair, and M11 applies the same inversion to the rendered page raster.
+ *
+ * The selector needs both attributes: `[data-theme]` alone has the same specificity as the
+ * theme files' own `--page-paper`, and they load after this file, so a bare
+ * `[data-night-mode='on']` would lose. Requiring both also lets the gallery preview Night Mode
+ * on a single element rather than the whole document.
+ */
+[data-theme][data-night-mode='on'] {
+  --page-paper: var(--page-paper-night);
+  --page-ink: var(--page-ink-night);
+  --annot-highlight: var(--annot-highlight-night);
+  --annot-underline: var(--annot-underline-night);
+  --annot-strikeout: var(--annot-strikeout-night);
+  --annot-note: var(--annot-note-night);
+  --annot-ink: var(--annot-ink-night);
+  --annot-shape: var(--annot-shape-night);
 }
 
 /* --ui-scale drives the root font size; everything in rem/em follows. */

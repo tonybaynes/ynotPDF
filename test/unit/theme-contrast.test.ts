@@ -71,6 +71,21 @@ describe('theme tokens', () => {
         expect(css).not.toMatch(/backdrop-filter/i);
       });
 
+      it('never renders a placeholder hint dimmer than muted text', () => {
+        /*
+         * The operator reads these; 4.5:1 is a floor, not a target. A hint carries no other
+         * cue than its italics, so it may never be the faintest text on the surface it sits on.
+         */
+        const input = parsed.tokens.get('--bg-input') ?? '';
+        const placeholder = contrastRatio(parsed.tokens.get('--fg-placeholder') ?? '', input);
+        const muted = contrastRatio(parsed.tokens.get('--fg-muted') ?? '', input);
+        expect(
+          placeholder,
+          `${theme.name}: placeholder is ${formatRatio(placeholder)} on --bg-input, ` +
+            `dimmer than muted text at ${formatRatio(muted)}`,
+        ).toBeGreaterThanOrEqual(muted);
+      });
+
       it.each(CONTRAST_PAIRS.map((p) => [`${p.fg} on ${p.bg}`, p] as const))(
         'contrast %s',
         (_label, pair) => {

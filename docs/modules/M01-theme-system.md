@@ -244,6 +244,36 @@ is colourblind: black and red read as the same colour):**
   dark and the palette under review was not the palette that ships. Probed in the operator's
   own Chrome: a bare `light` is repainted, `light only` is not. The contrast and e2e tests
   both assert the keyword so it cannot regress.
+- **Night Mode is a separate toggle, not a property of the dark themes** (operator decision,
+  2026-09-07). A theme colours the *interface*; a PDF page is the *document* and renders as its
+  author made it, which is nearly always white paper. Foxit puts Night Mode under View and so do
+  we: `view.nightMode.toggle` (`Mod+Alt+N`), off by default in every theme, persisted like the
+  theme itself. ThemeManager writes `data-night-mode` on `<html>` and the token layer swaps the
+  page pair; M11 applies the matching inversion to the rendered page raster.
+- **Night Mode swaps the annotation colours too.** Inverting only the paper is not enough: a
+  daylight highlight is a pale yellow that near-white ink cannot sit on (1.06:1 measured), and a
+  dark blue ink stroke drops to 2.88:1 against dark paper. Each annotation colour therefore has
+  a `-night` partner, and the pair table asserts them against the darkened page.
+- **No white at all in the Daylight chrome, and black text** (operator, 2026-09-07). A
+  full-screen `#ffffff` reads as glare, and so does a white input field. Grey throughout:
+  panels `#e0e0e8`, app `#d8d8e2`, inputs `#dcdce6`, ribbon `#d5d5de`, page backdrop `#a9a9b8`.
+  `--fg` and `--icon` are `#000000`. The only white left is `--page-paper`, which is the
+  document.
+- **How dark Daylight can go is capped by the status colours, not by taste.** Every status must
+  clear 4.5:1 on the darkest surface that carries text, which caps its lightness; the four then
+  have to stay distinguishable to a dichromat inside the remaining band. Searching the colour
+  space under semantic hue constraints (danger red-orange, warning amber, success teal, info
+  blue) finds a workable set down to a ribbon of about `#d0d0db` and **none at `#cacad6`** —
+  darker than that and "danger" degrades to a muddy brown that is no longer distinct from
+  "warning". `#d5d5de` keeps a margin. Worth quoting back if a darker Daylight is ever asked
+  for: the cost is not aesthetic, it is that the four statuses stop being tellable apart.
+- **A placeholder hint is never the faintest text on its surface** (operator, 2026-09-07,
+  twice). The brief and PLAN.md §3.2 allowed 3:1 for hints as the single low-contrast
+  exception; raising them to the 4.5:1 floor was still not enough to read comfortably. The rule
+  the tests now enforce is relative, not absolute: `--fg-placeholder` must reach at least the
+  same ratio as `--fg-muted` on `--bg-input`. A fixed number would drift again the next time a
+  surface moves; tying the hint to the theme's own secondary text cannot. The italics carry the
+  "this is a hint" meaning instead of low contrast.
 - **Annotation colours are theme-independent.** They are document content, not UI: the same
   values in all four themes, checked against the page paper rather than the app surfaces.
 
@@ -286,6 +316,15 @@ is colourblind: black and red read as the same colour):**
   `color-scheme: <scheme> only`, which is the standards-defined opt-out; verified in the
   operator's own browser with the flag enabled. `gallery.html` and `index.html` also carry
   `<meta name="color-scheme" content="dark light">` so the very first paint is covered too.
+
+**Added after review (2026-09-07):**
+- **Night Mode** — `view.nightMode.toggle` (`Mod+Alt+N`) and `view.nightMode.set { on }`, a
+  ribbon entry, a settings-schema flag, `--page-paper-night` / `--page-ink-night` and a `-night`
+  partner for every annotation colour, persisted under `view.nightMode`. The gallery shows each
+  theme's page sample twice, Night Mode off and on, so the two can be compared directly.
+  **M11 must apply the same inversion to the rendered page raster** — the tokens and the
+  `data-night-mode` attribute are the contract it codes against.
+- **Daylight softened** at the operator's request: no pure white in the chrome.
 
 **Deferred / notes:**
 - **Palettes approved by the operator on 2026-09-07**, all four, from the gallery page

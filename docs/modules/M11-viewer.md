@@ -81,6 +81,16 @@ Reading Mode, Navigation panels toggle, Page Transitions (skip).
 - Hand tool (default) and Select-text tool stub (M13 completes it).
 - Performance HUD (dev only): tiles/s, cache hit rate, worker queue depth.
 
+## Inherited requirement from M01 — Night Mode
+
+M01 ships the Night Mode toggle (`view.nightMode.toggle`, `Mod+Alt+N`), its persisted setting
+and its tokens; it sets `data-night-mode="on"` on `<html>`. **M11 must apply the matching
+inversion to the rendered page raster** so an opened document darkens too, not just the page
+placeholder. Invert luminance while preserving hue (a plain `invert()` turns photographs into
+negatives); leave images alone if that reads better, and match `--page-paper-night` /
+`--page-ink-night` for the paper and text. The state to read is
+`ctx.service<ThemeManager>('theme').nightMode`, plus its `onChange` for live updates.
+
 ## Out of scope
 
 Text selection, find, print (M13). Thumbnails/bookmarks (M12).
