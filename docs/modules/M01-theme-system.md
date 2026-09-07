@@ -261,12 +261,15 @@ is colourblind: black and red read as the same colour):**
   document.
 - **How dark Daylight can go is capped by the status colours, not by taste.** Every status must
   clear 4.5:1 on the darkest surface that carries text, which caps its lightness; the four then
-  have to stay distinguishable to a dichromat inside the remaining band. Searching the colour
-  space under semantic hue constraints (danger red-orange, warning amber, success teal, info
-  blue) finds a workable set down to a ribbon of about `#d0d0db` and **none at `#cacad6`** —
-  darker than that and "danger" degrades to a muddy brown that is no longer distinct from
-  "warning". `#d5d5de` keeps a margin. Worth quoting back if a darker Daylight is ever asked
-  for: the cost is not aesthetic, it is that the four statuses stop being tellable apart.
+  have to stay distinguishable to a dichromat inside the remaining band. A search of the colour
+  space under semantic hue constraints puts the hard floor at a text-bearing surface of about
+  `#ccccd8`. At the current `#d2d2dc` the band already forces a choice, verified by exhaustive
+  search: you can have a vivid red-orange `--danger` (chroma ≥ 55) **or** all four statuses
+  clearly lighter than body text, but not both. This theme takes the second — `--danger` is a
+  burnt orange `#884810`, and nothing is near-black. Discrimination is what the operator needs;
+  how red the red looks is not a channel available to him. An earlier note here claimed no set
+  existed below `#d0d0db`; that was an artefact of a search constrained to fixed lightness
+  bands, and is wrong.
 - **A placeholder hint is never the faintest text on its surface** (operator, 2026-09-07,
   twice). The brief and PLAN.md §3.2 allowed 3:1 for hints as the single low-contrast
   exception; raising them to the 4.5:1 floor was still not enough to read comfortably. The rule
