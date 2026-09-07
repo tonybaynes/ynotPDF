@@ -31,7 +31,7 @@
     "package": "npm run build && electron-builder --publish never",
     "postinstall": "install-electron",
     "icon": "node scripts/make-icon.ts",
-    "gallery": "vite src/renderer/theme --port 5199 --open /gallery.html"
+    "gallery": "vite src/renderer/theme --host 127.0.0.1 --port 5199 --strictPort --open /gallery.html"
   },
   "dependencies": {
     "electron-store": "^11.0.2"
