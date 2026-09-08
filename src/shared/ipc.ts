@@ -77,6 +77,97 @@ export interface SaveDialogOptions {
   readonly title?: string;
   /** Label of the confirm button ("Save", "Export"). */
   readonly buttonLabel?: string;
+  /**
+   * File-type filters. Absent means PDF plus "all files" — M21's original behaviour. M13 passes
+   * PNG for a snapshot and CSV for exported search results (ADR 0012).
+   */
+  readonly filters?: ReadonlyArray<{
+    readonly name: string;
+    readonly extensions: ReadonlyArray<string>;
+  }>;
+}
+
+// ---- clipboard, search and printing (M13, ADR 0012) -----------------------------------------
+
+/** What to put on the clipboard. Every format given is offered at once, as one item. */
+export interface ClipboardPayload {
+  readonly text?: string;
+  /** Rich Text Format, for "Copy with formatting". */
+  readonly rtf?: string;
+  readonly html?: string;
+}
+
+/** A printer the OS knows about. */
+export interface PrinterInfo {
+  readonly name: string;
+  readonly displayName: string;
+  readonly isDefault: boolean;
+  readonly description?: string;
+}
+
+/** Everything a print job needs before its sheets arrive. */
+export interface PrintJobSetup {
+  /** Sheet size in PDF points; every sheet of a job is the same size. */
+  readonly widthPt: number;
+  readonly heightPt: number;
+  /** Empty means the system default printer. */
+  readonly printer?: string;
+  readonly copies?: number;
+  readonly collate?: boolean;
+  /** Print in the printer's greyscale mode as well as rendering grey. */
+  readonly grayscale?: boolean;
+  /** Document name shown in the print queue. */
+  readonly title?: string;
+  /**
+   * Build the job and return the HTML that would have been printed without sending it to a
+   * printer. The e2e suite uses it; nothing in the app does.
+   */
+  readonly dryRun?: boolean;
+}
+
+/** How a print job ended. */
+export interface PrintJobResult {
+  readonly sheets: number;
+  /** False for a dry run or a job the reader cancelled at the OS dialog. */
+  readonly printed: boolean;
+  /** The generated HTML's path, for a dry run. */
+  readonly documentPath: string | null;
+  readonly error?: string;
+}
+
+/** Find options as they cross the IPC boundary (M13). */
+export interface FolderSearchOptions {
+  readonly matchCase: boolean;
+  readonly wholeWord: boolean;
+  readonly regex: boolean;
+  readonly ignoreDiacritics: boolean;
+  readonly proximity: number;
+  readonly includeBookmarks: boolean;
+  readonly includeComments: boolean;
+  readonly includeFormFields: boolean;
+}
+
+/** A folder search request. Results arrive on `search:results`. */
+export interface FolderSearchRequest {
+  readonly root: string;
+  readonly query: string;
+  readonly options: FolderSearchOptions;
+  readonly recursive: boolean;
+  /** Stop after this many hits so a large tree cannot run away. */
+  readonly maxHits: number;
+}
+
+/** One hit from a folder search. */
+export interface FolderSearchHit {
+  readonly path: string;
+  readonly name: string;
+  /** 0-based, or -1 for a hit that belongs to the document rather than a page. */
+  readonly page: number;
+  readonly source: 'page' | 'bookmark' | 'comment' | 'field';
+  readonly start: number;
+  readonly end: number;
+  readonly snippet: string;
+  readonly label?: string;
 }
 
 /** One document a crash left behind, as the recovery dialog lists it (M21). */
@@ -285,6 +376,28 @@ export interface IpcInvokeMap {
   'shell:openExternal': { args: [url: string]; result: void };
   'shell:showItemInFolder': { args: [path: string]; result: void };
   'devtools:toggle': { args: []; result: void };
+  /** Puts text / RTF / HTML on the system clipboard as one item (M13). */
+  'clipboard:write': { args: [payload: ClipboardPayload]; result: void };
+  /** Puts a PNG on the system clipboard as an image (M13: Copy image, Snapshot). */
+  'clipboard:writeImage': { args: [png: Uint8Array]; result: void };
+  /** Native folder picker, for the advanced search panel's folder scope. `null` on cancel. */
+  'dialog:pickFolder': { args: [title?: string]; result: string | null };
+  /**
+   * Starts a folder search in a main-process worker (M13, ADR 0012). Resolves with a job id;
+   * hits arrive on `search:results` and the job ends with `search:done`.
+   */
+  'search:folder': { args: [request: FolderSearchRequest]; result: string };
+  'search:cancel': { args: [jobId: string]; result: void };
+  /** Printers the OS knows about (M13). */
+  'print:printers': { args: []; result: PrinterInfo[] };
+  /** Opens a print job; sheets follow one at a time (M13, ADR 0012). */
+  'print:begin': { args: [setup: PrintJobSetup]; result: string };
+  /** Adds one rendered sheet, as PNG bytes, to an open job. */
+  'print:sheet': { args: [jobId: string, png: Uint8Array]; result: void };
+  /** Sends the job to the printer (or, for a dry run, just builds it) and cleans up. */
+  'print:finish': { args: [jobId: string]; result: PrintJobResult };
+  /** Abandons an open job and deletes its temporary files. */
+  'print:cancel': { args: [jobId: string]; result: void };
   /** A multi-select open dialog with the caller's filters (M91). Empty when cancelled. */
   'file:openFilesDialog': { args: [options?: OpenFilesOptions]; result: OpenedFile[] };
   /** Loads a URL or generated HTML in a hidden window and prints it to PDF (M91, ADR 0011). */
@@ -316,6 +429,22 @@ export interface IpcEventMap {
   'window:closeRequested': { readonly reason: 'window' | 'quit' };
   /** The app is trying to quit and was held back the same way. Answer with `app:confirmQuit`. */
   'app:quitRequested': Record<string, never>;
+  /** A batch of folder-search hits (M13). Batched so a big tree does not flood the channel. */
+  'search:results': { readonly jobId: string; readonly hits: ReadonlyArray<FolderSearchHit> };
+  /** Progress of a folder search: files looked at so far, and the one being read now. */
+  'search:progress': {
+    readonly jobId: string;
+    readonly scanned: number;
+    readonly total: number;
+    readonly file: string;
+  };
+  /** A folder search has ended, one way or another. */
+  'search:done': {
+    readonly jobId: string;
+    readonly cancelled: boolean;
+    readonly hits: number;
+    readonly error?: string;
+  };
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeMap;
@@ -385,6 +514,16 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'shell:openExternal',
   'shell:showItemInFolder',
   'devtools:toggle',
+  'clipboard:write',
+  'clipboard:writeImage',
+  'dialog:pickFolder',
+  'search:folder',
+  'search:cancel',
+  'print:printers',
+  'print:begin',
+  'print:sheet',
+  'print:finish',
+  'print:cancel',
   'file:openFilesDialog',
   'webpdf:render',
   'webpdf:cancel',
@@ -402,6 +541,9 @@ export const EVENT_CHANNELS: readonly IpcEventChannel[] = [
   'file:changedOnDisk',
   'window:closeRequested',
   'app:quitRequested',
+  'search:results',
+  'search:progress',
+  'search:done',
 ];
 
 /**

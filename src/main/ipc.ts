@@ -6,8 +6,19 @@
  * they stay correct once a tab has been dragged out into a second window (M02).
  */
 
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron';
-import type { FileKind, IpcHandlers, IpcInvokeChannel } from '../shared/ipc';
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  ClipboardItem,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  shell,
+} from 'electron';
+import type { FileKind, IpcHandlers, IpcInvokeChannel, SaveDialogOptions } from '../shared/ipc';
+import type { PrintJobs } from './print';
+import type { FolderSearches } from './search';
 import { hostArch, targetArch } from './arch';
 import { readFileForRenderer, writeBytes } from './files';
 import { probeFile, writeAtomic } from './fs/atomic';
@@ -36,6 +47,10 @@ export interface IpcDeps {
   recovery: RecoveryStore;
   /** Holds a close or a quit back while the renderer asks about unsaved work (M21). */
   closeBroker: CloseBroker;
+  /** Open print jobs (M13). */
+  printJobs: PrintJobs;
+  /** Running folder searches (M13). */
+  searches: FolderSearches;
   /** Prints web pages and generated HTML in a hidden window (M91). */
   readonly webpdf: WebPdfPrinter;
 }
@@ -71,16 +86,19 @@ const FILE_TITLES: Record<FileKind, string> = {
 /** The native Save dialog, filtered to PDFs. `null` when the reader cancelled. */
 async function saveDialog(
   win: BrowserWindow | null,
-  options: { defaultPath?: string; title?: string; buttonLabel?: string },
+  options: SaveDialogOptions,
 ): Promise<string | null> {
+  const filters = options.filters?.length
+    ? options.filters.map((f) => ({ name: f.name, extensions: [...f.extensions] }))
+    : [
+        { name: 'PDF documents', extensions: ['pdf'] },
+        { name: 'All files', extensions: ['*'] },
+      ];
   const dialogOptions: Electron.SaveDialogOptions = {
     title: options.title ?? 'Save PDF',
     ...(options.defaultPath !== undefined ? { defaultPath: options.defaultPath } : {}),
     ...(options.buttonLabel !== undefined ? { buttonLabel: options.buttonLabel } : {}),
-    filters: [
-      { name: 'PDF documents', extensions: ['pdf'] },
-      { name: 'All files', extensions: ['*'] },
-    ],
+    filters,
   };
   const result = win
     ? await dialog.showSaveDialog(win, dialogOptions)
@@ -301,6 +319,76 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     },
     'devtools:toggle': (e) => {
       windowOf(e)?.webContents.toggleDevTools();
+    },
+
+    // ---- M13: clipboard, folder search, printing (ADR 0012) ---------------------------------
+    'clipboard:write': async (_e, payload) => {
+      // One item carrying every format, not one `write` per format: a paste target then picks
+      // the richest thing it understands instead of receiving whichever we put down last.
+      const item: Record<string, string> = {};
+      if (payload.text !== undefined) item['text/plain'] = payload.text;
+      if (payload.html !== undefined) item['text/html'] = payload.html;
+      if (payload.rtf !== undefined) item['text/rtf'] = payload.rtf;
+      if (Object.keys(item).length === 0) return;
+      try {
+        await clipboard.write([new ClipboardItem(item)]);
+      } catch (error) {
+        // A platform that will not take one of the richer formats must not lose the copy: fall
+        // back to plain text, which every platform takes.
+        if (payload.text === undefined) throw error;
+        await clipboard.writeText(payload.text);
+      }
+    },
+    'clipboard:writeImage': async (_e, png) => {
+      const blob = new Blob([Buffer.from(png)], { type: 'image/png' });
+      await clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    },
+    'dialog:pickFolder': async (e, title) => {
+      const win = windowOf(e);
+      const options: Electron.OpenDialogOptions = {
+        title: title ?? 'Choose a folder to search',
+        properties: ['openDirectory'],
+      };
+      const result = win
+        ? await dialog.showOpenDialog(win, options)
+        : await dialog.showOpenDialog(options);
+      return result.canceled ? null : (result.filePaths[0] ?? null);
+    },
+    'search:folder': (e, request) => {
+      const win = windowOf(e);
+      if (!win) throw new Error('No window to search from');
+      return deps.searches.start(win, request);
+    },
+    'search:cancel': (_e, jobId) => {
+      deps.searches.cancel(jobId);
+    },
+    'print:printers': async (e) => {
+      const win = windowOf(e);
+      if (!win) return [];
+      const printers = await win.webContents.getPrintersAsync();
+      // `PrinterInfo` has no portable "is default" flag; the platform puts it in `options`
+      // under a different name on each OS, so all three are checked and none is assumed.
+      return printers.map((p) => {
+        const options = p.options as Readonly<Record<string, unknown>> | undefined;
+        const isDefault =
+          options?.['printer-is-default'] === 'true' ||
+          options?.['is-default'] === 'true' ||
+          options?.['default'] === 'true';
+        return {
+          name: p.name,
+          displayName: p.displayName || p.name,
+          isDefault,
+          ...(p.description ? { description: p.description } : {}),
+        };
+      });
+    },
+    'print:begin': (_e, setup) => deps.printJobs.begin(setup),
+    'print:sheet': (_e, jobId, png) => {
+      deps.printJobs.addSheet(jobId, png);
+    },
+    'print:finish': (e, jobId) => deps.printJobs.finish(jobId, windowOf(e)),
+    'print:cancel': (_e, jobId) => {
+      deps.printJobs.cancel(jobId);
     },
     // Multi-select with the caller's filters (M91). The files are not added to Recent: they are
     // sources for a new document, not documents that were opened.

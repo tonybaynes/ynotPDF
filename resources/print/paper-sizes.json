@@ -1,0 +1,15 @@
+{
+  "$comment": "Paper sizes offered by the print dialog and Page Setup (M13). Dimensions are the PORTRAIT size in PDF points (1/72 inch); the dialog swaps them for landscape. Add a size here rather than in code — this file is data, per PLAN.md §4.4.",
+  "sizes": [
+    { "id": "a4", "label": "A4 (210 × 297 mm)", "width": 595.28, "height": 841.89 },
+    { "id": "a3", "label": "A3 (297 × 420 mm)", "width": 841.89, "height": 1190.55 },
+    { "id": "a5", "label": "A5 (148 × 210 mm)", "width": 419.53, "height": 595.28 },
+    { "id": "a6", "label": "A6 (105 × 148 mm)", "width": 297.64, "height": 419.53 },
+    { "id": "b5", "label": "B5 (176 × 250 mm)", "width": 498.9, "height": 708.66 },
+    { "id": "letter", "label": "Letter (8.5 × 11 in)", "width": 612, "height": 792 },
+    { "id": "legal", "label": "Legal (8.5 × 14 in)", "width": 612, "height": 1008 },
+    { "id": "tabloid", "label": "Tabloid (11 × 17 in)", "width": 792, "height": 1224 },
+    { "id": "executive", "label": "Executive (7.25 × 10.5 in)", "width": 522, "height": 756 },
+    { "id": "statement", "label": "Statement (5.5 × 8.5 in)", "width": 396, "height": 612 }
+  ]
+}
