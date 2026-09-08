@@ -861,10 +861,13 @@ export class SetLayerVisibleCommand extends BaseCommand {
   private async write(visible: boolean): Promise<void> {
     const layer = this.doc.layer(this.layerId);
     if (!layer) return;
-    const applied = await tryEngine(() =>
+    await tryEngine(() =>
       this.doc.engine.setLayerVisible(this.doc.handle, layer.engineId, visible),
     );
-    if (!applied) this.intend('layers');
+    // The `layers` intent is recorded whether the engine took it or not (M12, ADR 0011): the
+    // PDFium adapter applies visibility by deactivating page objects, which is render-time only
+    // and deliberately leaves the bytes alone — so a save still has to write `/OCProperties`.
+    this.intend('layers');
     this.doc.setLayerVisibleRecord(this.layerId, visible);
   }
 

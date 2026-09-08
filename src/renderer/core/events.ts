@@ -55,6 +55,10 @@ export type DocumentEvent =
     }
   | { readonly type: 'field:changed'; readonly fieldId: ModelId; readonly name: string }
   | { readonly type: 'outline:changed' }
+  /** A named destination was created, renamed, re-aimed or removed (M12). */
+  | { readonly type: 'destinations:changed' }
+  /** An embedded file was added, described or removed (M12). */
+  | { readonly type: 'attachments:changed' }
   | { readonly type: 'layer:changed'; readonly layerId: ModelId }
   | { readonly type: 'metadata:changed' }
   | { readonly type: 'custom:changed'; readonly namespace: string }

@@ -526,7 +526,9 @@ export class FakeEngine implements PdfEngine {
     };
     d.attachments = [...d.attachments, attachment];
     d.attachmentBytes.set(attachment.id, file.bytes);
-    return Promise.resolve(attachment);
+    renumberAttachments(d);
+    const added = d.attachments.find((a) => a.name === file.name);
+    return Promise.resolve(added ?? attachment);
   }
 
   updateAttachment(
@@ -558,10 +560,9 @@ export class FakeEngine implements PdfEngine {
     const d = this.doc(doc);
     const at = d.attachments.findIndex((a) => a.id === attachmentId);
     if (at < 0) throw new EngineError('invalid-argument', `no attachment ${attachmentId}`);
-    d.attachments = d.attachments.filter((a) => a.id !== attachmentId);
     d.attachmentBytes.delete(attachmentId);
-    // Ids are positional, exactly as in PDFium: everything after the hole moves down one.
-    d.attachments = d.attachments.map((a, i) => ({ ...a, id: `att.${String(i)}` }));
+    d.attachments = d.attachments.filter((a) => a.id !== attachmentId);
+    renumberAttachments(d);
     return Promise.resolve();
   }
 
@@ -570,6 +571,21 @@ export class FakeEngine implements PdfEngine {
     const d = this.doc(doc);
     return Promise.resolve(new Uint8Array([d.pages.length]));
   }
+}
+
+/**
+ * Puts the positional attachment ids back in step with the list, bytes and all — PDFium names an
+ * embedded file by its index in the name tree, so an add or a delete renumbers the ones after it
+ * and an id that did not move would name a different file (M12, ADR 0011).
+ */
+function renumberAttachments(d: FakeDoc): void {
+  const bytes = d.attachments.map((a) => d.attachmentBytes.get(a.id));
+  d.attachments = d.attachments.map((a, i) => ({ ...a, id: `att.${String(i)}` }));
+  d.attachmentBytes.clear();
+  d.attachments.forEach((a, i) => {
+    const value = bytes[i];
+    if (value) d.attachmentBytes.set(a.id, value);
+  });
 }
 
 function parseId(id: string): { page: number; index: number } {
