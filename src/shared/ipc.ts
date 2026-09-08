@@ -104,6 +104,11 @@ export interface IpcInvokeMap {
   /** Opens another top-level window, optionally loading a file into it (tab drag-out, M02). */
   'window:new': { args: [path?: string]; result: void };
   'window:getState': { args: []; result: WindowState };
+  /**
+   * Enters or leaves OS full screen (M11, ADR 0009). The renderer cannot do this itself; the
+   * resulting state comes back on `window:stateChanged`. Passing nothing toggles.
+   */
+  'window:setFullScreen': { args: [fullScreen?: boolean]; result: boolean };
   /** Number of open app windows (tests). */
   'window:count': { args: []; result: number };
   'shell:openExternal': { args: [url: string]; result: void };
@@ -164,6 +169,7 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'window:setTitle',
   'window:new',
   'window:getState',
+  'window:setFullScreen',
   'window:count',
   'shell:openExternal',
   'shell:showItemInFolder',

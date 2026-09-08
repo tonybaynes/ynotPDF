@@ -811,6 +811,8 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
 
     const bitmap = ffi.call('FPDFBitmap_CreateEx', width, height, BITMAP.BGRA, 0, 0);
     if (bitmap === 0) throw new EngineError('internal', 'PDFium could not allocate the bitmap');
+    // "Line Weights off" (M11): hairline every stroke for this render, then put the widths back.
+    const strokes = options.lineWeights === false ? this.hairlineStrokes(p.page) : null;
     this.rendering = true;
     this.renderCancelled = false;
     try {
@@ -880,9 +882,52 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       };
     } finally {
       ffi.call('FPDFBitmap_Destroy', bitmap);
+      if (strokes) this.restoreStrokes(strokes);
       this.rendering = false;
       this.renderCancelled = false;
     }
+  }
+
+  /**
+   * Sets every stroke on the page (and inside its form XObjects) to width 0, which PDFium draws
+   * as a one-pixel hairline, and reports the previous widths so the caller can restore them.
+   * Nothing is written back to the document: `FPDFPage_GenerateContent` is never called, so the
+   * bytes on disk and any later save are unaffected.
+   */
+  private hairlineStrokes(page: number): Array<[number, number]> {
+    const ffi = this.ffi;
+    const saved: Array<[number, number]> = [];
+    const visit = (count: number, get: (i: number) => number, depth: number): void => {
+      if (depth > 4) return;
+      for (let i = 0; i < count; i++) {
+        const obj = get(i);
+        if (obj === 0) continue;
+        ffi.scope((s) => {
+          const f = s.alloc(4);
+          if (ffi.call('FPDFPageObj_GetStrokeWidth', obj, f)) {
+            const width = ffi.f32(f);
+            if (width > 0) {
+              saved.push([obj, width]);
+              ffi.call('FPDFPageObj_SetStrokeWidth', obj, 0);
+            }
+          }
+        });
+        if (ffi.call('FPDFPageObj_GetType', obj) === PAGEOBJ.FORM) {
+          const n = ffi.call('FPDFFormObj_CountObjects', obj);
+          visit(n, (j) => ffi.call('FPDFFormObj_GetObject', obj, j), depth + 1);
+        }
+      }
+    };
+    visit(
+      ffi.call('FPDFPage_CountObjects', page),
+      (i) => ffi.call('FPDFPage_GetObject', page, i),
+      0,
+    );
+    return saved;
+  }
+
+  private restoreStrokes(saved: ReadonlyArray<[number, number]>): void {
+    for (const [obj, width] of saved) this.ffi.call('FPDFPageObj_SetStrokeWidth', obj, width);
   }
 
   textRuns(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<TextRun>> {

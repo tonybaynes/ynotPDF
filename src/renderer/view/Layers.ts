@@ -48,17 +48,16 @@ export function createPageLayers(root: HTMLElement): PageLayers {
   return { root, raster, text, annot, widget, object, tool };
 }
 
-/** Sizes every layer to the displayed page box (CSS pixels) and the canvas to device pixels. */
-export function resizeLayers(
-  layers: PageLayers,
-  widthPx: number,
-  heightPx: number,
-  dpr: number,
-): void {
+/**
+ * Sizes the page box and every vector layer to the displayed page (CSS pixels).
+ *
+ * The raster canvas is deliberately *not* sized here: at high zoom a whole-page canvas would be
+ * hundreds of megapixels, so `PageView` keeps it as a moving window over the visible part of the
+ * page (see `PageView.setVisible`). Everything else covers the page exactly.
+ */
+export function resizeLayers(layers: PageLayers, widthPx: number, heightPx: number): void {
   layers.root.style.width = `${widthPx}px`;
   layers.root.style.height = `${heightPx}px`;
-  layers.raster.width = Math.round(widthPx * dpr);
-  layers.raster.height = Math.round(heightPx * dpr);
   for (const svg of [layers.annot, layers.object]) {
     svg.setAttribute('viewBox', `0 0 ${widthPx} ${heightPx}`);
     svg.setAttribute('width', String(widthPx));

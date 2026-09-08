@@ -20,7 +20,7 @@ commit. Sub-conversations working in parallel follow **§12**.
 | 1 | M10 PDF engine layer & PDFium adapter | [M10-engine-layer.md](docs/modules/M10-engine-layer.md) | ☑ |
 | 1 | M20 Document model, commands & undo stack | [M20-document-model.md](docs/modules/M20-document-model.md) | ☑ |
 | 2 | M03 Windows on ARM (arm64) support | [M03-windows-arm.md](docs/modules/M03-windows-arm.md) | ☐ |
-| 2 | M11 Viewer — rendering, navigation, zoom, layouts | [M11-viewer.md](docs/modules/M11-viewer.md) | ☐ |
+| 2 | M11 Viewer — rendering, navigation, zoom, layouts | [M11-viewer.md](docs/modules/M11-viewer.md) | ☑ |
 | 2 | M21 Save, Save As, autosave & recovery | [M21-save.md](docs/modules/M21-save.md) | ☐ |
 | 2 | M70 Encryption, permissions & certificate security | [M70-encryption.md](docs/modules/M70-encryption.md) | ☐ |
 | 2 | M91 Create PDF from images, web pages, clipboard, HTML/Markdown & text | [M91-create-pdf.md](docs/modules/M91-create-pdf.md) | ☐ |
