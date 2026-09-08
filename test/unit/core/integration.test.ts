@@ -423,3 +423,51 @@ describe('a whole session, journalled and replayed', () => {
     }
   });
 });
+
+describe('annotation ids survive a delete and its undo, against real PDFium', () => {
+  it('so the next edit lands on the annotation the user picked', async () => {
+    const doc = await open('text.pdf');
+    try {
+      const pageId = doc.page(0).id;
+      await doc.loadAnnotations(pageId);
+      for (const contents of ['alpha', 'beta', 'gamma']) {
+        await doc.apply(
+          new AddAnnotationCommand(
+            doc,
+            draftAnnotation(doc, pageId, {
+              subtype: 'Square',
+              rect: { x0: 10, y0: 10, x1: 100, y1: 50 },
+              flags: FLAGS,
+              contents,
+            }),
+          ),
+        );
+      }
+      const [alpha, beta, gamma] = doc.annotations(pageId).slice(-3);
+      const alphaId = must(alpha, 'alpha').id;
+
+      await doc.apply(new DeleteAnnotationCommand(doc, alphaId));
+      await doc.undoLast();
+
+      // Every model id must still name its own annotation in the file.
+      const engineList = await pdfium.annotations(doc.handle, 0);
+      for (const model of [alpha, beta, gamma]) {
+        const one = must(model, 'annotation');
+        const key = doc.idTable.engineKey('annotation', one.id);
+        expect(
+          engineList.find((a) => a.id === key)?.contents,
+          `${one.id} points at the wrong annotation`,
+        ).toBe(one.contents);
+      }
+
+      // And an edit goes where it was aimed.
+      await doc.apply(new UpdateAnnotationCommand(doc, alphaId, { contents: 'alpha edited' }));
+      const after = await pdfium.annotations(doc.handle, 0);
+      expect(after.filter((a) => a.contents === 'alpha edited')).toHaveLength(1);
+      expect(after.some((a) => a.contents === 'beta')).toBe(true);
+      expect(after.some((a) => a.contents === 'gamma')).toBe(true);
+    } finally {
+      await doc.close();
+    }
+  });
+});

@@ -524,13 +524,12 @@ describe('real engine failures propagate', () => {
     await expect(doc.apply(new AddAnnotationCommand(doc, draft))).rejects.toThrow('wasm died');
   });
 
-  it('while re-reading a page to re-bind annotation ids', async () => {
+  it('while deleting an annotation', async () => {
     const { doc, engine } = await openFake();
-    const pageId = doc.page(0).id;
-    await doc.loadAnnotations(pageId);
-    const draft = draftAnnotation(doc, pageId, annotationSource('Square'));
-    vi.spyOn(engine, 'annotations').mockRejectedValue(new EngineError('corrupt', 'bad page'));
-    await expect(doc.apply(new AddAnnotationCommand(doc, draft))).rejects.toThrow('bad page');
+    const list = await doc.loadAnnotations(doc.page(0).id);
+    vi.spyOn(engine, 'deleteAnnotation').mockRejectedValue(new EngineError('corrupt', 'bad page'));
+    const id = must(list[0], 'annotation').id;
+    await expect(doc.apply(new DeleteAnnotationCommand(doc, id))).rejects.toThrow('bad page');
   });
 
   it('but a backend without annotations only records an intent', async () => {

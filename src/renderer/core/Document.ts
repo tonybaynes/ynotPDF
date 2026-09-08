@@ -936,6 +936,7 @@ export class Document {
 
   /** Bumps `revision` and recomputes the write intents from the undo journal. */
   private touch(): void {
+    const before = this.state.writeIntents;
     const intents = collectIntents(this.undo.journal);
     this.store.set((s) => {
       const changed =
@@ -944,6 +945,9 @@ export class Document {
         ? { revision: s.revision + 1, writeIntents: intents }
         : { revision: s.revision + 1 };
     });
+    for (const intent of intents) {
+      if (!before.includes(intent)) this.events.emit({ type: 'writeIntent:added', intent });
+    }
     this.events.emit({ type: 'document:revision', revision: this.state.revision });
   }
 }

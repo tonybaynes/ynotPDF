@@ -303,7 +303,7 @@ is colourblind: black and red read as the same colour):**
   fallback. That fallback parsed the bytes as *opened*, which made every annotation added in the
   session appear colourless. It now saves a copy first when the document has been changed.
 
-### Three bugs the tests found
+### Bugs found while building, and by review
 
 - Undoing an insert deleted pages one at a time, and PDFium renumbers between deletions, so the
   second delete hit the wrong index. Every index is now collected before any of them is removed.
@@ -312,6 +312,31 @@ is colourblind: black and red read as the same colour):**
 - Undoing the *first* annotation on a page, or the first write to a `custom` namespace, left an
   empty shell behind — "read and empty" where there had been "not read at all". Both now restore
   the absence, which is what made the thousand-command property test pass.
+
+A review pass over the finished branch found four more, all now covered by
+`test/unit/core/regressions.test.ts`:
+
+- **Annotation ids could end up on the wrong annotation.** The id table was repaired after an
+  engine add or delete by pairing the model list and the engine list *by position*. They are not
+  in the same order: an annotation restored by undo goes back where it was in the model, while
+  PDFium appends it at the end. So after a delete and its undo, every id from that point on named
+  its neighbour — an edit landed on the wrong annotation, and adding to a page whose annotations
+  had never been loaded meant undo deleted a pre-existing one and left the added one behind. The
+  table is now repaired by index arithmetic: an engine delete shifts the bindings above it down
+  by one, an engine add appends and shifts nothing.
+- **The journal replayed a page insert to different ids.** `InsertPagesCommand` mints page ids
+  and serialised only its position, count and size, so a replay minted fresh ones and any later
+  entry naming an inserted page silently did nothing — while the replay reported complete
+  success. The ids are in the journal now, and the codec reserves them.
+- **Clearing a value was lost on save.** An engine patch says what a field *becomes* and cannot
+  say "and empty that one", so `toEngineAnnotation` omits nulls. Deleting a note's text or an ink
+  list therefore only happened in the model, with no write intent, and the old value came back on
+  the next save. Emptying a field now records the intent.
+- **A merged rename dropped its write intent.** `SetPageLabelCommand.merge()` built a fresh
+  command without adopting the intents of the two it replaced, and a merged command's `do()`
+  never runs — so renaming a page twice quickly lost `page-labels` from the journal, and the
+  rename would not have been written.
+
 
 ### Shared files touched (PLAN.md §12.3)
 

@@ -9,6 +9,10 @@
  * `document.state` sees the new state. They are synchronous: a handler that throws is logged
  * and the remaining handlers still run, because one broken panel must not stop the others from
  * updating.
+ *
+ * Every type here is emitted by something in M20. A module that adds a kind of change adds its
+ * event type in the same commit — a declared type nobody fires is a panel that silently never
+ * updates, which is worse than no event at all.
  */
 
 import type { ModelId } from './Ids';
@@ -52,8 +56,6 @@ export type DocumentEvent =
   | { readonly type: 'field:changed'; readonly fieldId: ModelId; readonly name: string }
   | { readonly type: 'outline:changed' }
   | { readonly type: 'layer:changed'; readonly layerId: ModelId }
-  | { readonly type: 'attachment:added'; readonly attachmentId: ModelId }
-  | { readonly type: 'attachment:removed'; readonly attachmentId: ModelId }
   | { readonly type: 'metadata:changed' }
   | { readonly type: 'custom:changed'; readonly namespace: string }
   | { readonly type: 'writeIntent:added'; readonly intent: WriteIntent }

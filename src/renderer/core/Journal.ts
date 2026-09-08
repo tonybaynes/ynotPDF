@@ -229,7 +229,10 @@ registerCommandCodec(COMMAND_ID.insertPages, (doc, payload) => {
   const width = asNumber(size['width']);
   const height = asNumber(size['height']);
   if (at === null || count === null || width === null || height === null) return null;
-  return new InsertPagesCommand(doc, at, count, { width, height });
+  // Reuse the recorded ids, and reserve them so a later allocation cannot collide.
+  const ids = asIds(p['ids']) ?? [];
+  for (const id of ids) doc.ids.reserve(id);
+  return new InsertPagesCommand(doc, at, count, { width, height }, ids);
 });
 
 registerCommandCodec(COMMAND_ID.deletePages, (doc, payload) => {

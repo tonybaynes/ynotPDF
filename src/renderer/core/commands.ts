@@ -182,12 +182,20 @@ export class InsertPagesCommand extends BaseCommand {
     at: number,
     count: number,
     size: { readonly width: number; readonly height: number },
+    /** Ids to reuse. The journal replays with the ids the original run minted. */
+    ids: ReadonlyArray<ModelId> = [],
   ) {
     super(doc);
     this.at = at;
     this.count = Math.max(1, Math.floor(count));
     this.size = size;
+    this.created = [...ids];
     this.label = this.count === 1 ? 'Insert page' : `Insert ${this.count} pages`;
+  }
+
+  /** The pages this command created, in order. Empty until it has run. */
+  get pageIds(): ReadonlyArray<ModelId> {
+    return this.created;
   }
 
   async do(): Promise<void> {
@@ -234,7 +242,12 @@ export class InsertPagesCommand extends BaseCommand {
   }
 
   toJSON(): CommandJson {
-    return { id: this.id, data: { at: this.at, count: this.count, size: this.size } };
+    // The ids go in the journal: a later entry names an inserted page by id, and a replay that
+    // minted fresh ones would find nothing and skip that entry while reporting success.
+    return {
+      id: this.id,
+      data: { at: this.at, count: this.count, size: this.size, ids: this.created },
+    };
   }
 }
 
@@ -433,7 +446,11 @@ export class SetPageLabelCommand extends BaseCommand {
   /** Consecutive renames of the same page collapse, so typing a label is one undo step. */
   merge(next: Command): Command | null {
     if (!(next instanceof SetPageLabelCommand) || next.pageId !== this.pageId) return null;
-    return new SetPageLabelCommand(this.doc, this.pageId, next.value, this.before);
+    const merged = new SetPageLabelCommand(this.doc, this.pageId, next.value, this.before);
+    // The merged command replaces both in the journal, so it has to carry both their intents:
+    // its own `do()` never runs, and the label would otherwise never reach M21's writer.
+    merged.adoptIntents([...this.writeIntents, ...next.writeIntents]);
+    return merged;
   }
 
   toJSON(): CommandJson {
@@ -473,7 +490,6 @@ export class AddAnnotationCommand extends BaseCommand {
     const applied = await createInEngine(this.doc, this.draft);
     if (!applied) this.intend('annotations');
     this.doc.putAnnotation(this.draft, this.index);
-    if (applied) await rebindPage(this.doc, this.draft.pageId);
   }
 
   async undo(): Promise<void> {
@@ -484,7 +500,7 @@ export class AddAnnotationCommand extends BaseCommand {
     if (engineId !== undefined) {
       await tryEngine(() => this.doc.engine.deleteAnnotation(this.doc.handle, engineId));
       this.doc.idTable.unbind('annotation', this.draft.id);
-      await rebindPage(this.doc, this.draft.pageId);
+      shiftBindingsAfterDelete(this.doc, this.draft.pageId, engineId);
     }
   }
 
@@ -519,14 +535,22 @@ export class UpdateAnnotationCommand extends BaseCommand {
     if (!current) return;
     this.before ??= current;
     const next = { ...current, ...this.patch } as ModelAnnotation;
-    await this.write(next);
+    await this.write(next, current);
   }
 
   async undo(): Promise<void> {
-    if (this.before) await this.write(this.before);
+    if (this.before) await this.write(this.before, null);
   }
 
-  private async write(annotation: ModelAnnotation): Promise<void> {
+  /**
+   * `previous` is the state this is changing *from* when going forwards, and null when undoing.
+   * Only the forward direction records what the writer must redo: an intent describes the change
+   * the journal still holds, and undoing takes the command out of the journal.
+   */
+  private async write(
+    annotation: ModelAnnotation,
+    previous: ModelAnnotation | null,
+  ): Promise<void> {
     const engineId = this.doc.idTable.engineKey('annotation', annotation.id);
     const pageIndex = this.doc.enginePage(annotation.pageId);
     let applied = false;
@@ -536,7 +560,12 @@ export class UpdateAnnotationCommand extends BaseCommand {
         this.doc.engine.updateAnnotation(this.doc.handle, engineId, patch),
       );
     }
-    if (!applied) this.intend('annotations');
+    // An engine patch says what a field *becomes*, and has no way to say "and clear that one".
+    // Emptying a note, a colour or an ink list therefore only happens in the model, and the
+    // writer has to redo it — otherwise the cleared value comes back on the next save.
+    if (!applied || (previous !== null && clearsAField(previous, annotation))) {
+      this.intend('annotations');
+    }
     this.doc.putAnnotation(annotation);
   }
 
@@ -582,7 +611,9 @@ export class DeleteAnnotationCommand extends BaseCommand {
     }
     if (!applied) this.intend('annotations');
     this.removed = this.doc.removeAnnotationRecord(this.annotationId);
-    if (applied) await rebindPage(this.doc, annotation.pageId);
+    if (applied && engineId !== undefined) {
+      shiftBindingsAfterDelete(this.doc, annotation.pageId, engineId);
+    }
   }
 
   async undo(): Promise<void> {
@@ -591,7 +622,6 @@ export class DeleteAnnotationCommand extends BaseCommand {
     const applied = await createInEngine(this.doc, annotation);
     if (!applied) this.intend('annotations');
     this.doc.putAnnotation(annotation, index);
-    if (applied) await rebindPage(this.doc, annotation.pageId);
   }
 
   toJSON(): CommandJson {
@@ -620,26 +650,68 @@ async function createInEngine(doc: Document, annotation: ModelAnnotation): Promi
 }
 
 /**
- * Re-reads a page's annotations and re-binds the model ids to PDFium's new numbering, in the
- * model's own order. Called after any engine add or delete, because PDFium renumbers everything
- * after the changed index.
+ * Whether the change from `before` to `after` empties something the engine patch cannot express.
+ * `toEngineAnnotation` omits null fields and empty geometry, because an absent key means "leave
+ * this alone" — so a value going to null, or a list going to empty, reaches the model and not the
+ * file.
  */
-async function rebindPage(doc: Document, pageId: ModelId): Promise<void> {
-  const index = doc.enginePage(pageId);
-  if (index === undefined) return;
-  try {
-    const list = await doc.engine.annotations(doc.handle, index);
-    const model = doc.annotations(pageId);
-    const count = Math.min(list.length, model.length);
-    for (let i = 0; i < count; i++) {
-      const engineAnnotation = list[i];
-      const modelAnnotation = model[i];
-      if (engineAnnotation && modelAnnotation) {
-        doc.idTable.bind('annotation', modelAnnotation.id, engineAnnotation.id);
-      }
-    }
-  } catch (error) {
-    if (!isUnsupported(error)) throw error;
+function clearsAField(before: ModelAnnotation, after: ModelAnnotation): boolean {
+  const scalars = [
+    'contents',
+    'author',
+    'created',
+    'modified',
+    'color',
+    'interiorColor',
+    'opacity',
+    'borderWidth',
+    'appearanceState',
+    'name',
+    'subject',
+    'state',
+  ] as const;
+  for (const key of scalars) {
+    if (before[key] !== null && after[key] === null) return true;
+  }
+  const geometry = (a: ModelAnnotation): number =>
+    (a.family === 'markup' || a.family === 'link' ? a.quadPoints.length : 0) +
+    (a.family === 'ink' ? a.paths.length : 0) +
+    (a.family === 'shape' ? a.vertices.length : 0);
+  return geometry(before) > 0 && geometry(after) === 0;
+}
+
+/** Splits an engine annotation id (`"a2.7"`) into its page and index. */
+function parseEngineAnnotationId(id: string): { page: number; index: number } | null {
+  const m = /^a(\d+)\.(\d+)$/.exec(id);
+  return m ? { page: Number(m[1]), index: Number(m[2]) } : null;
+}
+
+/**
+ * Repairs the id table after the engine removed the annotation at `removed`.
+ *
+ * PDFium closes the gap: everything after the removed index shifts down by one. Only the
+ * bindings need to move — the model ids do not change, which is the whole point of having them.
+ *
+ * This shifts by *index arithmetic* rather than by pairing the two lists positionally. They are
+ * not in the same order: an annotation restored by undo goes back to its original place in the
+ * model while the engine appends it at the end. Pairing by position bound every id after the
+ * change to the wrong annotation, so an edit landed on a neighbour and an undo deleted one.
+ */
+function shiftBindingsAfterDelete(doc: Document, pageId: ModelId, removed: string): void {
+  const gone = parseEngineAnnotationId(removed);
+  if (!gone) return;
+  const moves: { id: ModelId; index: number }[] = [];
+  for (const a of doc.annotations(pageId)) {
+    const key = doc.idTable.engineKey('annotation', a.id);
+    const at = key === undefined ? null : parseEngineAnnotationId(key);
+    if (at?.page !== gone.page || at.index <= gone.index) continue;
+    moves.push({ id: a.id, index: at.index - 1 });
+  }
+  // Lowest index first, so each id moves into a slot its previous holder has already left.
+  // Sorting numerically, not by id text, or "a0.10" would move before "a0.9".
+  moves.sort((x, y) => x.index - y.index);
+  for (const { id, index } of moves) {
+    doc.idTable.bind('annotation', id, `a${gone.page}.${index}`);
   }
 }
 
