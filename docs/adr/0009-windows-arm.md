@@ -105,13 +105,24 @@ this when it upgrades or replaces the WiX toolset.
 
 ## ARM CI
 
-GitHub's hosted `windows-11-arm` runners are free for public repositories.
-`tonybaynes/ynotPDF` is public and registers no self-hosted runners
-(`gh api /repos/tonybaynes/ynotPDF/actions/runners` → `total_count: 0`), so the workflow runs a
-real `windows-11-arm` job: it takes the packaged arm64 NSIS installer from the Windows job,
-installs it silently, and drives the installed `ynotPDF.exe` through the Playwright `app.about`
-smoke with `YNOT_EXPECT_ARCH=arm64`, which asserts the About dialog reads exactly
-`Windows arm64` — i.e. the arm64 binaries really are running natively, not under emulation.
+GitHub's hosted `windows-11-arm` runners are free for public repositories, and
+`tonybaynes/ynotPDF` is public with no self-hosted runners registered
+(`gh api /repos/tonybaynes/ynotPDF/actions/runners` → `total_count: 0`). **Confirmed by running
+one**: the job picked up a `windows-11-arm` runner on the first push of this branch, and the
+arm64 installer installed on it. ARM CI is available to this repository — the fallback of
+documenting an untested arm64 build is not needed.
+
+The job takes the packaged arm64 NSIS installer from the Windows job, installs it silently, and
+drives the installed `ynotPDF.exe` through the Playwright `app.about` smoke with
+`YNOT_EXPECT_ARCH=arm64`, which asserts the About dialog reads exactly `Windows arm64` — i.e. the
+arm64 binaries really are running natively, not under emulation.
+
+One trap, worth keeping: **`perMachine: false` only sets the installer's default.** The runner
+user is an administrator, so the first elevated `/S` install chose all-users and landed in
+`C:\Program Files\ynotPDF`, not `%LOCALAPPDATA%\Programs`. The step now passes `/S /currentuser`
+and reads the location back from the uninstall registry key rather than assuming a path —
+and because electron-builder leaves `InstallLocation` empty, it parses `DisplayIcon` and
+`UninstallString` as well.
 
 The job is `continue-on-error: false` and part of the definition of done for Windows on ARM. If
 GitHub ever withdraws the label from this repository the job will fail to start; the response is

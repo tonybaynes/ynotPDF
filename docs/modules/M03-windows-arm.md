@@ -284,6 +284,13 @@ electron-builder 26.15.3's own NSIS/MSI code, not from its documentation.
    smoke. If the run cannot get a runner, the job goes and the ADR/README say
    so plainly. Either way the operator's own ARM PC gets a manual checklist.
 
+   Outcome: the runner **is** available — the job picked one up on the first
+   push and the arm64 installer installed on it. The one correction needed was
+   in the job, not the packaging: `perMachine: false` only sets the installer's
+   *default*, and the runner user is an admin, so the elevated `/S` install
+   went all-users. The step now passes `/S /currentuser` and reads the install
+   location back from the uninstall registry key.
+
 ## Build log (fill in at merge)
 
 _Not started._

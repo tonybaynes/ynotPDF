@@ -181,37 +181,64 @@ jobs:
           $p = Start-Process -FilePath $exe.FullName -ArgumentList '/S', '/currentuser' -Wait -PassThru
           "installer exit code: $($p.ExitCode)"
 
-          $roots = @(
-            'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
-            'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
-            'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
-          )
           # electron-builder leaves InstallLocation empty, so DisplayIcon ("…\ynotPDF.exe,0") and
           # UninstallString ('"…\Uninstall ynotPDF.exe" /currentuser') are the ones that answer.
-          $candidates = @()
-          foreach ($root in $roots) {
-            if (-not (Test-Path $root)) { continue }
-            Get-ChildItem $root | ForEach-Object { Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue } |
-              Where-Object { $_.DisplayName -like 'ynotPDF*' } |
-              ForEach-Object {
-                $dirs = @()
-                if ($_.InstallLocation) { $dirs += $_.InstallLocation }
-                if ($_.DisplayIcon) { $dirs += Split-Path ($_.DisplayIcon -replace ',\d+$', '') -Parent }
-                if ($_.UninstallString) {
-                  $u = $_.UninstallString
-                  if ($u -match '^"([^"]+)"') { $u = $Matches[1] }
-                  $dirs += Split-Path $u -Parent
+          function Get-Candidates {
+            $roots = @(
+              'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+              'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+              'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+            )
+            $out = @()
+            foreach ($root in $roots) {
+              if (-not (Test-Path $root)) { continue }
+              Get-ChildItem $root | ForEach-Object { Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue } |
+                Where-Object { $_.DisplayName -like 'ynotPDF*' } |
+                ForEach-Object {
+                  $dirs = @()
+                  if ($_.InstallLocation) { $dirs += $_.InstallLocation }
+                  if ($_.DisplayIcon) { $dirs += Split-Path ($_.DisplayIcon -replace ',\d+$', '') -Parent }
+                  if ($_.UninstallString) {
+                    $u = $_.UninstallString
+                    if ($u -match '^"([^"]+)"') { $u = $Matches[1] }
+                    $dirs += Split-Path $u -Parent
+                  }
+                  foreach ($d in $dirs) { if ($d) { $out += (Join-Path $d 'ynotPDF.exe') } }
                 }
-                foreach ($d in $dirs) {
-                  if ($d) { "registry: $root -> $d"; $candidates += (Join-Path $d 'ynotPDF.exe') }
-                }
-              }
+            }
+            $out += "$env:LOCALAPPDATA\Programs\ynotPDF\ynotPDF.exe"
+            $out += "$env:ProgramFiles\ynotPDF\ynotPDF.exe"
+            return ($out | Select-Object -Unique)
           }
-          $candidates += "$env:LOCALAPPDATA\Programs\ynotPDF\ynotPDF.exe"
-          $candidates += "$env:ProgramFiles\ynotPDF\ynotPDF.exe"
 
-          $app = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $app) { throw "installer did not produce ynotPDF.exe; looked in:`n  $($candidates -join "`n  ")" }
+          # NSIS returns from the outer process before the inner one has finished writing files,
+          # so the executable can lag the registry entry by a few seconds. Wait for it.
+          $app = $null
+          $deadline = (Get-Date).AddSeconds(180)
+          do {
+            $candidates = Get-Candidates
+            $app = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if ($app) { break }
+            Start-Sleep -Seconds 5
+          } while ((Get-Date) -lt $deadline)
+
+          if (-not $app) {
+            "candidates considered:"
+            $candidates | ForEach-Object { "  $_" }
+            foreach ($d in @("$env:LOCALAPPDATA\Programs", "$env:ProgramFiles")) {
+              "--- $d ---"
+              Get-ChildItem $d -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+              $sub = Join-Path $d 'ynotPDF'
+              if (Test-Path $sub) { "--- $sub ---"; Get-ChildItem $sub -Recurse -Depth 1 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName }
+            }
+            # NSIS writes the registry entry only after extracting the app, so if the entry exists
+            # and the files do not, something removed them — Defender quarantining an unsigned
+            # Electron binary is the usual suspect until M131 signs the builds.
+            "--- Defender detections ---"
+            Get-MpThreatDetection -ErrorAction SilentlyContinue |
+              Select-Object -Last 10 InitialDetectionTime, Resources | Format-List
+            throw 'installer did not produce ynotPDF.exe (see the listing above)'
+          }
           "found: $app"
           "YNOT_E2E_EXECUTABLE=$app" >> $env:GITHUB_ENV
 
