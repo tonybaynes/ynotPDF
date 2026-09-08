@@ -13,7 +13,7 @@ Full plan: PLAN.md    Briefs: docs\modules\
 HOW TO START A MODULE  (do exactly this every time)
 ----------------------------------------------------
 1. Check the module's "needs" line. Every module named there must
-   already be ticked [x] below. If not, wait - do not start it.
+   already be ticked [✔] below. If not, wait - do not start it.
 2. Open a NEW Claude Code conversation.
 3. Set its working folder to  D:\Projects\ynotPDF
    (in the app: choose the folder when creating the session, or run
@@ -26,7 +26,7 @@ HOW TO START A MODULE  (do exactly this every time)
 6. Run up to 3-4 modules from the SAME wave at once, one conversation
    each. Never two conversations on the same module.
 7. When a conversation reports "merged to main, CI green", tick the
-   module [x] here AND check it shows as done in PLAN.md section 0.
+   module [✔] here AND check it shows as done in PLAN.md section 0.
 8. If a conversation says a dependency is not finished, it will stop by
    itself - finish that dependency first, then re-run the prompt.
 
@@ -303,6 +303,6 @@ THINGS ONLY TONY CAN DO
 [✔] Confirm app name / supply logo (M00) - "ynotPDF Logo.jpg"
 [✔] Approve tier list in PLAN.md section 1 (wave 1)
 [✔] Approve the four theme palettes (M01 gallery page)   - approved 2026-09-07
-[x] Provide real PDFs for hands-on testing - 3 boarding passes in testixtures\local\ (git-ignored, 2026-09-08); add more there any time
+[✔] Provide real PDFs for hands-on testing - 3 boarding passes in testixtures\local\ (git-ignored, 2026-09-08); add more there any time
 [ ] Windows code-signing certificate + Apple Developer account (M131)
 [ ] Decide: is LibreOffice acceptable for Office conversion? (M93)
