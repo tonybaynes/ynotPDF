@@ -290,4 +290,162 @@ is colourblind: black and red read as the same colour):**
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-08 on `mod/M70-encryption` (worktree `../ynotPDF-M70`).**
+
+### What shipped
+
+- **`Security`** (`src/engine/security/`) — four operations and no UI: what a file's protection
+  *is*, put protection on, take it off, and open a certificate-protected file with a `.p12`. qpdf
+  12.2.0 performs the standard security handler; the two things it has no implementation of are
+  ours. Bytes in, bytes out, so M120 can run the identical code with no window open.
+- **Password protection** — AES-256, AES-128, RC4-128 and RC4-40, the full permission set, and
+  `/EncryptMetadata`. The `/P` arithmetic is checked against qpdf's own `--show-encryption` for
+  every combination the dialog can produce, so a flag cannot mean one thing to us and another to
+  the file.
+- **Certificate protection** — CMS envelopes per recipient (node-forge), each carrying that
+  recipient's own permission bytes, the spec's key derivation, and AES-256 over every string and
+  stream. Recipients come from `.cer`, `.crt`, `.der`, `.pem` or `.p7b`; a document opens with the
+  recipient's `.p12` and refuses anyone else's.
+- **"Encrypt only file attachments"** — the `/EFF` arrangement, which qpdf also has no option for:
+  the document reads without a password and only its embedded files are protected.
+- **Remove security**, with the owner password, saying plainly what it costs before it happens.
+- **The Protect dialog** — Foxit's options with the operator's requirements over the top: a
+  strength meter that is a word, an icon and a sentence rather than a coloured bar; every caution
+  stated in words *before* it happens; both password fields always present, always keyboard
+  reachable, each with a show/hide toggle.
+- **Permission enforcement** — `CommandSpec.permission` (additive) plus a registered
+  `permissionGate`: a command the open document forbids is disabled, and its tooltip says which
+  permission is missing and that the owner password lifts it. `protect.security` and
+  `protect.remove` declare it today; M13's Print and Copy need only add the line.
+- **Unlock**, which lifts the restrictions for the session with the owner password without
+  changing the file — which is what an owner password is for.
+- **A Security panel** (`securityPropertiesPanel()`), returned as an element so M72 can host it as
+  the Properties dialog's Security tab, and shown on its own until then.
+- **The save pipeline stage** (`SavePipelineStage`, `runSaveStages`) — M21's contract, M70's
+  implementation. The file that lands on disk is protected the first time it is written.
+- **A status item** — "Protected", "Restricted", "Unlocked" or "Protection pending", a word and an
+  icon, colour only as a third cue; hidden entirely for an unprotected document.
+
+### Decisions worth knowing about
+
+- **qpdf runs in the main process, and the renderer Worker it was first built as does not work.**
+  This build of qpdf-wasm had its `wasmBinary` option minified away, so it can only be pointed at a
+  URL — and every URL a `file://` renderer can give it (`data:`, `blob:`, even a `Response` served
+  from a wrapped `fetch`) kills the renderer **process**: no exception, no window, exit code 143,
+  with the network and GPU utilities dying in the same breath. The same module and the same bytes
+  work perfectly in a plain Chromium worker, which is what makes it Electron's problem rather than
+  qpdf's. Main is Node, reads the `.wasm` off disk, and is where M120 and M121 will want it anyway.
+  ADR 0011 records the whole investigation, because the next module reaching for a Worker to hold a
+  large WebAssembly module needs to know.
+- **Every qpdf command gets its own module instance.** qpdf is a command-line program: `main`
+  returning means `exit()`, and a second `callMain` on the same instance runs a program that has
+  already ended. Node tolerates it; a Chromium renderer does not survive it. About 40 ms per run.
+- **qpdf has no public-key security handler, so certificate protection is ours** — and it is
+  *verified* rather than asserted. Under AESV3 the object key is the file key, so a public-key file
+  and a standard-handler file differ only in their `/Encrypt` dictionary. Swapping ours for a
+  `/Standard` R6 dictionary wrapping the identical key lets `qpdf --check` decrypt and validate
+  every stream in the document; a wrong IV, a wrong key or a stream we forgot would all show up.
+  That same swap, run the other way as a twelve-line incremental update, is also how the app
+  *opens* such a file — qpdf then does all the parsing, and no second PDF parser was needed.
+- **Certificate protection is AES-256 only.** The older public-key modes use SHA-1 key derivation
+  and per-object RC4 keys; writing one today would be creating a file with broken cryptography in
+  it. Password protection still offers AES-128 and RC4, because those exist so someone can *open* a
+  file in software from before 2008.
+- **Passwords are held in memory and nowhere else.** The model carries an intent saying *that*
+  there is an open password; the passwords live in a private map in the service. A test asserts the
+  journal cannot contain one. After a crash the intent replays and the save asks again, saying why.
+- **Protection is applied on save, through an undoable command.** Nothing on disk changes when the
+  dialog is dismissed, which is what the dialog says and what makes Undo mean something.
+
+### Bugs found while building, and what they were
+
+- **"Remove Security" put the protection straight back.** A document with no recorded intent keeps
+  whatever the file already had, which is right — but `{ kind: 'none' }` is *something being asked
+  for*, and reading the two as the same thing made the one command that must remove protection
+  quietly re-apply it. It has a regression test of its own.
+- **The writer was handed encrypted bytes.** M21 asks the engine for the document as it holds it,
+  and PDFium keeps the encryption unless told otherwise — so pdf-lib refused every save of a
+  protected file with "this version cannot rewrite it". The save now asks for decrypted bytes when
+  a stage owns the document's security, which is exactly when the protection will be put back.
+- **The reader was asked the same question twice.** M21 warns before saving an encrypted document
+  because a rewrite loses the password. With M70 present that warning is either false (it will be
+  re-protected) or a second question (the reader just chose to remove it), so a stage now says
+  whether it owns the document's security and M21 stays quiet.
+- **A certificate-protected document would have been saved in the clear, silently.** It is
+  decrypted before PDFium sees it, so from the engine's side it looks unprotected — the truth about
+  the tab and a dangerous thing to believe about the file. A public-key file names its recipients
+  but does not carry their certificates, so the protection genuinely cannot be reproduced; the save
+  now says so in words and asks the reader to choose the recipients again.
+- **qpdf's messages carried the name of whatever program was hosting it** — "forks.js: invalid
+  password" under vitest, "this.program: invalid password" in the app, because this build ignores
+  the `thisProgram` option. Stripped once, where the output is collected, with the filename that
+  follows left intact.
+- **`--print=high` is not a qpdf option.** We name full-resolution printing after the spec's bit 12;
+  qpdf calls it `full`, and the mismatch made it reject the entire command.
+- **Every file we wrote was missing its `/ID`.** The spec requires one in any encrypted document
+  and pdf-lib will not invent it, so qpdf warned on every stream of every certificate-protected
+  file. The document's own id is kept when it has one — a changed id makes a viewer treat the file
+  as a different document.
+- **The strength meter gave the least useful advice it had.** A password that is a keyboard run was
+  told to add a digit, because the generic advice came first. Specific faults now win.
+
+### Shared files touched (PLAN.md §12.3)
+
+- `src/shared/module.ts` — additive: `CommandPermission`, and the optional `CommandSpec.permission`.
+- `src/renderer/core/Registry.ts` — additive: `PERMISSION_GATE`, `PermissionGate`, `reasonDisabled`;
+  `isEnabled` consults the gate and `run`'s error carries the reason when there is one.
+- `src/renderer/app/ribbon/widgets.ts` — additive: a disabled control's tooltip gains the sentence.
+- `src/engine/Writer.ts` — additive: `SavePipelineStage`, `runSaveStages` and their types.
+- `src/renderer/modules/M21-save/SaveService.ts` — additive: the stage registry; plus the two
+  behaviour changes above (the warning, and asking the engine for decrypted bytes). ADR 0012.
+- `src/shared/ipc.ts`, `src/main/ipc.ts` — additive: the seven `security:*` channels and
+  `file:pickFile`, with their handlers.
+- `src/renderer/modules/M11-viewer/ViewerService.ts` — additive: a registered `security` service
+  may decrypt bytes before the engine sees them, because PDFium cannot open a public-key file.
+- `src/renderer/main.ts`, `src/renderer/index.html` — registers the manifest and its CSS.
+- `test/e2e/harness.ts` — additive: `isEnabled`.
+- `vitest.config.ts` — coverage gates for the new engine and module files.
+- `package.json` — `@neslinesli93/qpdf-wasm` 0.3.0 (wrapper ISC, qpdf Apache-2.0) and `node-forge`
+  1.4.0 (BSD-3) as dependencies; `@types/node-forge` as a dev dependency. `npm run licenses` passes.
+
+### Tests
+
+1 664 unit tests and 130 e2e tests, green on Windows locally and in CI on Windows, macOS and Linux.
+The M70 e2e suite also passes against the packaged `win-unpacked` build, which is what proves the
+wasm survives into the asar and loads from it. The three acceptance tests:
+
+- **AES-256, open + owner passwords, print=none** — qpdf's own `--show-encryption`, run from the
+  test process against the bytes actually on disk, confirms `R = 6`, AESv3 and every forbidden
+  flag, and refuses the file without a password. The file then opens **in a real Chrome**, which
+  asks for the password, accepts it and renders all five pages with no error. Opened in our app
+  with the *user* password, the permission-governed commands are disabled and the tooltip reads
+  "The document's security settings do not allow printing. Enter the owner password to unlock it."
+- **Remove security with the owner password** — `qpdf --check` reports "File is not encrypted" and
+  no syntax or stream errors.
+- **Certificate protection** — encrypted to a throwaway identity generated by the test, it opens
+  with that identity's `.p12` and brings the recipient's own permissions with it; the wrong
+  identity is refused as "not one of this document's recipients" and the wrong password as a bad
+  digital ID, with no tab left behind either time. qpdf itself cannot read the file at all, which
+  is a second check that what we wrote really is the public-key handler.
+
+Underneath those: the whole fixture corpus encrypted and read back, the `/P` bitfield round-tripped
+and checked against qpdf for every combination the dialog offers, the revision-6 hash and key
+wrapping inverted, the envelopes opened by each recipient and by nobody else, and the certificate
+encryption validated stream by stream by qpdf through the swapped-dictionary trick.
+
+### Deferred, and why
+
+- **The Security tab lives in its own dialog** until M72 exists to host it. The panel is already an
+  element (`securityPropertiesPanel()`); M72 needs one line.
+- **Per-recipient permissions are set for the whole list, not per row.** The format carries them
+  per recipient and the writer emits them that way — a reader can already be given different rights
+  by two different files — but the dialog edits one set. The row-by-row editor is a table with a
+  permissions popover in each row, and it belongs with M81's recipient management rather than
+  half-built here.
+- **Certificates come from files, not from the OS store.** The brief allows this ("M81's certificate
+  service if merged; otherwise file-based"), and M81 has not landed.
+- **`security.enforcePermissions` and `security.warnOnWeakAlgorithm` are declared but not yet
+  readable from the preferences UI**, which is M130's; the schema is registered and the defaults are
+  the honest ones.
+- **A public-key file cannot be re-protected without being given the recipients again.** That is the
+  format, not the code: the file names its recipients but does not carry their certificates.

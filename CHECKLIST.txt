@@ -88,7 +88,7 @@ WAVE 2
       needs: M20 M11
       prompt: Read D:\Projects\ynotPDF\docs\modules\M21-save.md and carry out the "Your task" section in full.
 
-[ ] M70  Encryption, permissions & certificate security
+[✔] M70  Encryption, permissions & certificate security
       model:  Opus
       needs: M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M70-encryption.md and carry out the "Your task" section in full.
