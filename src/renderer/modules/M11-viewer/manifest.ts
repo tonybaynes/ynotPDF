@@ -679,6 +679,7 @@ export default defineModule({
           });
         }
         v.syncOverlays();
+        v.announce();
         return v.state;
       },
     },
