@@ -294,6 +294,9 @@ export class NavigationService {
       });
     }
     viewer.syncOverlays();
+    // The scroll above moved the viewport without publishing; say where it is now, or the store
+    // lags until the browser's scroll event lands and the next page command is a no-op.
+    viewer.announce();
     return true;
   }
 
