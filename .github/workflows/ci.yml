@@ -130,14 +130,15 @@ jobs:
             release/*.rpm
           if-no-files-found: error
 
-      # Just the one installer the ARM job needs, so it downloads ~114 MB instead of the ~500 MB
-      # of all four Windows installers.
-      - name: Upload the arm64 installer on its own
+      # Just the arm64 installers the ARM job needs, rather than all four Windows ones.
+      - name: Upload the arm64 installers on their own
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v5
         with:
-          name: installer-win-arm64
-          path: release/*-win-arm64.exe
+          name: installers-win-arm64
+          path: |
+            release/*-win-arm64.exe
+            release/*-win-arm64.msi
           if-no-files-found: error
 
   # M03 / ADR 0009: prove the arm64 build actually runs on ARM hardware. GitHub's hosted
@@ -172,45 +173,41 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Download the arm64 installer
+      - name: Download the arm64 installers
         uses: actions/download-artifact@v5
         with:
-          name: installer-win-arm64
+          name: installers-win-arm64
           path: installers
 
-      # The builds are unsigned until M131. On the ARM runner the install produced every .pak,
-      # .dat and .bin data file but *none* of the PE binaries — no ynotPDF.exe and no DLLs — and
-      # NSIS's `CopyFiles /SILENT` swallows that, so the install reported success without its
-      # executable. Defender is scanning NSIS's temporary unpack directory under %TEMP%, and a
-      # path exclusion alone did not cover it because %TEMP% resolves to an 8.3 short path
-      # (C:\Users\RUNNER~1\...). Real-time monitoring is therefore turned off outright; the
-      # runner is ephemeral and the only thing it installs is our own artifact.
-      - name: Take Defender off this ephemeral runner
+      # Best-effort only. Tamper Protection on the hosted image silently ignores
+      # `Set-MpPreference -DisableRealtimeMonitoring` (it reports success, then Get-MpPreference
+      # still says False), and the exclusions made no difference either — see the step below.
+      - name: Ask Defender to stand aside (best effort)
         shell: pwsh
         run: |
-          try { Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop; 'real-time monitoring disabled' }
-          catch { "could not disable real-time monitoring: $($_.Exception.Message)" }
+          try { Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop } catch { }
           $temps = @($env:TEMP, "$env:USERPROFILE\AppData\Local\Temp") | Select-Object -Unique
           foreach ($p in @("$PWD\installers", "$env:LOCALAPPDATA\Programs\ynotPDF", "$env:ProgramFiles\ynotPDF") + $temps) {
             try { Add-MpPreference -ExclusionPath $p -ErrorAction Stop; "excluded: $p" }
             catch { "could not exclude $p : $($_.Exception.Message)" }
           }
-          "real-time monitoring disabled: $((Get-MpPreference).DisableRealtimeMonitoring)"
+          "real-time monitoring actually disabled: $((Get-MpPreference).DisableRealtimeMonitoring)"
           Get-PSDrive C | Select-Object Used, Free | Format-List
 
-      # `perMachine: false` only sets the *default*; the runner user is an admin, so an elevated
-      # silent install still picks all-users and lands in C:\Program Files. `/currentuser` forces
-      # the per-user install, and the install location is read back from the registry rather than
-      # assumed — with both well-known paths as a fallback.
+      # Two installers, because the NSIS one does not survive this runner. Every earlier run
+      # produced an install directory holding every .pak/.dat/.bin data file and *none* of the PE
+      # binaries — no ynotPDF.exe, no DLLs — while `CopyFiles /SILENT` swallowed the failure and
+      # the install still reported success. Defender is taking the unsigned binaries out of NSIS's
+      # temporary unpack directory, and it cannot be switched off here (Tamper Protection).
+      # msiexec writes through Windows Installer instead of copying out of %TEMP%, so the MSI is
+      # tried as a fallback; the step says which one produced the app.
+      #
+      # `perMachine: false` only sets the NSIS default, and the runner user is an admin, so
+      # `/currentuser` is passed to keep it a per-user install. The location is read back from the
+      # uninstall registry key rather than assumed, with both well-known paths as a fallback.
       - name: Install the arm64 build silently
         shell: pwsh
         run: |
-          $exe = Get-ChildItem installers -Filter '*-win-arm64.exe' | Select-Object -First 1
-          if (-not $exe) { throw 'no arm64 NSIS installer in the artifact' }
-          "installing $($exe.Name)"
-          $p = Start-Process -FilePath $exe.FullName -ArgumentList '/S', '/currentuser' -Wait -PassThru
-          "installer exit code: $($p.ExitCode)"
-
           # electron-builder leaves InstallLocation empty, so DisplayIcon ("…\ynotPDF.exe,0") and
           # UninstallString ('"…\Uninstall ynotPDF.exe" /currentuser') are the ones that answer.
           function Get-Candidates {
@@ -243,16 +240,42 @@ jobs:
 
           # NSIS returns from the outer process before the inner one has finished writing files,
           # so the executable can lag the registry entry by a few seconds. Wait for it.
-          $app = $null
-          $deadline = (Get-Date).AddSeconds(180)
-          do {
-            $candidates = Get-Candidates
-            $app = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-            if ($app) { break }
-            Start-Sleep -Seconds 5
-          } while ((Get-Date) -lt $deadline)
+          function Wait-ForApp([int]$seconds) {
+            $deadline = (Get-Date).AddSeconds($seconds)
+            do {
+              $found = Get-Candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+              if ($found) { return $found }
+              Start-Sleep -Seconds 5
+            } while ((Get-Date) -lt $deadline)
+            return $null
+          }
+
+          $installedBy = $null
+          $exe = Get-ChildItem installers -Filter '*-win-arm64.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'no arm64 NSIS installer in the artifact' }
+          "installing $($exe.Name) (NSIS)"
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList '/S', '/currentuser' -Wait -PassThru
+          "NSIS exit code: $($p.ExitCode)"
+          $app = Wait-ForApp 60
+          if ($app) { $installedBy = 'NSIS' }
 
           if (-not $app) {
+            $msi = Get-ChildItem installers -Filter '*-win-arm64.msi' | Select-Object -First 1
+            if ($msi) {
+              "NSIS install produced no executable; trying $($msi.Name) (MSI)"
+              $log = Join-Path $PWD 'msiexec.log'
+              $m = Start-Process msiexec -ArgumentList '/i', "`"$($msi.FullName)`"", '/qn', '/l*v', "`"$log`"" -Wait -PassThru
+              "msiexec exit code: $($m.ExitCode)"
+              $app = Wait-ForApp 60
+              if ($app) { $installedBy = 'MSI' }
+              elseif (Test-Path $log) { "--- last 40 lines of msiexec.log ---"; Get-Content $log -Tail 40 }
+            } else {
+              'no arm64 MSI in the artifact to fall back to'
+            }
+          }
+
+          if (-not $app) {
+            $candidates = Get-Candidates
             "candidates considered:"
             $candidates | ForEach-Object { "  $_" }
             foreach ($d in @("$env:LOCALAPPDATA\Programs", "$env:ProgramFiles")) {
@@ -271,8 +294,9 @@ jobs:
               Select-Object -Last 10 InitialDetectionTime, Resources | Format-List
             "--- disk ---"
             Get-PSDrive C | Select-Object Used, Free | Format-List
-            throw 'installer did not produce ynotPDF.exe (see the listing above)'
+            throw 'neither the NSIS nor the MSI installer produced ynotPDF.exe (see above)'
           }
+          "installed by: $installedBy"
           "found: $app"
           "YNOT_E2E_EXECUTABLE=$app" >> $env:GITHUB_ENV
 
