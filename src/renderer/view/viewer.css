@@ -1,0 +1,410 @@
+/*
+ * Viewer styles (M11). Colours come only from theme tokens — the page itself uses
+ * `--page-paper` / `--page-ink`, which M01 swaps for their `-night` pair when Night Mode is on,
+ * and the backdrop uses `--bg-canvas`, which is the darkest surface in every theme so a page
+ * always stands out against it.
+ *
+ * Nothing here is translucent: no `rgba()` with alpha < 1, no `opacity` < 1, no
+ * `backdrop-filter`. The loupe, the reading-mode bar and the perf HUD are all fully opaque.
+ */
+
+.viewer {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg-canvas);
+}
+
+/* The scroller occupies the whole viewer; the rulers overlay its two edges. */
+.viewer-scroll {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  position: relative;
+  overflow: auto;
+  outline-offset: -2px;
+  scrollbar-gutter: stable;
+}
+
+.viewer-content {
+  position: relative;
+  margin: 0 auto;
+}
+
+/* Overlay host for rulers, guides, the loupe and the HUD; never eats pointer events itself. */
+.viewer-overlay {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  position: relative;
+  pointer-events: none;
+}
+
+.viewer-overlay > * {
+  pointer-events: auto;
+}
+
+/* ---- pages ------------------------------------------------------------------------------- */
+
+.viewer-content .page {
+  position: absolute;
+  background: var(--page-paper);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px var(--shadow);
+  /* The page box is the coordinate frame for every layer. */
+  contain: layout paint;
+}
+
+.viewer-content .page .layer {
+  position: absolute;
+  inset: 0;
+}
+
+.viewer-content .page .layer-raster {
+  /* The raster canvas is a window on to the page: `PageView` sets its own left/top/size. */
+  inset: auto;
+  display: block;
+  image-rendering: auto;
+}
+
+.viewer-content .page .layer-text {
+  overflow: hidden;
+  /* M13 fills this with transparent spans; keep it out of the way until then. */
+  pointer-events: none;
+  user-select: text;
+}
+
+.viewer-content .page .layer-annot,
+.viewer-content .page .layer-object {
+  pointer-events: none;
+  overflow: visible;
+}
+
+.viewer-content .page .layer-widget {
+  pointer-events: none;
+}
+
+.viewer-content .page .layer-tool {
+  /* Always on top; the active tool decides what it does with the events. */
+  touch-action: none;
+}
+
+.viewer[data-tool-cursor='grab'] .layer-tool {
+  cursor: grab;
+}
+
+.viewer[data-tool-cursor='grabbing'] .layer-tool {
+  cursor: grabbing;
+}
+
+.viewer[data-tool-cursor='crosshair'] .layer-tool {
+  cursor: crosshair;
+}
+
+.viewer[data-tool-cursor='zoom-in'] .layer-tool {
+  cursor: zoom-in;
+}
+
+.viewer[data-tool-cursor='text'] .layer-tool {
+  cursor: text;
+}
+
+/* A page still waiting for its first pixels: the paper colour plus a quiet frame. */
+.viewer-content .page[aria-busy='true'] {
+  border-color: var(--border-strong);
+}
+
+/* ---- rulers ------------------------------------------------------------------------------ */
+
+.viewer[data-rulers='on'] .viewer-scroll {
+  margin-top: var(--ruler-size);
+  margin-inline-start: var(--ruler-size);
+}
+
+.viewer {
+  --ruler-size: 1.5rem;
+}
+
+.viewer-ruler {
+  position: absolute;
+  background: var(--bg-panel);
+  color: var(--fg-muted);
+  font-size: 0.643rem;
+  line-height: 1;
+  overflow: hidden;
+  user-select: none;
+}
+
+.viewer-ruler-h {
+  inset-block-start: 0;
+  inset-inline-start: var(--ruler-size);
+  inset-inline-end: 0;
+  height: var(--ruler-size);
+  border-bottom: 1px solid var(--border);
+}
+
+.viewer-ruler-v {
+  inset-block-start: var(--ruler-size);
+  inset-block-end: 0;
+  inset-inline-start: 0;
+  width: var(--ruler-size);
+  border-right: 1px solid var(--border);
+}
+
+/* The square where the two rulers meet doubles as the units button. */
+.viewer-ruler-corner {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  width: var(--ruler-size);
+  height: var(--ruler-size);
+  padding: 0;
+  background: var(--bg-panel);
+  color: var(--fg);
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font: inherit;
+  font-size: 0.643rem;
+  cursor: pointer;
+}
+
+.viewer-ruler-corner:hover {
+  background: var(--bg-hover);
+}
+
+.viewer-tick {
+  position: absolute;
+  background: var(--border-strong);
+}
+
+.viewer-ruler-h .viewer-tick {
+  inset-block-end: 0;
+  width: 1px;
+  height: 4px;
+}
+
+.viewer-ruler-h .viewer-tick-major {
+  height: 8px;
+}
+
+.viewer-ruler-v .viewer-tick {
+  inset-inline-end: 0;
+  height: 1px;
+  width: 4px;
+}
+
+.viewer-ruler-v .viewer-tick-major {
+  width: 8px;
+}
+
+.viewer-tick-label {
+  position: absolute;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.viewer-ruler-h .viewer-tick-label {
+  inset-block-start: 2px;
+  transform: translateX(2px);
+}
+
+.viewer-ruler-v .viewer-tick-label {
+  inset-inline-start: 1px;
+  transform: translateY(2px) rotate(0deg);
+}
+
+/* The strip you drag a guide out of. */
+.viewer-ruler[data-draggable='true'] {
+  cursor: crosshair;
+}
+
+/* ---- grid and guides --------------------------------------------------------------------- */
+
+.viewer-grid,
+.viewer-guides {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.viewer-grid-line {
+  position: absolute;
+  background: var(--border);
+}
+
+.viewer-guide {
+  position: absolute;
+  background: var(--accent);
+  pointer-events: auto;
+}
+
+.viewer-guide-v {
+  inset-block: 0;
+  width: 1px;
+  cursor: ew-resize;
+  /* A one-pixel line is hard to grab, so widen the hit area without widening the ink. */
+  border-inline: 3px solid transparent;
+  box-sizing: content-box;
+  margin-inline-start: -3px;
+}
+
+.viewer-guide-h {
+  inset-inline: 0;
+  height: 1px;
+  cursor: ns-resize;
+  border-block: 3px solid transparent;
+  box-sizing: content-box;
+  margin-block-start: -3px;
+}
+
+.viewer-guide:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 4px var(--focus-contrast);
+}
+
+/* ---- loupe (Foxit's magnifier window) ----------------------------------------------------- */
+
+.viewer-loupe {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  color: var(--fg);
+  border: 2px solid var(--border-strong);
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+.viewer-loupe-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-ribbon);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.857rem;
+  cursor: move;
+}
+
+.viewer-loupe-title .viewer-loupe-close {
+  margin-inline-start: auto;
+}
+
+.viewer-loupe canvas {
+  display: block;
+  background: var(--page-paper);
+}
+
+/* ---- marquee zoom ------------------------------------------------------------------------ */
+
+.viewer-marquee {
+  position: absolute;
+  border: 2px solid var(--accent);
+  background: var(--bg-selected);
+  pointer-events: none;
+}
+
+/* ---- reading mode / full screen ----------------------------------------------------------- */
+
+html[data-reading-mode='on'] .ribbon,
+html[data-reading-mode='on'] .tab-strip,
+html[data-reading-mode='on'] .nav-pane,
+html[data-reading-mode='on'] .properties-pane,
+html[data-reading-mode='on'] .status-bar,
+html[data-reading-mode='on'] .qat {
+  display: none !important;
+}
+
+.viewer-reading-bar {
+  position: fixed;
+  inset-block-end: 1rem;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: var(--bg-panel);
+  color: var(--fg);
+  border: 2px solid var(--border-strong);
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+.viewer-reading-bar .viewer-reading-page {
+  padding-inline: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- split view --------------------------------------------------------------------------- */
+
+.viewer-split {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  gap: 0;
+  background: var(--bg-canvas);
+}
+
+.viewer-split[data-orientation='vertical'] {
+  grid-template-columns: 1fr auto 1fr;
+}
+
+.viewer-split[data-orientation='horizontal'] {
+  grid-template-rows: 1fr auto 1fr;
+}
+
+.viewer-split-divider {
+  background: var(--border-strong);
+  border: 0;
+  padding: 0;
+}
+
+.viewer-split[data-orientation='vertical'] .viewer-split-divider {
+  width: 4px;
+  cursor: col-resize;
+}
+
+.viewer-split[data-orientation='horizontal'] .viewer-split-divider {
+  height: 4px;
+  cursor: row-resize;
+}
+
+.viewer-pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.viewer-pane[data-active='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ---- performance HUD (developer builds only) ---------------------------------------------- */
+
+.viewer-hud {
+  position: absolute;
+  inset-block-start: 0.5rem;
+  inset-inline-end: 0.5rem;
+  z-index: 50;
+  padding: 0.375rem 0.5rem;
+  background: var(--bg-panel);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
+  font-size: 0.786rem;
+  line-height: 1.4;
+  white-space: pre;
+}
+
+.viewer-hud-warn {
+  color: var(--warning);
+  font-weight: var(--fw-heading);
+}
