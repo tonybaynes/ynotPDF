@@ -688,6 +688,8 @@ export class AddAttachmentCommand extends NavCommand {
       mimeType: added.mimeType ?? this.file.mimeType,
       size: added.size ?? this.file.bytes.length,
       modified: added.modified ?? null,
+      created: added.created ?? null,
+      collectionFields: added.collectionFields ?? {},
       pageId: null,
     };
     this.doc.putAttachmentRecord(record);

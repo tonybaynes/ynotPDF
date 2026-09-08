@@ -479,6 +479,13 @@ export interface ModelAttachment {
   readonly mimeType: string | null;
   readonly size: number | null;
   readonly modified: string | null;
+  /** `/CreationDate` of the embedded stream (M12, ADR 0011). */
+  readonly created: string | null;
+  /**
+   * Values of a PDF Portfolio's custom schema fields for this file, keyed by field key (M12,
+   * ADR 0011). Empty for an ordinary attachment.
+   */
+  readonly collectionFields: Readonly<Record<string, string>>;
   /** Set when the attachment comes from a FileAttachment annotation. */
   readonly pageId: ModelId | null;
 }
@@ -611,6 +618,8 @@ export function toModelAttachment(
     mimeType: attachment.mimeType ?? null,
     size: attachment.size ?? null,
     modified: attachment.modified ?? null,
+    created: attachment.created ?? null,
+    collectionFields: attachment.collectionFields ?? {},
     pageId,
   };
 }
