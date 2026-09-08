@@ -120,7 +120,10 @@ export class SaveService {
   private readonly documents: Documents;
   private readonly settingsStorage: SettingsStorage;
   private readonly recoveryStorage: RecoveryStorage;
-  private readonly writer: WriterClient;
+  /**
+   * Spawned on the first save, not at startup (see {@link writer}). Null until then.
+   */
+  private writerClient: WriterClient | null;
   private readonly now: () => number;
   private readonly entries = new Map<string, Entry>();
   private readonly disposers: Array<() => void> = [];
@@ -136,7 +139,7 @@ export class SaveService {
     this.documents = options.shell.documents;
     this.settingsStorage = options.settingsStorage ?? ipcSettingsStorage();
     this.recoveryStorage = options.recoveryStorage ?? ipcRecoveryStorage();
-    this.writer = options.writer ?? WriterClient.spawn();
+    this.writerClient = options.writer ?? null;
     this.now = options.now ?? (() => Date.now());
   }
 
@@ -154,6 +157,18 @@ export class SaveService {
   get activeState(): SaveState | null {
     const doc = this.docs.active;
     return doc ? this.state(doc.id) : null;
+  }
+
+  /**
+   * The writer, spawned the first time something is actually saved.
+   *
+   * Eagerly is the obvious place, and it is the wrong one: the Worker loads pdf-lib, which is
+   * the better part of a megabyte of JavaScript that nothing needs until the reader presses
+   * Ctrl+S — and every window would pay for it at startup, including one that only ever reads.
+   */
+  private get writer(): WriterClient {
+    this.writerClient ??= WriterClient.spawn();
+    return this.writerClient;
   }
 
   private get docs(): DocumentService {
@@ -303,7 +318,8 @@ export class SaveService {
     for (const dispose of this.disposers.splice(0)) dispose();
     if (this.autosaveTimer) clearInterval(this.autosaveTimer);
     this.autosaveTimer = null;
-    this.writer.dispose();
+    this.writerClient?.dispose();
+    this.writerClient = null;
     this.entries.clear();
   }
 
