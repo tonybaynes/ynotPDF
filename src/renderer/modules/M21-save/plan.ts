@@ -19,6 +19,7 @@ import { COMMAND_ID } from '@core/commands';
 import type { ModelAnnotation, ModelDestination, ModelOutlineItem, ModelPage } from '@core/model';
 import { PDFIUM_GENERATES } from '@engine/appearance';
 import { appearanceInput, type AppearanceInput } from '@engine/appearance/types';
+import { dictEntries } from '@engine/appearance/dict';
 import type {
   PlannedAnnotation,
   PlannedAnnotationProperties,
@@ -127,16 +128,21 @@ function plannedAnnotations(
     const needsRepair = !PDFIUM_GENERATES.has(annotation.subtype);
     if (!wasChanged && !needsRepair) return;
     const input = toAppearanceInput(annotation);
+    // An annotation with no engine key is one PDFium refused to create — FreeText, Caret, Line,
+    // Polygon and PolyLine are all outside the ten subtypes it makes (M30, ADR 0013). The writer
+    // adds it to the page itself, from the whole model record rather than from a patch.
+    const insert = doc.idTable.engineKey('annotation', annotation.id) === undefined;
     const entry: {
       index: number;
       subtype: ModelAnnotation['subtype'];
       rect: ModelAnnotation['rect'];
+      insert?: boolean;
       properties?: PlannedAnnotationProperties;
       appearance?: { input: AppearanceInput; replace: boolean };
     } = { index, subtype: annotation.subtype, rect: annotation.rect };
+    if (insert) entry.insert = true;
     if (wasChanged) {
-      const properties = clearedProperties(annotation);
-      if (properties) entry.properties = properties;
+      entry.properties = changedProperties(annotation);
     }
     entry.appearance = { input, replace: wasChanged };
     out.push(entry);
@@ -145,28 +151,52 @@ function plannedAnnotations(
 }
 
 /**
- * The entries that have to be **removed** from the dictionary. Only nulls: a value the engine
- * could set is already in its bytes, and writing it again would risk overwriting something the
- * model reads less exactly than the file holds it.
+ * The whole dictionary of an annotation this session changed.
+ *
+ * M21 wrote only the *nulls* here, on the reasoning that a value the engine could set is already
+ * in its bytes. Two things since have made that too narrow. PDFium's `FPDFAnnot_SetColor` refuses
+ * outright while an annotation has an appearance stream — and it builds one itself for most
+ * markup subtypes as a page loads — so a recoloured highlight never reached the file. And an
+ * annotation PDFium cannot create at all has nothing in its bytes to build on (M30, ADR 0013).
+ *
+ * So for an annotation the session actually touched, the model is written in full. The risk the
+ * original comment named — overwriting something the model reads less exactly than the file holds
+ * it — does not apply to one the reader has just edited: there the model *is* the intent.
  */
-function clearedProperties(a: ModelAnnotation): PlannedAnnotationProperties | null {
-  const props: Record<string, unknown> = {};
-  const clear = (key: string, value: unknown): void => {
-    if (value === null) props[key] = null;
+function changedProperties(a: ModelAnnotation): PlannedAnnotationProperties {
+  const props: Record<string, unknown> = {
+    contents: a.contents,
+    author: a.author,
+    subject: a.subject,
+    name: a.name,
+    state: a.state,
+    color: a.color,
+    interiorColor: a.interiorColor,
+    opacity: a.opacity,
+    borderWidth: a.borderWidth,
+    flags: packFlags(a.flags),
+    created: a.created,
+    modified: a.modified,
   };
-  clear('contents', a.contents);
-  clear('author', a.author);
-  clear('subject', a.subject);
-  clear('name', a.name);
-  clear('state', a.state);
-  clear('color', a.color);
-  clear('interiorColor', a.interiorColor);
-  clear('opacity', a.opacity);
-  clear('borderWidth', a.borderWidth);
-  if ('quadPoints' in a && a.quadPoints.length === 0) props['quadPoints'] = null;
-  if ('paths' in a && a.paths.length === 0) props['paths'] = null;
-  if ('vertices' in a && a.vertices.length === 0) props['vertices'] = null;
-  return Object.keys(props).length > 0 ? props : null;
+  if ('quadPoints' in a) props['quadPoints'] = a.quadPoints.length > 0 ? a.quadPoints : null;
+  if ('paths' in a) props['paths'] = a.paths.length > 0 ? a.paths : null;
+  if ('vertices' in a) props['vertices'] = a.vertices.length > 0 ? a.vertices : null;
+  // Dictionary entries the engine has no setter for — `/CL`, `/Q`, `/Rotate`, `/RD` — and the
+  // ones it can only write as strings where the file wants a name.
+  const entries = dictEntries(a.extra);
+  if (Object.keys(entries).length > 0) props['entries'] = entries;
+  return props;
+}
+
+/** `AnnotationFlags` as the `/F` bit field (PDF 12.5.3). */
+function packFlags(flags: ModelAnnotation['flags']): number {
+  return (
+    (flags.hidden ? 2 : 0) |
+    (flags.print ? 4 : 0) |
+    (flags.noView ? 32 : 0) |
+    (flags.readOnly ? 64 : 0) |
+    (flags.locked ? 128 : 0)
+  );
 }
 
 /** The model annotation as the appearance generators want it. */

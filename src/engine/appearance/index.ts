@@ -12,26 +12,85 @@
 
 import type { AnnotationSubtype } from '../PdfEngine';
 import {
-  caretAppearance,
   circleAppearance,
   fileAttachmentAppearance,
-  freeTextAppearance,
-  highlightAppearance,
   inkAppearance,
   lineAppearance,
   polygonAppearance,
   polylineAppearance,
   squareAppearance,
+} from './generators';
+import { freeTextAppearance } from './freetext';
+import {
+  caretAppearance,
+  highlightAppearance,
   squigglyAppearance,
   strikeOutAppearance,
   underlineAppearance,
-} from './generators';
+} from './markup';
+import { noteAppearance } from './note';
 import type { AppearanceGenerator, AppearanceInput, AppearanceStream } from './types';
 
 export * from './types';
 export { ContentBuilder, num, pdfString, rgbComponents } from './content';
 export { glyphWidth, textWidth, wrapText } from './metrics';
 export { quadRects } from './generators';
+export {
+  quads,
+  quadNumbers,
+  quadFromRect,
+  quadsBounds,
+  caretRectAt,
+  CARET_SIZE,
+  type Quad,
+} from './markup';
+export {
+  NOTE_ICONS,
+  NOTE_SIZE,
+  DEFAULT_NOTE_ICON,
+  noteIcon,
+  noteRectAt,
+  iconPointsIn,
+  type IconStep,
+  type NoteIcon,
+} from './note';
+export {
+  BASE_FAMILIES,
+  DEFAULT_FREE_TEXT_STYLE,
+  appearanceFontFor,
+  buildDefaultAppearance,
+  buildDefaultStyle,
+  calloutNumbers,
+  calloutOf,
+  familyFor,
+  intentOf,
+  layoutFreeText,
+  measureFreeText,
+  paddingOf,
+  logicalBox,
+  parseDefaultAppearance,
+  parseDefaultStyle,
+  rotateOf,
+  rotatePoint,
+  styleOf,
+  styledStandardFont,
+  textBoxOf,
+  FREE_TEXT_PADDING,
+  type FreeTextFamily,
+  type FreeTextIntent,
+  type FreeTextStyle,
+  type LaidOutLine,
+  type TextAlign,
+} from './freetext';
+export {
+  ANNOTATION_DICT_MAPPINGS,
+  dictEntries,
+  dictMapping,
+  engineWritableKeys,
+  toDictValue,
+  type DictMapping,
+  type DictValue,
+} from './dict';
 
 /**
  * The subtypes PDFium generates an `/AP` for by itself when it loads a page
@@ -99,6 +158,7 @@ export function createAppearanceService(): AppearanceService {
   service.register('FreeText', freeTextAppearance);
   service.register('FileAttachment', fileAttachmentAppearance);
   service.register('Caret', caretAppearance);
+  service.register('Text', noteAppearance);
   return service;
 }
 

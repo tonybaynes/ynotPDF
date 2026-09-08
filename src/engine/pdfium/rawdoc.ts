@@ -20,11 +20,23 @@ import {
 } from 'pdf-lib';
 import type { Layer } from '../PdfEngine';
 
-/** `/C`, `/IC` (0xRRGGBB) and `/BS /W` or `/Border` width of one annotation, as in the file. */
+/**
+ * The parts of one annotation dictionary PDFium's API cannot give back: `/C`, `/IC` (0xRRGGBB)
+ * and the border width it hides behind an appearance stream, plus the number arrays it has no
+ * getter for at all — a callout's `/CL` and a free text's or caret's `/RD` (M30).
+ */
 export interface AnnotColors {
   readonly color?: number;
   readonly interiorColor?: number;
   readonly borderWidth?: number;
+  /** `/CL` — a callout's leader line, as flat numbers. */
+  readonly callout?: ReadonlyArray<number>;
+  /** `/RD` — the inset from `/Rect` to the content, four numbers. */
+  readonly padding?: ReadonlyArray<number>;
+  /** `/Q` — quadding: 0 left, 1 centre, 2 right. */
+  readonly align?: number;
+  /** `/Rotate` — rotation of a free text's contents, anticlockwise degrees. */
+  readonly rotate?: number;
 }
 
 export interface RawInfo {
@@ -192,10 +204,24 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
             const third = border?.asArray()[2];
             if (third instanceof PDFNumber) borderWidth = third.asNumber();
           }
+          const numbers = (key: string): ReadonlyArray<number> | undefined => {
+            const arr = dict?.lookupMaybe(PDFName.of(key), PDFArray);
+            if (!arr) return undefined;
+            const nums = arr
+              .asArray()
+              .map((v) => (v instanceof PDFNumber ? v.asNumber() : Number.NaN));
+            return nums.some((n) => Number.isNaN(n)) ? undefined : nums;
+          };
+          const number = (key: string): number | undefined =>
+            dict?.lookupMaybe(PDFName.of(key), PDFNumber)?.asNumber();
           out.push({
             ...optional('color', read('C')),
             ...optional('interiorColor', read('IC')),
             ...optional('borderWidth', borderWidth),
+            ...optional('callout', numbers('CL')),
+            ...optional('padding', numbers('RD')),
+            ...optional('align', number('Q')),
+            ...optional('rotate', number('Rotate')),
           });
         }
       }

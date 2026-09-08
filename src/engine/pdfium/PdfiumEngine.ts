@@ -65,7 +65,14 @@ import {
   SAVE,
 } from './constants';
 import { Ffi, readMatrix, readRectF, type WasmModule } from './ffi';
-import { assertRotation, readByteRange, subtypeValue, writeAnnotation } from './mutations';
+import {
+  assertRotation,
+  dropAppearance,
+  readByteRange,
+  setAppearanceStream,
+  subtypeValue,
+  writeAnnotation,
+} from './mutations';
 import { FontRegistry, type SubstitutionTable } from './fonts';
 import { readRawInfo, type RawInfo } from './rawdoc';
 import { addFunction, instantiatePdfium, removeFunction } from './wasm';
@@ -1217,7 +1224,8 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
   async annotations(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<Annotation>> {
     const { annotations, missingColors } = this.annotationsSync(doc, page);
     if (missingColors.length === 0) return annotations;
-    // PDFium generated appearance streams for these, hiding /C and /IC: read them raw.
+    // PDFium generated appearance streams for these, hiding /C and /IC, and it has no getter at
+    // all for the number arrays a callout and a free text carry: read them raw.
     const raw = await this.rawInfo(this.doc(doc));
     const colors = raw.annotationColors(page);
     const out = [...annotations];
@@ -1225,11 +1233,17 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       const a = out[index];
       const c = colors[index];
       if (a && c) {
+        const extra: Record<string, unknown> = { ...a.extra };
+        if (c.callout) extra['callout'] = c.callout;
+        if (c.padding) extra['padding'] = c.padding;
+        if (c.align !== undefined) extra['align'] = c.align;
+        if (c.rotate !== undefined) extra['rotate'] = c.rotate;
         out[index] = {
           ...a,
           ...optional('color', a.color ?? c.color),
           ...optional('interiorColor', a.interiorColor ?? c.interiorColor),
           ...optional('borderWidth', a.borderWidth ?? c.borderWidth),
+          ...(Object.keys(extra).length > 0 ? { extra } : {}),
         };
       }
     }
@@ -1380,10 +1394,35 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
           ) {
             extra['icon'] = iconName;
           }
+          // Free text carries how it is drawn in strings of its own, and what kind of free text
+          // it is in `/IT` (M30). Read for every subtype that can have them, not just FreeText:
+          // `/DA` also appears on widgets, and `/IT` on the shape family.
+          for (const [modelKey, pdfKey] of [
+            ['defaultAppearance', 'DA'],
+            ['intent', 'IT'],
+            ['defaultStyle', 'DS'],
+            ['lineEnding', 'LE'],
+          ] as const) {
+            const value = str(pdfKey);
+            if (value) extra[modelKey] = value;
+          }
+          /*
+           * Whether the file already carries an appearance stream. M30's annotation layer needs
+           * it: an annotation PDFium has drawn is already in the tile raster, and one it has not
+           * has to be drawn by the overlay instead — draw both and it appears twice.
+           */
+          extra['hasAP'] = hasAP;
           const c = annotColor(ANNOT_COLORTYPE.COLOR);
           const ic = annotColor(ANNOT_COLORTYPE.INTERIOR);
           // PDFium hides /C and /IC behind an appearance stream and ignores /BS /W: raw pass.
-          if ((hasAP && c === undefined && ic === undefined) || borderWidth === undefined) {
+          // A free text or a caret goes through it whatever its colours say, because `/CL`,
+          // `/RD`, `/Q` and `/Rotate` have no PDFium getter at all (M30).
+          if (
+            (hasAP && c === undefined && ic === undefined) ||
+            borderWidth === undefined ||
+            subtype === 'FreeText' ||
+            subtype === 'Caret'
+          ) {
             missingColors.push(out.length);
           }
           out.push({
@@ -1770,7 +1809,17 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       }
       const annot = this.ffi.call('FPDFPage_CreateAnnot', p.page, subtype);
       if (annot === 0) {
-        throw new EngineError('internal', `PDFium could not create a ${annotation.subtype}`);
+        /*
+         * PDFium creates only the ten subtypes its `IsValidAnnotSubtype` allows — Circle,
+         * Highlight, Ink, Popup, Square, Squiggly, Stamp, StrikeOut, Text and Underline. FreeText,
+         * Caret, Line, Polygon and PolyLine are refused outright. That is a limit of the backend,
+         * not a failure, so it is reported as one: the caller records a write intent and M21's
+         * writer adds the annotation to the file itself (M30, ADR 0013).
+         */
+        throw new EngineError(
+          'not-implemented',
+          `PDFium cannot create a ${annotation.subtype} annotation`,
+        );
       }
       let at: number;
       try {
@@ -1813,6 +1862,28 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
     const updated = (await this.annotations(doc, page))[index];
     if (!updated) throw new EngineError('internal', `annotation ${id} vanished after the update`);
     return updated;
+  }
+
+  /**
+   * Pushes an appearance stream onto an annotation, or drops it (M30, ADR 0013). The page is
+   * reloaded afterwards so the next render draws it; `FPDFPage_GenerateContent` is not called,
+   * because the annotation list is not part of the page's content stream.
+   */
+  setAnnotationAppearance(doc: DocHandle, id: string, content: string | null): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      const { page, index } = parseAnnotationId(id);
+      const p = this.loadPage(d, page);
+      const annot = this.ffi.call('FPDFPage_GetAnnot', p.page, index);
+      if (annot === 0) throw new EngineError('invalid-argument', `no annotation ${id}`);
+      try {
+        if (content === null) dropAppearance(this.ffi, annot);
+        else setAppearanceStream(this.ffi, annot, content);
+      } finally {
+        this.ffi.call('FPDFPage_CloseAnnot', annot);
+      }
+      this.invalidatePage(d, page);
+    });
   }
 
   deleteAnnotation(doc: DocHandle, id: string): Promise<void> {

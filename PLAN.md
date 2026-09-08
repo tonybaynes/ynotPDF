@@ -26,7 +26,7 @@ commit. Sub-conversations working in parallel follow **§12**.
 | 2 | M91 Create PDF from images, web pages, clipboard, HTML/Markdown & text | [M91-create-pdf.md](docs/modules/M91-create-pdf.md) | ☑ |
 | 3 | M12 Navigation panels — thumbnails, bookmarks, layers, attachments, destinations | [M12-navigation-panels.md](docs/modules/M12-navigation-panels.md) | ☐ |
 | 3 | M13 Text selection, find, copy, snapshot & print | [M13-select-find-print.md](docs/modules/M13-select-find-print.md) | ☑ |
-| 3 | M30 Annotations — text markup, notes, typewriter, text box, callout | [M30-markup-annotations.md](docs/modules/M30-markup-annotations.md) | ☐ |
+| 3 | M30 Annotations — text markup, notes, typewriter, text box, callout | [M30-markup-annotations.md](docs/modules/M30-markup-annotations.md) | ☑ |
 | 3 | M40 Organise pages — insert, delete, extract, replace, rotate, move, labels | [M40-organise-pages.md](docs/modules/M40-organise-pages.md) | ☐ |
 | 4 | M42 PDF Portfolios — create, edit, cover sheet, extract | [M42-portfolios.md](docs/modules/M42-portfolios.md) | ☐ |
 | 4 | M31 Annotations — shapes, ink & eraser, stamps, file attachments | [M31-shapes-ink-stamps.md](docs/modules/M31-shapes-ink-stamps.md) | ☐ |

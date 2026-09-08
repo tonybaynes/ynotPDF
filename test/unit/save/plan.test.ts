@@ -255,8 +255,16 @@ describe('annotations in the plan', () => {
     const entry = plan.pages[0]?.annotations?.find((a) => a.rect.x0 === existing.rect.x0);
     expect(entry?.appearance?.replace).toBe(true);
     expect(entry?.properties?.contents).toBeNull();
-    // A value that is still set is left to the engine, which already wrote it.
-    expect(entry?.properties && 'quadPoints' in entry.properties).toBe(false);
+    /*
+     * The whole model record is planned, not only the values that went away (changed by M30, ADR
+     * 0013). PDFium's `FPDFAnnot_SetColor` refuses while an annotation has an appearance stream —
+     * and it builds one itself for most markup subtypes — so leaving the still-set values "to the
+     * engine, which already wrote it" quietly lost a recoloured highlight. For an annotation the
+     * session actually edited, the model is the intent, so it is written in full.
+     */
+    expect(entry?.properties && 'quadPoints' in entry.properties).toBe(true);
+    expect(entry?.properties?.color).toBe(existing.color);
+    expect(entry?.insert).toBeUndefined();
     await doc.close();
   });
 

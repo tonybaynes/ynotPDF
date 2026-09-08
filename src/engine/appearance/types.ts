@@ -59,6 +59,36 @@ export type StandardFontName =
   | 'Symbol'
   | 'ZapfDingbats';
 
+/**
+ * A font the file does not embed, named by its `/BaseFont` (M30, ADR 0013).
+ *
+ * There is no font subsetter in this repo before M51, so a family the reader picked from the
+ * system list cannot be embedded. Writing it as a plain non-embedded TrueType font is still the
+ * right thing: PDFium — which is both our renderer and Chrome's — resolves it through the bundled
+ * Liberation/DejaVu substitutes, so the two agree, and an editor that *does* have the family uses
+ * the real one. Layout still uses the metrics of `fallback`, which is what the stream was wrapped
+ * against.
+ */
+export interface NonEmbeddedFont {
+  /** `/BaseFont`, e.g. `"Verdana"`. */
+  readonly baseFont: string;
+  /** The standard face whose metrics laid the text out. */
+  readonly fallback: StandardFontName;
+}
+
+/** A font an appearance stream refers to: one of the standard 14, or a named system face. */
+export type AppearanceFont = StandardFontName | NonEmbeddedFont;
+
+/** True for the object form — the union's discriminator. */
+export function isNonEmbeddedFont(font: AppearanceFont): font is NonEmbeddedFont {
+  return typeof font !== 'string';
+}
+
+/** The standard face whose widths lay a font out, whichever form it takes. */
+export function metricFont(font: AppearanceFont): StandardFontName {
+  return isNonEmbeddedFont(font) ? font.fallback : font;
+}
+
 /** One `/ExtGState` the stream refers to by name. */
 export interface ExtGStateSpec {
   /** `/ca` — non-stroking alpha. */
@@ -72,7 +102,7 @@ export interface ExtGStateSpec {
 /** What the stream's `/Resources` must contain, by the names the content uses. */
 export interface AppearanceResources {
   readonly extGState: Readonly<Record<string, ExtGStateSpec>>;
-  readonly fonts: Readonly<Record<string, StandardFontName>>;
+  readonly fonts: Readonly<Record<string, AppearanceFont>>;
 }
 
 /** A generated `/AP /N` form XObject, as data. */

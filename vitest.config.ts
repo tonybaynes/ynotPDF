@@ -122,6 +122,25 @@ export default defineConfig({
         'src/renderer/modules/M91-create-pdf/open.ts',
         'src/renderer/modules/M91-create-pdf/rasterDecoder.ts',
         'src/renderer/modules/M91-create-pdf/create.worker.ts',
+        /*
+         * M30's DOM and shell half, for the same reason again: the annotation layer's painting,
+         * the pointer/keyboard controller, the inline editor, the popup note, the properties panel
+         * and the service that wires them together all need a document and a running viewer, and
+         * are proved by Playwright in `test/e2e/annotations.spec.ts`. Everything they are built out
+         * of — the quads, the shapes, the presets, the settings, the clipboard and the whole of
+         * `engine/appearance/` — is pure and gated below. `NotePopup`'s two exported string
+         * functions are the exception and are unit-tested; the file is excluded because the rest of
+         * it is a `contenteditable`.
+         */
+        'src/renderer/modules/M30-markup-annotations/AnnotationService.ts',
+        'src/renderer/modules/M30-markup-annotations/AnnotationController.ts',
+        'src/renderer/modules/M30-markup-annotations/InlineEditor.ts',
+        'src/renderer/modules/M30-markup-annotations/NotePopup.ts',
+        'src/renderer/modules/M30-markup-annotations/PropertiesPanel.ts',
+        'src/renderer/modules/M30-markup-annotations/identity.ts',
+        'src/renderer/modules/M30-markup-annotations/manifest.ts',
+        'src/renderer/modules/M30-markup-annotations/tools.ts',
+        'src/renderer/view/AnnotationLayer.ts',
       ],
       reporter: ['text', 'lcov'],
       thresholds: {
@@ -290,6 +309,38 @@ export default defineConfig({
           functions: 80,
           statements: 75,
         },
+        // M30's pure half: the quads a highlight is written from, what the overlay draws, the
+        // presets, the settings and the clipboard. The quads decide what a markup annotation
+        // actually marks, so their gate is the highest here.
+        'src/renderer/modules/M30-markup-annotations/quads.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M30-markup-annotations/shapes.ts': {
+          lines: 85,
+          functions: 90,
+          statements: 85,
+        },
+        'src/renderer/modules/M30-markup-annotations/clipboard.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M30-markup-annotations/settings.ts': {
+          lines: 85,
+          functions: 85,
+          statements: 85,
+        },
+        'src/renderer/modules/M30-markup-annotations/presets.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/engine/appearance/dict.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/appearance/freetext.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/engine/appearance/markup.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/engine/appearance/note.ts': { lines: 90, functions: 90, statements: 90 },
       },
     },
   },

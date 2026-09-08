@@ -338,6 +338,12 @@ export interface IpcInvokeMap {
   /** Writes one persisted setting. `undefined` deletes the key. */
   'settings:set': { args: [key: string, value: unknown]; result: void };
   /**
+   * Font families installed on this machine, sorted (M30, ADR 0013). Read once from the OS font
+   * directories and cached for the life of the process; an empty list simply means the free-text
+   * picker offers only the base families, which is a fine outcome rather than an error.
+   */
+  'fonts:list': { args: []; result: string[] };
+  /**
    * Tells the main process which native colour scheme to use for title bars, menus and native
    * dialogs, so the OS chrome follows the active theme (M01).
    */
@@ -497,6 +503,7 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'recent:remove',
   'settings:get',
   'settings:set',
+  'fonts:list',
   'theme:setNative',
   'app:info',
   'app:quit',

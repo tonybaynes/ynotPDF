@@ -466,6 +466,21 @@ export class FakeEngine implements PdfEngine {
     return Promise.resolve();
   }
 
+  /** M30's appearance push. The fake keeps the stream so a test can assert one was written. */
+  setAnnotationAppearance(doc: DocHandle, id: string, content: string | null): Promise<void> {
+    this.need('annotations', 'setAnnotationAppearance');
+    this.note('setAnnotationAppearance');
+    const { page, index } = parseId(id);
+    const p = this.page(doc, page);
+    const annotation = p.annotations[index];
+    if (!annotation) throw new EngineError('invalid-argument', `no annotation ${id}`);
+    const extra = { ...annotation.extra };
+    if (content === null) delete extra['appearanceStream'];
+    else extra['appearanceStream'] = content;
+    p.annotations[index] = { ...annotation, extra, ...(content === null ? {} : {}) };
+    return Promise.resolve();
+  }
+
   setFieldValue(doc: DocHandle, fieldName: string, value: string): Promise<void> {
     this.need('setFieldValue', 'setFieldValue');
     this.note('setFieldValue');

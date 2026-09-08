@@ -10,8 +10,8 @@ Shortcuts are _editor_-scoped by default: they do nothing while the caret is in 
 modal dialog is open, so typing "z" into the page number does not switch tools. The few that stay
 live everywhere are marked **global**.
 
-Started by M11 (viewer); each later module adds its own rows. M21 added Save and Save As, and
-M13 added selection, copy, find, search and printing.
+Started by M11 (viewer); each later module adds its own rows. M21 added Save and Save As, M13
+added selection, copy, find, search and printing, and M30 added the comment tools.
 
 ## Files and windows
 
@@ -106,14 +106,48 @@ Layout, split view, the loupe, line weights and the rendering options have no de
 are on the **View** ribbon tab and in the palette. `view.layout.single`, `view.layout.continuous`,
 `view.layout.facing`, `view.layout.facingContinuous` and `view.layout.book` are the five layouts.
 
+## Comments
+
+Text markup acts on whatever text is selected, so select first and then mark. Choosing one of them
+with nothing selected switches to Select Text, which is what you need next.
+
+| Keys        | Command            | What it does                                              |
+| ----------- | ------------------ | --------------------------------------------------------- |
+| `Mod+Alt+H` | `annot.highlight`  | Highlight the selected text                               |
+| `Mod+Alt+U` | `annot.underline`  | Underline the selected text                               |
+| `Mod+Alt+K` | `annot.strikeout`  | Strike through the selected text                          |
+| —           | `annot.squiggly`   | Wavy underline                                            |
+| —           | `annot.replace`    | Replace Text — strike it through and mark the replacement |
+| —           | `annot.insert`     | Insert Text — mark where text should go                   |
+| `Mod+Alt+M` | `annot.note`       | Note — click the page to place a sticky note              |
+| `Mod+Alt+W` | `annot.typewriter` | Typewriter — type straight on to the page                 |
+| —           | `annot.textbox`    | Text Box — a bordered box with words in it                |
+| —           | `annot.callout`    | Callout — a text box with a leader line                   |
+
+With a comment selected, in the page area:
+
+| Keys                        | Command                                    | What it does                                        |
+| --------------------------- | ------------------------------------------ | --------------------------------------------------- |
+| `Delete`, `Backspace`       | `annot.delete`                             | Delete the selected comments                        |
+| Arrow keys                  | —                                          | Nudge by one point; `Shift` moves ten times as far  |
+| `Enter`, `F2`               | `annot.edit`                               | Open the popup, or type in a text box               |
+| `Mod+C` / `Mod+X` / `Mod+V` | `annot.copy` / `annot.cut` / `annot.paste` | Copy, cut and paste comments, between documents too |
+| `Escape`                    | `annot.deselect`                           | Clear the comment selection                         |
+| `Shift`-click               | —                                          | Add a comment to the selection                      |
+
 ## Tools
 
-| Keys | Command                     | What it does                                         |
-| ---- | --------------------------- | ---------------------------------------------------- |
-| `G`  | `tool.hand.activate`        | Hand — drag the page                                 |
-| `V`  | `tool.selectText.activate`  | Select text                                          |
-| `Z`  | `tool.marqueeZoom.activate` | Marquee zoom — drag a rectangle, or click to zoom in |
-| —    | `tool.snapshot.activate`    | Snapshot — drag a rectangle to copy it as a picture  |
+| Keys | Command                          | What it does                                         |
+| ---- | -------------------------------- | ---------------------------------------------------- |
+| `G`  | `tool.hand.activate`             | Hand — drag the page                                 |
+| `V`  | `tool.selectText.activate`       | Select text                                          |
+| `Z`  | `tool.marqueeZoom.activate`      | Marquee zoom — drag a rectangle, or click to zoom in |
+| —    | `tool.snapshot.activate`         | Snapshot — drag a rectangle to copy it as a picture  |
+| —    | `tool.selectAnnotation.activate` | Select Annotation — click, drag, or marquee comments |
+| —    | `tool.note.activate`             | Note                                                 |
+| —    | `tool.typewriter.activate`       | Typewriter                                           |
+| —    | `tool.textbox.activate`          | Text Box                                             |
+| —    | `tool.callout.activate`          | Callout                                              |
 
 With **Select Text** active: drag to select, double-click a word, triple-click a paragraph,
 `Shift`-click to extend, `Alt`-drag to take a column, and the arrow keys, `Home` and `End` move

@@ -218,8 +218,222 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **The overlay draws what the raster cannot, and nothing else.** PDFium synthesises an `/AP` for
+  Highlight, Underline, Squiggly, StrikeOut and Text as it loads a page, so those are already in
+  the tile raster and the SVG layer only draws their selection handles. FreeText and Caret get no
+  `/AP` from PDFium, so the layer draws them — until the file is saved and reopened, when M21's
+  writer has baked one and `extra.hasAP` says so. An annotation this session created or edited is
+  always drawn by the layer, because an edit makes PDFium drop the appearance it had.
+- **Note icons are pushed into the engine as a real appearance stream.** PDFium's own Text
+  appearance is one fixed yellow square whatever `/Name` says — and it rewrites `/Rect` to 20×20
+  while it is at it. A note icon is pure vector with no font resource, so
+  `PdfEngine.setAnnotationAppearance` (new, optional, ADR 0013) hands PDFium the stream our own
+  generator built. The live raster then shows the icon the reader picked, and the saved file
+  carries the same stream.
+- **`AnnotationLayer` lives in `view/`, like `TextLayer`.** M31's shapes and ink, M33's
+  measurements, M50's objects and M82's signatures all need the same hit-testing, handles,
+  marquee and nudge; putting it in M30's folder would mean four copies or four cross-module
+  imports. It knows about `ModelAnnotation` and `PageView`, not about tools or commands.
+- **Every geometry change is one `UpdateAnnotationCommand`, merged.** A drag emits an update per
+  frame; `UpdateAnnotationCommand.merge` collapses them, so one drag is one undo step and the
+  "properties change and its appearance are one undo step" acceptance falls out of the same
+  mechanism. `document.batch()` groups a multi-select move into one composite.
+- **QuadPoints come from the line's own axes, not from a bounding box.** `quadsForSpan` projects
+  each character box onto the line's direction and normal (M13's `TextLine.angle`), so a
+  highlight over rotated text is a rotated quad rather than the axis-aligned box that contains
+  it. A page with `/Rotate` needs no special case at all: text runs are already in unrotated user
+  space, which is the space `/QuadPoints` is written in.
+- **Solid colours only, and the rule is enforced twice.** The app never writes `/CA` for its own
+  annotations (the model's `opacity` stays null), and a DOM walk in the e2e suite asserts no
+  overlay element carries alpha below 1. Highlight still reads because its appearance stream uses
+  the `Multiply` blend mode — opaque paint that darkens the paper and leaves the ink, the same
+  trick M13's selection rectangles use.
+- **Annotation colours are content, not chrome.** A theme token colours the interface; a
+  highlight colour is written into the file and must survive a theme change, so the presets are
+  `0xRRGGBB` values in `resources/annotations/colours.json` and the swatch buttons carry them as
+  inline styles behind `ynot-allow-color`. The named presets are chosen so no two of them differ
+  only in red↔green, and each carries its name as text, not colour alone.
+- **`/DA` and `/DS` are built and parsed by one pure module.** `freetext.ts` owns the whole
+  round trip — font, size, colour, alignment, line spacing, border and fill — so the properties
+  panel, the inline editor and the appearance generator cannot disagree about what a free-text
+  annotation says.
+- **Free text is edited in a contenteditable overlay positioned by the same transform the layer
+  uses**, with M13's font metrics for the wrap, so what is typed is where it lands. Committing
+  writes `/Contents`, `/DA`, `/DS` and the appearance stream in one command.
+- **A callout is a FreeText with `/IT /FreeTextCallout` and `/CL`**, exactly as the PDF spec has
+  it: three points (tip, knee, shoulder) plus `/RD` marking the text box inside `/Rect`. The
+  leader line and its arrow head are part of the appearance stream, not a second annotation.
+- **Fonts: the base 14 are offered first; the system list is real but never embedded.** There is
+  no font subsetter in this repo before M51, so a system family is written to `/DA` and into a
+  non-embedded font dictionary, laid out with the metrics of the standard face it maps to. Both
+  PDFium and Chrome are PDFium, and both substitute through the same bundled Liberation/DejaVu
+  faces, so the two agree — the properties panel says in words that another editor may not.
+- **The dictionary entries PDFium cannot write go through the plan.** `FPDFAnnot_SetStringValue`
+  covers `/Name`, `/DA`, `/DS`, `/RC` and `/IT`; `/CL`, `/Q`, `/Rotate` and `/RD` are numbers and
+  arrays PDFium's annotation API has no setter for, so `PlannedAnnotationProperties.entries`
+  carries them to M21's writer (ADR 0013). One pure mapper, `engine/appearance/dict.ts`, is the
+  only place that knows which model key is which PDF key.
+- **Copy/paste is JSON on the system clipboard**, under a `text/plain` payload beginning with a
+  marker line, so a paste into another window of the app rebuilds the annotations and a paste
+  into a text editor at least says what it was. Pasting places the annotations on the current
+  page, offset when the source page is the target page.
+- **Identity is asked for once, in an opaque dialog, on the first annotation** — name, initials
+  and email, stored under `identity.*`. Every annotation carries `/T`, `/CreationDate` and `/M`
+  from it; `/Subj` defaults to the tool's own name, as Foxit does.
+- **Reply and status are model data only.** `/IRT`, `/State` and `/StateModel` are read, written
+  and preserved, and `AnnotationService.replies(id)` returns the thread — M32 builds the panel on
+  top without changing anything here.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-08 on `mod/M30-markup-annotations` (worktree `../ynotPDF-M30`).**
+
+### What shipped
+
+- **`src/renderer/view/AnnotationLayer.ts`** — the SVG overlay M00 reserved: paths and text in
+  page space, selection outlines, eight box handles plus a callout's tip and knee, hit testing
+  through an annotation's quads rather than its rect, a marquee, and a per-page signature so an
+  unchanged page is not rebuilt. In `view/` on purpose — M31's shapes and ink, M33's measurements
+  and M82's signatures all need the same thing.
+- **Text markup** — Highlight, Underline, Squiggly, Strikeout, Replace Text and Insert Text, from
+  M13's text selection. One annotation per page the selection touches, `/QuadPoints` built in each
+  line's own axes, and colour presets that are named as well as coloured.
+- **Notes** — a 14-icon catalogue drawn as vector paths, a 20 × 20 rect where the page was clicked,
+  and an opaque popup with bold/italic/underline/colour stored as `/RC` beside plain `/Contents`.
+- **Free text** — typewriter, text box and callout, told apart by `/IT`; `/DA` and `/DS` built and
+  parsed by one module; alignment, line spacing, border width and style, fill, and `/Rotate` in
+  the four right angles; a `contenteditable` overlay for typing in place that grows the box as the
+  words outgrow it and removes one nothing was typed into.
+- **Selection and geometry** — click, Shift-click, a marquee under the Select Annotation tool,
+  Select All on the page; drag to move, handles to resize, a callout's tip and knee to drag;
+  arrow-key nudge (Shift × 10); Delete; copy, cut and paste, between two documents.
+- **The properties panel** — the right pane, bound to the selection, writing straight through so
+  the page updates as a control moves; "Set as default" per tool; "Keep tool selected".
+- **Identity** — name, initials and email, asked once in an opaque dialog before the first
+  annotation, and declinable. Every annotation carries `/T`, `/CreationDate`, `/M` and `/Subj`.
+- **Replies and status as data** — `/IRT`, `/State` and `/StateModel` read, written and preserved,
+  with `replies(id)` and `setState(id, …)` for M32 to build a panel on.
+- **`src/engine/appearance/`** — `markup.ts` (quad-aware highlight, underline, strikeout, squiggly
+  and the caret), `freetext.ts` (`/DA`, `/DS`, layout, alignment, rotation, the callout's leader
+  and arrow head), `note.ts` (the icon catalogue), `dict.ts` (model key ↔ PDF key).
+- **`src/main/fonts.ts`** — the system font list, read from the OS font directories by parsing each
+  file's sfnt `name` table. No new libraries.
+
+### The four things that were not as expected
+
+- **PDFium creates ten annotation subtypes and refuses the rest.** `FPDFPage_CreateAnnot` accepts
+  Circle, Highlight, Ink, Popup, Square, Squiggly, Stamp, StrikeOut, Text and Underline. FreeText
+  and Caret — the typewriter, the text box, the callout and both proof-reading marks — are refused
+  outright, and so are Line, Polygon and PolyLine, which M31 will want. The adapter now reports
+  that as `not-implemented` rather than an internal error, and M21's write plan gained an `insert`
+  flag so the writer adds such an annotation to the file itself (ADR 0013). M31 inherits the path.
+- **`FPDFAnnot_SetColor` refuses while an annotation has an `/AP`** — and PDFium builds one itself
+  for most markup subtypes as a page loads. So _every_ recolouring of a highlight was silently
+  dropped: the model changed and the file did not. Two fixes: `writeAnnotation` drops the
+  appearance stream first rather than last, and a changed annotation is now planned in **full**
+  rather than only for the values that went away.
+- **PDFium's `Text` appearance is one fixed yellow square**, whatever `/Name` says, and it rewrites
+  `/Rect` to 20 × 20 on the way past. `PdfEngine.setAnnotationAppearance` (new, ADR 0013) hands it
+  our own stream instead, which works because a note icon needs no font resource. It is also why a
+  note offers no resize handle: PDFium would undo the resize on the next page load.
+- **`/Name` came back as a string, not a name.** `FPDFAnnot_SetStringValue` is PDFium's only
+  generic setter, so `/Name`, and the number and array entries `/CL`, `/Q`, `/Rotate` and `/RD`,
+  now go through the write plan as typed values.
+
+### Bugs the tests found, all real
+
+- **A second highlight over the first one was impossible.** The annotation controller took every
+  press that landed on an annotation, so with the Select Text tool active the drag never started.
+  It now stands aside for Select Text, Snapshot and Marquee Zoom — which is what Foxit does, and
+  the e2e that marks the same words four times is what caught it.
+- **A settings write made in the same tick as the first settings _read_ was undone by it.** The
+  service loads its settings without blocking the app, which is right; a command that ran before
+  that finished had its value quietly replaced by the stored one. Every write now waits for the
+  first read.
+- **`Mod+Alt+N` and `Mod+Alt+T` were already taken** by Night Mode and the theme switcher, and the
+  Registry's rule is last-binding-wins — so binding them here would have stolen two keys the
+  operator uses daily. The comment tools use `Mod+Alt+M` and `Mod+Alt+W`, and a unit test now
+  checks the whole app's bindings for a clash.
+- **A quad over text at 30° was half again too large.** The engine reports each character as an
+  axis-aligned box, which for rotated text contains the glyph rather than being it. The two are
+  related exactly, so the glyph box is recovered by solving the pair — and at 45°, where the system
+  is singular, the box is used and the test says so.
+- **The properties panel never appeared.** M02 shows the first right-dock panel by order whose
+  `when` passes, and the e2e demo module has a document-wide panel at order 2 that is always true.
+  A panel bound to the **selection** has to outrank one bound to the document, so this one is
+  order 0 — which M72's document properties will meet the same way.
+- **An empty typewriter draws nothing at all**, because it is words on the page and nothing else.
+  That is correct, and it is why the inline editor removes a box nothing was typed into; the
+  acceptance test states it rather than papering over it.
+- **A page can be pushed under the chrome.** Choosing the Comment tab makes the ribbon taller and
+  selecting an annotation opens the right pane, and either can move the part of a page a test was
+  clicking at behind them. The e2e clicks pages through their own coordinates now, which is also
+  how a reader reaches them.
+
+### Shared files touched (PLAN.md §12.3, all additive except where noted)
+
+- `src/engine/PdfEngine.ts` — `setAnnotationAppearance` (ADR 0013).
+- `src/engine/pdfium/{PdfiumEngine,mutations,rawdoc}.ts` — implements it; writes the string-valued
+  `extra` keys; exposes `extra.hasAP`, `/DA`, `/IT`, `/DS`, `/LE`, and reads `/CL`, `/RD`, `/Q` and
+  `/Rotate` through the raw-catalogue pass PDFium has no getter for. **One behaviour change:**
+  `writeAnnotation` drops the appearance stream first, not last.
+- `src/engine/Writer.ts`, `src/engine/writers/FullRewriteWriter.ts` — `PlannedAnnotation.insert`,
+  `PlannedAnnotationProperties.{flags,created,modified,entries}`, non-embedded fonts in an
+  appearance stream's resources.
+- `src/engine/appearance/{types,content,index,generators}.ts` — the font union, `textLinesAt`, and
+  the newer generators registered in place of the plainer ones M21 shipped. `generators.ts` keeps
+  the shapes and the file-attachment pin; its text-markup, free-text and caret generators moved.
+- `src/renderer/modules/M21-save/plan.ts` — **one behaviour change:** a changed annotation is
+  planned in full (see above), and one with no engine binding is planned as an insert.
+- `src/shared/ipc.ts`, `src/main/ipc.ts` — `fonts:list`.
+- `src/renderer/main.ts`, `src/renderer/index.html` — registers the M30 manifest and its CSS.
+- `vitest.config.ts` — coverage include, exclude and gates for the new files.
+- `docs/shortcuts.md`, `resources/README.md`, `src/renderer/view/README.md`, `PLAN.md` §0.
+- `test/unit/core/fakeEngine.ts` — the new engine method; `test/unit/save/plan.test.ts` — the
+  full-properties rule, with the reason written beside it.
+
+### Tests
+
+Green on Windows locally: lint (eslint, prettier, the colour/opacity rules, `tsc` on both
+projects), **2 198 unit tests** with the coverage gates, and **210 Playwright tests**.
+
+Unit: 9 files, 156 tests in `test/unit/annotations/` — the quads (including the acceptance line
+about a rotated page), the appearance streams and the style strings, what the overlay draws and
+lets you grab, the settings and the clipboard, the manifest and the shortcut document, the sfnt
+reader, and a **full save-and-reopen round trip** through the real engine, M21's planner and
+`FullRewriteWriter`.
+
+E2E: `test/e2e/annotations.spec.ts`, 23 tests, one per acceptance line, in the built app.
+
+**The hands-on check the conventions ask for, recorded.** `test/unit/annotations/real-files.test.ts`
+runs the module against the operator's own files in `test/fixtures/local/` — three boarding passes
+from three different producers (our own pdf-lib writer, an unknown one, and Edge's Skia
+print-to-PDF, which is tagged) and the Foxit portfolio — and skips itself on any machine without
+them, as CLAUDE.md requires. For each: a highlight over the page's *own* first line of text, so the
+quads come from whatever `textRuns` really reports for that producer and are asserted to land
+inside the crop box; a note with a Key icon; and a typewriter, which is the one PDFium refuses to
+create and the writer has to insert. All four files round-trip with the annotations intact and an
+appearance stream on each. Nothing about their contents is read, quoted or asserted.
+
+### Deferred, and why
+
+- **A cross-renderer pixel hash.** "PDFium == our overlay-free render == Chrome" is checked as the
+  two claims that can be made honestly without cropping Chrome's plugin surface: after a reopen the
+  overlay draws _nothing_, so our render **is** PDFium's; and Chrome's own viewer on the same file,
+  at the same size, differs from the file without our annotations and is identical to itself.
+  Chrome's PDF viewer draws into a plugin whose bounds are not addressable from the page, so a
+  dHash of the two renderers' pixels would have compared a page against a page-plus-toolbar.
+- **Embedding a system font.** There is no subsetter here before M51 brings fontkit. A family
+  outside the base 14 is named in `/DA` and in a non-embedded font dictionary, laid out with the
+  metrics of the standard face it maps to; the panel says so in words.
+- **Rich text is bold/italic/underline/colour**, stored as `/RC`. Lists, indents and mixed sizes
+  are not offered — the popup is a note, not a word processor.
+- **The comments panel, replies UI, FDF/XFDF and "summarise" are M32's**, explicitly out of scope.
+  The data they need — `/IRT`, `/State`, `/StateModel` — is written and read here.
+- **Shapes, ink, the eraser, stamps and file attachments are M31's.** `AnnotationLayer`,
+  `PlannedAnnotation.insert` and the appearance registry are all in place for them.
+- **One pre-existing shortcut clash is recorded, not fixed:** `Mod+G` is bound by M11 to
+  `view.page.goTo` and by M13 to `edit.findNext`, and last-binding-wins makes it Find Next — which
+  is what Foxit does with the key, so the behaviour is right and the M11 binding is redundant.
+  `test/unit/annotations/manifest.test.ts` pins it so the next change to either module does not
+  think it introduced it; M130's shortcut editor is where it belongs.
