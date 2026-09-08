@@ -214,10 +214,9 @@ test.describe('the thumbnail grid — the operator’s layout rules', () => {
     expect(before.thumbnails.current).toBeGreaterThanOrEqual(0);
     expect(before.thumbnails.labels).toContain('41');
     await app.run('view.thumbnails.larger');
-    await app.page.waitForTimeout(400);
+    await expect.poll(async () => (await navState()).thumbnails.labels).toContain('41');
     await settle();
     const after = await navState();
-    expect(after.thumbnails.labels).toContain('41');
     expect(after.thumbnails.current).toBeGreaterThanOrEqual(0);
   });
 
@@ -259,11 +258,13 @@ test.describe('the thumbnail grid — the operator’s layout rules', () => {
   test('clicking a thumbnail navigates, and the current page is marked with a word', async () => {
     await open('multipage.pdf');
     await app.page.locator('.thumb-cell').nth(2).click();
-    await app.page.waitForTimeout(200);
-    expect((await viewState()).page).toBe(2);
-    const current = app.page.locator('.thumb-cell.is-current');
+    // Polled rather than waited out: the viewport scrolls, tells the store, and the panel
+    // repaints on the next frame, and how long that takes is the runner's business.
+    await expect.poll(async () => (await viewState()).page).toBe(2);
+    const current = app.page.locator('.thumb-cell[data-page="2"]');
     await expect(current).toHaveAttribute('aria-current', 'page');
     await expect(current).toHaveAttribute('aria-label', /current page/);
+    await expect(current).toHaveClass(/is-current/);
   });
 
   test('a 1000-page document mounts only what it can see, and follows the reader', async () => {
@@ -338,10 +339,16 @@ test.describe('bookmarks', () => {
     // calls current is a judgement about the window, not about where the bookmark went.
     for (const [i, bookmark] of rows.bookmarks.entries()) {
       await app.run('view.page.goTo', { page: 1 });
-      await app.page.waitForTimeout(150);
+      await expect.poll(async () => (await viewState()).page).toBe(0);
       await app.page.locator('.nav-tree [data-row]').nth(i).click();
-      await app.page.waitForTimeout(300);
       if (bookmark.page < 0) continue;
+      await expect
+        .poll(async () => {
+          const now = await viewState();
+          const box = now.rects.find((r) => r.page === bookmark.page);
+          return box === undefined ? false : box.y + box.height > now.scrollTop;
+        })
+        .toBe(true);
       const state = await viewState();
       const rect = state.rects.find((r) => r.page === bookmark.page);
       expect(rect, `page ${String(bookmark.page)} should be laid out`).toBeDefined();
@@ -365,29 +372,30 @@ test.describe('bookmarks', () => {
     const before = (await navState()).bookmarks.map((b) => b.title);
 
     await app.run('bookmarks.add', { title: 'From the test' });
-    await app.page.waitForTimeout(200);
+    await expect
+      .poll(async () => (await navState()).bookmarks.map((b) => b.title))
+      .toContain('From the test');
     const added = await navState();
-    expect(added.bookmarks.map((b) => b.title)).toContain('From the test');
 
     const newRow = added.bookmarks.find((b) => b.title === 'From the test');
     expect(newRow).toBeDefined();
     if (!newRow) return;
     await app.run('dev.navSelect', { bookmark: newRow.id });
     await app.run('bookmarks.indent');
-    await app.page.waitForTimeout(150);
-    const nested = await navState();
-    expect(nested.bookmarks.find((b) => b.id === newRow.id)?.level).toBeGreaterThan(1);
+    await expect
+      .poll(async () => (await navState()).bookmarks.find((b) => b.id === newRow.id)?.level ?? 0)
+      .toBeGreaterThan(1);
 
     await app.run('dev.navSelect', { bookmark: newRow.id });
     await app.run('bookmarks.delete');
-    await app.page.waitForTimeout(150);
-    expect((await navState()).bookmarks.map((b) => b.title)).not.toContain('From the test');
+    await expect
+      .poll(async () => (await navState()).bookmarks.map((b) => b.title))
+      .not.toContain('From the test');
 
     await app.run('edit.undo');
     await app.run('edit.undo');
     await app.run('edit.undo');
-    await app.page.waitForTimeout(200);
-    expect((await navState()).bookmarks.map((b) => b.title)).toEqual(before);
+    await expect.poll(async () => (await navState()).bookmarks.map((b) => b.title)).toEqual(before);
   });
 
   test('the tree collapses and expands from the keyboard', async () => {
@@ -431,14 +439,13 @@ test.describe('layers', () => {
     expect(layer).toBeDefined();
     if (!layer) return;
     await app.run('layers.toggle', { layer: layer.id, visible: false });
-    await app.page.waitForTimeout(600);
-    expect((await navState()).layers[0]?.state).toBe('Hidden');
-    const inkAfter = await pageInk();
-    expect(inkAfter).not.toBe(inkBefore);
+    await expect.poll(async () => (await navState()).layers[0]?.state).toBe('Hidden');
+    // The page has to be re-rendered without the layer, which is a round trip to the engine.
+    await expect.poll(pageInk, { timeout: 15_000 }).not.toBe(inkBefore);
 
     await app.run('layers.toggle', { layer: layer.id, visible: true });
-    await app.page.waitForTimeout(600);
-    expect((await navState()).layers[0]?.state).toBe('Visible');
+    await expect.poll(async () => (await navState()).layers[0]?.state).toBe('Visible');
+    await expect.poll(pageInk, { timeout: 15_000 }).toBe(inkBefore);
   });
 
   test('reset puts the initial visibility back, in one undo step', async () => {
@@ -449,10 +456,9 @@ test.describe('layers', () => {
     const layer = (await navState()).layers[0];
     if (!layer) return;
     await app.run('layers.toggle', { layer: layer.id, visible: false });
-    await app.page.waitForTimeout(200);
+    await expect.poll(async () => (await navState()).layers.map((l) => l.state)).not.toEqual(start);
     await app.run('layers.reset');
-    await app.page.waitForTimeout(200);
-    expect((await navState()).layers.map((l) => l.state)).toEqual(start);
+    await expect.poll(async () => (await navState()).layers.map((l) => l.state)).toEqual(start);
   });
 });
 
@@ -480,7 +486,11 @@ test.describe('attachments', () => {
       description: 'A note from M12',
     })) as string | null;
     expect(id).not.toBeNull();
-    await app.page.waitForTimeout(200);
+    await expect
+      .poll(async () =>
+        (await navState()).attachments.some((a) => a.cells[0]?.includes('note.txt')),
+      )
+      .toBe(true);
 
     const outcome = (await app.run('file.save')) as { saved: boolean };
     expect(outcome.saved).toBe(true);
@@ -506,7 +516,7 @@ test.describe('destinations', () => {
     await open('multipage.pdf');
     await app.run('view.page.next');
     await app.run('view.page.next');
-    await app.page.waitForTimeout(200);
+    await expect.poll(async () => (await viewState()).page).toBe(2);
     const at = (await viewState()).page;
 
     await app.run('destinations.add', { name: 'the-third-page' });
@@ -516,17 +526,17 @@ test.describe('destinations', () => {
     expect(state.destinations.map((d) => d.name)).toContain('the-third-page');
 
     await app.run('view.page.first');
-    await app.page.waitForTimeout(200);
+    await expect.poll(async () => (await viewState()).page).toBe(0);
     await app.page.locator('.nav-list [data-row]').first().click();
-    await app.page.waitForTimeout(300);
-    expect((await viewState()).page).toBe(at);
+    await expect.poll(async () => (await viewState()).page).toBe(at);
 
     const dest = state.destinations[0];
     if (!dest) return;
     await app.run('dev.navSelect', { destination: dest.id });
     await app.run('destinations.rename', { name: 'renamed' });
-    await app.page.waitForTimeout(200);
-    expect((await navState()).destinations.map((d) => d.name)).toContain('renamed');
+    await expect
+      .poll(async () => (await navState()).destinations.map((d) => d.name))
+      .toContain('renamed');
   });
 });
 
