@@ -51,6 +51,15 @@ Destinations, plus Fields/Signatures/Comments panels that later modules add.
 
 ## Scope — build all of this
 
+- **Pages (thumbnails) is the default panel — operator requirement.** On
+  launch and on every document open the left pane is open showing Pages,
+  unless the setting `ui.leftPaneOnOpen` says otherwise. Values: `pages`
+  (default) · `bookmarks` · `last-used` (M02's current behaviour) ·
+  `closed`. Store it through `settings:get`/`settings:set`; expose it in
+  this module as a right-click option on the pane tab strip ("Open this
+  panel by default") and register it for the Preferences dialog (M130,
+  View page). Bookmarks-on-open never overrides it, even for documents
+  whose `/PageMode` is `/UseOutlines` — the user's choice wins.
 - Thumbnails panel: virtualised grid, size slider (small/medium/large,
   persisted), current page highlighted with word tooltip, click navigates,
   keyboard navigation, multi-select (Ctrl/Shift) exposed for M40, renders
@@ -106,6 +115,10 @@ None new.
   back.
 - Attachments fixture: add a file, save (M21), reopen → attachment present
   with description.
+- Fresh profile: launch, open any PDF ⇒ left pane is open on Pages with
+  thumbnails rendered. Set `ui.leftPaneOnOpen = 'closed'`, reopen ⇒ pane
+  closed; set `'pages'` again ⇒ back, including for a `/PageMode
+  /UseOutlines` fixture.
 - Thumbnails: 500-page fixture scrolls the grid at ≥ 55 fps; current page
   follows the viewport.
 
