@@ -228,7 +228,59 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **One store slice, extended additively.** `ui.view` (M02) stays the single source of view
+  state; M11 adds `rotation`, `spread`, `split` and the `facing-continuous` layout to it
+  (ADR 0009) and drives M02's existing `view.*` commands rather than registering them again.
+  The status bar, the View ribbon and the tests therefore read one object.
+- **Five layout modes, one pure function.** `layoutPages()` (`view/layout.ts`) maps page sizes +
+  zoom + mode to a table of content-relative rects; it knows nothing about the DOM. Rows are
+  built from two booleans — *facing* and *cover* — so: single (no/–), continuous (no/–),
+  facing (yes/no), facing-continuous (yes/no), book (yes/yes, page 1 alone in the right column).
+  Facing rows are laid out on a two-column grid whose widths are the maxima over all left- and
+  right-hand pages, spine-aligned, so spreads line up down the document as they do in Foxit.
+  `continuous` is a property of the mode, not a separate flag; non-continuous modes lay out the
+  same rows but the viewport mounts one row at a time.
+- **Never re-render on scroll.** Scrolling only moves DOM and blits already-decoded tiles. The
+  engine is asked for a tile exactly once per (page, scale bucket, rotation, render flags, tile);
+  everything else is cache work.
+- **The page canvas is a window, not the page.** At 6400 % a full-page canvas would be
+  gigabytes, so each `PageView` keeps a canvas covering the visible region grown by one tile,
+  repositioned as you scroll and repainted from the cache. Cache hits make that free.
+- **Tiles are 512 CSS px × DPR**, snapped by `PageGeometry.tile()` so they align with the
+  full-page bitmap. Requests are ordered by distance from the viewport centre, cancelled through
+  `EngineClient.cancelRenders()` when superseded, and neighbours are prefetched from
+  `requestIdleCallback`. Zoom is bucketed to the nearest 1/8 step so a pinch does not invalidate
+  the cache on every frame.
+- **The LRU is bounded in megabytes** (`viewer.cache.megabytes`, default 256) and counts the real
+  bitmap cost (w × h × 4); eviction closes the `ImageBitmap`.
+- **Night Mode inverts lightness, not colour.** `view/night.ts` maps each pixel's luminance along
+  the `--page-paper-night` → `--page-ink-night` ramp and adds the source's chroma back unchanged,
+  so hue survives and a photograph stays a photograph rather than a negative. Image objects are
+  then painted back un-inverted from the source tile (`viewer.night.keepImages`, default on),
+  using the image rects from `pageObjects()`.
+- **View rotation is not a document change**, so it is not a `Command`: it lives in `ui.view` and
+  is passed to the engine as `RenderOptions.rotation`. `page.rotate*` (M20) remains the undoable
+  document rotation.
+- **The shell owns the chrome; M11 owns the document area.** Viewports mount into `#doc-host`,
+  one per tab (`Documents.attach`), disposed by `Documents.onClosed`.
+- **Tools get pointer events from the tool layer.** M02 has a tools service but nothing was
+  feeding it; M11's `PageView.tool` layer translates pointer events to PDF user space and
+  dispatches them to the active `ToolSpec`, which is what `ToolPointerEvent` was specified for.
+- **Split view is two viewports over one `Document`**, sharing the tile cache and the engine
+  handle, each with its own scroll, zoom and layout; the synced-scroll toggle mirrors the
+  fraction, not the pixels, so different zooms still track.
+- **Encrypted files re-prompt in place.** `file.openBytes` asks the viewer service to open; a
+  `password-required` / `wrong-password` error opens an opaque dialog with a show/hide toggle and
+  loops until it opens or the user cancels — cancelling closes nothing and leaves no tab.
+- **Rulers, grid and guides reuse existing theme tokens** (`--bg-panel`, `--fg-muted`, `--border`,
+  `--accent`); no new colour tokens, so M01's contrast tests keep covering them.
+- **Pure maths in Node, DOM in Playwright.** There is no jsdom in this repo and the brief adds no
+  libraries, so layout, tiling, the LRU, night maths, fit/zoom-to-cursor, history, units and
+  guides are pure modules with unit tests, and everything that touches the DOM is proved by
+  `test/e2e/viewer.spec.ts`.
+- **Full screen needs main.** New IPC `window:setFullScreen` / `window:isFullScreen` (ADR 0009);
+  reading mode is pure renderer (a `data-reading-mode` attribute on `<html>` plus an opaque
+  floating bar).
 
 ## Build log (fill in at merge)
 
