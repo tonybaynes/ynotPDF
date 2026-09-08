@@ -9,6 +9,14 @@
  * Payloads must be structured-cloneable; bytes travel as `Uint8Array`.
  */
 
+import type {
+  ClipboardContents,
+  DecodedRaster,
+  OpenFilesOptions,
+  WebRenderRequest,
+  WebRenderResult,
+} from './create';
+
 /** A file opened from disk. */
 export interface OpenedFile {
   /** Absolute path. */
@@ -17,16 +25,6 @@ export interface OpenedFile {
   readonly name: string;
   /** Raw bytes. */
   readonly bytes: Uint8Array;
-}
-
-/** Options for the general "pick some files" dialog (M12, ADR 0011). */
-export interface OpenFilesOptions {
-  readonly title?: string;
-  readonly buttonLabel?: string;
-  /** Allow more than one file (default true). */
-  readonly multiple?: boolean;
-  /** Native filters; the default is a single "All files" entry. */
-  readonly filters?: ReadonlyArray<{ readonly name: string; readonly extensions: string[] }>;
 }
 
 /** Recent-files entry persisted by main (`electron-store`). */
@@ -130,11 +128,6 @@ export interface AppInfo {
 export interface IpcInvokeMap {
   /** Shows the native open dialog filtered to PDFs. `null` when cancelled. */
   'file:openDialog': { args: []; result: OpenedFile | null };
-  /**
-   * Shows the native open dialog for files of any type, optionally multi-select (M12,
-   * ADR 0011) — what "attach a file to this PDF" needs. Empty when cancelled.
-   */
-  'file:openFilesDialog': { args: [options?: OpenFilesOptions]; result: OpenedFile[] };
   /** Reads a file by absolute path (recent files, file association). */
   'file:read': { args: [path: string]; result: OpenedFile };
   /** Writes bytes to an absolute path (used by Save in M21). */
@@ -222,6 +215,16 @@ export interface IpcInvokeMap {
   'shell:openTempFile': { args: [name: string, bytes: Uint8Array]; result: string };
   'shell:showItemInFolder': { args: [path: string]; result: void };
   'devtools:toggle': { args: []; result: void };
+  /** A multi-select open dialog with the caller's filters (M91). Empty when cancelled. */
+  'file:openFilesDialog': { args: [options?: OpenFilesOptions]; result: OpenedFile[] };
+  /** Loads a URL or generated HTML in a hidden window and prints it to PDF (M91, ADR 0011). */
+  'webpdf:render': { args: [request: WebRenderRequest]; result: WebRenderResult };
+  /** Destroys a render job's window; a no-op when the job has finished. */
+  'webpdf:cancel': { args: [jobId: string]; result: void };
+  /** Text, HTML and image (PNG) on the clipboard (M91). */
+  'clipboard:read': { args: []; result: ClipboardContents };
+  /** Decodes an image with the platform's own codecs; `null` when it cannot (M91). */
+  'image:decode': { args: [bytes: Uint8Array]; result: DecodedRaster | null };
 }
 
 /** Push channels main → renderer. Key = channel name; value = payload. */
@@ -267,7 +270,6 @@ export interface YnotBridge {
 /** Full list of invoke channels, used by the preload script to whitelist and by tests. */
 export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'file:openDialog',
-  'file:openFilesDialog',
   'file:read',
   'file:write',
   'file:saveDialog',
@@ -306,6 +308,11 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'shell:openTempFile',
   'shell:showItemInFolder',
   'devtools:toggle',
+  'file:openFilesDialog',
+  'webpdf:render',
+  'webpdf:cancel',
+  'clipboard:read',
+  'image:decode',
 ];
 
 /** Full list of event channels main may push. */

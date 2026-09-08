@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fixture site — Home</title>
+<style>
+  body { font-family: Georgia, serif; margin: 2em; max-width: 40em; }
+  .banner { background: #1e5aa8; color: #ffffff; padding: 1em; }
+  nav a { margin-right: 1em; }
+  @media print {
+    .banner { background: #dddddd; color: #000000; }
+    .no-print { display: none; }
+  }
+</style>
+</head>
+<body>
+<h1 id="top">Fixture site</h1>
+<div class="banner">A banner with a background colour.</div>
+<p>This is the home page of a tiny static site used to test "Create PDF from web page". It links to two internal pages, one external page and an in-page anchor.</p>
+<p class="no-print">This paragraph is hidden by the print stylesheet.</p>
+<img src="../logo-alpha.png" alt="logo" width="64" height="64">
+<nav>
+  <a href="about.html">About</a>
+  <a href="contact.html#team">Contact team</a>
+  <a href="https://example.com/outside">Outside</a>
+  <a href="#top">Top</a>
+</nav>
+</body>
+</html>

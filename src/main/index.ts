@@ -12,6 +12,7 @@ import { registerIpcHandlers } from './ipc';
 import { buildMenu } from './menu';
 import { RecentFiles } from './recent';
 import { Settings, THEME_KEY } from './settings';
+import { WebPdfPrinter } from './webpdf/WebPdfPrinter';
 import { broadcast, createMainWindow, getMainWindow, sendTo } from './window';
 import { cleanTempFiles, readFileForRenderer } from './files';
 
@@ -99,6 +100,7 @@ const closeBroker = new CloseBroker();
 const watchers = new FileWatchers((path) => {
   broadcast('file:changedOnDisk', { path });
 });
+const webpdf = new WebPdfPrinter();
 let recovery: RecoveryStore | null = null;
 
 /**
@@ -123,6 +125,7 @@ app.on('before-quit', (event) => {
 });
 
 app.on('will-quit', () => {
+  webpdf.dispose();
   void watchers.closeAll();
   // Temporary copies of attachments the reader opened in another application (M12, ADR 0011).
   void cleanTempFiles();
@@ -178,6 +181,7 @@ if (gotLock) {
       watchers,
       recovery,
       closeBroker,
+      webpdf,
     });
     pendingOpens.push(...pdfPathsFromArgv(process.argv));
     await boot();

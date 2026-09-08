@@ -551,7 +551,7 @@ const LAYER_COMMANDS: ReadonlyArray<CommandSpec> = [
       const [file] = await invoke('file:openFilesDialog', {
         title: 'Import layer visibility',
         buttonLabel: 'Import',
-        multiple: false,
+        multi: false,
         filters: [
           { name: 'Layer visibility', extensions: ['json'] },
           { name: 'All files', extensions: ['*'] },

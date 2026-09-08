@@ -7,6 +7,7 @@ test-results
 playwright-report
 package-lock.json
 test/fixtures/*.pdf
+test/fixtures/create/
 CHECKLIST.txt
 PLAN.md
 docs/modules/*.md

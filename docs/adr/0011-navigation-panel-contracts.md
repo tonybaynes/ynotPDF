@@ -56,21 +56,23 @@ editable, so it needs to say so. `destinations` joins the union in
 `src/renderer/core/model.ts` and `buildWritePlan` fills the section it already had. Purely
 additive: a document that does not edit destinations plans exactly what it planned before.
 
-### 4. Two new IPC channels
+### 4. One new IPC channel
 
 ```ts
-'file:openFilesDialog': { args: [options?: OpenFilesOptions]; result: OpenedFile[] };
-'shell:openTempFile':   { args: [name: string, bytes: Uint8Array]; result: string };
+'shell:openTempFile': { args: [name: string, bytes: Uint8Array]; result: string };
 ```
 
-- **`file:openFilesDialog`** is the existing open dialog without the PDF filter and with
-  multi-select, which is what "add attachments" needs. `file:openDialog` stays exactly as it
-  is; the two do not share a code path in the renderer.
-- **`shell:openTempFile`** writes bytes to a per-session temp directory and hands them to
-  the OS default application (`shell.openPath`). The renderer has no filesystem, so opening
-  an attachment cannot be done any other way. The file name is sanitised in main (no
-  separators, no `..`, length-capped) and everything written this way is deleted when the
-  app quits.
+**`shell:openTempFile`** writes bytes to a per-session temp directory and hands them to the OS
+default application (`shell.openPath`). The renderer has no filesystem, so opening an attachment
+cannot be done any other way. The file name is sanitised in main (no separators, no `..`, length
+capped) and everything written this way is deleted when the app quits. In an e2e run
+(`YNOT_E2E=1`) everything happens except the `shell.openPath` — a test must never make the
+machine it runs on open another application.
+
+"Add attachments" also needs a file picker without the PDF filter. M12 wrote one and **M91
+shipped the same channel** (`file:openFilesDialog`) while this module was in flight; M91's is
+the one that stayed, and M12 calls it. Two modules inventing the same channel a week apart is
+worth a note for whoever adds the third: look in `IpcInvokeMap` before adding to it.
 
 ### 5. `DocumentView.refresh()` and `Viewer.refresh()` (M11, additive)
 

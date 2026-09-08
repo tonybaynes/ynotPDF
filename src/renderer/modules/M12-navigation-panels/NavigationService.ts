@@ -567,7 +567,7 @@ export class NavigationService {
     const files = await invoke('file:openFilesDialog', {
       title: 'Choose files to attach',
       buttonLabel: 'Attach',
-      multiple: true,
+      multi: true,
     });
     return files.map((f) => ({ name: f.name, bytes: f.bytes }));
   }

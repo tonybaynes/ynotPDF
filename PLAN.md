@@ -23,7 +23,7 @@ commit. Sub-conversations working in parallel follow **§12**.
 | 2 | M11 Viewer — rendering, navigation, zoom, layouts | [M11-viewer.md](docs/modules/M11-viewer.md) | ☑ |
 | 2 | M21 Save, Save As, autosave & recovery | [M21-save.md](docs/modules/M21-save.md) | ☑ |
 | 2 | M70 Encryption, permissions & certificate security | [M70-encryption.md](docs/modules/M70-encryption.md) | ☐ |
-| 2 | M91 Create PDF from images, web pages, clipboard, HTML/Markdown & text | [M91-create-pdf.md](docs/modules/M91-create-pdf.md) | ☐ |
+| 2 | M91 Create PDF from images, web pages, clipboard, HTML/Markdown & text | [M91-create-pdf.md](docs/modules/M91-create-pdf.md) | ☑ |
 | 3 | M12 Navigation panels — thumbnails, bookmarks, layers, attachments, destinations | [M12-navigation-panels.md](docs/modules/M12-navigation-panels.md) | ☑ |
 | 3 | M13 Text selection, find, copy, snapshot & print | [M13-select-find-print.md](docs/modules/M13-select-find-print.md) | ☐ |
 | 3 | M30 Annotations — text markup, notes, typewriter, text box, callout | [M30-markup-annotations.md](docs/modules/M30-markup-annotations.md) | ☐ |

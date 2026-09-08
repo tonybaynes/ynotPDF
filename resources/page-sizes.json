@@ -1,0 +1,43 @@
+{
+  "$comment": "Page-size presets (M91). Sizes are portrait, in millimetres; the code turns them into points and swaps for landscape. Add a row to offer a new size everywhere a page size is chosen — Create PDF, web printing, M130 preferences. `group` is only for grouping in menus.",
+  "version": 1,
+  "sizes": [
+    { "id": "A3", "label": "A3", "widthMm": 297, "heightMm": 420, "group": "ISO A" },
+    { "id": "A4", "label": "A4", "widthMm": 210, "heightMm": 297, "group": "ISO A" },
+    { "id": "A5", "label": "A5", "widthMm": 148, "heightMm": 210, "group": "ISO A" },
+    { "id": "A6", "label": "A6", "widthMm": 105, "heightMm": 148, "group": "ISO A" },
+    { "id": "B4", "label": "B4", "widthMm": 250, "heightMm": 353, "group": "ISO B" },
+    { "id": "B5", "label": "B5", "widthMm": 176, "heightMm": 250, "group": "ISO B" },
+    {
+      "id": "Letter",
+      "label": "Letter",
+      "widthMm": 215.9,
+      "heightMm": 279.4,
+      "group": "North America"
+    },
+    {
+      "id": "Legal",
+      "label": "Legal",
+      "widthMm": 215.9,
+      "heightMm": 355.6,
+      "group": "North America"
+    },
+    {
+      "id": "Tabloid",
+      "label": "Tabloid",
+      "widthMm": 279.4,
+      "heightMm": 431.8,
+      "group": "North America"
+    },
+    {
+      "id": "Executive",
+      "label": "Executive",
+      "widthMm": 184.15,
+      "heightMm": 266.7,
+      "group": "North America"
+    },
+    { "id": "DL", "label": "DL envelope", "widthMm": 110, "heightMm": 220, "group": "Envelopes" },
+    { "id": "C5", "label": "C5 envelope", "widthMm": 162, "heightMm": 229, "group": "Envelopes" },
+    { "id": "C6", "label": "C6 envelope", "widthMm": 114, "heightMm": 162, "group": "Envelopes" }
+  ]
+}
