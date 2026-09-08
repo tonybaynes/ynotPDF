@@ -408,3 +408,16 @@ html[data-reading-mode='on'] .qat {
   color: var(--warning);
   font-weight: var(--fw-heading);
 }
+
+/* ---- the password prompt's field ----------------------------------------------------------- */
+
+.password-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.password-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}

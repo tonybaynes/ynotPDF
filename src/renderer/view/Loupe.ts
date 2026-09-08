@@ -45,7 +45,9 @@ export class Loupe {
     this.canvas.style.height = `${height}px`;
 
     const close = button('icon-btn viewer-loupe-close', { 'aria-label': 'Close loupe' }, icon('x'));
-    close.addEventListener('click', () => this.close());
+    close.addEventListener('click', () => {
+      this.close();
+    });
     this.label.textContent = `${this.factorValue}×`;
     const title = el(
       'div.viewer-loupe-title',
@@ -71,7 +73,9 @@ export class Loupe {
       this.update(e.clientX, e.clientY);
     };
     this.view.scroller.addEventListener('pointermove', track);
-    this.disposers.push(() => this.view.scroller.removeEventListener('pointermove', track));
+    this.disposers.push(() => {
+      this.view.scroller.removeEventListener('pointermove', track);
+    });
     this.element.focus();
   }
 
@@ -187,7 +191,9 @@ export class Loupe {
       }
     };
     this.element.addEventListener('keydown', onKey);
-    this.disposers.push(() => this.element.removeEventListener('keydown', onKey));
+    this.disposers.push(() => {
+      this.element.removeEventListener('keydown', onKey);
+    });
   }
 }
 

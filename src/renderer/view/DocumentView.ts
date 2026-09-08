@@ -133,14 +133,18 @@ export class DocumentView {
       this.schedule();
     };
     this.scroller.addEventListener('scroll', onScroll, { passive: true });
-    this.disposers.push(() => this.scroller.removeEventListener('scroll', onScroll));
+    this.disposers.push(() => {
+      this.scroller.removeEventListener('scroll', onScroll);
+    });
 
     const resize = new ResizeObserver(() => {
       this.applyFit();
       this.relayout();
     });
     resize.observe(this.scroller);
-    this.disposers.push(() => resize.disconnect());
+    this.disposers.push(() => {
+      resize.disconnect();
+    });
 
     this.disposers.push(
       this.renderer.onTile((id, request) => {
@@ -335,7 +339,8 @@ export class DocumentView {
     if (!next) return;
     this.currentPage = next.pages[0] ?? this.currentPage;
     this.relayout({ keepPage: true });
-    const top = land === 'top' ? 0 : Math.max(0, this.content.offsetHeight - this.scroller.clientHeight);
+    const top =
+      land === 'top' ? 0 : Math.max(0, this.content.offsetHeight - this.scroller.clientHeight);
     this.setScroll({ left: this.scroller.scrollLeft, top });
     this.emit();
   }
@@ -439,8 +444,8 @@ export class DocumentView {
   /** Recomputes the fit zoom, if a fit mode is held. */
   private applyFit(): void {
     if (!this.fitMode) return;
-    const row = this.table.rows[Math.max(0, rowOfPage(this.table, this.currentPage))] ??
-      this.table.rows[0];
+    const row =
+      this.table.rows[Math.max(0, rowOfPage(this.table, this.currentPage))] ?? this.table.rows[0];
     const pages = row?.pages ?? [0];
     const sizes = pages.map((p) => this.sizes[p]).filter((s): s is PageSize => Boolean(s));
     if (sizes.length === 0) return;
@@ -711,7 +716,9 @@ function requestIdle(fn: () => void): number {
   const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: object) => number })
     .requestIdleCallback;
   if (ric) return ric(fn, { timeout: 500 });
-  return globalThis.setTimeout(fn, 200) as unknown as number;
+  // `setTimeout` is `number` in the DOM and `Timeout` under Node's types; the handle is opaque.
+  const handle: unknown = globalThis.setTimeout(fn, 200);
+  return handle as number;
 }
 
 function cancelIdle(handle: number): void {

@@ -33,7 +33,7 @@ export interface PageViewOptions {
 export const CANVAS_MARGIN = TILE_SIZE;
 
 /** Where the raster canvas currently sits inside the page, in CSS px. */
-export interface CanvasWindow extends PxRect {}
+export type CanvasWindow = PxRect;
 
 export class PageView {
   readonly index: PageIndex;
@@ -136,8 +136,16 @@ export class PageView {
     const h = Math.min(this.heightPx, Math.max(1, visible.height + CANVAS_MARGIN * 2));
     // Snap to the tile grid so the window only moves in whole tiles: fewer repaints, and the
     // tiles we paint always line up with the canvas.
-    const x = clamp(Math.floor((visible.x - CANVAS_MARGIN) / TILE_SIZE) * TILE_SIZE, 0, this.widthPx - w);
-    const y = clamp(Math.floor((visible.y - CANVAS_MARGIN) / TILE_SIZE) * TILE_SIZE, 0, this.heightPx - h);
+    const x = clamp(
+      Math.floor((visible.x - CANVAS_MARGIN) / TILE_SIZE) * TILE_SIZE,
+      0,
+      this.widthPx - w,
+    );
+    const y = clamp(
+      Math.floor((visible.y - CANVAS_MARGIN) / TILE_SIZE) * TILE_SIZE,
+      0,
+      this.heightPx - h,
+    );
     const next: CanvasWindow = { x: Math.max(0, x), y: Math.max(0, y), width: w, height: h };
     if (
       next.x === this.window.x &&
@@ -228,10 +236,9 @@ export class PageView {
       (kind: 'onPointerDown' | 'onPointerMove' | 'onPointerUp') =>
       (event: Event): void => {
         const tool = this.toolFor?.();
-        const fn = tool?.[kind];
-        if (!tool || !fn) return;
+        if (!tool) return;
         const e = event as PointerEvent;
-        const consumed = fn.call(tool, this.toolEvent(e));
+        const consumed = tool[kind]?.(this.toolEvent(e));
         if (consumed) {
           event.preventDefault();
           event.stopPropagation();

@@ -81,7 +81,10 @@ export function tilesForRect(
   const { cols, rows } = gridSize(pageWidthPx, pageHeightPx, tileSize);
   const c0 = Math.max(0, Math.floor(visible.x / tileSize));
   const r0 = Math.max(0, Math.floor(visible.y / tileSize));
-  const c1 = Math.min(cols - 1, Math.floor((visible.x + Math.max(0, visible.width) - 1) / tileSize));
+  const c1 = Math.min(
+    cols - 1,
+    Math.floor((visible.x + Math.max(0, visible.width) - 1) / tileSize),
+  );
   const r1 = Math.min(
     rows - 1,
     Math.floor((visible.y + Math.max(0, visible.height) - 1) / tileSize),

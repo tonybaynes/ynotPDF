@@ -139,6 +139,13 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
         focused: win?.isFocused() ?? false,
       };
     },
+    'window:setFullScreen': (e, fullScreen) => {
+      const win = windowOf(e);
+      if (!win) return false;
+      const next = fullScreen ?? !win.isFullScreen();
+      win.setFullScreen(next);
+      return win.isFullScreen();
+    },
     'window:count': () => allWindows().length,
     'shell:openExternal': async (_e, url) => {
       if (!/^https?:\/\//.test(url)) throw new Error('Only http(s) URLs may be opened');

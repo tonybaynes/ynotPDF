@@ -15,7 +15,7 @@
  * | `single`            | no     | –     | no         |
  * | `continuous`        | no     | –     | yes        |
  * | `facing`            | yes    | no    | no         |
- * | `facing-continuous` | yes    | no    | yes        |
+ * | `facingContinuous`  | yes    | no    | yes        |
  * | `book`              | yes    | yes   | yes        |
  *
  * Facing rows sit on a two-column grid whose column widths are the maxima over every left- and
@@ -26,13 +26,13 @@
 import type { Rotation } from '@shared/pdf';
 
 /** The five page layouts (Foxit's View tab). */
-export type LayoutMode = 'single' | 'continuous' | 'facing' | 'facing-continuous' | 'book';
+export type LayoutMode = 'single' | 'continuous' | 'facing' | 'facingContinuous' | 'book';
 
 export const LAYOUT_MODES: ReadonlyArray<LayoutMode> = [
   'single',
   'continuous',
   'facing',
-  'facing-continuous',
+  'facingContinuous',
   'book',
 ];
 
@@ -84,12 +84,12 @@ export interface LayoutTable {
 
 /** Whether a mode pairs pages. */
 export function isFacing(mode: LayoutMode): boolean {
-  return mode === 'facing' || mode === 'facing-continuous' || mode === 'book';
+  return mode === 'facing' || mode === 'facingContinuous' || mode === 'book';
 }
 
 /** Whether a mode scrolls through every page or shows one row at a time. */
 export function isContinuous(mode: LayoutMode): boolean {
-  return mode === 'continuous' || mode === 'facing-continuous' || mode === 'book';
+  return mode === 'continuous' || mode === 'facingContinuous' || mode === 'book';
 }
 
 /** Whether the first page stands alone (a cover). */
@@ -127,7 +127,11 @@ export function columnOf(row: ReadonlyArray<number>, page: number, cover: boolea
 }
 
 /** Displayed size of a page in CSS px at `zoom`, with the extra view rotation applied. */
-export function pageBoxPx(size: LayoutPageSize, zoom: number, rotation: Rotation = 0): {
+export function pageBoxPx(
+  size: LayoutPageSize,
+  zoom: number,
+  rotation: Rotation = 0,
+): {
   width: number;
   height: number;
 } {

@@ -1,0 +1,522 @@
+/**
+ * `ViewerService` — one `Viewer` per document tab, and the bridge between the viewer and the
+ * rest of the app (M11). Registered as the service `"viewer"`.
+ *
+ * What it owns:
+ * - **Opening.** `open(file)` turns bytes into a `Document` (through M20's `DocumentService`),
+ *   a tab and a viewport, prompting for a password and retrying while the file asks for one.
+ * - **The store.** M02 registered `view.*` commands that write `ui.view`; this service is what
+ *   makes them mean something, and it writes the viewport's own state back so the status bar,
+ *   the ribbon toggles and the tests all read one object.
+ * - **Per-document memory.** Scroll position, zoom, layout and guides are written under a hash
+ *   of the document's path and restored when it is reopened.
+ * - **Full screen and reading mode**, which are window-level rather than per-tab.
+ */
+
+import { icon } from '@app/icons';
+import type { ShellServices } from '@app/services';
+import { SERVICE } from '@app/services';
+import type { Documents, DocumentTab } from '@app/tabs/Documents';
+import type { Registry } from '@core/Registry';
+import type { Document } from '@core/Document';
+import type { EngineClient } from '@engine/EngineClient';
+import { hasBridge, invoke, type OpenedFile } from '@shared/ipc';
+import type { ToolSpec } from '@shared/module';
+import type { ThemeManager } from '@theme/ThemeManager';
+import { THEME_SERVICE } from '@modules/M01-theme-system/manifest';
+import { DOCUMENT_SERVICE, type DocumentService } from '@modules/M20-document-model/manifest';
+import { megabytes } from '@view/TileCache';
+import { TileRenderer, type RenderFlags } from '@view/TileRenderer';
+import { FALLBACK_PALETTE, parseColor, type NightPalette } from '@view/night';
+import { GuideSet } from '@view/guides';
+import type { LayoutMode } from '@view/layout';
+import { factor, percent, type FitMode } from '@view/zoom';
+import type { ViewportState } from '@view/DocumentView';
+import { DEFAULT_OVERLAY_STATE, type OverlayState } from '@view/Overlays';
+import { Viewer, type SplitOrientation } from './Viewer';
+import { openWithPassword } from './password';
+import {
+  DEFAULT_SETTINGS,
+  ipcSettingsStorage,
+  readDocumentState,
+  readSettings,
+  writeDocumentState,
+  writeSetting,
+  type SettingsStorage,
+  type ViewerSettings,
+} from './settings';
+import { viewerTools } from './tools';
+
+export const VIEWER_SERVICE = 'viewer';
+
+export interface ViewerServiceOptions {
+  readonly registry: Registry;
+  readonly shell: ShellServices;
+  readonly host: HTMLElement;
+  readonly client: EngineClient;
+  readonly storage?: SettingsStorage;
+}
+
+export class ViewerService {
+  readonly renderer: TileRenderer;
+  private readonly registry: Registry;
+  private readonly shell: ShellServices;
+  private readonly documents: Documents;
+  private readonly host: HTMLElement;
+  private readonly storage: SettingsStorage;
+  private readonly viewers = new Map<string, Viewer>();
+  private readonly disposers: Array<() => void> = [];
+  private readonly tools: ToolSpec[];
+  private settingsValue: ViewerSettings = DEFAULT_SETTINGS;
+  private overlayState: OverlayState = DEFAULT_OVERLAY_STATE;
+  private readingMode = false;
+  private readingBar: HTMLElement | null = null;
+  private pushingState = false;
+
+  constructor(options: ViewerServiceOptions) {
+    this.registry = options.registry;
+    this.shell = options.shell;
+    this.documents = options.shell.documents;
+    this.host = options.host;
+    this.storage = options.storage ?? ipcSettingsStorage();
+    this.renderer = new TileRenderer({
+      client: options.client,
+      cacheBytes: megabytes(DEFAULT_SETTINGS.cacheMegabytes),
+      palette: () => this.nightPalette(),
+    });
+    this.tools = viewerTools(() => this.active);
+
+    this.disposers.push(
+      this.documents.subscribe((state) => {
+        this.showActive(state.active);
+      }),
+    );
+    this.disposers.push(
+      this.documents.onClosed((tab) => {
+        void this.closeTab(tab);
+      }),
+    );
+
+    // Night Mode is M01's toggle; the raster follows it live.
+    if (this.registry.hasService(THEME_SERVICE)) {
+      const themes = this.registry.service<ThemeManager>(THEME_SERVICE);
+      this.disposers.push(
+        themes.onChange(() => {
+          for (const viewer of this.viewers.values()) {
+            viewer.setFlags({ night: themes.nightMode });
+          }
+        }),
+      );
+    }
+  }
+
+  /** The tools this module contributes (the manifest lists them). */
+  get toolSpecs(): ReadonlyArray<ToolSpec> {
+    return this.tools;
+  }
+
+  get settings(): ViewerSettings {
+    return this.settingsValue;
+  }
+
+  get active(): Viewer | null {
+    const tab = this.documents.active;
+    return tab ? (this.viewers.get(tab.id) ?? null) : null;
+  }
+
+  get(tabId: string): Viewer | null {
+    return this.viewers.get(tabId) ?? null;
+  }
+
+  /** Reads the settings; called once from `activate`. */
+  async load(): Promise<void> {
+    this.settingsValue = await readSettings(this.storage);
+    this.renderer.setCacheBytes(megabytes(this.settingsValue.cacheMegabytes));
+    this.renderer.keepImages = this.settingsValue.nightKeepImages;
+    this.overlayState = {
+      rulers: this.settingsValue.rulers,
+      grid: this.settingsValue.grid,
+      guides: this.settingsValue.guides,
+      unit: this.settingsValue.rulerUnits,
+      gridSpacing: this.settingsValue.gridSpacing,
+    };
+  }
+
+  /** Changes one setting, persists it and applies it to every open viewer. */
+  async setSetting<K extends keyof ViewerSettings>(
+    name: K,
+    value: ViewerSettings[K],
+  ): Promise<ViewerSettings[K]> {
+    this.settingsValue = { ...this.settingsValue, [name]: value };
+    await writeSetting(this.storage, name, value);
+    this.applySetting(name);
+    return value;
+  }
+
+  private applySetting(name: keyof ViewerSettings): void {
+    const s = this.settingsValue;
+    switch (name) {
+      case 'cacheMegabytes':
+        this.renderer.setCacheBytes(megabytes(s.cacheMegabytes));
+        break;
+      case 'nightKeepImages':
+        this.renderer.keepImages = s.nightKeepImages;
+        break;
+      case 'rulers':
+      case 'grid':
+      case 'guides':
+      case 'rulerUnits':
+      case 'gridSpacing':
+        this.overlayState = {
+          rulers: s.rulers,
+          grid: s.grid,
+          guides: s.guides,
+          unit: s.rulerUnits,
+          gridSpacing: s.gridSpacing,
+        };
+        for (const viewer of this.viewers.values()) viewer.setOverlays(this.overlayState);
+        break;
+      case 'lineWeights':
+      case 'smoothText':
+      case 'smoothImages':
+      case 'smoothPaths':
+      case 'grayscale':
+        for (const viewer of this.viewers.values()) viewer.setFlags(this.flags());
+        break;
+      case 'autoScrollSpeed':
+        for (const viewer of this.viewers.values()) viewer.setAutoScrollSpeed(s.autoScrollSpeed);
+        break;
+      default:
+        break;
+    }
+  }
+
+  // ---- opening -----------------------------------------------------------------------------------
+
+  /**
+   * Opens a file into a new tab. Returns the tab, or `null` when the reader cancelled the
+   * password prompt — cancelling leaves nothing behind.
+   */
+  async open(file: OpenedFile): Promise<DocumentTab | null> {
+    const service = this.registry.service<DocumentService>(DOCUMENT_SERVICE);
+    const existing = file.path ? this.documents.tabs.find((t) => t.path === file.path) : undefined;
+    if (existing) {
+      this.documents.activate(existing.id);
+      return existing;
+    }
+    const opened = await openWithPassword(
+      (password) =>
+        service.open(file.bytes, {
+          path: file.path,
+          name: file.name,
+          ...(password === undefined ? {} : { password }),
+        }),
+      { dialogs: this.shell.dialogs, name: file.name },
+    );
+    if (!opened) return null;
+    await this.attach(opened.tab, opened.document);
+    if (hasBridge() && file.path) await invoke('recent:add', file.path).catch(() => []);
+    return opened.tab;
+  }
+
+  /** Builds the viewport for a tab whose `Document` already exists. */
+  async attach(tab: DocumentTab, document: Document): Promise<Viewer> {
+    const existing = this.viewers.get(tab.id);
+    if (existing) return existing;
+    const remembered = tab.path ? await readDocumentState(this.storage, tab.path) : {};
+    const restore = this.settingsValue.restorePosition;
+    const layout: LayoutMode =
+      (restore ? remembered.layout : undefined) ?? this.settingsValue.defaultLayout;
+    const fit: FitMode =
+      (restore ? (remembered.fit ?? null) : null) ??
+      (this.settingsValue.defaultZoom === 'none' ? null : this.settingsValue.defaultZoom);
+    const zoom = restore && remembered.zoom ? remembered.zoom : 1;
+
+    const viewer = new Viewer({
+      host: this.host,
+      tabId: tab.id,
+      document,
+      renderer: this.renderer,
+      activeTool: () => this.currentTool(),
+      flags: this.flags(),
+      overlays: this.overlayState,
+      layout,
+      zoom,
+      fit,
+      autoScrollSpeed: this.settingsValue.autoScrollSpeed,
+      onStateChange: (state) => {
+        this.publish(tab.id, state);
+      },
+      onGuidesChanged: () => {
+        void this.remember(tab);
+      },
+    });
+    if (restore && remembered.guides) {
+      const set = GuideSet.fromJSON(remembered.guides);
+      for (const g of set.all) viewer.guides.add(g.page, g.axis, g.at);
+    }
+    this.viewers.set(tab.id, viewer);
+    this.documents.attach(tab.id, viewer);
+    if (restore && typeof remembered.page === 'number') {
+      viewer.goToPage(remembered.page, { record: false });
+      if (typeof remembered.scrollTop === 'number') {
+        viewer.pane.setScroll({
+          left: remembered.scrollLeft ?? 0,
+          top: remembered.scrollTop,
+        });
+      }
+    }
+    if (this.settingsValue.perfHud) viewer.toggleHud();
+    this.showActive(this.documents.state.active);
+    this.publish(tab.id, viewer.state);
+    return viewer;
+  }
+
+  private async closeTab(tab: DocumentTab): Promise<void> {
+    const viewer = this.viewers.get(tab.id);
+    if (!viewer) return;
+    await this.remember(tab);
+    this.viewers.delete(tab.id);
+    viewer.dispose();
+    this.renderer.forget(tab.id);
+    if (this.viewers.size === 0) this.resetView();
+  }
+
+  /** Writes the per-document memory. */
+  private async remember(tab: DocumentTab): Promise<void> {
+    const viewer = this.viewers.get(tab.id);
+    if (!viewer || !tab.path || !this.settingsValue.restorePosition) return;
+    const state = viewer.state;
+    await writeDocumentState(this.storage, tab.path, {
+      page: state.page,
+      zoom: state.zoom,
+      fit: state.fit,
+      layout: state.layout,
+      scrollTop: state.scrollTop,
+      scrollLeft: state.scrollLeft,
+      guides: viewer.guides.toJSON(),
+    });
+  }
+
+  // ---- store bridge ------------------------------------------------------------------------------
+
+  /** Viewport → store. Everything the status bar and the ribbon read comes from here. */
+  private publish(tabId: string, state: ViewportState): void {
+    if (this.documents.state.active !== tabId) return;
+    this.pushingState = true;
+    try {
+      this.shell.ui.set((s) => ({
+        view: {
+          ...s.view,
+          page: state.pageCount === 0 ? 0 : state.page + 1,
+          pageCount: state.pageCount,
+          zoom: percent(state.zoom),
+          fit: state.fit,
+          layout: state.layout,
+          rotation: state.rotation,
+          split: this.active?.split ?? 'off',
+          syncScroll: this.active?.synced ?? true,
+        },
+      }));
+    } finally {
+      this.pushingState = false;
+    }
+    this.shell.invalidate();
+  }
+
+  /**
+   * Store → viewport. M02's `view.*` commands only write `ui.view`; this subscription is what
+   * turns those writes into scrolling and zooming, so the commands, the status bar's fields and
+   * the palette all end up in the same place.
+   */
+  install(): () => void {
+    const stop = this.shell.ui.select(
+      (s) => s.view,
+      (view) => {
+        if (this.pushingState) return;
+        const viewer = this.active;
+        if (!viewer) return;
+        const state = viewer.state;
+        if (view.layout !== state.layout) viewer.setLayout(view.layout);
+        if (view.rotation !== state.rotation) viewer.setRotation(view.rotation);
+        if (view.fit !== state.fit) viewer.setFit(view.fit);
+        else if (!view.fit && view.zoom !== percent(state.zoom)) viewer.setZoom(view.zoom);
+        if (view.pageCount > 0 && view.page - 1 !== state.page) viewer.goToPage(view.page - 1);
+        if (view.split !== viewer.split) this.setSplit(view.split);
+        if (view.syncScroll !== viewer.synced) viewer.setSyncScroll(view.syncScroll);
+      },
+      { immediate: false },
+    );
+    this.disposers.push(stop);
+    return stop;
+  }
+
+  /** Clears the view slice when the last document closes. */
+  private resetView(): void {
+    this.pushingState = true;
+    try {
+      this.shell.ui.set((s) => ({
+        view: { ...s.view, page: 0, pageCount: 0, rotation: 0, split: 'off' },
+      }));
+    } finally {
+      this.pushingState = false;
+    }
+  }
+
+  private showActive(activeId: string | null): void {
+    for (const [id, viewer] of this.viewers) {
+      viewer.element.hidden = id !== activeId;
+    }
+    const viewer = activeId ? this.viewers.get(activeId) : null;
+    if (viewer) this.publish(viewer.tabId, viewer.state);
+    this.updateReadingBar();
+  }
+
+  // ---- window modes -----------------------------------------------------------------------------
+
+  async setFullScreen(on?: boolean): Promise<boolean> {
+    if (!hasBridge()) return false;
+    const next = await invoke('window:setFullScreen', on);
+    return next;
+  }
+
+  get isReadingMode(): boolean {
+    return this.readingMode;
+  }
+
+  /**
+   * Reading mode hides the chrome and leaves a small opaque bar with the page controls — Foxit's
+   * behaviour, and the reason the bar exists at all is that a full-screen reader with no way out
+   * is a trap. Escape leaves.
+   */
+  setReadingMode(on: boolean): boolean {
+    if (on === this.readingMode) return this.readingMode;
+    this.readingMode = on;
+    const root = document.documentElement;
+    if (on) root.dataset['readingMode'] = 'on';
+    else delete root.dataset['readingMode'];
+    this.updateReadingBar();
+    this.active?.focus();
+    return this.readingMode;
+  }
+
+  private updateReadingBar(): void {
+    if (!this.readingMode) {
+      this.readingBar?.remove();
+      this.readingBar = null;
+      return;
+    }
+    if (!this.readingBar) {
+      this.readingBar = buildReadingBar(this.shell);
+      document.body.append(this.readingBar);
+    }
+    const view = this.shell.ui.get().view;
+    const label = this.readingBar.querySelector('.viewer-reading-page');
+    if (label) label.textContent = view.pageCount ? `${view.page} of ${view.pageCount}` : '';
+  }
+
+  // ---- split --------------------------------------------------------------------------------------
+
+  setSplit(orientation: SplitOrientation): void {
+    const viewer = this.active;
+    if (!viewer) return;
+    viewer.setSplit(orientation, {
+      host: this.host,
+      tabId: viewer.tabId,
+      document: viewer.document,
+      renderer: this.renderer,
+      activeTool: () => this.currentTool(),
+      flags: this.flags(),
+      overlays: this.overlayState,
+      layout: viewer.state.layout,
+      zoom: viewer.state.zoom,
+      fit: viewer.state.fit,
+      autoScrollSpeed: this.settingsValue.autoScrollSpeed,
+      onStateChange: (state) => {
+        this.publish(viewer.tabId, state);
+      },
+    });
+    this.publish(viewer.tabId, viewer.state);
+  }
+
+  // ---- helpers ------------------------------------------------------------------------------------
+
+  /** The render flags built from the settings plus M01's live Night Mode state. */
+  flags(): RenderFlags {
+    const s = this.settingsValue;
+    return {
+      annotations: true,
+      forms: true,
+      grayscale: s.grayscale,
+      smoothText: s.smoothText,
+      smoothImages: s.smoothImages,
+      smoothPaths: s.smoothPaths,
+      lineWeights: s.lineWeights,
+      night: this.nightMode(),
+    };
+  }
+
+  nightMode(): boolean {
+    if (!this.registry.hasService(THEME_SERVICE)) return false;
+    return this.registry.service<ThemeManager>(THEME_SERVICE).nightMode;
+  }
+
+  /** Reads `--page-paper-night` / `--page-ink-night` from the live theme. */
+  private nightPalette(): NightPalette {
+    if (typeof getComputedStyle !== 'function') return FALLBACK_PALETTE;
+    const style = getComputedStyle(document.documentElement);
+    const paper = parseColor(style.getPropertyValue('--page-paper-night'));
+    const ink = parseColor(style.getPropertyValue('--page-ink-night'));
+    return {
+      paper: paper ?? FALLBACK_PALETTE.paper,
+      ink: ink ?? FALLBACK_PALETTE.ink,
+    };
+  }
+
+  private currentTool(): ToolSpec | null {
+    const id = this.shell.ui.get().activeTool;
+    if (!id) return null;
+    return this.registry.tools().find((t) => t.id === id) ?? null;
+  }
+
+  dispose(): void {
+    for (const d of this.disposers.splice(0)) d();
+    for (const viewer of this.viewers.values()) viewer.dispose();
+    this.viewers.clear();
+    this.renderer.dispose();
+    this.readingBar?.remove();
+    delete document.documentElement.dataset['readingMode'];
+  }
+}
+
+/** The minimal floating bar reading mode leaves behind. Opaque, keyboard-reachable. */
+function buildReadingBar(shell: ShellServices): HTMLElement {
+  const make = (label: string, iconName: string, command: string): HTMLButtonElement => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'icon-btn';
+    b.setAttribute('aria-label', label);
+    b.title = label;
+    b.dataset['command'] = command;
+    b.addEventListener('click', () => void shell.run(command));
+    b.append(icon(iconName));
+    return b;
+  };
+  const bar = document.createElement('div');
+  bar.className = 'viewer-reading-bar';
+  bar.setAttribute('role', 'toolbar');
+  bar.setAttribute('aria-label', 'Reading mode');
+  const page = document.createElement('span');
+  page.className = 'viewer-reading-page';
+  bar.append(
+    make('Previous page', 'chevron-left', 'view.page.previous'),
+    page,
+    make('Next page', 'chevron-right', 'view.page.next'),
+    make('Zoom out', 'zoom-out', 'view.zoom.out'),
+    make('Zoom in', 'zoom-in', 'view.zoom.in'),
+    make('Leave reading mode', 'shrink', 'view.readingMode.toggle'),
+  );
+  return bar;
+}
+
+export { factor, SERVICE };

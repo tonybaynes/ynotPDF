@@ -13,7 +13,7 @@
 import { el } from '@app/dom';
 import type { PdfRect } from '@shared/pdf';
 import type { DocumentView } from './DocumentView';
-import { GuideSet, gridLines, type Guide, type GuideAxis } from './guides';
+import { gridLines, type Guide, type GuideAxis, type GuideSet } from './guides';
 import { rectOfPage } from './layout';
 import { formatLength, rulerTicks, type Unit } from './units';
 
@@ -290,7 +290,7 @@ export class Overlays {
 
   private moveGuideTo(guide: Guide, clientX: number, clientY: number): void {
     const hit = this.view.hitTest(clientX, clientY);
-    if (!hit || hit.page !== guide.page) return;
+    if (hit?.page !== guide.page) return;
     this.guides.move(guide.id, guide.axis === 'vertical' ? hit.x : hit.y);
     this.sync();
   }
@@ -321,6 +321,8 @@ export class Overlays {
       window.addEventListener('pointerup', up);
     };
     ruler.addEventListener('pointerdown', down);
-    this.disposers.push(() => ruler.removeEventListener('pointerdown', down));
+    this.disposers.push(() => {
+      ruler.removeEventListener('pointerdown', down);
+    });
   }
 }

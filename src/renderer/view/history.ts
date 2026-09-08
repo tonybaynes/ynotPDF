@@ -54,7 +54,7 @@ export class ViewHistory {
    */
   push(position: ViewPosition): void {
     const current = this.current;
-    if (current && current.page === position.page && Math.abs(current.top - position.top) < 1) {
+    if (current?.page === position.page && Math.abs(current.top - position.top) < 1) {
       this.entries[this.cursor] = position;
       return;
     }

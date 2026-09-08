@@ -18,6 +18,7 @@
 import type { EngineClient } from '@engine/EngineClient';
 import { EngineError, type DocHandle, type RenderOptions } from '@engine/PdfEngine';
 import type { PageGeometry } from '@engine/geometry';
+import type { PdfRect } from '@shared/pdf';
 import { TileCache, megabytes } from './TileCache';
 import { bitmapBytes, tileId, tileRect, type TileCoord, type TileSpec } from './tiles';
 import {
@@ -65,7 +66,11 @@ export function flagsKey(f: RenderFlags): string {
   );
 }
 
-export function renderOptions(f: RenderFlags, rotation: number, background?: number): RenderOptions {
+export function renderOptions(
+  f: RenderFlags,
+  rotation: number,
+  background?: number,
+): RenderOptions {
   return {
     annotations: f.annotations,
     forms: f.forms,
@@ -195,7 +200,9 @@ export class TileRenderer {
     return tileId(this.specOf(request));
   }
 
-  placeholderId(request: Pick<PlaceholderRequest, 'docKey' | 'page' | 'rotation' | 'flags'>): string {
+  placeholderId(
+    request: Pick<PlaceholderRequest, 'docKey' | 'page' | 'rotation' | 'flags'>,
+  ): string {
     return tileId({
       doc: request.docKey,
       page: request.page,
@@ -281,12 +288,17 @@ export class TileRenderer {
     this.inFlight.set(id, handle);
     try {
       const result = await handle.promise;
-      const bitmap = await this.postProcess(result.bitmap, request, {
-        x: 0,
-        y: 0,
-        width: result.bitmap.width,
-        height: result.bitmap.height,
-      }, scale);
+      const bitmap = await this.postProcess(
+        result.bitmap,
+        request,
+        {
+          x: 0,
+          y: 0,
+          width: result.bitmap.width,
+          height: result.bitmap.height,
+        },
+        scale,
+      );
       this.cache.set(id, bitmap, bitmapBytes(bitmap.width, bitmap.height));
       return bitmap;
     } catch (error) {
@@ -460,9 +472,7 @@ export class TileRenderer {
     if (!pending) {
       pending = this.client
         .call('pageObjects', [request.doc, request.page])
-        .then((objects) =>
-          objects.filter((o) => o.kind === 'image').map((o) => ({ rect: o.rect }) as PixelRectInPoints),
-        )
+        .then((objects) => objects.filter((o) => o.kind === 'image').map((o) => ({ rect: o.rect })))
         .catch(() => [] as PixelRectInPoints[]);
       this.imageRects.set(key, pending);
     }
@@ -484,7 +494,7 @@ export class TileRenderer {
 }
 
 interface PixelRectInPoints {
-  readonly rect: import('@shared/pdf').PdfRect;
+  readonly rect: PdfRect;
 }
 
 function isCancelled(error: unknown): boolean {
