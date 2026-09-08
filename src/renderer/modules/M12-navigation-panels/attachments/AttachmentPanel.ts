@@ -150,6 +150,7 @@ export function mountAttachmentPanel(
     }
 
     const columns = collection === null ? defaultColumns() : collectionColumns(collection);
+    if (columns.length > 4) nav.fitPaneToColumns(columns.length);
     table.replaceChildren();
     table.style.setProperty('--nav-columns', String(columns.length));
 

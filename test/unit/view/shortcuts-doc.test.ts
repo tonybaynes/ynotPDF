@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Registry, normalizeKey } from '@core/Registry';
 import viewerManifest from '@modules/M11-viewer/manifest';
+import navigationManifest from '@modules/M12-navigation-panels/manifest';
 
 const DOC = readFileSync(join(process.cwd(), 'docs', 'shortcuts.md'), 'utf8');
 
@@ -29,12 +30,13 @@ function documentedCommands(): Map<string, string> {
 describe('docs/shortcuts.md', () => {
   const registry = new Registry();
   registry.register(viewerManifest);
+  registry.register(navigationManifest);
 
   it('names a command for every row it gives a key', () => {
     expect(documentedCommands().size).toBeGreaterThan(30);
   });
 
-  it('documents every shortcut M11 registers', () => {
+  it('documents every shortcut M11 and M12 register', () => {
     const documented = documentedCommands();
     for (const spec of registry.allShortcuts()) {
       expect(documented.has(spec.command), `${spec.key} → ${spec.command}`).toBe(true);
@@ -49,7 +51,7 @@ describe('docs/shortcuts.md', () => {
     }
   });
 
-  it('the keys it lists for M11 commands are the keys M11 binds', () => {
+  it('the keys it lists are the keys those modules bind', () => {
     const documented = documentedCommands();
     for (const spec of registry.allShortcuts()) {
       const listed = documented.get(spec.command) ?? '';

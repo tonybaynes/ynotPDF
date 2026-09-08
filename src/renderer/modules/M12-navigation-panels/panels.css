@@ -205,13 +205,24 @@
 
 /* ---- attachments table ---------------------------------------------------------------------- */
 
+/*
+ * A portfolio brings its own columns — the operator's has seven — and squeezing seven of them
+ * into a one-column-wide pane truncates every cell to two characters. So the table keeps a
+ * readable minimum width and scrolls sideways inside the panel instead, and the first column (the
+ * file name, always) gets twice the share of whatever room there is.
+ */
 .nav-table {
   padding: 0;
+  min-width: max-content;
+}
+
+[data-panel-scroll='attachments'] {
+  overflow-x: auto;
 }
 
 .nav-tr {
   display: grid;
-  grid-template-columns: repeat(var(--nav-columns, 4), minmax(0, 1fr));
+  grid-template-columns: minmax(14ch, 2fr) repeat(calc(var(--nav-columns, 4) - 1), minmax(8ch, 1fr));
   gap: var(--sp-2);
   align-items: center;
   padding: var(--sp-1) var(--sp-2);

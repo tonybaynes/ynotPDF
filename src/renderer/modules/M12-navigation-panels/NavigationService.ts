@@ -43,6 +43,7 @@ import {
   type NavigationSettings,
   type SettingsStorage,
 } from './settings';
+import { PANE_MAX_WIDTH as PANE_MAX } from '@app/ui/UiState';
 import { paneWidthFor } from './thumbnails/grid';
 import { ThumbnailRenderer } from './thumbnails/ThumbnailRenderer';
 
@@ -97,6 +98,7 @@ export class NavigationService {
   readonly initialLayerState = new Map<string, Readonly<Record<string, boolean>>>();
   /** Whether the pane has already been sized to one column of thumbnails this session. */
   private paneFitted = false;
+  private paneFittedForColumns = false;
 
   constructor(options: NavigationServiceOptions) {
     this.registry = options.registry;
@@ -390,14 +392,41 @@ export class NavigationService {
   fitPaneToOneColumn(): boolean {
     if (this.paneFitted) return false;
     this.paneFitted = true;
-    this.setPaneWidth(paneWidthFor(this.settingsValue.thumbnailSize));
+    this.setPaneWidth(paneWidthFor(this.settingsValue.thumbnailSize) + this.stripWidth());
+    return true;
+  }
+
+  /**
+   * How much of the pane's width the shell's own icon strip takes.
+   *
+   * `ui.leftPane.width` is the width of the *whole* pane, strip included, while the grid's
+   * arithmetic is about the panel it leaves behind. Forgetting the difference is what put a
+   * horizontal scrollbar under a single column of thumbnails.
+   */
+  private stripWidth(): number {
+    if (typeof document === 'undefined') return 0;
+    return document.querySelector<HTMLElement>('.pane-strip')?.offsetWidth ?? 0;
+  }
+
+  /**
+   * Widens the pane enough to read an attachment list with `columns` columns, the first time
+   * that panel is shown in this session. A portfolio declares its own schema — the operator's
+   * has seven columns — and the pane's one-thumbnail width would truncate every cell to two
+   * characters. Never narrows: the reader's own splitter drag stands.
+   */
+  fitPaneToColumns(columns: number): boolean {
+    if (this.paneFittedForColumns) return false;
+    this.paneFittedForColumns = true;
+    const wanted = Math.min(PANE_MAX, 160 + Math.max(1, columns) * 60);
+    if (this.shell.ui.get().leftPane.width >= wanted) return false;
+    this.setPaneWidth(wanted);
     return true;
   }
 
   /** Sets the thumbnail size and the pane width that shows exactly one column of it. */
   async setThumbnailSize(size: number): Promise<number> {
     await this.setSetting('thumbnailSize', size);
-    this.setPaneWidth(paneWidthFor(size));
+    this.setPaneWidth(paneWidthFor(size) + this.stripWidth());
     return size;
   }
 
