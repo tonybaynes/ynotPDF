@@ -196,8 +196,171 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **Structure lives in the model, content lives in the engine.** Page *order*, *presence*
+  and *labels* are the `Document`'s alone: deleting or moving a page edits the model's page
+  list, never PDFium. `FPDFPage_Delete` is destructive and cannot be undone, so an
+  engine-backed delete would make undo a lie. Everything PDFium can reverse exactly —
+  rotation, boxes, annotations, field values, inserting a blank page we created — goes to the
+  engine immediately so renders reflect the edit. Views resolve a model page id to the live
+  PDFium index through `Document.enginePage(pageId)`; M21's writer emits the model's order.
+- **Stable ids** (`Ids.ts`): every entity gets `pg-1`, `an-7`, `fl-2`, … unique within the
+  document and stable across reordering, deletion and undo. `IdTable` is the two-way map
+  between a model id and its engine key (page index, `a<page>.<i>` annotation id); it is
+  rebound after any engine operation that renumbers, which is why an annotation deleted and
+  restored by undo keeps its model id while its engine id changes.
+- **Write intents, not a diff.** Each command reports whether the engine took the change.
+  What the engine could not do is recorded as a `WriteIntent` kind on the document
+  (`page-order`, `page-labels`, `metadata`, `layers`, `outline`, `custom`). M21 reads
+  `document.writeIntents` to know what its writer must apply on top of the engine's bytes.
+- **Commands are data.** Every command carries `toJSON()` → `{ id, data }` of plain JSON
+  values, and a codec registered by type rebuilds it against a document (`Journal.ts`). One
+  mechanism serves three features: undo/redo in memory, autosave and recovery (M21) and batch
+  replay (M120). `CompositeCommand` serialises its children, so a transaction round-trips as
+  a single entry.
+- **Transactions.** `UndoStack.beginTransaction(label)` / `commit()` / `rollback()` sit on the
+  same group stack as the existing callback form `group()`, so nesting either way flattens
+  into one composite entry and one undo step. Rollback undoes in reverse and records nothing.
+- **Merging.** `merge()` coalesces consecutive same-target edits (typing in a field, dragging
+  an annotation). `Document.breakMerge()` is called on selection change and after an idle
+  gap so "type, pause, type" is two undo steps, as Foxit behaves.
+- **Fine-grained events.** `document.on('annotation:added', …)` and friends fire alongside the
+  store notification, carrying the entity id, so a view repaints one annotation rather than a
+  whole page. `onAny` exists for panels that mirror entire collections.
+- **Annotations are a discriminated union** over subtype families (markup, ink, shape, note,
+  free text, stamp, widget, link, file attachment, other) sharing `AnnotationBase` — id,
+  pageId, rect, flags, author, dates, contents, appearance. Unknown or exotic subtypes
+  classify as `other` rather than failing, so a file always loads.
+- **Engine contract additions** (ADR 0007, additive): `signatures(doc)` and
+  `namedDestinations(doc)`, both read-only and both backed by PDFium APIs the M10 build
+  already exports (`FPDF_GetSignatureObject*`, `FPDF_GetNamedDest*`). Needed because the
+  brief puts destinations and a signature summary in the model and neither was reachable.
+- **PDFium mutation coverage.** Implemented: `setPageRotation`, `insertBlankPages`,
+  `deletePages`, `movePage`, `importPages`, `setCropBox` (MediaBox through the same call),
+  `addAnnotation`, `updateAnnotation`, `deleteAnnotation`, `setFieldValue` (writes `/V`, plus
+  `/AS` for checkbox and radio, then regenerates the widget appearance). Absent from the
+  build and therefore model-only: `setMetadata` (PDFium has no info-dictionary setter) and
+  `setLayerVisible` (per-object `FPDFPageObj_SetIsActive` is M12's job, not a document
+  mutation). Both raise `NotImplementedError`, which the command layer turns into a write
+  intent.
+- **Ribbon dynamic labels** (ADR 0008, additive): a ribbon button may declare
+  `dynamicLabel(ctx)`. The shell already re-evaluates item state on every `invalidate()`, so
+  Undo reads "Undo Rotate page" and greys out with no history, as Foxit does.
+- **Testing.** The property test runs against `FakeEngine`, an in-memory `PdfEngine` in
+  `test/unit/core/fakeEngine.ts`, so 1 000 random commands finish in seconds and every
+  fallback path is exercised; a second, smaller suite runs the same commands through real
+  PDFium and re-renders to prove the engine agrees. fast-check 4 (MIT) generates the
+  sequences.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-08 on `mod/M20-document-model` (worktree `../ynotPDF-M20`).**
+
+### What shipped
+
+- **`Document`** — the full model: pages (stable id, label, `/Rotate`, all five boxes, lazy
+  content objects), annotations as a discriminated union over ten families, the form-field tree
+  with its widgets, outline, destinations, layers, attachments, metadata, security state, a
+  read-only signature summary, view settings, a namespaced `custom` bag, `revision`, `dirty` and
+  the derived `writeIntents`. `validate()` checks fifteen invariants and `snapshot()` gives the
+  JSON-safe structure the property test compares.
+- **Stable ids** (`Ids.ts`) — `pg-1`, `an-7`, `fl-2` … unique per document, never reused, and an
+  `IdTable` mapping each to the engine's own key. A page keeps its id through moves, deletions
+  and undo; an annotation keeps its id while PDFium renumbers underneath it.
+- **Commands** (`commands.ts`) — thirteen of them: rotate, insert, delete, move, set box, rename
+  page, add/update/delete annotation, set field value, set metadata, set layer visibility, set
+  custom state. `UndoStack` gained `beginTransaction` / `commit` / `rollback` beside the existing
+  `group()`, and `Document` gained a 600 ms idle merge barrier so "type, pause, type" is two undo
+  steps.
+- **Change events** (`events.ts`) — sixteen typed events with the id of what changed, fired
+  alongside the store notification.
+- **Journal** (`Journal.ts`) — every command serialises to `{ type, payload }` of JSON and a
+  registered codec rebuilds it. A transaction round-trips as one entry. Commands with no codec
+  are marked, not dropped, so M21 can say what a recovery could not restore.
+- **PDFium mutations** — `setPageRotation`, `deletePages`, `insertBlankPages`, `importPages`,
+  `movePage`, `setCropBox` (and `setMediaBox`), `addAnnotation`, `updateAnnotation`,
+  `deleteAnnotation`, `setFieldValue`, plus the two new reads `signatures` and
+  `namedDestinations`. Helpers live in `src/engine/pdfium/mutations.ts`.
+- **M20 module** — `DocumentService` (the `document` service), `edit.undo` / `edit.redo` with
+  ribbon buttons that name what they would revert, `page.rotateRight` / `page.rotateLeft`, and
+  four developer commands the e2e suite drives.
+
+### Decisions worth knowing about
+
+- **Page order and presence live in the model, not the engine.** `FPDFPage_Delete` is
+  destructive, so an engine-backed delete would make undo a lie. Deleting or moving a page edits
+  the model's list and records a `page-order` write intent; the engine keeps its own pages and
+  views resolve through `Document.enginePage(pageId)`. Everything PDFium can reverse exactly —
+  rotation, boxes, annotations, field values, blank pages we created — does go to the engine, so
+  a render reflects the edit at once. Full reasoning in ADR 0007.
+- **Form field values go through PDFium's form-fill environment**, not by writing `/V` on the
+  widget. In a hierarchical form the widget is a kid whose `/Parent` holds `/T` and `/V`, and
+  PDFium's annotation API cannot reach the parent — the obvious implementation writes to the
+  wrong dictionary and every reader still sees the old value. `FORM_ReplaceSelection` and a
+  simulated click for the button types let PDFium update the field it owns and regenerate the
+  appearance.
+- **The raw catalogue pass now re-serialises a mutated document.** PDFium hides `/C` and `/IC`
+  behind an appearance stream it generates, so annotation colours are read with pdf-lib as a
+  fallback. That fallback parsed the bytes as *opened*, which made every annotation added in the
+  session appear colourless. It now saves a copy first when the document has been changed.
+
+### Three bugs the tests found
+
+- Undoing an insert deleted pages one at a time, and PDFium renumbers between deletions, so the
+  second delete hit the wrong index. Every index is now collected before any of them is removed.
+- Deleting a page left its annotations, its fields' widgets and any destination aimed at it
+  pointing into nothing. The command now takes them with the page and restores them on undo.
+- Undoing the *first* annotation on a page, or the first write to a `custom` namespace, left an
+  empty shell behind — "read and empty" where there had been "not read at all". Both now restore
+  the absence, which is what made the thousand-command property test pass.
+
+### Shared files touched (PLAN.md §12.3)
+
+- `src/engine/PdfEngine.ts` — additive: `signatures()`, `namedDestinations()`, the
+  `SignatureSummary` and `NamedDestination` types, both names in `ENGINE_METHODS`, and both
+  methods on `NotImplementedEngine` (ADR 0007).
+- `src/shared/module.ts` — additive: optional `dynamicLabel` on the ribbon `button` and `toggle`
+  item variants (ADR 0008).
+- `src/renderer/app/ribbon/model.ts` and `widgets.ts` — additive: `ItemState.label`, folded into
+  the group signature and applied to the button's text and tooltip.
+- `src/renderer/core/{Command,UndoStack,Document}.ts` — `CommandJson`, `CompositeCommand.toJSON`,
+  transactions, and the model itself.
+- `src/renderer/modules/M00-scaffold/manifest.ts` — **removed** the `edit.undo` / `edit.redo`
+  placeholders and their `Mod+Shift+Z` binding. They were stubs against a `document` service that
+  did not exist; M20 registers the real commands and provides the service. This is the one
+  non-additive shared edit in the module.
+- `src/renderer/main.ts` — registers the M20 manifest.
+- `vitest.config.ts` — coverage gates for the new core files.
+- `package.json` — `fast-check` 4.9.0 (MIT) as a dev dependency.
+
+### Tests
+
+1 129 unit tests and 61 e2e tests, green on Windows locally and in CI on Windows, macOS and
+Linux. The four acceptance tests:
+
+- **Property test** — 1 000 random commands, undo all, deep-equal the original; redo all,
+  deep-equal the post-state. Plus generated sequences against three engine configurations
+  (everything supported, exactly what PDFium supports, nothing supported), whole sequences as one
+  transaction, rolled-back transactions, and branching after a partial undo.
+- **Engine mutations** — rotate, reorder and delete pages, then the render or the re-read text
+  agrees; add an annotation and `annotations(page)` lists it, with its colours and geometry.
+- **Journal** — round-trips through `JSON.stringify` and replays into a second copy of the same
+  file, giving an identical model and identical page renders.
+- **Ribbon** (e2e) — Undo and Redo show "Undo Rotate page", "Undo Delete page", "Undo Insert 3
+  pages", and enable and disable with the history.
+
+`src/renderer/core` is at 96 % statements, and `Document.ts`, `commands.ts`, `Journal.ts`,
+`Ids.ts`, `model.ts` and `events.ts` all carry coverage gates now.
+
+### Deferred, and why
+
+- **`setMetadata` and `setLayerVisible` are model-only.** PDFium has no information-dictionary
+  setter, and layer visibility is a per-object rendering concern (`FPDFPageObj_SetIsActive`) that
+  belongs to M12's layer panel rather than to a document mutation. Both raise
+  `NotImplementedError`, both become write intents, and M21's writer applies them.
+- **Text-field appearance after a value change** is whatever PDFium regenerates. The model and
+  the saved file carry the right value; how faithfully the widget redraws before a save is M60's
+  problem.
+- **Bleed, trim and art boxes** are model-only: PDFium exposes setters for MediaBox and CropBox
+  only. M41's crop UI and M21's writer will need them.
+- **Named destinations are read-only.** Editing them is M12's.
+- **XMP is carried but not parsed.** M72 owns document properties.
