@@ -35,6 +35,7 @@ import {
   indent,
   insert,
   isDescendant,
+  itemOf,
   maxDepth,
   move,
   outdent,
@@ -43,6 +44,7 @@ import {
   restoreSubtree,
   rootsOf,
   subtreeOf,
+  update,
   walk,
 } from '@modules/M12-navigation-panels/bookmarks/tree';
 import { openFake, RICH_SPEC } from './core/helpers';
@@ -160,6 +162,56 @@ describe('outline tree algebra', () => {
         .filter((o) => o.open)
         .map((o) => o.id),
     ).toEqual(['a', 'b', 'd', 'e']);
+  });
+
+  it('is safe on a broken tree: a missing parent, a missing child, a silly index', () => {
+    const list = sample();
+    // Inserting under a parent that is not there changes nothing.
+    expect(shape(insert(list, node('x', null), { parentId: 'gone' as ModelId, index: 0 }))).toEqual(
+      shape(list),
+    );
+    // Moving a node that is not there, or into a parent that is not there, likewise.
+    expect(shape(move(list, 'gone' as ModelId, { parentId: null, index: 0 }))).toEqual(shape(list));
+    expect(shape(move(list, 'd' as ModelId, { parentId: 'gone' as ModelId, index: 0 }))).toEqual(
+      shape(list),
+    );
+    // Removing something that is not there gives the list back and nothing removed.
+    const removal = removeSubtree(list, 'gone' as ModelId);
+    expect(removal.removed).toEqual([]);
+    expect(shape(removal.list)).toEqual(shape(list));
+    // Restoring nothing, or into a parent that has gone, is a no-op rather than a throw.
+    expect(shape(restoreSubtree(list, [], { parentId: null, index: 0 }))).toEqual(shape(list));
+    expect(
+      shape(restoreSubtree(list, [node('z', null)], { parentId: 'gone' as ModelId, index: 0 })),
+    ).toEqual(shape(list));
+    // A `childIds` entry with no node behind it is skipped, not rendered as a hole.
+    expect(childrenOf([node('a', null, ['ghost'])], 'a' as ModelId)).toEqual([]);
+    expect(childrenOf(list, 'gone' as ModelId)).toEqual([]);
+    // An index that is not a number lands at the end.
+    const appended = insert(list, node('x', null), { parentId: null, index: Number.NaN });
+    expect(shape(appended).at(-1)).toBe('x:0');
+    // Indenting or outdenting something that is not there.
+    expect(shape(indent(list, 'gone' as ModelId))).toEqual(shape(list));
+    expect(shape(outdent(list, 'gone' as ModelId))).toEqual(shape(list));
+    // Restoring a subtree under a real parent puts it back under it.
+    const cut = removeSubtree(list, 'c' as ModelId);
+    expect(shape(restoreSubtree(cut.list, cut.removed, cut.at))).toEqual(shape(list));
+  });
+
+  it('updates one node and leaves the shape alone', () => {
+    const updated = update(sample(), 'b' as ModelId, { title: 'renamed', bold: true });
+    expect(shape(updated)).toEqual(shape(sample()));
+    expect(updated.find((o) => o.id === 'b')?.title).toBe('renamed');
+    expect(update(sample(), 'gone' as ModelId, { title: 'x' })).toEqual(sample());
+  });
+
+  it('an empty outline has no depth to speak of', () => {
+    expect(maxDepth([])).toBe(-1);
+    expect(walk([])).toEqual([]);
+    expect(rootsOf([])).toEqual([]);
+    expect(depthOf(sample(), 'gone' as ModelId)).toBe(-1);
+    expect(subtreeOf(sample(), 'gone' as ModelId)).toEqual([]);
+    expect(itemOf(sample(), 'gone' as ModelId)).toBeNull();
   });
 
   it('reports positions and subtrees', () => {
