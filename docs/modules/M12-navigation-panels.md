@@ -333,4 +333,112 @@ is colourblind: black and red read as the same colour):**
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-08 on `mod/M12-navigation-panels` (worktree `../ynotPDF-M12`).** Green locally on
+Windows: lint (eslint, prettier, the colour/opacity rules, `tsc` on both projects), 1 638 unit
+tests with the coverage gates, 146 Playwright tests.
+
+### What shipped
+
+- **Five panels, in `src/renderer/modules/M12-navigation-panels/`.** **Pages** — a virtualised
+  grid whose rows, not pages, are what exists in the DOM, so a 1 000-page document costs what a
+  five-page one does. **Bookmarks** — the outline as an editable tree: expand-to-level, inline
+  rename, drag to reorder with before / into / after zones, indent and outdent, colour, bold,
+  italic, and a destination or a URI action. **Layers** — a checkbox and the word "Visible" or
+  "Hidden" each, reset to the visibility the document opened with, and import/export of a
+  visibility set as a view or as the document's own default. **Attachments** — the embedded
+  files, a portfolio's own schema columns, open, save as, add, delete, describe, and the
+  file-attachment annotations listed read-only for M31. **Destinations** — the named
+  destinations, click to go, rename in place, re-aim at the current view, delete, create from
+  the current view.
+- **Pages is the default panel** (`ui.leftPaneOnOpen`, values `pages` · `bookmarks` ·
+  `last-used` · `closed`), applied on every document open, offered on the pane tab strip's
+  right-click menu and declared in the settings schema for M130. A file whose `/PageMode` asks
+  for `/UseOutlines` does not override it — `outline.pdf` is exactly such a file and there is a
+  test that opens it.
+- **The thumbnail layout rules, exactly as asked.** One column at the current size; `+`, `−` and
+  Ctrl+wheel step the ladder (80 · 120 · 160 · 220 · 300) and re-set the pane to one column at
+  the new size, keeping the current page in view; dragging the splitter divides more columns out
+  of the width it is given, and the column count is stored nowhere.
+- **Thumbnails never delay the page you are reading.** `ThumbnailRenderer` keeps its own small
+  LRU of bitmaps (out of M11's tile cache on purpose), holds every request back while the
+  viewer's renderer has work outstanding, keeps one render in flight, and cancels what has
+  scrolled away.
+- **Thirteen document commands** with journal codecs, and forty-odd registered commands — every
+  one in the palette, five panel shortcuts (`Mod+Shift+1`–`5`), `Mod+B` for a bookmark, three
+  View ribbon groups and five context menus.
+- **PDF Portfolios open properly.** New engine read `collection()` returns the `/Collection`
+  schema; the Attachments panel opens by itself, shows the portfolio's own columns, and an
+  embedded PDF opens in a new tab. Verified against the operator's `Sample Portfolio.pdf`: all
+  three files open in tabs.
+- **Engine and writer work (ADR 0011).** `setLayerVisible` is implemented in the PDFium adapter
+  by deactivating the page objects marked with the group — render-time only, so the bytes are
+  untouched and undo is exact. `addAttachment` / `updateAttachment` / `deleteAttachment` make
+  embedded files editable. Two IPC channels: pick any files, and hand bytes to the OS through a
+  temp file. `WriteIntent` gains `destinations` and `attachments`, and the writer gains the
+  section that puts an embedded file's description and type where a reader looks for them.
+
+### Bugs the tests and the operator found, all real
+
+- **An attached file's bytes were gone by the time the journal wanted them.** The engine
+  *transfers* a `Uint8Array` into its worker, which detaches the buffer on this side, so
+  `toJSON()` — and a redo — read an empty array. The command keeps its own copy now.
+- **The Pages panel opened at the shell's generic 260 px pane width**, so `+` made the pane
+  *narrower*. It sizes the pane to one column when it first opens instead — and then did it
+  wrong a second time, by treating `ui.leftPane.width` as the panel's width when it is the
+  pane's, icon strip included. A single column had a horizontal scrollbar under it until that
+  was fixed.
+- **The `+` / `−` buttons went round the service rather than the command**, so the palette, the
+  ribbon and the wheel could have drifted apart. They all run `view.thumbnails.larger` now.
+- **A bookmark nested under a collapsed parent vanished.** The panel opens whatever is hiding
+  the selected bookmark.
+- **A portfolio's own PDFs said they were `text/plain`.** The operator's Foxit-made portfolio
+  declares `/Subtype /text#2Fplain` on all three embedded PDFs, so "open in a new tab" decided by
+  MIME type handed them to the OS instead. A PDF is now decided by its name and its `%PDF-`
+  bytes, and the type is believed last.
+- **A debugging run opened three PDFs in Foxit on the operator's desk.** The two channels that
+  hand something to the operating system now do everything except the last step under
+  `YNOT_E2E`, and the temporary copies are deleted when the app quits.
+- **M02's shell test asserted that the demo module owned the only two left panels.** It asserts
+  that its own two are there.
+
+### Shared files touched (PLAN.md §12.3, all per ADR 0011)
+
+- `src/engine/PdfEngine.ts` — additive: `collection()`, `addAttachment`, `updateAttachment`,
+  `deleteAttachment`, the `PdfCollection` / `CollectionField` / `NewAttachment` /
+  `AttachmentPatch` types, `Attachment.created` and `Attachment.collectionFields`, the four names
+  in `ENGINE_METHODS`, and the four methods on `NotImplementedEngine`.
+- `src/engine/pdfium/{PdfiumEngine,rawdoc,mutations}.ts` — the implementations.
+- `src/engine/Writer.ts` and `src/engine/writers/FullRewriteWriter.ts` — additive:
+  `PlannedAttachment`, `WritePlan.attachments`, the `attachments` phase and `writeAttachments`.
+- `src/shared/ipc.ts`, `src/main/ipc.ts`, `src/main/files.ts`, `src/main/index.ts` —
+  `file:openFilesDialog`, `shell:openTempFile`, the temp-file writer and its cleanup on quit.
+- `src/renderer/core/model.ts` — additive: `destinations` and `attachments` write intents,
+  `ModelAttachment.created` and `.collectionFields`.
+- `src/renderer/core/events.ts` — additive: `destinations:changed`, `attachments:changed`.
+- `src/renderer/core/Document.ts` — additive: the destination and attachment record helpers and
+  `rebindAttachments`.
+- `src/renderer/core/commands.ts` — `SetLayerVisibleCommand` always records the `layers` intent,
+  because the engine's implementation is render-time only.
+- `src/renderer/view/DocumentView.ts` and `src/renderer/modules/M11-viewer/Viewer.ts` — additive:
+  `refresh()`.
+- `src/renderer/modules/M21-save/{plan,SaveService}.ts` — the planner fills the two new sections;
+  the progress dialog names the new phase.
+- `src/renderer/main.ts`, `src/renderer/index.html`, `vitest.config.ts`, `PLAN.md` §0.
+
+### Deferred, and why
+
+- **Creating and editing portfolios is M42**, as the brief says. The reader, the schema columns
+  and open-in-a-tab are here and are not forked: M42 adds a writer to `collection()` and editing
+  to the same panel.
+- **Page manipulation from the thumbnail context menu is M40's**, also as the brief says. The
+  multi-select it needs is here, in the shell's `Selection` service under the `pages` kind.
+- **A bookmark's "open file" action opens a URL, not a path.** `bookmarks.setAction` takes a web
+  address; a `/Launch` action pointing at a file on disk is read and preserved, but ynotPDF will
+  not follow one on a click — running what a PDF names is not something a viewer should do
+  without the whole trust conversation M81 will bring.
+- **Attachment ids are positional**, because PDFium's are. The id table is repaired by index
+  arithmetic after every add and delete, and there is a test for it; a name-keyed engine would be
+  better and is not worth an ADR of its own yet.
+- **M21's `AddOutlineItemCommand` stays.** It was written as scaffolding "until M12 lands", and
+  M12's own `AddBookmarkCommand` supersedes it for the UI, but four of M21's tests are built on
+  it and removing it is a change to that module's suite rather than to this one's.
