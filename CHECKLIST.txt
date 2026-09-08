@@ -78,7 +78,7 @@ WAVE 2
         Read D:\Projects\ynotPDF\docs\modules\M03-windows-arm.md and carry out the "Your task" section in full. I do not have a Windows-on-ARM machine; rely on CI and document what could not be tested.
       note:  can run at the same time as M11 - it only touches build config.
 
-[ ] M11  Viewer — rendering, navigation, zoom, layouts
+[✔] M11  Viewer — rendering, navigation, zoom, layouts
       model:  Opus
       needs: M02 M10
       prompt: Read D:\Projects\ynotPDF\docs\modules\M11-viewer.md and carry out the "Your task" section in full.
