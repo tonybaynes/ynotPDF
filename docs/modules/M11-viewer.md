@@ -228,8 +228,168 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **One store slice, extended additively.** `ui.view` (M02) stays the single source of view
+  state; M11 adds `rotation`, `spread`, `split` and the `facing-continuous` layout to it
+  (ADR 0009) and drives M02's existing `view.*` commands rather than registering them again.
+  The status bar, the View ribbon and the tests therefore read one object.
+- **Five layout modes, one pure function.** `layoutPages()` (`view/layout.ts`) maps page sizes +
+  zoom + mode to a table of content-relative rects; it knows nothing about the DOM. Rows are
+  built from two booleans — *facing* and *cover* — so: single (no/–), continuous (no/–),
+  facing (yes/no), facing-continuous (yes/no), book (yes/yes, page 1 alone in the right column).
+  Facing rows are laid out on a two-column grid whose widths are the maxima over all left- and
+  right-hand pages, spine-aligned, so spreads line up down the document as they do in Foxit.
+  `continuous` is a property of the mode, not a separate flag; non-continuous modes lay out the
+  same rows but the viewport mounts one row at a time.
+- **Never re-render on scroll.** Scrolling only moves DOM and blits already-decoded tiles. The
+  engine is asked for a tile exactly once per (page, scale bucket, rotation, render flags, tile);
+  everything else is cache work.
+- **The page canvas is a window, not the page.** At 6400 % a full-page canvas would be
+  gigabytes, so each `PageView` keeps a canvas covering the visible region grown by one tile,
+  repositioned as you scroll and repainted from the cache. Cache hits make that free.
+- **Tiles are 512 CSS px × DPR**, snapped by `PageGeometry.tile()` so they align with the
+  full-page bitmap. Requests are ordered by distance from the viewport centre, cancelled when
+  superseded, and neighbours are prefetched from `requestIdleCallback` (worked out from the
+  geometry, without building a page's DOM to ask it). Zoom is bucketed to the nearest 1/8 step so
+  a pinch does not invalidate the cache on every frame.
+- **The render queue is keyed by viewport.** A split view has two viewports sharing one renderer;
+  replacing the queue globally still converges — each pane's next paint re-adds what the other
+  cancelled — but the two spend the scroll cancelling and restarting each other's renders. The
+  queue is the union of what each viewport wants, and a viewport releases its wants when it goes.
+- **The LRU is bounded in megabytes** (`viewer.cache.megabytes`, default 256) and counts the real
+  bitmap cost (w × h × 4); eviction closes the `ImageBitmap`.
+- **Night Mode inverts lightness, not colour.** `view/night.ts` maps each pixel's luminance along
+  the `--page-paper-night` → `--page-ink-night` ramp and adds the source's chroma back unchanged,
+  so hue survives and a photograph stays a photograph rather than a negative. Image objects are
+  then painted back un-inverted from the source tile (`viewer.night.keepImages`, default on),
+  using the image rects from `pageObjects()`.
+- **View rotation is not a document change**, so it is not a `Command`: it lives in `ui.view` and
+  is passed to the engine as `RenderOptions.rotation`. `page.rotate*` (M20) remains the undoable
+  document rotation.
+- **The shell owns the chrome; M11 owns the document area.** Viewports mount into `#doc-host`,
+  one per tab (`Documents.attach`), disposed by `Documents.onClosed`.
+- **Tools get pointer events from the tool layer.** M02 has a tools service but nothing was
+  feeding it; M11's `PageView.tool` layer translates pointer events to PDF user space and
+  dispatches them to the active `ToolSpec`, which is what `ToolPointerEvent` was specified for.
+- **Split view is two viewports over one `Document`**, sharing the tile cache and the engine
+  handle, each with its own scroll, zoom and layout; the synced-scroll toggle mirrors the
+  fraction, not the pixels, so different zooms still track.
+- **Encrypted files re-prompt in place.** `file.openBytes` asks the viewer service to open; a
+  `password-required` / `wrong-password` error opens an opaque dialog with a show/hide toggle and
+  loops until it opens or the user cancels — cancelling closes nothing and leaves no tab.
+- **Rulers, grid and guides reuse existing theme tokens** (`--bg-panel`, `--fg-muted`, `--border`,
+  `--accent`); no new colour tokens, so M01's contrast tests keep covering them.
+- **Pure maths in Node, DOM in Playwright.** There is no jsdom in this repo and the brief adds no
+  libraries, so layout, tiling, the LRU, night maths, fit/zoom-to-cursor, history, units and
+  guides are pure modules with unit tests, and everything that touches the DOM is proved by
+  `test/e2e/viewer.spec.ts`.
+- **The frame-rate acceptance is measured against the machine it runs on.** A CI runner with
+  software rendering turns animation frames over at 40-odd fps whatever is asked of it, so the
+  test first measures the same window idle and settled, then requires the 1000-page scroll to
+  stay within 10 % of that — which is what "scrolling costs almost nothing" actually means — and
+  still enforces the 55 fps figure on any machine that can reach it.
+- **Full screen needs main.** New IPC `window:setFullScreen` (ADR 0009); reading mode is pure
+  renderer (a `data-reading-mode` attribute on `<html>` plus an opaque floating bar).
+
+- **Two things changed while building.** A one-page book no longer reserves a column gap it has
+  nothing to put in. And Night Mode scales the colour deviation down rather than letting the
+  channel clip: clipping bent a saturated violet nearly 40 degrees off its hue, where scaling
+  keeps the hue exact (worst case over the whole 8-bit cube: 5 degrees) and gives up a little
+  saturation instead.
+- **Zoom-to-cursor anchors on the page, not the content.** The padding and the gaps between pages
+  do not scale with the zoom, so treating the content as one uniformly scaling plane drifts by
+  exactly the 16 px padding. The viewport records the page point under the cursor, re-lays out,
+  then corrects the scroll so that point is back where it was, which is exact whatever the
+  padding does. When the whole document already fits the window there is no scroll to correct
+  with, and it simply re-centres, as Foxit does.
+- **The page canvas keeps its alpha channel.** An opaque canvas composites as black wherever
+  nothing has been drawn, including for a moment after a resize, and a black rectangle where a
+  page should be is the worst failure this module could have.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-08 on `mod/M11-viewer` (worktree `../ynotPDF-M11`).** Green locally on Windows:
+lint (eslint, prettier, the colour/opacity rules, `tsc` on both projects), 1290 unit tests with
+the coverage gates, 105 Playwright tests.
+
+**Shipped:**
+
+- **`src/renderer/view/` - the view layer.** Pure and unit-tested in Node: `layout.ts` (the five
+  modes as a table of page rects, built from two booleans - *facing* and *cover* - with facing
+  rows on a spine-aligned two-column grid), `zoom.ts` (ladder, buckets, the three fits, marquee,
+  zoom-about-a-point), `tiles.ts` (grid, ids, render order), `TileCache.ts` (an LRU bounded in
+  **bytes** that disposes what it evicts), `night.ts`, `units.ts` (pt/mm/cm/in and ruler ticks
+  that stay readable at any zoom), `guides.ts`, `history.ts`. DOM, proved by Playwright:
+  `PageView` (six layers, a canvas that is a *window* on the page so 6400 % does not need a
+  two-gigapixel bitmap, and the pointer bridge to the active tool), `DocumentView` (the
+  virtualised scrolling viewport), `TileRenderer` (the only thing that asks the engine for
+  pixels - priority queue, cancellation, idle prefetch, the Night Mode pass), `Overlays`
+  (rulers, grid, guides), `Loupe`, `PerfHud`, `viewer.css`.
+- **`src/renderer/modules/M11-viewer/`** - `ViewerService` (a `Viewer` per tab, opening
+  documents, the `ui.view` bridge, per-document memory), `Viewer` (one or two panes over one
+  `Document` and one tile cache, history, auto-scroll, loupe, HUD, input), `tools.ts` (Hand,
+  Select text, Marquee zoom, Loupe), `password.ts`, `settings.ts`, `manifest.ts` (46 commands,
+  five View ribbon groups, a page context menu, the settings schema).
+- **Night Mode's raster half** (M01's inherited requirement): each pixel's luma is mapped along
+  the theme's `--page-ink-night` to `--page-paper-night` ramp and its colour deviation added
+  back, so lightness inverts and hue survives - a red heading stays red where `invert()` would
+  make it cyan. Image objects are painted back un-inverted from the source tile
+  (`viewer.night.keepImages`, on by default), using the rects from `pageObjects()`.
+- **Line Weights is real.** ADR 0009: `RenderOptions.lineWeights` is implemented in the PDFium
+  adapter by setting every stroke on the page (and one level into its form XObjects) to width 0
+  for the duration of one render and restoring it afterwards. `FPDFPage_GenerateContent` is never
+  called, so the file is untouched. On an 8 pt-stroke page: 16 % ink becomes 2 %, restored
+  exactly.
+- **Tests.** 7 unit files (145 tests) for the pure layer, including the acceptance layout table
+  for 1, 2, 3 and 7 pages in all five modes, zoom-to-cursor as a fast-check property, and
+  `tile-composite.test.ts` - which tiles a page exactly as the viewer does, against the real
+  engine, and compares with the engine's own whole-page render across `rotated.pdf`,
+  `mixed-boxes.pdf` and `text.pdf` at four view rotations. 39 of those 40 cases are
+  pixel-identical; the one that is not differs on 0.013 % of its pixels (PDFium anti-aliases each
+  tile against its own edge). `test/e2e/viewer.spec.ts` has 45 tests, one per acceptance line.
+  A unit test keeps `docs/shortcuts.md` honest against the code.
+- **Docs.** ADR 0009, `docs/shortcuts.md` (started here, as the brief asks), READMEs for
+  `src/renderer/view/` and the module folder.
+
+**Bugs the tests found, all real:**
+
+- The tools were declared on the manifest with a `() => null` viewer lookup - and the shell hands
+  page layers the *manifest's* specs, so every tool was a silent no-op.
+- `ui.set` builds a new `view` object on every write and the subscription compared by identity,
+  so publishing looped until the stack ran out.
+- A publish made while a store change was being applied queued a write that landed after the
+  command and undid it: `view.zoom.actual` left the zoom where it was.
+- Zoom-to-cursor drifted by exactly the content padding (see Design decisions).
+- Auto-scroll stopped on its first frame: a frame's crawl is about a pixel and the browser's
+  rounded `scrollTop` looked unchanged.
+- Closing a tab hides its viewport *before* `onClosed` fires, so the place written on close was
+  measured from a hidden element and always read `scrollTop: 0`. The last published state is
+  remembered instead, and it is written as the reader moves rather than only at close, so an
+  unexpected exit does not lose it.
+- `Mod+Alt+Right` / `Mod+Alt+Left` could never fire: `KeyboardEvent.key` calls those
+  `ArrowRight` / `ArrowLeft`. Found while writing the shortcut list.
+- Reading mode hid only the ribbon - the CSS guessed class names the shell does not use. The e2e
+  had not caught it because `toBeHidden()` passes for an element that is not there; it now counts
+  each one first.
+
+**Shared files touched (minimal, additive, per ADR 0009):** `src/renderer/app/ui/UiState.ts`
+(`rotation`, `split`, `syncScroll`; `facingContinuous`; `fit: 'visible'`), `src/shared/ipc.ts`
+and `src/main/ipc.ts` (`window:setFullScreen`), `src/engine/PdfEngine.ts` and
+`src/engine/pdfium/PdfiumEngine.ts` (`RenderOptions.lineWeights`), `src/renderer/main.ts`
+(register M11), `src/renderer/index.html` (link `view/viewer.css`),
+`src/renderer/modules/M00-scaffold/manifest.ts` (`file.openBytes` delegates to `view.openFile`
+when M11 is present), `vitest.config.ts` (coverage include and gates), `PLAN.md` section 0.
+
+**Deferred, and why:**
+
+- **Page transitions** - explicitly out of scope in the brief ("skip").
+- **Fit Visible fits the page width, not the inked bounding box.** Doing it properly needs the
+  content bounding box, which means `pageObjects()` per page: a per-page engine round trip on
+  every fit. M13 will already be walking text runs, so it is worth revisiting when it has.
+- **The loupe magnifies the on-screen canvas** rather than asking the engine for a second render
+  at the loupe's own scale. At 2-8x over an already-crisp tile that is what the eye wants and it
+  costs nothing while the pointer sweeps; a re-render would be sharper at 8x over a low-zoom
+  page.
+- **Split view is two panes, not two windows.** Foxit can also tear a view into its own window;
+  M02's `app.tabs.detach` is the mechanism when someone wants that.
+- **Text selection** is a stub, as the brief says - the tool, the cursor and the (empty) text
+  layer are here; M13 fills them.

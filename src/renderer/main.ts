@@ -18,6 +18,7 @@ import themeManifest, { THEME_SERVICE } from '@modules/M01-theme-system/manifest
 import { ipcThemeStorage } from '@modules/M01-theme-system/storage';
 import shellManifest from '@modules/M02-app-shell/manifest';
 import engineManifest from '@modules/M10-engine-layer/manifest';
+import viewerManifest from '@modules/M11-viewer/manifest';
 import documentManifest from '@modules/M20-document-model/manifest';
 import { ThemeManager } from '@theme/ThemeManager';
 
@@ -56,6 +57,7 @@ registry.register(themeManifest);
 registry.register(shellManifest);
 registry.register(engineManifest);
 registry.register(documentManifest);
+registry.register(viewerManifest);
 
 const e2e = hasBridge() && getBridge().e2e;
 if (e2e) {

@@ -51,6 +51,12 @@ export interface RenderOptions {
   readonly smoothPaths?: boolean;
   /** Sub-pixel (LCD) text rendering (default false). */
   readonly lcdText?: boolean;
+  /**
+   * Draw strokes at their true widths (default true). `false` is Foxit's "Line Weights off":
+   * every stroke becomes a one-pixel hairline, which is how a CAD drawing stays readable when
+   * it is zoomed out. Render-time only — the file is never touched (ADR 0009).
+   */
+  readonly lineWeights?: boolean;
 }
 
 /**

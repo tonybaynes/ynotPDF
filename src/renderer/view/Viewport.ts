@@ -10,17 +10,13 @@
 import type { PageSize, PdfPoint, PdfRect, Rotation } from '@shared/pdf';
 
 export type ZoomMode = 'custom' | 'fit-page' | 'fit-width' | 'fit-visible';
-export type LayoutMode = 'single' | 'continuous' | 'facing' | 'facing-continuous' | 'book';
 
-export interface ViewportState {
-  readonly zoom: number;
-  readonly zoomMode: ZoomMode;
-  readonly layout: LayoutMode;
-  /** Extra view rotation applied to every page (View ▸ Rotate), clockwise. */
-  readonly rotation: Rotation;
-  /** 0-based index of the page most visible in the viewport. */
-  readonly currentPage: number;
-}
+/**
+ * The layout modes and the live view state moved to `layout.ts` and `DocumentView.ts` when M11
+ * built the real viewer; they are re-exported here so the M00 import path keeps working.
+ */
+export type { LayoutMode } from './layout';
+export type { ViewportState } from './DocumentView';
 
 /** Minimum and maximum zoom (Foxit: 1 %..6400 %). */
 export const MIN_ZOOM = 0.01;

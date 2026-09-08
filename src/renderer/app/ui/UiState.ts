@@ -16,12 +16,16 @@ import { createStore, type Store } from '@core/Store';
 import { hasBridge, invoke } from '@shared/ipc';
 import type { BackstageSlot } from '@shared/module';
 
-/** Page layout modes the status bar offers; M11 implements them. */
-export type LayoutMode = 'single' | 'continuous' | 'facing' | 'book';
+/**
+ * Page layout modes the status bar offers; M11 implements them. `facingContinuous` was added
+ * by M11 (ADR 0009) so the set matches Foxit's five View-tab buttons.
+ */
+export type LayoutMode = 'single' | 'continuous' | 'facing' | 'facingContinuous' | 'book';
 export const LAYOUT_MODES: ReadonlyArray<{ id: LayoutMode; label: string; icon: string }> = [
   { id: 'single', label: 'Single page', icon: 'rectangle-vertical' },
   { id: 'continuous', label: 'Continuous', icon: 'rows-3' },
   { id: 'facing', label: 'Facing', icon: 'columns-2' },
+  { id: 'facingContinuous', label: 'Continuous facing', icon: 'layout-grid' },
   { id: 'book', label: 'Book', icon: 'book-open' },
 ];
 
@@ -35,8 +39,8 @@ export const REGIONS: ReadonlyArray<Region> = [
   'status',
 ];
 
-/** Zoom modes: a number is percent; the strings are the fit modes. */
-export type ZoomFit = 'page' | 'width' | null;
+/** Zoom modes: a number is percent; the strings are the fit modes (`visible` added by M11). */
+export type ZoomFit = 'page' | 'width' | 'visible' | null;
 export const ZOOM_MIN = 1;
 export const ZOOM_MAX = 6400;
 export const ZOOM_PRESETS: ReadonlyArray<number> = [25, 50, 75, 100, 125, 150, 200, 300, 400];
@@ -49,6 +53,12 @@ export interface ViewState {
   readonly zoom: number;
   readonly fit: ZoomFit;
   readonly layout: LayoutMode;
+  /** View rotation in clockwise degrees (M11, ADR 0009). Not a document change. */
+  readonly rotation: 0 | 90 | 180 | 270;
+  /** Split view: off, or two panes side by side / stacked (M11). */
+  readonly split: 'off' | 'vertical' | 'horizontal';
+  /** Whether the two split panes scroll together (M11). */
+  readonly syncScroll: boolean;
 }
 
 export interface UiState {
@@ -128,7 +138,16 @@ export function initialUiState(persisted: Partial<PersistedUi> = {}): UiState {
     },
     rightPane: { width: clampPaneWidth(p.rightPaneWidth), visible: true },
     backstage: { open: false, page: 'open' },
-    view: { page: 0, pageCount: 0, zoom: 100, fit: null, layout: p.layout },
+    view: {
+      page: 0,
+      pageCount: 0,
+      zoom: 100,
+      fit: null,
+      layout: p.layout,
+      rotation: 0,
+      split: 'off',
+      syncScroll: true,
+    },
     activeTool: null,
     keyTips: false,
     region: 'document',
@@ -166,6 +185,7 @@ export function parseZoomInput(text: string): { zoom: number; fit: ZoomFit } | n
   if (!t) return null;
   if (/^fit\s*(page|p)?$/.test(t) || t === 'page') return { zoom: 100, fit: 'page' };
   if (/^fit\s*(width|w)$/.test(t) || t === 'width') return { zoom: 100, fit: 'width' };
+  if (/^fit\s*(visible|v)$/.test(t) || t === 'visible') return { zoom: 100, fit: 'visible' };
   const x = /^(\d+(?:\.\d+)?)\s*x$/.exec(t);
   if (x?.[1]) return { zoom: clampZoom(Number(x[1]) * 100), fit: null };
   const pct = /^(\d+(?:\.\d+)?)\s*%?$/.exec(t);
@@ -183,6 +203,7 @@ export function parsePageInput(text: string, pageCount: number): number | null {
 export function formatZoom(view: ViewState): string {
   if (view.fit === 'page') return 'Fit page';
   if (view.fit === 'width') return 'Fit width';
+  if (view.fit === 'visible') return 'Fit visible';
   return `${view.zoom}%`;
 }
 

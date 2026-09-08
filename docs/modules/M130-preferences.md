@@ -73,6 +73,10 @@ Cloud sync of settings.
 
 ## Design notes & constraints
 
+- **View page must carry `ui.leftPaneOnOpen`** (Pages / Bookmarks / Last
+  used / Closed — default Pages), registered by M12. The operator relies
+  on the thumbnail pane; it must be settable here in words, not only from
+  the pane's context menu.
 - Settings live in one `electron-store` with schema versions and
   migrations; modules read via a typed `settings.get('M11.tileCacheMb')`.
 

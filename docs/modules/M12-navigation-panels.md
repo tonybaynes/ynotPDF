@@ -51,11 +51,33 @@ Destinations, plus Fields/Signatures/Comments panels that later modules add.
 
 ## Scope — build all of this
 
-- Thumbnails panel: virtualised grid, size slider (small/medium/large,
-  persisted), current page highlighted with word tooltip, click navigates,
-  keyboard navigation, multi-select (Ctrl/Shift) exposed for M40, renders
-  via engine at thumbnail scale with its own small cache; page labels
-  shown under each thumb.
+- **Pages (thumbnails) is the default panel — operator requirement.** On
+  launch and on every document open the left pane is open showing Pages,
+  unless the setting `ui.leftPaneOnOpen` says otherwise. Values: `pages`
+  (default) · `bookmarks` · `last-used` (M02's current behaviour) ·
+  `closed`. Store it through `settings:get`/`settings:set`; expose it in
+  this module as a right-click option on the pane tab strip ("Open this
+  panel by default") and register it for the Preferences dialog (M130,
+  View page). Bookmarks-on-open never overrides it, even for documents
+  whose `/PageMode` is `/UseOutlines` — the user's choice wins.
+- Thumbnails panel — layout rules (operator requirement, exact):
+  - **Opens as a single column** of thumbnails at the default size; the
+    panel's initial width is whatever one thumbnail plus margins needs.
+  - **`+` and `−` buttons at the top of the panel** step the thumbnail
+    size (e.g. 80 → 120 → 160 → 220 → 300 px wide; persisted as
+    `ui.thumbnailSize`). Stepping **auto-resizes the panel width** to fit
+    the new single-column size (wider on `+`, narrower on `−`) — the user
+    never has to drag the splitter after zooming. Ctrl+wheel over the grid
+    does the same; the buttons carry tooltips with words ("Larger
+    thumbnails").
+  - **Dragging the splitter wider adds columns**: the grid reflows to as
+    many columns as fit at the current thumbnail size (2, 3, …); dragging
+    narrower drops back to one. Column count is derived, never stored.
+  - After a `+`/`−` step the grid keeps the current page in view.
+  - Everything else: virtualised grid, current page highlighted with a
+    word tooltip, click navigates, keyboard navigation, multi-select
+    (Ctrl/Shift) exposed for M40, renders via engine at thumbnail scale
+    with its own small cache; page labels shown under each thumb.
 - Bookmarks panel: tree from `outline()`; expand/collapse, expand-to-level,
   click → destination (page + zoom mode/rect), keyboard navigation; **edit
   as Commands**: add (from current view), rename inline, delete, nest/
@@ -106,6 +128,14 @@ None new.
   back.
 - Attachments fixture: add a file, save (M21), reopen → attachment present
   with description.
+- Fresh profile: launch, open any PDF ⇒ left pane is open on Pages with
+  thumbnails rendered. Set `ui.leftPaneOnOpen = 'closed'`, reopen ⇒ pane
+  closed; set `'pages'` again ⇒ back, including for a `/PageMode
+  /UseOutlines` fixture.
+- Fresh profile: Pages panel shows exactly one column; press `+` twice ⇒
+  thumbnails larger, panel visibly wider, still one column, current page
+  still in view; press `−` ⇒ narrower again. Drag the splitter to ~2.5×
+  the width ⇒ two columns; back ⇒ one.
 - Thumbnails: 500-page fixture scrolls the grid at ≥ 55 fps; current page
   follows the viewport.
 

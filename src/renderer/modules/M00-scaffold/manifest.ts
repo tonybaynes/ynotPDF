@@ -63,8 +63,11 @@ export default defineModule({
         if (!file) throw new Error('file.openBytes needs { file }');
         const shell = ctx.service<Store<ShellState>>('shell');
         const registry = ctx.service<Registry>('registry');
-        // M10/M11 turn this into a real Document + viewer; until then the shell (M02) opens a
-        // tab for it and M00 only reflects the name.
+        // M11 turns the bytes into a real Document and a viewport (asking for a password when
+        // the file wants one). Without it the shell (M02) just opens a tab for the name.
+        if (registry.has('view.openFile') && registry.isEnabled('view.openFile')) {
+          return ctx.run('view.openFile', { file });
+        }
         if (registry.hasService('documents')) {
           registry.service<Documents>('documents').open({ title: file.name, path: file.path });
         } else {
