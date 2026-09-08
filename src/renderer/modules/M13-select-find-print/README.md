@@ -42,8 +42,8 @@ M111 reads it aloud.
 - **One text model per page, read once.** `TextService` caches it with the document; a find and a
   selection on the same page read the same object.
 - **One imposition, three consumers.** The preview, the printer and "Print to PDF" all draw the
-  plan `print/plan.ts` produced, so they cannot disagree (ADR 0011).
-- **Selection is ours, not the browser's.** See ADR 0011 for why, and `selection/Highlighter.ts`
+  plan `print/plan.ts` produced, so they cannot disagree (ADR 0012).
+- **Selection is ours, not the browser's.** See ADR 0012 for why, and `selection/Highlighter.ts`
   for how the highlight stays opaque without hiding the words under it.
 
 ## What M13 does not own

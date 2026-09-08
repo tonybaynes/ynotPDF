@@ -1,5 +1,5 @@
 /**
- * Printing (M13, ADR 0011). Electron gives a desktop app exactly one cross-platform way to put
+ * Printing (M13, ADR 0012). Electron gives a desktop app exactly one cross-platform way to put
  * ink on paper: `webContents.print()`. So a print job becomes a tiny HTML document — one `<img>`
  * per sheet, each declared at the exact paper size, with `@page { margin: 0 }` — loaded into a
  * hidden `BrowserWindow` and printed.

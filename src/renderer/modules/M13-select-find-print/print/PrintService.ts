@@ -3,7 +3,7 @@
  *
  * The renderer keeps the interesting half of printing: it imposes the pages and rasterises the
  * sheets, because that is where the engine lives. Main only receives finished sheets and gives
- * them to `webContents.print()` (ADR 0011). Sheets are sent one at a time so a hundred-page job
+ * them to `webContents.print()` (ADR 0012). Sheets are sent one at a time so a hundred-page job
  * at 300 DPI never exists all at once in either process.
  */
 

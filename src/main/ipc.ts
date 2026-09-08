@@ -27,6 +27,9 @@ import type { RecoveryStore } from './fs/recovery';
 import type { FileWatchers } from './fs/watcher';
 import type { RecentFiles } from './recent';
 import type { Settings } from './settings';
+import { readClipboard } from './webpdf/clipboard';
+import { decodeWithNativeImage } from './webpdf/decodeImage';
+import type { WebPdfPrinter } from './webpdf/WebPdfPrinter';
 import { allWindows, broadcast, getMainWindow } from './window';
 
 export interface IpcDeps {
@@ -44,6 +47,8 @@ export interface IpcDeps {
   printJobs: PrintJobs;
   /** Running folder searches (M13). */
   searches: FolderSearches;
+  /** Prints web pages and generated HTML in a hidden window (M91). */
+  readonly webpdf: WebPdfPrinter;
 }
 
 function windowOf(event: { readonly sender: unknown }): BrowserWindow | null {
@@ -243,7 +248,7 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       windowOf(e)?.webContents.toggleDevTools();
     },
 
-    // ---- M13: clipboard, folder search, printing (ADR 0011) ---------------------------------
+    // ---- M13: clipboard, folder search, printing (ADR 0012) ---------------------------------
     'clipboard:write': async (_e, payload) => {
       // One item carrying every format, not one `write` per format: a paste target then picks
       // the richest thing it understands instead of receiving whichever we put down last.
@@ -312,6 +317,30 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     'print:cancel': (_e, jobId) => {
       deps.printJobs.cancel(jobId);
     },
+    // Multi-select with the caller's filters (M91). The files are not added to Recent: they are
+    // sources for a new document, not documents that were opened.
+    'file:openFilesDialog': async (e, options) => {
+      const win = windowOf(e);
+      const multi = options?.multi !== false;
+      const filters = options?.filters ?? [{ name: 'All files', extensions: ['*'] }];
+      const dialogOptions: Electron.OpenDialogOptions = {
+        title: options?.title ?? 'Create PDF from files',
+        properties: multi ? ['openFile', 'multiSelections'] : ['openFile'],
+        filters: filters.map((f) => ({ name: f.name, extensions: [...f.extensions] })),
+        ...(options?.buttonLabel !== undefined ? { buttonLabel: options.buttonLabel } : {}),
+      };
+      const result = win
+        ? await dialog.showOpenDialog(win, dialogOptions)
+        : await dialog.showOpenDialog(dialogOptions);
+      if (result.canceled) return [];
+      return Promise.all(result.filePaths.map((path) => readFileForRenderer(path)));
+    },
+    'webpdf:render': (_e, request) => deps.webpdf.render(request),
+    'webpdf:cancel': (_e, jobId) => {
+      deps.webpdf.cancel(jobId);
+    },
+    'clipboard:read': () => readClipboard(),
+    'image:decode': (_e, bytes) => decodeWithNativeImage(bytes),
   };
 
   for (const channel of Object.keys(handlers) as IpcInvokeChannel[]) {

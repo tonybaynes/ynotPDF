@@ -1,5 +1,5 @@
 /**
- * Folder-search worker (M13, ADR 0011). A Node `worker_thread` started by `main/search/index.ts`
+ * Folder-search worker (M13, ADR 0012). A Node `worker_thread` started by `main/search/index.ts`
  * with its own PDFium instance, so searching a tree of documents never touches the window's
  * event loop and cancelling it is a `terminate()` rather than a co-operative flag no one checks.
  *

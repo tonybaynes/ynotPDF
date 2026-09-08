@@ -61,6 +61,17 @@ export function buildMenu(recent: RecentFiles): void {
     {
       label: '&File',
       submenu: [
+        {
+          label: 'New',
+          submenu: [
+            cmd('create.blank', 'Blank document…', 'CmdOrCtrl+N'),
+            cmd('create.fromImages', 'From images…'),
+            cmd('create.fromFiles', 'From files…'),
+            cmd('create.fromWebPage', 'From web page…'),
+            cmd('create.fromClipboard', 'From clipboard…'),
+          ],
+        },
+        { type: 'separator' },
         cmd('file.open', 'Open…', 'CmdOrCtrl+O'),
         { label: 'Open Recent', submenu: recentItems },
         { type: 'separator' },

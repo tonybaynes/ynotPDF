@@ -1,0 +1,12 @@
+ASCII only: a plain line of text.
+Accents: café, naïve, résumé, Zoë.
+Curly quotes: “double” and ‘single’.
+Dashes: an em dash — and an en dash – in one line.
+Currency: €12.50, £8, ¥1000, $3.
+Symbols: © 2026 ynotPDF fixtures ® ™ … • § ¶
+Ligatures and specials: Œ œ Æ æ ß
+Spanish and German: ¿Qué? ¡Hola! Straße Ärger Übung
+CJK and emoji: 漢字 日本語 🙂
+Fractions and degrees: ½ ¼ ¾ 90° ±5 × ÷
+Nordic: Ørsted Åland Æsir smørrebrød
+Last line — the end.

@@ -243,7 +243,7 @@ is colourblind: black and red read as the same colour):**
   blend with the paper — `mix-blend-mode: multiply` on a light page, `screen` under Night Mode —
   which is fully opaque paint that darkens the paper and leaves the ink. It also means the
   selection _model_ is ours, which is what makes column select, cross-page runs and "n of m" work
-  the same way on every platform (ADR 0011).
+  the same way on every platform (ADR 0012).
 - **Selection listens on the viewport, not on the page tool layer.** A drag that starts on page 3
   and ends on page 5 has to keep producing coordinates after it has left the page it started on,
   and a pointer capture on a page element reports that page's coordinates for ever. `ToolSpec` is
@@ -264,7 +264,7 @@ is colourblind: black and red read as the same colour):**
 - **The imposition is pure, and one plan feeds three consumers.** The preview renders sheet _n_ of
   the plan, the printer rasterises the same plan, and "Print to PDF" draws it with pdf-lib. They
   cannot disagree, and the acceptance test can state the imposition as a table with no printer.
-- **Printing is an HTML document of images in a hidden window** (ADR 0011) — the only
+- **Printing is an HTML document of images in a hidden window** (ADR 0012) — the only
   cross-platform route Electron offers. Sheets go to main one at a time and are referenced by
   relative path, because a hundred 300-DPI sheets inlined as data URLs is about 300 MB of base64.
 - **"Print as image" is given the one place it can mean something.** Everything that reaches a
@@ -295,8 +295,14 @@ is colourblind: black and red read as the same colour):**
 ## Build log (fill in at merge)
 
 **Built 2026-09-08 on `mod/M13-select-find-print` (worktree `../ynotPDF-M13`).** Green locally on
-Windows: lint (eslint, prettier, the colour/opacity rules, `tsc` on both projects), 1 708 unit
-tests with the coverage gates, 159 Playwright tests.
+Windows and in CI on all three OSes plus the arm64 installer smoke: lint (eslint, prettier, the
+colour/opacity rules, `tsc` on both projects), then — with M91 merged in — 1 924 unit tests with
+the coverage gates and 178 Playwright tests.
+
+M91 landed on `main` while this was being built, so the branch carries a merge: both modules add
+to `src/shared/ipc.ts`, `src/main/ipc.ts`, `src/main/index.ts`, `src/renderer/main.ts`,
+`src/renderer/index.html` and `vitest.config.ts`, and every conflict was two additions to one
+list. M91 also took ADR **0011**, so this module's printing ADR is **0012**.
 
 **Shipped:**
 
@@ -320,7 +326,7 @@ tests with the coverage gates, 159 Playwright tests.
 - **Advanced search.** A left-pane panel: scope (this document / all open / a folder), the full
   option set, a proximity box, a results tree grouped document → page with a line of context,
   click-to-navigate-and-select, progress, cancel, and Export to CSV.
-- **Folder search** in a main-process worker thread with its own PDFium (ADR 0011), streaming
+- **Folder search** in a main-process worker thread with its own PDFium (ADR 0012), streaming
   batched results and cancellable by `terminate()`.
 - **Printing.** Our own opaque dialog covering Foxit's option set — printer, copies, collate,
   range (all / current / selection / custom), odd-even subset, reverse, scaling (fit / actual /
@@ -328,7 +334,7 @@ tests with the coverage gates, 159 Playwright tests.
   order and borders, booklet with binding and duplex subset, tiling with scale, overlap and marks,
   comments and form fields, greyscale, print-as-image, DPI — with a live preview of any sheet. The
   imposition is pure and shared by the preview, the paper and Print to PDF.
-- **Docs.** ADR 0011, `docs/shortcuts.md` rows for selection, copy, find, search and print,
+- **Docs.** ADR 0012, `docs/shortcuts.md` rows for selection, copy, find, search and print,
   READMEs for the module and the view layer.
 
 **The manual check the brief asks for, recorded.** "Copied RTF opens in WordPad/TextEdit and
@@ -358,7 +364,7 @@ RTF reader makes for Helvetica and Times-Roman.
   with one large button, and `shell.spec.ts` pins its own window width rather than inheriting the
   runner's, so the next module to reach for the Home tab does not learn this the same way.
 
-**Shared files touched (minimal, additive, per ADR 0011):** `src/shared/ipc.ts` and
+**Shared files touched (minimal, additive, per ADR 0012):** `src/shared/ipc.ts` and
 `src/main/ipc.ts` (clipboard, folder picker, folder search, printing; `SaveDialogOptions.filters`),
 `src/main/index.ts` (own the print jobs and the searches, release them with the window),
 `src/main/menu.ts` (Print, Print to PDF, and Copy / Copy with Formatting / Select All / Find as
@@ -376,7 +382,7 @@ demo module itself is untouched.
 
 - **Find & replace and spell-check** — M54's, explicitly out of scope.
 - **Read aloud** — M111's, explicitly out of scope.
-- **A vector path to the printer.** Electron has none (ADR 0011). Everything that reaches paper is
+- **A vector path to the printer.** Electron has none (ADR 0012). Everything that reaches paper is
   a raster at the chosen DPI; the dialog exposes the DPI, and Print to PDF keeps a vector route.
 - **Print to PDF in vector mode does not carry annotation or widget appearances**, because
   pdf-lib's `embedPage` carries a page's content and not its annotations. "Print as image" does,

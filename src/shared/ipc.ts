@@ -9,6 +9,14 @@
  * Payloads must be structured-cloneable; bytes travel as `Uint8Array`.
  */
 
+import type {
+  ClipboardContents,
+  DecodedRaster,
+  OpenFilesOptions,
+  WebRenderRequest,
+  WebRenderResult,
+} from './create';
+
 /** A file opened from disk. */
 export interface OpenedFile {
   /** Absolute path. */
@@ -62,7 +70,7 @@ export interface SaveDialogOptions {
   readonly buttonLabel?: string;
   /**
    * File-type filters. Absent means PDF plus "all files" — M21's original behaviour. M13 passes
-   * PNG for a snapshot and CSV for exported search results (ADR 0011).
+   * PNG for a snapshot and CSV for exported search results (ADR 0012).
    */
   readonly filters?: ReadonlyArray<{
     readonly name: string;
@@ -70,7 +78,7 @@ export interface SaveDialogOptions {
   }>;
 }
 
-// ---- clipboard, search and printing (M13, ADR 0011) -----------------------------------------
+// ---- clipboard, search and printing (M13, ADR 0012) -----------------------------------------
 
 /** What to put on the clipboard. Every format given is offered at once, as one item. */
 export interface ClipboardPayload {
@@ -299,14 +307,14 @@ export interface IpcInvokeMap {
   /** Native folder picker, for the advanced search panel's folder scope. `null` on cancel. */
   'dialog:pickFolder': { args: [title?: string]; result: string | null };
   /**
-   * Starts a folder search in a main-process worker (M13, ADR 0011). Resolves with a job id;
+   * Starts a folder search in a main-process worker (M13, ADR 0012). Resolves with a job id;
    * hits arrive on `search:results` and the job ends with `search:done`.
    */
   'search:folder': { args: [request: FolderSearchRequest]; result: string };
   'search:cancel': { args: [jobId: string]; result: void };
   /** Printers the OS knows about (M13). */
   'print:printers': { args: []; result: PrinterInfo[] };
-  /** Opens a print job; sheets follow one at a time (M13, ADR 0011). */
+  /** Opens a print job; sheets follow one at a time (M13, ADR 0012). */
   'print:begin': { args: [setup: PrintJobSetup]; result: string };
   /** Adds one rendered sheet, as PNG bytes, to an open job. */
   'print:sheet': { args: [jobId: string, png: Uint8Array]; result: void };
@@ -314,6 +322,16 @@ export interface IpcInvokeMap {
   'print:finish': { args: [jobId: string]; result: PrintJobResult };
   /** Abandons an open job and deletes its temporary files. */
   'print:cancel': { args: [jobId: string]; result: void };
+  /** A multi-select open dialog with the caller's filters (M91). Empty when cancelled. */
+  'file:openFilesDialog': { args: [options?: OpenFilesOptions]; result: OpenedFile[] };
+  /** Loads a URL or generated HTML in a hidden window and prints it to PDF (M91, ADR 0011). */
+  'webpdf:render': { args: [request: WebRenderRequest]; result: WebRenderResult };
+  /** Destroys a render job's window; a no-op when the job has finished. */
+  'webpdf:cancel': { args: [jobId: string]; result: void };
+  /** Text, HTML and image (PNG) on the clipboard (M91). */
+  'clipboard:read': { args: []; result: ClipboardContents };
+  /** Decodes an image with the platform's own codecs; `null` when it cannot (M91). */
+  'image:decode': { args: [bytes: Uint8Array]; result: DecodedRaster | null };
 }
 
 /** Push channels main → renderer. Key = channel name; value = payload. */
@@ -422,6 +440,11 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'print:sheet',
   'print:finish',
   'print:cancel',
+  'file:openFilesDialog',
+  'webpdf:render',
+  'webpdf:cancel',
+  'clipboard:read',
+  'image:decode',
 ];
 
 /** Full list of event channels main may push. */

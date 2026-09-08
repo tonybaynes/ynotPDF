@@ -14,6 +14,7 @@ import { PrintJobs } from './print';
 import { RecentFiles } from './recent';
 import { FolderSearches } from './search';
 import { Settings, THEME_KEY } from './settings';
+import { WebPdfPrinter } from './webpdf/WebPdfPrinter';
 import { broadcast, createMainWindow, getMainWindow, sendTo } from './window';
 import { readFileForRenderer } from './files';
 
@@ -104,6 +105,7 @@ const watchers = new FileWatchers((path) => {
 });
 const printJobs = new PrintJobs();
 const searches = new FolderSearches();
+const webpdf = new WebPdfPrinter();
 let recovery: RecoveryStore | null = null;
 
 /**
@@ -128,6 +130,7 @@ app.on('before-quit', (event) => {
 });
 
 app.on('will-quit', () => {
+  webpdf.dispose();
   void watchers.closeAll();
   printJobs.disposeAll();
   searches.disposeAll();
@@ -185,6 +188,7 @@ if (gotLock) {
       closeBroker,
       printJobs,
       searches,
+      webpdf,
     });
     pendingOpens.push(...pdfPathsFromArgv(process.argv));
     await boot();

@@ -1,5 +1,5 @@
 /**
- * Folder search, main-process half (M13, ADR 0011). Owns the worker threads, forwards their
+ * Folder search, main-process half (M13, ADR 0012). Owns the worker threads, forwards their
  * messages to the window that asked, and makes sure a window that goes away does not leave a
  * worker chewing through a folder for nobody.
  *

@@ -1,4 +1,4 @@
-# ADR 0011 — Printing, and the IPC selection, search and print need
+# ADR 0012 — Printing, and the IPC selection, search and print need
 
 - Status: accepted
 - Date: 2026-09-08
