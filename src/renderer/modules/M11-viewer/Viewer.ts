@@ -18,7 +18,7 @@ import { Loupe } from '@view/Loupe';
 import { Overlays, type OverlayState } from '@view/Overlays';
 import { PerfHud } from '@view/PerfHud';
 import type { RenderFlags, TileRenderer } from '@view/TileRenderer';
-import { GuideSet } from '@view/guides';
+import { GuideSet, snapPoint } from '@view/guides';
 import { ViewHistory, type ViewPosition } from '@view/history';
 import type { LayoutMode } from '@view/layout';
 import { clampFactor, stepPercent, wheelZoom, factor, percent, type FitMode } from '@view/zoom';
@@ -376,6 +376,22 @@ export class Viewer {
     return this.document.state.pages.map(pageSizeOf);
   }
 
+  /**
+   * Snaps a page point to the grid and the guides, honouring the current settings. Exposed for
+   * the tools later modules bring — M33's measuring, M50's object handles — so "snap" means the
+   * same thing everywhere and they do not each reimplement it.
+   */
+  snap(page: number, point: { readonly x: number; readonly y: number }): { x: number; y: number } {
+    return snapPoint(point, {
+      ...(this.snapToGrid ? { grid: this.overlayState.gridSpacing } : {}),
+      guides: this.guides.forPage(page),
+      page,
+    });
+  }
+
+  /** Whether tools should snap to the grid (the `viewer.grid.snap` setting). */
+  snapToGrid = false;
+
   syncOverlays(): void {
     for (const o of this.overlaysByPane) o.sync();
   }
@@ -528,6 +544,24 @@ export class Viewer {
       if (tool?.onKeyDown?.(event)) {
         event.preventDefault();
         return;
+      }
+      // While auto-scrolling, the digits set the speed and the minus key reverses, as in Foxit.
+      if (this.autoScroll) {
+        if (/^[0-9]$/.test(event.key)) {
+          event.preventDefault();
+          this.setAutoScrollSpeed(event.key === '0' ? 10 : Number(event.key));
+          return;
+        }
+        if (event.key === '-' || event.key === '_') {
+          event.preventDefault();
+          this.reverseAutoScroll();
+          return;
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          this.stopAutoScroll();
+          return;
+        }
       }
       switch (event.key) {
         case 'PageDown':

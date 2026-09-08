@@ -51,6 +51,9 @@ Started by M11 (viewer); each later module adds its own rows.
 `Page Down` / `Page Up` / `Space` act on the page area, so they scroll whichever half of a split
 view has the focus.
 
+While **auto-scroll** is running, the page area takes `1`–`9` (and `0` for the fastest) to set the
+speed, `-` to turn it round and `Escape` to stop.
+
 ## Zoom
 
 | Keys               | Command                | What it does           |

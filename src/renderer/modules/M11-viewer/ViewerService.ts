@@ -180,6 +180,9 @@ export class ViewerService {
         };
         for (const viewer of this.viewers.values()) viewer.setOverlays(this.overlayState);
         break;
+      case 'snapToGrid':
+        for (const viewer of this.viewers.values()) viewer.snapToGrid = s.snapToGrid;
+        break;
       case 'lineWeights':
       case 'smoothText':
       case 'smoothImages':
@@ -273,6 +276,7 @@ export class ViewerService {
         });
       }
     }
+    viewer.snapToGrid = this.settingsValue.snapToGrid;
     if (this.settingsValue.perfHud) viewer.toggleHud();
     this.restoring.delete(tab.id);
     this.showActive(this.documents.state.active);

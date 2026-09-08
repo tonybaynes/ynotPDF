@@ -648,6 +648,25 @@ test.describe('navigation', () => {
     expect((await state()).scrollTop).toBe(stopped);
     expect(await app.run('view.autoScroll.speed', { speed: 8 })).toBe(8);
   });
+
+  test('the digits set the auto-scroll speed and minus reverses it', async () => {
+    await open('huge-page-count.pdf', { path: 'C:/fixtures/speedkeys.pdf' });
+    await app.run('dev.viewerScroll', { top: 2000 });
+    await app.page.locator('.viewer-scroll').first().focus();
+    await app.run('view.autoScroll.toggle');
+    await app.page.keyboard.press('9');
+    await app.page.waitForTimeout(500);
+    const fast = (await state()).scrollTop;
+    expect(fast).toBeGreaterThan(2000);
+    // Minus turns it round; the view comes back up.
+    await app.page.keyboard.press('-');
+    await app.page.waitForTimeout(500);
+    expect((await state()).scrollTop).toBeLessThan(fast);
+    await app.page.keyboard.press('Escape');
+    const stopped = (await state()).scrollTop;
+    await app.page.waitForTimeout(300);
+    expect((await state()).scrollTop).toBe(stopped);
+  });
 });
 
 test.describe('tools and overlays', () => {
