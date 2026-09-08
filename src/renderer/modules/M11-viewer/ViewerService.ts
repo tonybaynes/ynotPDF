@@ -18,6 +18,7 @@ import type { ShellServices } from '@app/services';
 import { SERVICE } from '@app/services';
 import type { Documents, DocumentTab } from '@app/tabs/Documents';
 import type { Registry } from '@core/Registry';
+import { shallowEqual } from '@core/Store';
 import type { Document } from '@core/Document';
 import type { EngineClient } from '@engine/EngineClient';
 import { hasBridge, invoke, type OpenedFile } from '@shared/ipc';
@@ -33,6 +34,7 @@ import type { LayoutMode } from '@view/layout';
 import { factor, percent, type FitMode } from '@view/zoom';
 import type { ViewportState } from '@view/DocumentView';
 import { DEFAULT_OVERLAY_STATE, type OverlayState } from '@view/Overlays';
+import type { ViewState } from '@app/ui/UiState';
 import { Viewer, type SplitOrientation } from './Viewer';
 import { openWithPassword } from './password';
 import {
@@ -45,7 +47,6 @@ import {
   type SettingsStorage,
   type ViewerSettings,
 } from './settings';
-import { viewerTools } from './tools';
 
 export const VIEWER_SERVICE = 'viewer';
 
@@ -66,12 +67,22 @@ export class ViewerService {
   private readonly storage: SettingsStorage;
   private readonly viewers = new Map<string, Viewer>();
   private readonly disposers: Array<() => void> = [];
-  private readonly tools: ToolSpec[];
   private settingsValue: ViewerSettings = DEFAULT_SETTINGS;
   private overlayState: OverlayState = DEFAULT_OVERLAY_STATE;
   private readingMode = false;
   private readingBar: HTMLElement | null = null;
   private pushingState = false;
+  private applying = false;
+  /** `setTimeout` handles: `number` in the DOM, `Timeout` under Node's types. */
+  private readonly rememberTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /**
+   * The last state each tab reported. Closing a tab hides its viewport before `onClosed` fires,
+   * and a hidden element's `scrollTop` reads 0 — so the place is written from here, not from a
+   * live measurement taken after the lights have gone out.
+   */
+  private readonly lastState = new Map<string, ViewportState>();
+  /** Tabs whose remembered place is still being applied; their state is not news yet. */
+  private readonly restoring = new Set<string>();
 
   constructor(options: ViewerServiceOptions) {
     this.registry = options.registry;
@@ -84,8 +95,6 @@ export class ViewerService {
       cacheBytes: megabytes(DEFAULT_SETTINGS.cacheMegabytes),
       palette: () => this.nightPalette(),
     });
-    this.tools = viewerTools(() => this.active);
-
     this.disposers.push(
       this.documents.subscribe((state) => {
         this.showActive(state.active);
@@ -108,11 +117,6 @@ export class ViewerService {
         }),
       );
     }
-  }
-
-  /** The tools this module contributes (the manifest lists them). */
-  get toolSpecs(): ReadonlyArray<ToolSpec> {
-    return this.tools;
   }
 
   get settings(): ViewerSettings {
@@ -206,7 +210,9 @@ export class ViewerService {
     }
     const opened = await openWithPassword(
       (password) =>
-        service.open(file.bytes, {
+        // The engine transfers the buffer into its worker, which detaches it — so every attempt
+        // gets its own copy, or the second one would find an empty ArrayBuffer.
+        service.open(file.bytes.slice(), {
           path: file.path,
           name: file.name,
           ...(password === undefined ? {} : { password }),
@@ -232,6 +238,7 @@ export class ViewerService {
       (this.settingsValue.defaultZoom === 'none' ? null : this.settingsValue.defaultZoom);
     const zoom = restore && remembered.zoom ? remembered.zoom : 1;
 
+    this.restoring.add(tab.id);
     const viewer = new Viewer({
       host: this.host,
       tabId: tab.id,
@@ -267,6 +274,7 @@ export class ViewerService {
       }
     }
     if (this.settingsValue.perfHud) viewer.toggleHud();
+    this.restoring.delete(tab.id);
     this.showActive(this.documents.state.active);
     this.publish(tab.id, viewer.state);
     return viewer;
@@ -275,8 +283,13 @@ export class ViewerService {
   private async closeTab(tab: DocumentTab): Promise<void> {
     const viewer = this.viewers.get(tab.id);
     if (!viewer) return;
+    const pending = this.rememberTimers.get(tab.id);
+    if (pending !== undefined) clearTimeout(pending);
+    this.rememberTimers.delete(tab.id);
     await this.remember(tab);
     this.viewers.delete(tab.id);
+    this.lastState.delete(tab.id);
+    this.restoring.delete(tab.id);
     viewer.dispose();
     this.renderer.forget(tab.id);
     if (this.viewers.size === 0) this.resetView();
@@ -285,8 +298,8 @@ export class ViewerService {
   /** Writes the per-document memory. */
   private async remember(tab: DocumentTab): Promise<void> {
     const viewer = this.viewers.get(tab.id);
-    if (!viewer || !tab.path || !this.settingsValue.restorePosition) return;
-    const state = viewer.state;
+    const state = this.lastState.get(tab.id);
+    if (!viewer || !state || !tab.path || !this.settingsValue.restorePosition) return;
     await writeDocumentState(this.storage, tab.path, {
       page: state.page,
       zoom: state.zoom,
@@ -300,24 +313,54 @@ export class ViewerService {
 
   // ---- store bridge ------------------------------------------------------------------------------
 
-  /** Viewport → store. Everything the status bar and the ribbon read comes from here. */
+  /**
+   * Schedules the per-document memory write. Called as the reader moves rather than only on
+   * close, so the place is already on disk if the app goes away unexpectedly — and so a tab that
+   * is closed and reopened straight away finds it.
+   */
+  private scheduleRemember(tabId: string): void {
+    if (!this.settingsValue.restorePosition) return;
+    const existing = this.rememberTimers.get(tabId);
+    if (existing !== undefined) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      this.rememberTimers.delete(tabId);
+      const tab = this.documents.get(tabId);
+      if (tab) void this.remember(tab);
+    }, 250);
+    this.rememberTimers.set(tabId, timer);
+  }
+
+  /**
+   * Viewport → store. Everything the status bar and the ribbon read comes from here.
+   *
+   * The write is skipped when nothing actually differs. That is not an optimisation: `ui.set`
+   * builds a fresh `view` object every time, and the subscription below reads `s.view`, so an
+   * unconditional write-back would notify, which would apply, which would publish again.
+   */
   private publish(tabId: string, state: ViewportState): void {
+    if (!this.restoring.has(tabId)) {
+      this.lastState.set(tabId, state);
+      this.scheduleRemember(tabId);
+    }
     if (this.documents.state.active !== tabId) return;
+    const next: ViewState = {
+      page: state.pageCount === 0 ? 0 : state.page + 1,
+      pageCount: state.pageCount,
+      zoom: percent(state.zoom),
+      fit: state.fit,
+      layout: state.layout,
+      rotation: state.rotation,
+      split: this.active?.split ?? 'off',
+      syncScroll: this.active?.synced ?? true,
+    };
+    // While a store change is being applied to the viewport, the viewport's *intermediate*
+    // states are not news: publishing one would queue a store write that lands after the
+    // command has finished and undo it. `install` publishes once when it is done.
+    if (this.applying) return;
+    if (shallowEqual(next, this.shell.ui.get().view)) return;
     this.pushingState = true;
     try {
-      this.shell.ui.set((s) => ({
-        view: {
-          ...s.view,
-          page: state.pageCount === 0 ? 0 : state.page + 1,
-          pageCount: state.pageCount,
-          zoom: percent(state.zoom),
-          fit: state.fit,
-          layout: state.layout,
-          rotation: state.rotation,
-          split: this.active?.split ?? 'off',
-          syncScroll: this.active?.synced ?? true,
-        },
-      }));
+      this.shell.ui.set({ view: next });
     } finally {
       this.pushingState = false;
     }
@@ -333,19 +376,35 @@ export class ViewerService {
     const stop = this.shell.ui.select(
       (s) => s.view,
       (view) => {
-        if (this.pushingState) return;
+        if (this.pushingState || this.applying) return;
+        // The store defers a `set` made inside a notification, so a listener can be handed a
+        // snapshot that has already been superseded — opening a document publishes its first
+        // state, then jumps to the remembered page, and the first notification arrives after
+        // the second. Applying a stale snapshot would undo the newer one.
+        if (!shallowEqual(view, this.shell.ui.get().view)) return;
         const viewer = this.active;
         if (!viewer) return;
-        const state = viewer.state;
-        if (view.layout !== state.layout) viewer.setLayout(view.layout);
-        if (view.rotation !== state.rotation) viewer.setRotation(view.rotation);
-        if (view.fit !== state.fit) viewer.setFit(view.fit);
-        else if (!view.fit && view.zoom !== percent(state.zoom)) viewer.setZoom(view.zoom);
-        if (view.pageCount > 0 && view.page - 1 !== state.page) viewer.goToPage(view.page - 1);
-        if (view.split !== viewer.split) this.setSplit(view.split);
-        if (view.syncScroll !== viewer.synced) viewer.setSyncScroll(view.syncScroll);
+        this.applying = true;
+        try {
+          const state = viewer.state;
+          if (view.layout !== state.layout) viewer.setLayout(view.layout);
+          if (view.rotation !== state.rotation) viewer.setRotation(view.rotation);
+          if (view.fit !== state.fit) viewer.setFit(view.fit);
+          // `view.zoom.set` writes the zoom *and* clears the fit in one go, so the zoom has to
+          // be applied after the fit rather than instead of it.
+          if (!view.fit && view.zoom !== percent(viewer.state.zoom)) viewer.setZoom(view.zoom);
+          if (view.pageCount > 0 && view.page - 1 !== state.page) viewer.goToPage(view.page - 1);
+          if (view.split !== viewer.split) this.setSplit(view.split);
+          if (view.syncScroll !== viewer.synced) viewer.setSyncScroll(view.syncScroll);
+        } finally {
+          this.applying = false;
+        }
+        // One write back, describing where the viewport actually ended up.
+        this.publish(viewer.tabId, viewer.state);
       },
-      { immediate: false },
+      // Compared field by field: `ui.set` makes a new `view` object on every write, so an
+      // identity comparison would fire this on writes that changed nothing.
+      { immediate: false, equals: shallowEqual },
     );
     this.disposers.push(stop);
     return stop;
@@ -480,6 +539,8 @@ export class ViewerService {
   }
 
   dispose(): void {
+    for (const timer of this.rememberTimers.values()) clearTimeout(timer);
+    this.rememberTimers.clear();
     for (const d of this.disposers.splice(0)) d();
     for (const viewer of this.viewers.values()) viewer.dispose();
     this.viewers.clear();

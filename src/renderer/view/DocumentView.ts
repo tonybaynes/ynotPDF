@@ -260,25 +260,43 @@ export class DocumentView {
   zoomAt(zoom: number, anchorX: number, anchorY: number, fit: FitMode = null): void {
     const target = clampFactor(zoom);
     if (target === this.zoomFactor && fit === this.fitMode) return;
-    const before = {
-      left: this.scroller.scrollLeft,
-      top: this.scroller.scrollTop,
-    };
+    const box = this.scroller.getBoundingClientRect();
+    // The page point under the cursor: this, not a content coordinate, is what must not move.
+    // The content padding and the gaps between pages do not scale with the zoom, so treating the
+    // content as one uniformly scaling plane drifts by exactly the padding — 16 px, which at 1×
+    // is 16 points of page and very visible.
+    const anchored = this.hitTest(box.left + anchorX, box.top + anchorY);
+    const before = { left: this.scroller.scrollLeft, top: this.scroller.scrollTop };
     const oldOffsetX = this.contentOffsetX;
     const oldZoom = this.zoomFactor;
     this.zoomFactor = target;
     this.fitMode = fit;
-    this.table = this.buildTable();
-    const newOffsetX = this.offsetXFor(this.table);
-    const scroll = zoomAboutPoint(
-      before,
-      { x: anchorX, y: anchorY },
-      oldZoom,
-      target,
-      { x: oldOffsetX, y: 0 },
-      { x: newOffsetX, y: 0 },
-    );
-    this.relayout({ scroll });
+    // A first approximation, so the right pages are mounted; the correction below is exact.
+    this.relayout({
+      scroll: (offsetX) =>
+        zoomAboutPoint(
+          before,
+          { x: anchorX, y: anchorY },
+          oldZoom,
+          target,
+          { x: oldOffsetX, y: 0 },
+          { x: offsetX, y: 0 },
+        ),
+    });
+    if (anchored) {
+      const view = this.views.get(anchored.page);
+      if (view) {
+        const pageBox = view.element.getBoundingClientRect();
+        const device = view.transform.toDevice({ x: anchored.x, y: anchored.y });
+        const nowX = pageBox.left - box.left + device.x;
+        const nowY = pageBox.top - box.top + device.y;
+        this.setScroll({
+          left: this.scroller.scrollLeft + (nowX - anchorX),
+          top: this.scroller.scrollTop + (nowY - anchorY),
+        });
+        this.paint();
+      }
+    }
     this.emit();
   }
 
@@ -362,6 +380,11 @@ export class DocumentView {
     this.scroller.scrollTop = Math.min(Math.max(0, scroll.top), maxTop);
     this.suppressScroll = false;
     this.updateCurrentPage();
+  }
+
+  /** How far this viewport can scroll vertically. */
+  get scrollRange(): number {
+    return Math.max(0, this.content.offsetHeight - this.scroller.clientHeight);
   }
 
   /** Fraction of the scrollable height, 0..1 — how split view keeps two panes in step. */
@@ -473,7 +496,9 @@ export class DocumentView {
     options: {
       readonly keepPage?: boolean;
       readonly rebuild?: boolean;
-      readonly scroll?: { readonly left: number; readonly top: number };
+      readonly scroll?:
+        | { readonly left: number; readonly top: number }
+        | ((contentOffsetX: number) => { readonly left: number; readonly top: number });
     } = {},
   ): void {
     if (this.disposed) return;
@@ -491,7 +516,9 @@ export class DocumentView {
     this.content.style.height = `${contentHeight}px`;
 
     if (options.scroll) {
-      this.setScroll(options.scroll);
+      this.setScroll(
+        typeof options.scroll === 'function' ? options.scroll(this.contentOffsetX) : options.scroll,
+      );
     } else if (options.keepPage && previousRect) {
       const nextRect = rectOfPage(this.table, this.currentPage);
       if (nextRect && this.table.continuous) {

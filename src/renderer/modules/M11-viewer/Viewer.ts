@@ -325,15 +325,27 @@ export class Viewer {
       return false;
     }
     let last = performance.now();
+    // The position is accumulated as a float rather than read back from the scroller: a frame's
+    // worth of crawl is about a pixel, and comparing the browser's rounded `scrollTop` before
+    // and after would look like "it did not move" and stop on the first frame.
+    let position = this.pane.state.scrollTop;
     const step = (now: number): void => {
       if (!this.autoScroll) return;
-      const dt = (now - last) / 1000;
+      // The first frame's timestamp can precede the `performance.now()` taken a moment earlier.
+      const dt = Math.max(0, (now - last) / 1000);
       last = now;
-      const pixels = this.autoScrollSpeed * 24 * dt * this.autoScrollDirection;
-      const before = this.pane.state.scrollTop;
-      this.pane.scrollBy(0, pixels);
-      if (this.pane.state.scrollTop === before && pixels !== 0) this.stopAutoScroll();
-      else this.autoScroll = requestAnimationFrame(step);
+      position += this.autoScrollSpeed * 24 * dt * this.autoScrollDirection;
+      const range = this.pane.scrollRange;
+      // Only the end being travelled towards counts as the end.
+      const arrived = this.autoScrollDirection > 0 ? position >= range : position <= 0;
+      if (arrived) {
+        this.pane.setScroll({ left: this.pane.state.scrollLeft, top: position });
+        this.stopAutoScroll();
+        return;
+      }
+      this.pane.setScroll({ left: this.pane.state.scrollLeft, top: position });
+      this.pane.scrollBy(0, 0); // repaint at the new position
+      this.autoScroll = requestAnimationFrame(step);
     };
     this.autoScroll = requestAnimationFrame(step);
     return true;

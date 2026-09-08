@@ -32,6 +32,15 @@ export type { Viewer } from './Viewer';
 
 const service = (ctx: ServiceContext): ViewerService => ctx.service<ViewerService>(VIEWER_SERVICE);
 
+/**
+ * The tools are declared on the manifest, which the Registry reads *before* `activate` builds
+ * the service — so they reach the active viewer through this reference rather than a captured
+ * one. (Handing `viewerTools` a `() => null` here is exactly the bug that made every tool a
+ * silent no-op: the shell hands the *manifest's* specs to the page layers.)
+ */
+let live: ViewerService | null = null;
+const activeViewer = (): Viewer | null => live?.active ?? null;
+
 const hasViewer = (ctx: ServiceContext): boolean =>
   ctx.service<Registry>('registry').hasService(VIEWER_SERVICE);
 
@@ -148,6 +157,7 @@ export default defineModule({
     if (!host) return undefined;
     const client = registry.service<EngineClient>('engineClient');
     const viewerService = new ViewerService({ registry, shell, host, client });
+    live = viewerService;
     registry.provide(VIEWER_SERVICE, viewerService);
     const stopStore = viewerService.install();
     void viewerService.load();
@@ -164,12 +174,13 @@ export default defineModule({
     });
 
     return () => {
+      live = null;
       stopStore();
       viewerService.dispose();
     };
   },
 
-  tools: viewerTools(() => null),
+  tools: viewerTools(activeViewer),
 
   settings: VIEWER_SETTINGS_SCHEMA,
 
@@ -186,7 +197,10 @@ export default defineModule({
       run: async (ctx) => {
         const file = ctx.args['file'] as OpenedFile | undefined;
         if (!file) throw new Error('view.openFile needs { file }');
-        const tab = await service(ctx).open(file);
+        // The e2e bridge structured-clones a plain array; IPC and drag-drop send real bytes.
+        const bytes = toBytes(file.bytes);
+        if (!bytes) throw new Error('view.openFile needs { file: { bytes } }');
+        const tab = await service(ctx).open({ ...file, bytes });
         return tab ? { id: tab.id, title: tab.title } : null;
       },
     },
@@ -692,7 +706,14 @@ export default defineModule({
           v.pane.scroller.getBoundingClientRect().left + x,
           v.pane.scroller.getBoundingClientRect().top + y,
         );
-        return { before, after, zoom: v.pane.zoom };
+        // A point can only be held still if there is scroll left to hold it with: when the whole
+        // document fits the window there is nothing to compensate with, and it cannot.
+        return {
+          before,
+          after,
+          zoom: v.pane.zoom,
+          scrollable: v.pane.scrollRange > 0,
+        };
       },
     },
   ],
@@ -853,6 +874,14 @@ function loupeOpen(ctx: ServiceContext): boolean {
 
 function autoScrolling(ctx: ServiceContext): boolean {
   return hasViewer(ctx) ? (service(ctx).active?.autoScrolling ?? false) : false;
+}
+
+/** Accepts a `Uint8Array`, an `ArrayBuffer` or the plain array the e2e bridge produces. */
+function toBytes(value: unknown): Uint8Array | null {
+  if (value instanceof Uint8Array) return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (Array.isArray(value)) return Uint8Array.from(value as number[]);
+  return null;
 }
 
 function round(n: number): number {
