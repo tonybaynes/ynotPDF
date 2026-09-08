@@ -259,7 +259,9 @@ export async function mountShell(root: HTMLElement, options: ShellOptions): Prom
     return ok ? 'close' : 'cancel';
   });
 
-  // Drop a PDF anywhere on the window to open it.
+  // Drop a PDF anywhere on the window to open it. Anything else goes, as one batch, to M91's
+  // converters when that module is present (`create.fromDropped`); without it non-PDFs are
+  // ignored as they always were.
   root.addEventListener('dragover', (e) => {
     if (e.dataTransfer?.types.includes('Files')) {
       e.preventDefault();
@@ -267,19 +269,29 @@ export async function mountShell(root: HTMLElement, options: ShellOptions): Prom
     }
   });
   root.addEventListener('drop', (e) => {
-    const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => /\.pdf$/i.test(f.name));
-    if (files.length === 0) return;
+    const dropped = Array.from(e.dataTransfer?.files ?? []);
+    const pdfs = dropped.filter((f) => /\.pdf$/i.test(f.name));
+    const others = dropped.filter((f) => !/\.pdf$/i.test(f.name));
+    const convertible = others.length > 0 && registry.has('create.fromDropped');
+    if (pdfs.length === 0 && !convertible) return;
     e.preventDefault();
-    for (const f of files) {
-      void f.arrayBuffer().then((buf) => {
-        const withPath = f as File & { path?: string };
-        const file: OpenedFile = {
-          path: withPath.path ?? f.name,
-          name: f.name,
-          bytes: new Uint8Array(buf),
-        };
-        void services.run('file.openBytes', { file });
-      });
+    const read = async (f: File): Promise<OpenedFile> => {
+      const withPath = f as File & { path?: string };
+      return {
+        path: withPath.path ?? f.name,
+        name: f.name,
+        bytes: new Uint8Array(await f.arrayBuffer()),
+      };
+    };
+    for (const f of pdfs) {
+      void read(f).then((file) => services.run('file.openBytes', { file }));
+    }
+    if (convertible) {
+      void Promise.all(others.map(read)).then((files) =>
+        services.run('create.fromDropped', {
+          files: files.map((f) => ({ ...f, mime: others.find((o) => o.name === f.name)?.type })),
+        }),
+      );
     }
   });
 
