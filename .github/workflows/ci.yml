@@ -178,18 +178,24 @@ jobs:
           name: installer-win-arm64
           path: installers
 
-      # ynotPDF.exe is a ~226 MB unsigned Electron binary, and the builds stay unsigned until
-      # M131. On the first ARM runs everything in the package extracted *except* that one file:
-      # NSIS copies the unpacked tree with `CopyFiles /SILENT` and swallows the failure, so the
-      # install "succeeded" without its executable. Excluding the paths from real-time scanning
-      # keeps Defender off the file while it is being written and copied.
-      - name: Keep Defender off the installer and install paths
+      # The builds are unsigned until M131. On the ARM runner the install produced every .pak,
+      # .dat and .bin data file but *none* of the PE binaries — no ynotPDF.exe and no DLLs — and
+      # NSIS's `CopyFiles /SILENT` swallows that, so the install reported success without its
+      # executable. Defender is scanning NSIS's temporary unpack directory under %TEMP%, and a
+      # path exclusion alone did not cover it because %TEMP% resolves to an 8.3 short path
+      # (C:\Users\RUNNER~1\...). Real-time monitoring is therefore turned off outright; the
+      # runner is ephemeral and the only thing it installs is our own artifact.
+      - name: Take Defender off this ephemeral runner
         shell: pwsh
         run: |
-          foreach ($p in @("$PWD\installers", "$env:LOCALAPPDATA\Programs\ynotPDF", "$env:ProgramFiles\ynotPDF", $env:TEMP)) {
+          try { Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop; 'real-time monitoring disabled' }
+          catch { "could not disable real-time monitoring: $($_.Exception.Message)" }
+          $temps = @($env:TEMP, "$env:USERPROFILE\AppData\Local\Temp") | Select-Object -Unique
+          foreach ($p in @("$PWD\installers", "$env:LOCALAPPDATA\Programs\ynotPDF", "$env:ProgramFiles\ynotPDF") + $temps) {
             try { Add-MpPreference -ExclusionPath $p -ErrorAction Stop; "excluded: $p" }
             catch { "could not exclude $p : $($_.Exception.Message)" }
           }
+          "real-time monitoring disabled: $((Get-MpPreference).DisableRealtimeMonitoring)"
           Get-PSDrive C | Select-Object Used, Free | Format-List
 
       # `perMachine: false` only sets the *default*; the runner user is an admin, so an elevated
@@ -258,7 +264,9 @@ jobs:
             # NSIS writes the registry entry only after extracting the app, so an entry pointing at
             # a directory that holds locales/ and resources/ but not the executable means the copy
             # of that one 226 MB file failed and `CopyFiles /SILENT` swallowed it.
-            "--- Defender detections ---"
+            "--- Defender ---"
+            "real-time monitoring disabled: $((Get-MpPreference).DisableRealtimeMonitoring)"
+            Get-MpThreat -ErrorAction SilentlyContinue | Select-Object -Last 10 ThreatName, Resources | Format-List
             Get-MpThreatDetection -ErrorAction SilentlyContinue |
               Select-Object -Last 10 InitialDetectionTime, Resources | Format-List
             "--- disk ---"
