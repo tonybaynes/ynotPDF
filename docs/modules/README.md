@@ -11,6 +11,7 @@ One self-contained brief per module. Tell a conversation:
 | 1 | [M02 Application shell (ribbon, panes, tabs, status bar, dialogs)](./M02-app-shell.md) | Core | M00, M01 |
 | 1 | [M10 PDF engine layer & PDFium adapter](./M10-engine-layer.md) | Core | M00 |
 | 1 | [M20 Document model, commands & undo stack](./M20-document-model.md) | Core | M00, M10 |
+| 2 | [M03 Windows on ARM (arm64) support](./M03-windows-arm.md) | Core | M00, M10 |
 | 2 | [M11 Viewer — rendering, navigation, zoom, layouts](./M11-viewer.md) | Core | M02, M10 |
 | 2 | [M21 Save, Save As, autosave & recovery](./M21-save.md) | Core | M20, M11 |
 | 2 | [M70 Encryption, permissions & certificate security](./M70-encryption.md) | Core | M21 |

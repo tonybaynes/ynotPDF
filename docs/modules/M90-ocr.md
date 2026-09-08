@@ -77,6 +77,12 @@ Handwriting recognition (Parked).
 
 ## Design notes & constraints
 
+- **Windows on ARM (M03):** Tesseract's official Windows builds are x64
+  only. On `process.arch === 'arm64'` Windows the app must use the
+  `tesseract.js` WASM engine automatically (same output, slower) unless an
+  arm64 native build is pinned in `resources/binaries.json`. The OCR dialog
+  shows which engine is in use (word, not colour). Never let the arm64
+  installer fail OCR silently.
 - Text layer mapping must use `PageGeometry` so search/selection align at
   every zoom — test by rendering selection rects over words.
 
@@ -120,8 +126,13 @@ and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;
   (MIT); OCR via **Tesseract** (Apache-2.0). Permissive licences only —
   never MuPDF, iText, Ghostscript or anything AGPL/commercial.
 - **No Docker, ever** (build or runtime). The installer is self-contained;
-  native binaries are bundled per OS and fetched at build time by
-  `scripts/fetch-binaries.ts` (pinned checksums, git-ignored). Installing
+  native binaries are bundled per OS **and CPU architecture** and fetched
+  at build time by `scripts/fetch-binaries.ts` (`resources/binaries.json`,
+  pinned checksums, git-ignored). **Supported targets: Windows x64 and
+  Windows arm64, macOS universal (x64 + arm64), Linux x64.** Any module that
+  adds a native binary must supply a `win32-arm64` entry or a WASM fallback
+  that is used automatically on that architecture — the arm64 installer must
+  never ship a feature that silently fails. Installing
   build toolchains locally (Rust, C++, emsdk) is pre-approved if a module
   needs one — record it in `docs/adr/` and `README.md`.
 

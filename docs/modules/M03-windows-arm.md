@@ -1,106 +1,129 @@
-# M70 — Encryption, permissions & certificate security
+# M03 — Windows on ARM (arm64) support
 
 | | |
 |---|---|
-| **Module id** | `M70` — folder `src/renderer/modules/M70-encryption/`, branch `mod/M70-encryption` |
+| **Module id** | `M03` — branch `mod/M03-windows-arm` (no renderer module folder: this touches build config only) |
 | **Earliest wave** | 2 (see `PLAN.md` §0/§12) |
 | **Tier** | Core |
-| **Depends on** | M21 |
-| **Unlocks** | [M120 Batch processing & action wizard](./M120-batch-actions.md) |
+| **Depends on** | M00, M10 |
+| **Unlocks** | nothing blocks on it, but M70, M90 and M131 read its ADR |
 
 ## Your task — the prompt for this conversation
 
-You are building **M70 — Encryption, permissions & certificate security** of ynotPDF. Carry this brief out end to
-end without waiting to be asked for the next step:
+You are building **M03 — Windows on ARM (arm64) support** of ynotPDF. Carry
+this brief out end to end without waiting to be asked for the next step:
 
 1. Read this file completely, then `CLAUDE.md`, `PLAN.md` §2–4, §9 and §12,
-   and the briefs of your direct dependencies: [M21 Save, Save As, autosave & recovery](./M21-save.md).
-   Confirm each dependency is ☑ in `PLAN.md` §0. If one is not, say so and
-   stop — do not build against unfinished work.
-2. Create branch `mod/M70-encryption` from `main` in a new git worktree and
+   and the briefs of your direct dependencies: [M00 Scaffold](./M00-scaffold.md),
+   [M10 Engine layer](./M10-engine-layer.md) — especially their Build logs
+   and `docs/adr/0006-pdfium-adapter.md`. Confirm both are ☑ in `PLAN.md`
+   §0.
+2. Create branch `mod/M03-windows-arm` from `main` in a new git worktree and
    work there.
-3. Fill in **Design decisions** below (short, concrete) before writing code;
-   update it as you go. Write ADRs for any contract change.
-4. Implement the **Scope** section — all of it, not the easy parts. Every
-   document change is an undoable `Command`; every user action is a
-   registered command with a palette entry and, where sensible, a shortcut.
-5. Write the tests listed under **Acceptance tests** (plus whatever unit
-   tests you needed while building). Run `npm run lint`, `npm test`,
-   `npm run e2e` locally, then push and make CI green on all three OSes.
-6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
-   this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
-   **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+3. Fill in **Design decisions** below before changing config; write
+   `docs/adr/00NN-windows-arm.md` recording what is architecture-specific in
+   the app today and the rule for future native binaries.
+4. Implement the **Scope** section — all of it.
+5. Run `npm run lint`, `npm test`, `npm run build`, `npm run package`
+   locally; push and make CI green on all three OSes with the new arm64
+   artifacts present.
+6. Merge to `main`, tick M03 ☑ in `PLAN.md` §0 in the same merge, fill in
+   the **Build log** below.
+7. Report back in a few plain lines, including exactly how the operator can
+   test the arm64 installer.
 
 ---
 
 ## Purpose
 
-Password security (AES-256/AES-128/RC4-128 legacy), permission flags,
-remove security, and certificate-based encryption, applied on save through
-qpdf.
+Make the Windows build ship for **arm64** as well as x64, prove it in CI,
+and set the rule every later module follows when it adds a native binary.
+The operator wants Windows-on-ARM as a first-class target.
 
-## Foxit 14 reference — what to emulate
+## Why this is small
 
-Foxit Protect → Password Protect (open password, permissions password,
-printing allowed none/low/high, changes allowed, copy/extract, accessibility,
-encrypt all/except metadata/attachments only, algorithm), Remove Security,
-Certificate Protect (recipients with per-recipient permissions), Security
-Properties.
+After M00 and M10 the app contains **no architecture-specific code**:
+Electron itself publishes `win32-arm64` builds, PDFium runs as
+WebAssembly (`@hyzyla/pdfium`, ADR 0006), and the only fetched binaries are
+fonts (`resources/binaries.json` targets `any`). So today arm64 support is
+packaging + verification. The lasting value is the rule for M70 (qpdf), M90
+(Tesseract) and M131 (installers), which will add real native binaries.
 
 ## Scope — build all of this
 
-- Security dialog (opaque) mirroring Foxit's options; strength meter with
-  words; confirm fields; store as a document security *intent* on the model
-  (never the password in the journal/recovery file — hold in memory only,
-  re-prompt after recovery).
-- Writer pipeline stage: after the full/incremental write, run qpdf
-  (`@jspawn/qpdf-wasm` in a worker or bundled CLI via IPC — choose in an
-  ADR; the app ships whichever) to encrypt with the chosen algorithm/
-  permissions, `--encrypt-metadata` options; remove security with the
-  owner password; keep document id.
-- Certificate encryption: public-key encryption per PDF spec (`/Filter
-  /Adobe.PubSec`) with recipients from `.cer/.p7b` or the OS store (M81's
-  certificate service if merged; otherwise file-based), per-recipient
-  permissions; open such files with a private key from a `.p12` (prompt).
-- Permission enforcement inside the app: respect `/P` flags when the
-  document was opened with the user password (disable print/copy/edit
-  commands with tooltips saying why); owner password unlocks.
-- Security tab in Properties (M72) shows the state.
-- Batch hook for M120.
+- `electron-builder.yml`: Windows targets `nsis` and `msi` for
+  `arch: [x64, arm64]`; keep `artifactName` carrying `${arch}` (it already
+  does) so files come out as `ynotPDF-<ver>-win-x64.exe` /
+  `…-win-arm64.exe`; confirm the NSIS installer refuses to install the
+  wrong architecture (electron-builder does this by default — verify and
+  note).
+- `scripts/fetch-binaries.ts` / `resources/binaries.json`: fetching must be
+  driven by the **target** platform/arch (from `--platform`/`--arch` args or
+  env `YNOT_TARGET`), not only the host, so an x64 runner can package an
+  arm64 installer. Add a lint-style check that every entry with a
+  `win32-x64` target also has `win32-arm64` **or** an explicit
+  `"arm64Fallback": "wasm"` field, and fail `fetch-binaries` otherwise, with
+  a worded message naming the module.
+- `src/main` runtime helper `targetArch()` (or similar) exposing
+  `process.arch` to modules that must choose a binary vs WASM path; unit
+  test.
+- `.github/workflows/ci.yml`: the Windows job packages **both** x64 and
+  arm64 (cross-package on the x64 runner: `electron-builder --win --x64
+  --arm64`); artifact upload picks up both. Then **verify** the arm64 build
+  actually runs: add a `windows-11-arm` job if the runner is available to
+  this repository (check `gh api /repos/tonybaynes/ynotPDF/actions/runners`
+  and try a workflow run; GitHub hosts `windows-11-arm` runners — availability
+  for private repos depends on the plan). If it is available: install the
+  arm64 artifact silently, launch, run the Playwright smoke (`app.about`).
+  If it is not available: document that clearly in the ADR and in
+  `README.md`, and provide a manual smoke checklist the operator runs on an
+  ARM device; do not pretend it was tested.
+- `README.md`: supported platforms table (Windows x64, Windows arm64, macOS
+  universal, Linux x64), how to build a specific arch locally, how to tell
+  which one is installed (About dialog — add the arch string to
+  `app.about`, a tiny additive change in `src/renderer/app/`).
+- `docs/adr/00NN-windows-arm.md`: the rule — every native binary ships
+  `win32-arm64` or declares a WASM fallback; CI packages both; M70/M90/M131
+  briefs already reference this ADR by name.
+- `PLAN.md` §3.1 already lists the target; keep it true.
 
 ## Out of scope
 
-RMS/AIP (Parked).
+Linux arm64 (not requested; the same mechanism would cover it later).
+Signing (M131). Native PDFium (still in reserve per ADR 0006 — if it is
+ever adopted, `pdfium-binaries` publishes `win-arm64`).
 
 ## Design notes & constraints
 
-- **Windows on ARM (M03):** prefer `@jspawn/qpdf-wasm` precisely because it
-  is architecture-independent. If the bundled qpdf CLI is chosen instead,
-  `resources/binaries.json` must carry `win32-x64` **and** `win32-arm64`
-  entries (qpdf publishes both) and the ADR must say so; CI packages both.
-- Passwords never logged, never in the journal, never in recovery files.
-- qpdf is the single implementation of the crypto — do not reimplement.
+- Cross-packaging arm64 from an x64 runner is the normal electron-builder
+  path; the Electron arm64 zip is downloaded into the cache. Keep the cache
+  paths outside the workspace as M00 did (ESM `type: module` gotcha).
+- Do not add a fourth full test matrix leg unless the ARM runner exists;
+  the point is a real smoke on real ARM, or an honest note that it awaits
+  one.
 
 ## Files you will create or touch
 
-`src/renderer/modules/M70-encryption/**`, `src/engine/security/**`,
-`docs/adr/00NN-qpdf-packaging.md`, tests.
+`electron-builder.yml`, `.github/workflows/ci.yml`, `scripts/fetch-binaries.ts`,
+`resources/binaries.json` (schema note in `$comment`), `src/main/arch.ts`,
+`src/renderer/app/` (About dialog arch string — additive), `README.md`,
+`docs/adr/00NN-windows-arm.md`, tests.
 
 ## Libraries
 
-@jspawn/qpdf-wasm or qpdf release binaries (Apache-2.0), node-forge.
+None new.
 
-## Acceptance tests — the module is done when these pass on all three OSes
+## Acceptance tests — the module is done when these pass
 
-- Encrypt fixture with AES-256 open+owner passwords and print=none ⇒ opens
-  in Chrome with the password; `qpdf --show-encryption` confirms
-  algorithm and flags; our app disables Print with a worded tooltip when
-  opened with the user password.
-- Remove security with the owner password ⇒ `qpdf --check` shows none.
-- Certificate-encrypt to a test cert ⇒ opens with its .p12, fails
-  without.
+- CI's Windows job uploads four installers: NSIS and MSI for x64 **and**
+  arm64, each named with its arch.
+- `fetch-binaries` fails with a worded error when a test entry has
+  `win32-x64` but neither `win32-arm64` nor `arm64Fallback`.
+- Either: the `windows-11-arm` job installs and launches the arm64 build and
+  the smoke passes — or: the ADR and README state that ARM CI is
+  unavailable and the operator's manual smoke on an ARM device is recorded
+  in the Build log (ask the operator whether an ARM machine exists).
+- About dialog shows `Windows arm64` / `Windows x64` correctly.
 
 ---
 

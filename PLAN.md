@@ -19,6 +19,7 @@ commit. Sub-conversations working in parallel follow **§12**.
 | 1 | M02 Application shell (ribbon, panes, tabs, status bar, dialogs) | [M02-app-shell.md](docs/modules/M02-app-shell.md) | ☑ |
 | 1 | M10 PDF engine layer & PDFium adapter | [M10-engine-layer.md](docs/modules/M10-engine-layer.md) | ☑ |
 | 1 | M20 Document model, commands & undo stack | [M20-document-model.md](docs/modules/M20-document-model.md) | ☑ |
+| 2 | M03 Windows on ARM (arm64) support | [M03-windows-arm.md](docs/modules/M03-windows-arm.md) | ☐ |
 | 2 | M11 Viewer — rendering, navigation, zoom, layouts | [M11-viewer.md](docs/modules/M11-viewer.md) | ☐ |
 | 2 | M21 Save, Save As, autosave & recovery | [M21-save.md](docs/modules/M21-save.md) | ☐ |
 | 2 | M70 Encryption, permissions & certificate security | [M70-encryption.md](docs/modules/M70-encryption.md) | ☐ |
@@ -150,8 +151,8 @@ the UI.
 ## 3. Product requirements
 
 ### 3.1 Platforms
-Windows 10/11 x64 · macOS 12+ (universal) · Linux x64 (AppImage, .deb,
-.rpm). CI builds all three on every push; a module is "done" only when its
+Windows 10/11 **x64 and arm64** (Windows on ARM is a first-class target —
+M03) · macOS 12+ (universal) · Linux x64 (AppImage, .deb, .rpm). CI builds all three on every push; a module is "done" only when its
 tests pass on all three.
 
 ### 3.2 Themes — four, dark default
@@ -384,7 +385,7 @@ Full per-module detail is in each `docs/modules/*.md`.
 
 - **Wave 0:** M00 (no deps)
 - **Wave 1:** M01 (M00) · M02 (M00, M01) · M10 (M00) · M20 (M00, M10)
-- **Wave 2:** M11 (M02, M10) · M21 (M20, M11) · M70 (M21) · M91 (M21)
+- **Wave 2:** M03 (M00, M10) · M11 (M02, M10) · M21 (M20, M11) · M70 (M21) · M91 (M21)
 - **Wave 3:** M12 (M11, M20) · M13 (M11) · M30 (M21, M11, M13) · M40 (M21, M12)
 - **Wave 4:** M31 (M30) · M32 (M30) · M41 (M40) · M72 (M21) · M130 (M02, M01)
   - → *MILESTONE 1 — usable viewer & annotator (v0.1)*

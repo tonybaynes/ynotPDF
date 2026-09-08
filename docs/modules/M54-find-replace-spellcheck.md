@@ -105,8 +105,13 @@ and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;
   (MIT); OCR via **Tesseract** (Apache-2.0). Permissive licences only —
   never MuPDF, iText, Ghostscript or anything AGPL/commercial.
 - **No Docker, ever** (build or runtime). The installer is self-contained;
-  native binaries are bundled per OS and fetched at build time by
-  `scripts/fetch-binaries.ts` (pinned checksums, git-ignored). Installing
+  native binaries are bundled per OS **and CPU architecture** and fetched
+  at build time by `scripts/fetch-binaries.ts` (`resources/binaries.json`,
+  pinned checksums, git-ignored). **Supported targets: Windows x64 and
+  Windows arm64, macOS universal (x64 + arm64), Linux x64.** Any module that
+  adds a native binary must supply a `win32-arm64` entry or a WASM fallback
+  that is used automatically on that architecture — the arm64 installer must
+  never ship a feature that silently fails. Installing
   build toolchains locally (Rust, C++, emsdk) is pre-approved if a module
   needs one — record it in `docs/adr/` and `README.md`.
 
