@@ -276,6 +276,17 @@ is colourblind: black and red read as the same colour):**
   _same_ pure matcher the find bar uses, so it cannot disagree with a search of an open document.
   The wasm bytes are read in main and handed over in `workerData`: in a packaged app they are
   inside `app.asar`, and asar-aware `fs` is a main-process guarantee.
+- **The matcher runs in the renderer, over the text model, not inside the engine worker.** The
+  brief's design note suggested the worker; the worker would then have to hold a text index that
+  the renderer *also* needs for selection, and two copies of a page's text is two chances to
+  disagree about an offset. The engine worker still does the expensive part — `textRuns` — and the
+  match itself is a regular expression over a few kilobytes. The folder search does run in its own
+  worker, in main, exactly as the brief says, because there the files are not open and the tree
+  can be large.
+- **The working selection model lives in the module; `core/Selection` gets the published form.**
+  Carets, granularity and a column rectangle are what a drag needs; `SelectionState.kind === 'text'`
+  with its run ranges is what the rest of the app reads, and it is written on every change. M50
+  adds object selection to the same core model without meeting any of this.
 - **Paper sizes are data** (`resources/print/paper-sizes.json`), per PLAN.md §4.4.
 - **Ctrl+C and Ctrl+A fall back to the focused field.** They act on the document selection in the
   page area and on the field in the find bar or a dialog, so typing still behaves the way it does
