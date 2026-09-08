@@ -103,24 +103,8 @@ export default defineModule({
         return true;
       },
     },
-    {
-      id: 'edit.undo',
-      label: 'Undo',
-      category: 'Edit',
-      icon: 'undo-2',
-      shortcut: 'Mod+Z',
-      when: (ctx) => ctx.service<Registry>('registry').hasService('document'),
-      run: (ctx) => ctx.service<{ undoLast(): Promise<void> }>('document').undoLast(),
-    },
-    {
-      id: 'edit.redo',
-      label: 'Redo',
-      category: 'Edit',
-      icon: 'redo-2',
-      shortcut: 'Mod+Y',
-      when: (ctx) => ctx.service<Registry>('registry').hasService('document'),
-      run: (ctx) => ctx.service<{ redoLast(): Promise<void> }>('document').redoLast(),
-    },
+    // `edit.undo` and `edit.redo` were stubbed here by M00 and are now registered by M20, which
+    // owns the undo stack and can also say what each of them would revert.
     {
       id: 'app.commandPalette',
       label: 'Command Palette',
@@ -177,5 +161,4 @@ export default defineModule({
       },
     },
   ],
-  shortcuts: [{ key: 'Mod+Shift+Z', command: 'edit.redo' }],
 });
