@@ -7,8 +7,11 @@
  * uses PDFium's progressive renderer and yields to the event loop so cancel messages get
  * through (`cancelCurrent()`).
  *
- * Mutation methods are still `NotImplementedError` here — M20+ add them additively — except
- * `save`, which is a plain `FPDF_SaveAsCopy` and costs nothing to offer now.
+ * M20 (ADR 0007) added the mutations PDFium can express — page rotation, insert, delete, move,
+ * import, crop box, annotation add/update/delete, form field values — plus the signature and
+ * named-destination reads. `setMetadata` and `setLayerVisible` stay `NotImplementedError`
+ * because the build has no API for them; the document model records those as write intents and
+ * M21's writer applies them. The mutation helpers live in `mutations.ts`.
  */
 
 import type { PageIndex, PageSize, PdfMatrix, PdfPoint, PdfRect, Rotation } from '@shared/pdf';
@@ -28,6 +31,8 @@ import {
   type Layer,
   type Link,
   type Metadata,
+  type NamedDestination,
+  type NewAnnotation,
   type OpenOptions,
   type OutlineItem,
   type PageObject,
@@ -38,6 +43,7 @@ import {
   type RenderOptions,
   type RenderResult,
   type SaveOptions,
+  type SignatureSummary,
   type TextRun,
 } from '../PdfEngine';
 import {
@@ -59,6 +65,7 @@ import {
   SAVE,
 } from './constants';
 import { Ffi, readMatrix, readRectF, type WasmModule } from './ffi';
+import { assertRotation, readByteRange, subtypeValue, writeAnnotation } from './mutations';
 import { FontRegistry, type SubstitutionTable } from './fonts';
 import { readRawInfo, type RawInfo } from './rawdoc';
 import { addFunction, instantiatePdfium, removeFunction } from './wasm';
@@ -107,6 +114,11 @@ interface OpenDoc {
   readonly encrypted: boolean;
   readonly pages: Map<number, LoadedPage>;
   raw: Promise<RawInfo> | null;
+  /**
+   * True once anything has been changed (M20). `bytes` is then the file as it was *opened*, not
+   * as it is now, so the raw catalogue pass has to re-serialise instead of re-reading them.
+   */
+  mutated: boolean;
 }
 
 /** Engines that can abort the request currently executing (used by the worker on `cancel`). */
@@ -130,6 +142,16 @@ export function pdfDateToIso(value: string | undefined): string | undefined {
 
 const packRgb = (r: number, g: number, b: number): number =>
   ((r & 255) << 16) | ((g & 255) << 8) | (b & 255);
+
+/**
+ * Splits an annotation id (`"a2.7"` — page 2, index 7) back into its parts. Ids are only stable
+ * while the page is unmodified; M20's `IdTable` re-binds them after every add or delete.
+ */
+export function parseAnnotationId(id: string): { page: PageIndex; index: number } {
+  const m = /^a(\d+)\.(\d+)$/.exec(id);
+  if (!m) throw new EngineError('invalid-argument', `${id} is not an annotation id`);
+  return { page: Number(m[1]), index: Number(m[2]) };
+}
 
 function optional<K extends string, V>(key: K, value: V | undefined): Partial<Record<K, V>> {
   return value === undefined ? {} : ({ [key]: value } as Record<K, V>);
@@ -269,6 +291,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       encrypted: ffi.call('FPDF_GetSecurityHandlerRevision', doc) !== -1,
       pages: new Map(),
       raw: null,
+      mutated: false,
     });
     return handle;
   }
@@ -593,12 +616,21 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
     return (await this.rawInfo(this.doc(doc))).layers;
   }
 
+  /**
+   * The catalogue facts PDFium has no API for (layers, XMP, annotation colours behind a
+   * generated appearance stream), read with pdf-lib.
+   *
+   * The bytes it parses must be the document *as it is now*: after a mutation `d.bytes` is the
+   * file as it was opened, so an annotation added in this session would be invisible to the
+   * fallback and its colour would read as absent. Encrypted files are copied without security
+   * for the same reason — the strings would otherwise be unreadable.
+   */
   private rawInfo(d: OpenDoc): Promise<RawInfo> {
     if (!d.raw) {
       let bytes = d.bytes;
-      if (d.encrypted) {
+      if (d.encrypted || d.mutated) {
         try {
-          bytes = this.saveCopy(d, SAVE.REMOVE_SECURITY);
+          bytes = this.saveCopy(d, d.encrypted ? SAVE.REMOVE_SECURITY : 0);
         } catch {
           bytes = d.bytes;
         }
@@ -1498,43 +1530,427 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
     });
   }
 
-  // ---- PdfEngine: mutation (M20+) --------------------------------------------------------------
+  // ---- PdfEngine: mutation (M20, ADR 0007) ------------------------------------------------------
 
-  setPageRotation(): Promise<void> {
-    return Promise.reject(new NotImplementedError('setPageRotation'));
+  /**
+   * Drops every cached page of a document. Required after any operation that changes the page
+   * list: a cached `FPDF_PAGE` for an old index would otherwise be handed out for a different
+   * page.
+   */
+  private invalidatePages(d: OpenDoc): void {
+    for (const p of d.pages.values()) this.unloadPage(d, p);
+    d.pages.clear();
+    d.raw = null;
+    d.mutated = true;
   }
-  deletePages(): Promise<void> {
-    return Promise.reject(new NotImplementedError('deletePages'));
+
+  /** Drops one cached page (after an edit that changes what it draws). */
+  private invalidatePage(d: OpenDoc, index: PageIndex): void {
+    d.raw = null;
+    d.mutated = true;
+    const p = d.pages.get(index);
+    if (!p) return;
+    d.pages.delete(index);
+    this.unloadPage(d, p);
   }
-  insertBlankPages(): Promise<void> {
-    return Promise.reject(new NotImplementedError('insertBlankPages'));
+
+  /** Finds the widget annotation of a field by its fully qualified name. */
+  private findWidget(
+    d: OpenDoc,
+    fieldName: string,
+  ): { page: PageIndex; loaded: LoadedPage; annot: number; type: number } | null {
+    const pages = this.ffi.call('FPDF_GetPageCount', d.doc);
+    for (let page = 0; page < pages; page++) {
+      const loaded = this.loadPage(d, page);
+      const count = this.ffi.call('FPDFPage_GetAnnotCount', loaded.page);
+      for (let i = 0; i < count; i++) {
+        const annot = this.ffi.call('FPDFPage_GetAnnot', loaded.page, i);
+        if (annot === 0) continue;
+        const name = this.ffi.utf16Call((buf, len) =>
+          this.ffi.call('FPDFAnnot_GetFormFieldName', d.form, annot, buf, len),
+        );
+        if (name === fieldName) {
+          const type = this.ffi.call('FPDFAnnot_GetFormFieldType', d.form, annot);
+          return { page, loaded, annot, type };
+        }
+        this.ffi.call('FPDFPage_CloseAnnot', annot);
+      }
+    }
+    return null;
   }
-  importPages(): Promise<void> {
-    return Promise.reject(new NotImplementedError('importPages'));
+
+  setPageRotation(doc: DocHandle, page: PageIndex, rotation: Rotation): Promise<void> {
+    return run(() => {
+      assertRotation(rotation);
+      const d = this.doc(doc);
+      const p = this.loadPage(d, page);
+      this.ffi.call('FPDFPage_SetRotation', p.page, rotation / 90);
+      // The displayed size flips for 90/270, so the cached geometry is stale.
+      p.geometry = null;
+    });
   }
-  movePage(): Promise<void> {
-    return Promise.reject(new NotImplementedError('movePage'));
+
+  deletePages(doc: DocHandle, pages: ReadonlyArray<PageIndex>): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      const count = this.ffi.call('FPDF_GetPageCount', d.doc);
+      const unique = [...new Set(pages)].sort((a, b) => b - a);
+      for (const index of unique) {
+        if (!Number.isInteger(index) || index < 0 || index >= count) {
+          throw new EngineError('invalid-page', `page ${index} is out of range (0..${count - 1})`);
+        }
+      }
+      if (unique.length >= count) {
+        throw new EngineError('invalid-argument', 'a document must keep at least one page');
+      }
+      this.invalidatePages(d);
+      // Highest index first, so the ones still to come are unaffected.
+      for (const index of unique) this.ffi.call('FPDFPage_Delete', d.doc, index);
+    });
   }
-  setCropBox(): Promise<void> {
-    return Promise.reject(new NotImplementedError('setCropBox'));
+
+  insertBlankPages(
+    doc: DocHandle,
+    at: PageIndex,
+    count: number,
+    size: { readonly width: number; readonly height: number },
+  ): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      const total = this.ffi.call('FPDF_GetPageCount', d.doc);
+      if (!Number.isInteger(at) || at < 0 || at > total) {
+        throw new EngineError('invalid-page', `cannot insert at ${at} (0..${total})`);
+      }
+      if (!Number.isInteger(count) || count < 1) {
+        throw new EngineError('invalid-argument', `count must be a positive integer (${count})`);
+      }
+      if (!(size.width > 0) || !(size.height > 0)) {
+        throw new EngineError('invalid-argument', 'page size must be positive');
+      }
+      this.invalidatePages(d);
+      for (let i = 0; i < count; i++) {
+        const page = this.ffi.call('FPDFPage_New', d.doc, at + i, size.width, size.height);
+        if (page === 0) throw new EngineError('internal', 'PDFium could not create a page');
+        this.ffi.call('FPDFPage_GenerateContent', page);
+        this.ffi.call('FPDF_ClosePage', page);
+      }
+    });
   }
-  addAnnotation(): Promise<Annotation> {
-    return Promise.reject(new NotImplementedError('addAnnotation'));
+
+  importPages(
+    doc: DocHandle,
+    source: DocHandle,
+    pages: ReadonlyArray<PageIndex>,
+    at: PageIndex,
+  ): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      const src = this.doc(source);
+      const total = this.ffi.call('FPDF_GetPageCount', d.doc);
+      if (!Number.isInteger(at) || at < 0 || at > total) {
+        throw new EngineError('invalid-page', `cannot insert at ${at} (0..${total})`);
+      }
+      this.invalidatePages(d);
+      const ok = this.ffi.scope((s) => {
+        if (pages.length === 0) {
+          return this.ffi.call('FPDF_ImportPagesByIndex', d.doc, src.doc, 0, 0, at);
+        }
+        const buf = s.alloc(pages.length * 4);
+        pages.forEach((p, i) => {
+          this.ffi.setI32(buf, p, i);
+        });
+        return this.ffi.call('FPDF_ImportPagesByIndex', d.doc, src.doc, buf, pages.length, at);
+      });
+      if (!ok) throw new EngineError('internal', 'PDFium could not import the pages');
+    });
   }
-  updateAnnotation(): Promise<Annotation> {
-    return Promise.reject(new NotImplementedError('updateAnnotation'));
+
+  movePage(doc: DocHandle, from: PageIndex, to: PageIndex): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      const count = this.ffi.call('FPDF_GetPageCount', d.doc);
+      for (const [name, index] of [
+        ['from', from],
+        ['to', to],
+      ] as const) {
+        if (!Number.isInteger(index) || index < 0 || index >= count) {
+          throw new EngineError('invalid-page', `${name} page ${index} is out of range`);
+        }
+      }
+      if (from === to) return;
+      this.invalidatePages(d);
+      const ok = this.ffi.scope((s) => {
+        const buf = s.alloc(4);
+        this.ffi.setI32(buf, from, 0);
+        return this.ffi.call('FPDF_MovePages', d.doc, buf, 1, to);
+      });
+      if (!ok) throw new EngineError('internal', `PDFium could not move page ${from} to ${to}`);
+    });
   }
-  deleteAnnotation(): Promise<void> {
-    return Promise.reject(new NotImplementedError('deleteAnnotation'));
+
+  setCropBox(doc: DocHandle, page: PageIndex, box: PdfRect): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      const p = this.loadPage(d, page);
+      const r = normalizeRect(box);
+      if (!(r.x1 - r.x0 > 0) || !(r.y1 - r.y0 > 0)) {
+        throw new EngineError('invalid-argument', 'a crop box must have a positive area');
+      }
+      this.ffi.call('FPDFPage_SetCropBox', p.page, r.x0, r.y0, r.x1, r.y1);
+      p.geometry = null;
+    });
   }
-  setFieldValue(): Promise<void> {
-    return Promise.reject(new NotImplementedError('setFieldValue'));
+
+  /**
+   * Sets the MediaBox. Not part of the `PdfEngine` contract (M40 may promote it); offered here
+   * because `setCropBox` would otherwise be able to crop a page larger than its own paper.
+   */
+  setMediaBox(doc: DocHandle, page: PageIndex, box: PdfRect): Promise<void> {
+    return run(() => {
+      const p = this.loadPage(this.doc(doc), page);
+      const r = normalizeRect(box);
+      this.ffi.call('FPDFPage_SetMediaBox', p.page, r.x0, r.y0, r.x1, r.y1);
+      p.geometry = null;
+    });
   }
-  setMetadata(): Promise<void> {
+
+  async addAnnotation(doc: DocHandle, annotation: NewAnnotation): Promise<Annotation> {
+    const page = annotation.page;
+    const index = await run(() => {
+      const d = this.doc(doc);
+      const p = this.loadPage(d, page);
+      const subtype = subtypeValue(annotation.subtype);
+      if (subtype === 0) {
+        throw new EngineError('invalid-argument', `cannot create a ${annotation.subtype}`);
+      }
+      const annot = this.ffi.call('FPDFPage_CreateAnnot', p.page, subtype);
+      if (annot === 0) {
+        throw new EngineError('internal', `PDFium could not create a ${annotation.subtype}`);
+      }
+      let at: number;
+      try {
+        writeAnnotation(this.ffi, annot, annotation);
+        at = this.ffi.call('FPDFPage_GetAnnotIndex', p.page, annot);
+      } finally {
+        this.ffi.call('FPDFPage_CloseAnnot', annot);
+      }
+      this.ffi.call('FPDFPage_GenerateContent', p.page);
+      // Reload so PDFium builds the appearance stream for the new annotation.
+      this.invalidatePage(d, page);
+      return at;
+    });
+    // Read through the async path, so the raw-catalogue fallback fills in the colours PDFium
+    // hides once it has generated an appearance stream.
+    const created = (await this.annotations(doc, page))[index];
+    if (!created) throw new EngineError('internal', 'the new annotation could not be read back');
+    return created;
+  }
+
+  async updateAnnotation(
+    doc: DocHandle,
+    id: string,
+    patch: Partial<Omit<Annotation, 'id' | 'page'>>,
+  ): Promise<Annotation> {
+    const { page, index } = parseAnnotationId(id);
+    await run(() => {
+      const d = this.doc(doc);
+      const p = this.loadPage(d, page);
+      const annot = this.ffi.call('FPDFPage_GetAnnot', p.page, index);
+      if (annot === 0) throw new EngineError('invalid-argument', `no annotation ${id}`);
+      try {
+        writeAnnotation(this.ffi, annot, patch);
+      } finally {
+        this.ffi.call('FPDFPage_CloseAnnot', annot);
+      }
+      this.ffi.call('FPDFPage_GenerateContent', p.page);
+      this.invalidatePage(d, page);
+    });
+    const updated = (await this.annotations(doc, page))[index];
+    if (!updated) throw new EngineError('internal', `annotation ${id} vanished after the update`);
+    return updated;
+  }
+
+  deleteAnnotation(doc: DocHandle, id: string): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      const { page, index } = parseAnnotationId(id);
+      const p = this.loadPage(d, page);
+      const count = this.ffi.call('FPDFPage_GetAnnotCount', p.page);
+      if (index < 0 || index >= count) {
+        throw new EngineError('invalid-argument', `no annotation ${id}`);
+      }
+      if (!this.ffi.call('FPDFPage_RemoveAnnot', p.page, index)) {
+        throw new EngineError('internal', `PDFium could not remove annotation ${id}`);
+      }
+      this.ffi.call('FPDFPage_GenerateContent', p.page);
+      this.invalidatePage(d, page);
+    });
+  }
+
+  /**
+   * Sets a field's value **through the form-fill environment**, the way a user would.
+   *
+   * Writing `/V` onto the widget annotation looks simpler and does not work: in a hierarchical
+   * form the widget is a kid whose `/Parent` holds `/T` and `/V`, and PDFium's annotation API
+   * cannot reach the parent — the write lands on the wrong dictionary and every reader still
+   * sees the old value. Driving `FORM_*` instead lets PDFium update the field it owns and
+   * regenerate the widget's appearance, so `formFields()` and the next render both agree.
+   */
+  setFieldValue(doc: DocHandle, fieldName: string, value: string): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      if (d.form === 0) throw new EngineError('invalid-argument', 'the document has no form');
+      const found = this.findWidget(d, fieldName);
+      if (!found) throw new EngineError('invalid-argument', `no field named ${fieldName}`);
+      const { loaded, annot, type } = found;
+      try {
+        this.ffi.call('FORM_SetFocusedAnnot', d.form, annot);
+        switch (type) {
+          case FORMFIELD.TEXTFIELD:
+            this.replaceText(d, loaded.page, value);
+            break;
+          case FORMFIELD.COMBOBOX:
+          case FORMFIELD.LISTBOX: {
+            const index = this.optionIndex(d, annot, value);
+            if (index >= 0) {
+              this.ffi.call('FORM_SetIndexSelected', d.form, loaded.page, index, 1);
+            } else if (type === FORMFIELD.COMBOBOX) {
+              // An editable combo box accepts free text; a list box does not.
+              this.replaceText(d, loaded.page, value);
+            } else {
+              throw new EngineError('invalid-argument', `${fieldName} has no option "${value}"`);
+            }
+            break;
+          }
+          case FORMFIELD.CHECKBOX:
+          case FORMFIELD.RADIOBUTTON: {
+            const wanted = value !== '' && value !== 'Off';
+            const checked = this.ffi.call('FPDFAnnot_IsChecked', d.form, annot) !== 0;
+            if (wanted !== checked) this.clickWidget(d, loaded.page, annot);
+            break;
+          }
+          default:
+            throw new EngineError(
+              'invalid-argument',
+              `${fieldName} is a ${this.fieldType(type)} field and has no value to set`,
+            );
+        }
+        this.ffi.call('FORM_ForceToKillFocus', d.form);
+      } finally {
+        this.ffi.call('FPDFPage_CloseAnnot', annot);
+      }
+      d.mutated = true;
+      d.raw = null;
+    });
+  }
+
+  /** Selects everything in the focused text control and types `value` over it. */
+  private replaceText(d: OpenDoc, page: number, value: string): void {
+    this.ffi.call('FORM_SelectAllText', d.form, page);
+    this.ffi.scope((s) => {
+      this.ffi.call('FORM_ReplaceSelection', d.form, page, s.utf16(value));
+    });
+  }
+
+  /** The index of a choice option whose label is `value`, or -1. */
+  private optionIndex(d: OpenDoc, annot: number, value: string): number {
+    const n = this.ffi.call('FPDFAnnot_GetOptionCount', d.form, annot);
+    for (let i = 0; i < n; i++) {
+      const label = this.ffi.utf16Call((buf, len) =>
+        this.ffi.call('FPDFAnnot_GetOptionLabel', d.form, annot, i, buf, len),
+      );
+      if (label === value) return i;
+    }
+    return -1;
+  }
+
+  /** Clicks the centre of a widget, which is how a check box or radio button is toggled. */
+  private clickWidget(d: OpenDoc, page: number, annot: number): void {
+    this.ffi.scope((s) => {
+      const f = s.alloc(16);
+      this.ffi.call('FPDFAnnot_GetRect', annot, f);
+      const r = readRectF(this.ffi, f);
+      const x = (r.left + r.right) / 2;
+      const y = (r.top + r.bottom) / 2;
+      this.ffi.call('FORM_OnLButtonDown', d.form, page, 0, x, y);
+      this.ffi.call('FORM_OnLButtonUp', d.form, page, 0, x, y);
+    });
+  }
+
+  /**
+   * Not available: PDFium exposes no setter for the document information dictionary. M21's
+   * writer applies the model's metadata when it serialises (the `metadata` write intent).
+   */
+  setMetadata(..._args: unknown[]): Promise<void> {
     return Promise.reject(new NotImplementedError('setMetadata'));
   }
-  setLayerVisible(): Promise<void> {
+
+  /**
+   * Not available as a document mutation: PDFium can only deactivate individual page objects
+   * (`FPDFPageObj_SetIsActive`), which is a rendering concern and belongs to M12's layer panel.
+   */
+  setLayerVisible(..._args: unknown[]): Promise<void> {
     return Promise.reject(new NotImplementedError('setLayerVisible'));
+  }
+
+  // ---- PdfEngine: signatures and named destinations (ADR 0007) ----------------------------------
+
+  signatures(doc: DocHandle): Promise<ReadonlyArray<SignatureSummary>> {
+    return run(() => {
+      const d = this.doc(doc);
+      const ffi = this.ffi;
+      const count = ffi.call('FPDF_GetSignatureCount', d.doc);
+      const out: SignatureSummary[] = [];
+      for (let i = 0; i < count; i++) {
+        const sig = ffi.call('FPDF_GetSignatureObject', d.doc, i);
+        if (sig === 0) continue;
+        const reason = ffi.utf16Call((buf, len) =>
+          ffi.call('FPDFSignatureObj_GetReason', sig, buf, len),
+        );
+        const subFilter = ffi.utf8Call((buf, len) =>
+          ffi.call('FPDFSignatureObj_GetSubFilter', sig, buf, len),
+        );
+        const time = ffi.utf8Call((buf, len) =>
+          ffi.call('FPDFSignatureObj_GetTime', sig, buf, len),
+        );
+        const permission = ffi.call('FPDFSignatureObj_GetDocMDPPermission', sig);
+        out.push({
+          byteRange: readByteRange(ffi, sig),
+          ...optional('reason', reason === '' ? undefined : reason),
+          ...optional('subFilter', subFilter === '' ? undefined : subFilter),
+          ...optional('time', pdfDateToIso(time)),
+          ...optional('docMdpPermission', permission > 0 ? permission : undefined),
+        });
+      }
+      return out;
+    });
+  }
+
+  namedDestinations(doc: DocHandle): Promise<ReadonlyArray<NamedDestination>> {
+    return run(() => {
+      const d = this.doc(doc);
+      const ffi = this.ffi;
+      const count = ffi.call('FPDF_CountNamedDests', d.doc);
+      const out: NamedDestination[] = [];
+      for (let i = 0; i < count; i++) {
+        ffi.scope((s) => {
+          // FPDF_GetNamedDest(doc, index, buffer, long* buflen): call twice, as everywhere else.
+          const lenPtr = s.alloc(4);
+          ffi.setI32(lenPtr, 0);
+          if (ffi.call('FPDF_GetNamedDest', d.doc, i, 0, lenPtr) === 0) return;
+          const needed = ffi.i32(lenPtr);
+          if (needed <= 0) return;
+          const buf = s.alloc(needed);
+          ffi.setI32(lenPtr, needed);
+          const dest = ffi.call('FPDF_GetNamedDest', d.doc, i, buf, lenPtr);
+          if (dest === 0) return;
+          const name = ffi.readUtf16(buf, ffi.i32(lenPtr));
+          const target = this.destination(d, dest);
+          if (name !== '' && target) out.push({ name, dest: target });
+        });
+      }
+      return out;
+    });
   }
 
   save(

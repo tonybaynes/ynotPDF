@@ -194,6 +194,8 @@ export interface ItemState {
   readonly enabled: boolean;
   readonly pressed: boolean | null;
   readonly value: string | null;
+  /** Text from the item's `dynamicLabel` (M20, ADR 0008); null means "use the static label". */
+  readonly label: string | null;
 }
 
 export interface StateSource {
@@ -206,17 +208,20 @@ export function itemState(item: RibbonItemModel, source: StateSource): ItemState
   const enabled = item.command ? source.isEnabled(item.command) : true;
   let pressed: boolean | null = null;
   let value: string | null = null;
+  let label: string | null = null;
   const spec = item.spec;
   if (spec) {
     try {
       if (spec.kind === 'toggle') pressed = spec.pressed(ctx);
       else if (spec.kind === 'gallery') value = spec.selected?.(ctx) ?? null;
       else if (spec.kind === 'color' || spec.kind === 'input') value = spec.value(ctx);
+      if (spec.kind === 'button' || spec.kind === 'toggle')
+        label = spec.dynamicLabel?.(ctx) ?? null;
     } catch (error) {
       console.warn(`ribbon: state of ${item.id} threw`, error);
     }
   }
-  return { enabled, pressed, value };
+  return { enabled, pressed, value, label };
 }
 
 /** A cheap string that changes when any item's dynamic state changes. */
@@ -225,7 +230,8 @@ export function groupSignature(group: RibbonGroupModel, source: StateSource): st
     .map((i) => {
       if (i.kind === 'separator') return '|';
       const s = itemState(i, source);
-      return `${i.id}:${s.enabled ? 1 : 0}${s.pressed === null ? '-' : s.pressed ? 1 : 0}${s.value ?? ''}`;
+      const dynamic = `${s.value ?? ''}${s.label ?? ''}`;
+      return `${i.id}:${s.enabled ? 1 : 0}${s.pressed === null ? '-' : s.pressed ? 1 : 0}${dynamic}`;
     })
     .join(';');
 }

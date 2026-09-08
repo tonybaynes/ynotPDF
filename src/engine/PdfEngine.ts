@@ -254,6 +254,30 @@ export interface Link {
   readonly annotationId?: string;
 }
 
+/** A destination reachable by name from the catalogue's `/Dests` name tree (ADR 0007). */
+export interface NamedDestination {
+  readonly name: string;
+  readonly dest: Destination;
+}
+
+/**
+ * What a viewer can say about a signature *before* any trust decision (ADR 0007). Validating
+ * one — building the chain, checking revocation, LTV — is M81's job; nothing here asserts that
+ * a signature is good.
+ */
+export interface SignatureSummary {
+  /** `/Reason`, when the signer gave one. */
+  readonly reason?: string;
+  /** `/SubFilter`, e.g. `"adbe.pkcs7.detached"`, `"ETSI.CAdES.detached"`. */
+  readonly subFilter?: string;
+  /** `/M` — signing time as the file states it, ISO 8601 when parsable. */
+  readonly time?: string;
+  /** `/ByteRange` as stored. Anything but four ascending numbers means a malformed file. */
+  readonly byteRange: ReadonlyArray<number>;
+  /** `/DocMDP` permission level 1..3, absent when this is not a certification signature. */
+  readonly docMdpPermission?: number;
+}
+
 /** An outline (bookmark) node. */
 export interface OutlineItem {
   readonly title: string;
@@ -396,6 +420,10 @@ export interface PdfEngine {
   formFields(doc: DocHandle): Promise<ReadonlyArray<FormField>>;
   /** Links on a page with their destination / URI resolved (ADR 0005). */
   links(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<Link>>;
+  /** Signature fields with what the file says about them, in document order (ADR 0007). */
+  signatures(doc: DocHandle): Promise<ReadonlyArray<SignatureSummary>>;
+  /** Named destinations from the catalogue's name tree (ADR 0007). */
+  namedDestinations(doc: DocHandle): Promise<ReadonlyArray<NamedDestination>>;
 
   // ---- mutation (each corresponds to a `Command`) --------------------------------------------
 
@@ -529,6 +557,12 @@ export class NotImplementedEngine implements PdfEngine {
   links(..._args: unknown[]): Promise<ReadonlyArray<Link>> {
     return Promise.reject(new NotImplementedError('links'));
   }
+  signatures(..._args: unknown[]): Promise<ReadonlyArray<SignatureSummary>> {
+    return Promise.reject(new NotImplementedError('signatures'));
+  }
+  namedDestinations(..._args: unknown[]): Promise<ReadonlyArray<NamedDestination>> {
+    return Promise.reject(new NotImplementedError('namedDestinations'));
+  }
   setPageRotation(..._args: unknown[]): Promise<void> {
     return Promise.reject(new NotImplementedError('setPageRotation'));
   }
@@ -590,6 +624,8 @@ export const ENGINE_METHODS = [
   'annotations',
   'formFields',
   'links',
+  'signatures',
+  'namedDestinations',
   'setPageRotation',
   'deletePages',
   'insertBlankPages',
