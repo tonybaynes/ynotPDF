@@ -539,16 +539,8 @@ export class Viewer {
           event.preventDefault();
           this.scrollByPages(-1);
           break;
-        case 'Home':
-          if (!event.ctrlKey && !event.metaKey) return;
-          event.preventDefault();
-          this.goToPage(0);
-          break;
-        case 'End':
-          if (!event.ctrlKey && !event.metaKey) return;
-          event.preventDefault();
-          this.goToPage(this.document.pageCount - 1);
-          break;
+        // Ctrl/Cmd+Home and Ctrl/Cmd+End are bound in the manifest so they work wherever the
+        // focus is; handling them here as well would run the command twice.
         default:
           return;
       }

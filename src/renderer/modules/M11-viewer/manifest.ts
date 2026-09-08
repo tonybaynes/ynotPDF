@@ -721,8 +721,9 @@ export default defineModule({
   shortcuts: [
     { key: 'Mod+Shift+Plus', command: 'view.rotate.clockwise' },
     { key: 'Mod+Shift+Minus', command: 'view.rotate.anticlockwise' },
-    { key: 'Mod+Alt+Right', command: 'view.page.next' },
-    { key: 'Mod+Alt+Left', command: 'view.page.previous' },
+    // `KeyboardEvent.key` for the arrows is `ArrowRight` / `ArrowLeft`; anything else never fires.
+    { key: 'Mod+Alt+ArrowRight', command: 'view.page.next' },
+    { key: 'Mod+Alt+ArrowLeft', command: 'view.page.previous' },
     { key: 'Mod+Home', command: 'view.page.first' },
     { key: 'Mod+End', command: 'view.page.last' },
     { key: 'G', command: 'tool.hand.activate' },
