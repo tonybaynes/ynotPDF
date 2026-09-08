@@ -38,6 +38,13 @@ export default defineConfig({
       thresholds: {
         'src/renderer/core/Store.ts': { lines: 95, functions: 95, statements: 95 },
         'src/renderer/core/UndoStack.ts': { lines: 95, functions: 95, statements: 95 },
+        // M20's model. The undo stack has to be exactly right, so the gate is high.
+        'src/renderer/core/Document.ts': { lines: 92, functions: 90, statements: 92 },
+        'src/renderer/core/commands.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/renderer/core/Journal.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/renderer/core/Ids.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/renderer/core/model.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/renderer/core/events.ts': { lines: 90, functions: 90, statements: 90 },
         'src/renderer/theme/ThemeManager.ts': { lines: 95, functions: 95, statements: 95 },
         'src/renderer/theme/contrast.ts': { lines: 95, functions: 95, statements: 95 },
         'src/renderer/theme/separation.ts': { lines: 95, functions: 95, statements: 95 },
