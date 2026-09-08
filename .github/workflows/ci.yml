@@ -130,6 +130,16 @@ jobs:
             release/*.rpm
           if-no-files-found: error
 
+      # Just the one installer the ARM job needs, so it downloads ~114 MB instead of the ~500 MB
+      # of all four Windows installers.
+      - name: Upload the arm64 installer on its own
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v5
+        with:
+          name: installer-win-arm64
+          path: release/*-win-arm64.exe
+          if-no-files-found: error
+
   # M03 / ADR 0009: prove the arm64 build actually runs on ARM hardware. GitHub's hosted
   # `windows-11-arm` runners are free for public repositories, which this one is. If the label is
   # ever withdrawn this job fails to start — the response is to delete it and say so in the ADR
@@ -162,11 +172,25 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Download the Windows installers
+      - name: Download the arm64 installer
         uses: actions/download-artifact@v5
         with:
-          name: installers-windows-latest
+          name: installer-win-arm64
           path: installers
+
+      # ynotPDF.exe is a ~226 MB unsigned Electron binary, and the builds stay unsigned until
+      # M131. On the first ARM runs everything in the package extracted *except* that one file:
+      # NSIS copies the unpacked tree with `CopyFiles /SILENT` and swallows the failure, so the
+      # install "succeeded" without its executable. Excluding the paths from real-time scanning
+      # keeps Defender off the file while it is being written and copied.
+      - name: Keep Defender off the installer and install paths
+        shell: pwsh
+        run: |
+          foreach ($p in @("$PWD\installers", "$env:LOCALAPPDATA\Programs\ynotPDF", "$env:ProgramFiles\ynotPDF", $env:TEMP)) {
+            try { Add-MpPreference -ExclusionPath $p -ErrorAction Stop; "excluded: $p" }
+            catch { "could not exclude $p : $($_.Exception.Message)" }
+          }
+          Get-PSDrive C | Select-Object Used, Free | Format-List
 
       # `perMachine: false` only sets the *default*; the runner user is an admin, so an elevated
       # silent install still picks all-users and lands in C:\Program Files. `/currentuser` forces
@@ -231,12 +255,14 @@ jobs:
               $sub = Join-Path $d 'ynotPDF'
               if (Test-Path $sub) { "--- $sub ---"; Get-ChildItem $sub -Recurse -Depth 1 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName }
             }
-            # NSIS writes the registry entry only after extracting the app, so if the entry exists
-            # and the files do not, something removed them — Defender quarantining an unsigned
-            # Electron binary is the usual suspect until M131 signs the builds.
+            # NSIS writes the registry entry only after extracting the app, so an entry pointing at
+            # a directory that holds locales/ and resources/ but not the executable means the copy
+            # of that one 226 MB file failed and `CopyFiles /SILENT` swallowed it.
             "--- Defender detections ---"
             Get-MpThreatDetection -ErrorAction SilentlyContinue |
               Select-Object -Last 10 InitialDetectionTime, Resources | Format-List
+            "--- disk ---"
+            Get-PSDrive C | Select-Object Used, Free | Format-List
             throw 'installer did not produce ynotPDF.exe (see the listing above)'
           }
           "found: $app"
