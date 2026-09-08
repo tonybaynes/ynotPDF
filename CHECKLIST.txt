@@ -73,7 +73,10 @@ WAVE 2
 [ ] M03  Windows on ARM (arm64) support
       model:  Opus
       needs: M00 M10
-      prompt: Read D:\Projects\ynotPDF\docs\modules\M03-windows-arm.md and carry out the "Your task" section in full.
+      prompt (pick ONE, depending on whether you own a Windows-on-ARM PC):
+        Read D:\Projects\ynotPDF\docs\modules\M03-windows-arm.md and carry out the "Your task" section in full. I have a Windows-on-ARM machine and can run a manual smoke test when you ask.
+        Read D:\Projects\ynotPDF\docs\modules\M03-windows-arm.md and carry out the "Your task" section in full. I do not have a Windows-on-ARM machine; rely on CI and document what could not be tested.
+      note:  can run at the same time as M11 - it only touches build config.
 
 [ ] M11  Viewer — rendering, navigation, zoom, layouts
       model:  Opus
@@ -298,4 +301,3 @@ THINGS ONLY TONY CAN DO
 [ ] Provide a few non-confidential real PDFs for the test corpus (M10)
 [ ] Windows code-signing certificate + Apple Developer account (M131)
 [ ] Decide: is LibreOffice acceptable for Office conversion? (M93)
-[ ] Tell the M03 session whether you have a Windows-on-ARM machine to smoke-test on
