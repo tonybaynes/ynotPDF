@@ -193,6 +193,14 @@ is colourblind: black and red read as the same colour):**
 - Commits: `<Mid>: <what>` and end with
   `Co-Authored-By: Claude <noreply@anthropic.com>`. Never commit real
   customer PDFs, binaries, or secrets — fixtures are public-domain/synthetic.
+- **Real sample PDFs for hands-on testing live in `test/fixtures/local/`**
+  (git-ignored; the operator drops files there — boarding passes and the
+  like, so they carry personal data). Open them when you manually check
+  your module against real-world files, and prefer them over synthetic
+  fixtures for "does it look right" judgements. Tests may use them only
+  with `it.skipIf(!existsSync(...))` — CI and other machines don't have
+  them. Never copy, commit or quote their contents; `local/README.md`
+  lists what is there.
 - Replies to the operator: short and plain (eyesight). Never leave the
   operator a to-do you could do yourself.
 
