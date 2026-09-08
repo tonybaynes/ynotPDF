@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { deflateRawSync, gunzipSync, gzipSync } from 'node:zlib';
-import { readTar, readZip } from '../../scripts/fetch-binaries';
+import {
+  checkArm64Coverage,
+  readTar,
+  readZip,
+  resolveTarget,
+  type Manifest,
+} from '../../scripts/fetch-binaries';
 
 /** Builds a minimal ustar archive in memory. */
 function makeTar(entries: Array<{ name: string; data: Uint8Array }>): Uint8Array {
@@ -135,5 +142,90 @@ describe('fetch-binaries archive readers', () => {
     expect(got.get('d/ttf/Y.ttf')?.[26]).toBe(0);
     expect(new TextDecoder().decode(got.get('d/LICENSE'))).toBe('licence');
     expect(() => readZip(new Uint8Array(30), new Set())).toThrow(/central directory/);
+  });
+});
+
+// ---- M03: Windows on ARM (ADR 0009) ---------------------------------------------------------
+
+/** A manifest with one entry, `targets` and `arm64Fallback` supplied by the test. */
+function manifest(entry: Partial<Manifest['binaries'][number]>): Manifest {
+  return {
+    binaries: [{ name: 'qpdf', version: '12.3.0', module: 'M70', targets: {}, ...entry }],
+  };
+}
+
+describe('checkArm64Coverage', () => {
+  const win32x64 = { url: 'https://example.invalid/qpdf-x64.zip', sha256: 'a'.repeat(64) };
+
+  it('rejects a win32-x64 download with no arm64 answer, naming the module', () => {
+    const problems = checkArm64Coverage(manifest({ targets: { 'win32-x64': win32x64 } }));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('qpdf (M70)');
+    expect(problems[0]).toContain('win32-arm64');
+    expect(problems[0]).toContain('arm64Fallback');
+    expect(problems[0]).toContain('ADR 0009');
+  });
+
+  it('accepts a matching win32-arm64 download', () => {
+    expect(
+      checkArm64Coverage(
+        manifest({
+          targets: {
+            'win32-x64': win32x64,
+            'win32-arm64': {
+              url: 'https://example.invalid/qpdf-arm64.zip',
+              sha256: 'b'.repeat(64),
+            },
+          },
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('accepts an explicit wasm fallback instead', () => {
+    expect(
+      checkArm64Coverage(manifest({ targets: { 'win32-x64': win32x64 }, arm64Fallback: 'wasm' })),
+    ).toEqual([]);
+  });
+
+  it('ignores entries that are architecture-independent or not for Windows', () => {
+    expect(checkArm64Coverage(manifest({ targets: { any: win32x64 } }))).toEqual([]);
+    expect(checkArm64Coverage(manifest({ targets: { 'linux-x64': win32x64 } }))).toEqual([]);
+  });
+
+  it('passes on the manifest we actually ship', () => {
+    const real = JSON.parse(readFileSync('resources/binaries.json', 'utf8')) as Manifest;
+    expect(checkArm64Coverage(real)).toEqual([]);
+  });
+});
+
+describe('resolveTarget', () => {
+  const host = { platform: 'win32', arch: 'x64' };
+
+  it('falls back to the host when nothing is asked for', () => {
+    expect(resolveTarget({}, {}, host)).toEqual(host);
+  });
+
+  it('reads YNOT_TARGET so an x64 runner can package arm64', () => {
+    expect(resolveTarget({}, { YNOT_TARGET: 'win32-arm64' }, host)).toEqual({
+      platform: 'win32',
+      arch: 'arm64',
+    });
+  });
+
+  it('lets explicit flags win over the environment', () => {
+    expect(resolveTarget({ arch: 'x64' }, { YNOT_TARGET: 'win32-arm64' }, host)).toEqual({
+      platform: 'win32',
+      arch: 'x64',
+    });
+    expect(resolveTarget({ platform: 'linux' }, { YNOT_TARGET: 'win32-arm64' }, host)).toEqual({
+      platform: 'linux',
+      arch: 'arm64',
+    });
+  });
+
+  it('ignores a malformed or empty YNOT_TARGET rather than fetching for nothing', () => {
+    expect(resolveTarget({}, { YNOT_TARGET: '' }, host)).toEqual(host);
+    expect(resolveTarget({}, { YNOT_TARGET: 'win32' }, host)).toEqual(host);
   });
 });

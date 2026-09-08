@@ -8,6 +8,7 @@
 
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron';
 import type { IpcHandlers, IpcInvokeChannel } from '../shared/ipc';
+import { hostArch, targetArch } from './arch';
 import { readFileForRenderer, writeBytes } from './files';
 import type { RecentFiles } from './recent';
 import type { Settings } from './settings';
@@ -106,7 +107,8 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       chrome: process.versions.chrome ?? '',
       node: process.versions.node,
       platform: process.platform,
-      arch: process.arch,
+      arch: targetArch(),
+      hostArch: hostArch(),
       isPackaged: app.isPackaged,
       e2e: process.env['YNOT_E2E'] === '1',
     }),

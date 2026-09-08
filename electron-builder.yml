@@ -22,13 +22,24 @@ fileAssociations:
     mimeType: application/pdf
     role: Editor
 win:
+  # M03: Windows on ARM is a first-class target (PLAN.md 3.1, ADR 0009). Both architectures are
+  # cross-packaged from the x64 CI runner; artifactName carries ${arch}, so the four files are
+  # ynotPDF-<ver>-win-{x64,arm64}.{exe,msi}.
   target:
-    - nsis
-    - msi
+    - target: nsis
+      arch: [x64, arm64]
+    - target: msi
+      arch: [x64, arm64]
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   perMachine: false
+  # One installer per architecture. The default (true) additionally emits a combined installer
+  # carrying both app payloads, which doubles the download for no benefit here.
+  buildUniversalInstaller: false
+  # Refuses an arm64-only installer on a non-ARM64 PC; electron-builder has no such guard of its
+  # own (ADR 0009 records what its NSIS templates actually do).
+  include: resources/build/installer.nsh
 msi:
   perMachine: false
 mac:

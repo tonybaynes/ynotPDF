@@ -8,6 +8,53 @@ Editor 14. Electron + TypeScript, PDFium engine, four colour themes, dark by def
 - Architecture: PLAN.md §4. Contracts every module codes against: `src/engine/PdfEngine.ts`,
   `src/shared/module.ts`, `src/shared/ipc.ts`, `src/renderer/core/*`.
 
+## Supported platforms
+
+| Platform                 | Architecture          | Installers               | Verified by                                    |
+| ------------------------ | --------------------- | ------------------------ | ---------------------------------------------- |
+| Windows 10/11            | x64                   | NSIS `.exe`, MSI         | CI `windows-latest` (build, unit, e2e)         |
+| **Windows 10/11 on ARM** | **arm64**             | NSIS `.exe`, MSI         | CI `windows-11-arm` — installs and launches it |
+| macOS 12+                | universal (x64+arm64) | DMG                      | CI `macos-latest`                              |
+| Linux                    | x64                   | AppImage, `.deb`, `.rpm` | CI `ubuntu-latest`                             |
+
+Both Windows architectures are cross-packaged on the x64 runner, so every push produces four
+Windows installers: `ynotPDF-<version>-win-{x64,arm64}.{exe,msi}`.
+
+**On Windows on ARM, use the NSIS `-arm64.exe`.** It refuses to install on a non-ARM64 PC. The
+`-arm64.msi` installs the same app but carries no architecture guard — electron-builder's bundled
+WiX cannot mark a package arm64 — so it is there for group-policy deployment, where the admin
+picks the architecture. The x64 installer _is_ allowed on an ARM PC and runs under Windows'
+emulation; that is a working fallback, not the intended one.
+
+Every native binary the project bundles must ship a `win32-arm64` build or declare a WebAssembly
+fallback — `npm run fetch-binaries` fails otherwise, naming the module. See
+[ADR 0009](docs/adr/0009-windows-arm.md).
+
+### Building one architecture locally
+
+```bash
+npm run build
+npx electron-builder --win --arm64 --publish never   # or --x64, or both
+npx electron-builder --mac --publish never
+npx electron-builder --linux --publish never
+```
+
+Build-time downloads follow the **target**, not the machine you are on: pass
+`--platform`/`--arch` to `npm run fetch-binaries`, or set `YNOT_TARGET`:
+
+```bash
+YNOT_TARGET=win32-arm64 npm run fetch-binaries
+```
+
+### Which build am I running?
+
+**Help ▸ About ynotPDF** (or `app.about` in the command palette) shows the **Platform** row:
+
+- `Windows arm64` — the native ARM build.
+- `Windows x64` — the x64 build on an x64 PC.
+- `Windows x64 (emulated on arm64)` — the x64 build on an ARM PC. It works, but the arm64
+  installer is the one you want.
+
 ## Setup
 
 Requirements: **Node 26+** and npm 11+, git. No Docker, no global tools.
@@ -89,6 +136,18 @@ await app.run('app.about');
 None needed yet. When a module installs one (Rust, C++, emsdk), it records why in `docs/adr/`
 and adds the install step here. M10 evaluated native PDFium (koffi FFI) and a custom emscripten
 build and needed neither: the npm wasm build passes every performance target (ADR 0006).
+
+## Windows on ARM (M03)
+
+`src/main/arch.ts` is the single place that answers architecture questions: `targetArch()` is
+what the build was compiled for — the value a module uses to choose a bundled native binary or a
+WebAssembly path — and `hostArch()` is what the PC actually is, seen through Windows' x64
+emulation. Never read `process.arch` directly for that decision.
+
+CI runs a `windows-11-arm` job that installs the packaged arm64 NSIS installer and drives the
+installed app through the Playwright smoke, asserting the About dialog reads exactly
+`Windows arm64`. On top of that, run the manual checklist in
+[ADR 0009](docs/adr/0009-windows-arm.md) on a real ARM device after any packaging change.
 
 ## PDF engine (M10)
 

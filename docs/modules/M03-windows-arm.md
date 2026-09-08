@@ -220,7 +220,69 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+Taken 2026-09-08, before any config changed. Findings 3–5 come from reading
+electron-builder 26.15.3's own NSIS/MSI code, not from its documentation.
+
+1. **arm64 is a packaging target, not a code path — today.** Nothing in the
+   app is architecture-specific: PDFium is WebAssembly (ADR 0006), the only
+   fetched binaries are fonts (`targets: { any: … }`), and Electron publishes
+   `win32-arm64`. So M03 changes build config, adds one runtime helper and one
+   guard, and writes the rule the modules with real native binaries follow.
+2. **One installer per architecture, not a combined one.** electron-builder's
+   NSIS target defaults to `buildUniversalInstaller: true`, which emits a
+   *combined* x64+arm64 installer **and** (because our `artifactName` contains
+   `${arch}`) the two per-arch ones — three `.exe` files, the combined one
+   carrying both app payloads (~2× the download). We set
+   `nsis.buildUniversalInstaller: false`, so the Windows job emits exactly
+   four artifacts: `ynotPDF-<ver>-win-{x64,arm64}.{exe,msi}`.
+3. **The "electron-builder refuses the wrong architecture by default" premise
+   in the brief is false, and we fix it.** `templates/nsis/common.nsh`
+   (`check64BitAndSetRegView`) only ever guards *32-bit Windows*; the message
+   catalogue has `win7Required` and `x64WinRequired` and nothing for arm64.
+   Worse, `include/extractAppPackage.nsh` picks the payload at run time from
+   `$packageArch`, and on an x64 PC an arm64-only installer leaves that
+   variable **empty** — it then tries to unpack `app-.7z`, i.e. it fails
+   messily instead of saying why. So we ship `resources/build/installer.nsh`
+   with a `customInit` macro: when the package is arm64-only
+   (`APP_ARM64` defined, `APP_64` not) and `${IsNativeARM64}` is false, show a
+   worded message and quit. `customInit` (not `preInit`) is the hook, because
+   `preInit` is also inserted into the intermediate `BUILD_UNINSTALLER` pass
+   that electron-builder *runs on the x64 build machine* — a guard there would
+   break the arm64 build itself.
+4. **The x64 installer stays installable on ARM, deliberately.** NSIS's
+   `identify_package` accepts `${IsNativeARM64}` for a 64-bit payload, and
+   Windows 11 runs x64 Electron under emulation. It is a working fallback, so
+   we do not block it; the About dialog names it instead (decision 6).
+5. **The arm64 MSI is an x64-declared package carrying arm64 binaries.**
+   `MsiTarget.js` maps `Arch.arm64 → x64` for candle because the bundled WiX
+   4.0.0.5512.2 has no arm64 platform. It builds and installs, but MSI gets no
+   architecture guard at all. NSIS is therefore the recommended installer on
+   ARM; the MSI stays for the group-policy/imaging case. Noted in ADR 0009 and
+   the README.
+6. **`targetArch()` reports what the build is; `hostArch()` reports what the
+   PC is** (`src/main/arch.ts`, pure functions, unit-tested). Windows sets
+   `PROCESSOR_ARCHITEW6432=ARM64` inside an emulated x64 process, which is the
+   only detection available without a native call. The About dialog shows
+   `Windows arm64`, `Windows x64`, or `Windows x64 (emulated on arm64)` — the
+   last one is exactly what the operator needs to see when checking which
+   installer landed on an ARM PC.
+7. **Fetching is driven by the *target*, not the host.** `fetch-binaries`
+   already took `--platform`/`--arch`; it now also reads `YNOT_TARGET`
+   (`win32-arm64`), which is what CI sets, so an x64 runner can assemble an
+   arm64 payload. Precedence: explicit flags → `YNOT_TARGET` → host.
+8. **The rule is enforced by a check, not by a review habit.**
+   `fetch-binaries` fails before downloading anything if an entry offers
+   `win32-x64` without `win32-arm64` and without `"arm64Fallback": "wasm"`.
+   The message names the module (`M70`, `M90`, …) so the failure lands on
+   whoever added the entry.
+9. **ARM CI: verify, don't assume.** `tonybaynes/ynotPDF` is a *public* repo
+   on a personal account and registers no self-hosted runners
+   (`gh api …/actions/runners` → `total_count: 0`), so GitHub's hosted
+   `windows-11-arm` label should be free and available. That is a claim until
+   a run proves it, so the workflow gains a real `windows-11-arm` job that
+   installs the arm64 NSIS silently, launches it and runs the `app.about`
+   smoke. If the run cannot get a runner, the job goes and the ADR/README say
+   so plainly. Either way the operator's own ARM PC gets a manual checklist.
 
 ## Build log (fill in at merge)
 

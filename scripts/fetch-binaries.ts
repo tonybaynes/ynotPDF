@@ -14,6 +14,13 @@
  *     "any": { … }                              // platform-independent (fonts, data)
  *   }
  * }
+ * The target is the platform/arch being *packaged for*, not the host: `--platform`/`--arch`,
+ * else `YNOT_TARGET` (`win32-arm64`), else the host. That is what lets an x64 CI runner assemble
+ * an arm64 payload (M03).
+ *
+ * Every entry offering a `win32-x64` download must also offer `win32-arm64` or declare
+ * `"arm64Fallback": "wasm"`; the check runs before any download (ADR 0009).
+ *
  * Usage: `node scripts/fetch-binaries.ts [--platform win32] [--arch x64] [--force] [--only name]`
  */
 
@@ -36,16 +43,63 @@ interface Target {
   readonly extract?: Extract;
 }
 
-interface BinaryEntry {
+export interface BinaryEntry {
   readonly name: string;
   readonly version: string;
   readonly module: string;
   readonly dir?: string;
+  /**
+   * Declares that this binary has no arm64 Windows build and the module uses a WebAssembly path
+   * on that architecture instead (ADR 0009). The only accepted way to omit `win32-arm64`.
+   */
+  readonly arm64Fallback?: 'wasm';
   readonly targets: Readonly<Record<string, Target>>;
 }
 
-interface Manifest {
+export interface Manifest {
   readonly binaries: ReadonlyArray<BinaryEntry>;
+}
+
+// ---- arm64 coverage rule (ADR 0009) ---------------------------------------------------------
+
+/**
+ * Windows on ARM is a supported target, so an entry may not ship a feature that silently fails
+ * there. Returns one worded problem per offending entry, naming the module that owns it.
+ */
+export function checkArm64Coverage(manifest: Manifest): string[] {
+  const problems: string[] = [];
+  for (const entry of manifest.binaries) {
+    if (!('win32-x64' in entry.targets)) continue;
+    if ('win32-arm64' in entry.targets) continue;
+    if (entry.arm64Fallback === 'wasm') continue;
+    problems.push(
+      [
+        `${entry.name} (${entry.module}) offers a win32-x64 download but nothing for win32-arm64.`,
+        `  Windows on ARM is a supported target (ADR 0009). Add a "win32-arm64" entry, or set`,
+        `  "arm64Fallback": "wasm" on the entry and make the module use a WebAssembly path when`,
+        `  targetArch() is 'arm64'.`,
+      ].join('\n'),
+    );
+  }
+  return problems;
+}
+
+/**
+ * The platform/arch being packaged for. Explicit flags win, then `YNOT_TARGET` (`win32-arm64`),
+ * then the host. Pure so the precedence is unit-tested.
+ */
+export function resolveTarget(
+  flags: { readonly platform?: string | undefined; readonly arch?: string | undefined },
+  env: Record<string, string | undefined>,
+  host: { readonly platform: string; readonly arch: string },
+): { platform: string; arch: string } {
+  // A malformed YNOT_TARGET contributes nothing rather than fetching for a half-guessed target.
+  const parts = (env['YNOT_TARGET'] ?? '').split('-');
+  const fromEnv = parts.length === 2 ? { platform: parts[0], arch: parts[1] } : {};
+  return {
+    platform: flags.platform ?? fromEnv.platform ?? host.platform,
+    arch: flags.arch ?? fromEnv.arch ?? host.arch,
+  };
 }
 
 // ---- archive readers (small on purpose: gzip via zlib, tar/zip parsed here) ------------------
@@ -191,8 +245,11 @@ async function main(): Promise<void> {
     const i = args.indexOf(flag);
     return i >= 0 ? args[i + 1] : undefined;
   };
-  const platform = opt('--platform') ?? process.platform;
-  const arch = opt('--arch') ?? process.arch;
+  const { platform, arch } = resolveTarget(
+    { platform: opt('--platform'), arch: opt('--arch') },
+    process.env,
+    { platform: process.platform, arch: process.arch },
+  );
   const only = opt('--only');
   const force = args.includes('--force');
   const key = `${platform}-${arch}`;
@@ -200,6 +257,11 @@ async function main(): Promise<void> {
   const manifest = JSON.parse(
     readFileSync(join(root, 'resources', 'binaries.json'), 'utf8'),
   ) as Manifest;
+  const problems = checkArm64Coverage(manifest);
+  if (problems.length > 0) {
+    throw new Error(problems.map((p) => `fetch-binaries: ${p}`).join('\n\n'));
+  }
+  console.info(`fetch-binaries: target ${key}`);
   let n = 0;
   for (const entry of manifest.binaries) {
     if (only && entry.name !== only) continue;

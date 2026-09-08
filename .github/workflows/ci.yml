@@ -93,8 +93,29 @@ jobs:
             test-results
           if-no-files-found: ignore
 
+      # M03: Windows ships x64 and arm64. Cross-packaging arm64 on the x64 runner is
+      # electron-builder's normal path — it downloads the arm64 Electron zip into the cache.
       - name: Package installers (electron-builder, unsigned)
+        if: runner.os != 'Windows'
         run: npx electron-builder --publish never
+
+      - name: Package installers, x64 and arm64 (electron-builder, unsigned)
+        if: runner.os == 'Windows'
+        run: npx electron-builder --win --x64 --arm64 --publish never
+
+      - name: Check the Windows job produced all four installers
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          missing=0
+          for f in '*-win-x64.exe' '*-win-arm64.exe' '*-win-x64.msi' '*-win-arm64.msi'; do
+            if ! compgen -G "release/$f" > /dev/null; then
+              echo "missing installer: release/$f"
+              missing=1
+            fi
+          done
+          ls -l release/*.exe release/*.msi
+          exit $missing
 
       - name: Upload installers
         uses: actions/upload-artifact@v5
@@ -108,3 +129,69 @@ jobs:
             release/*.deb
             release/*.rpm
           if-no-files-found: error
+
+  # M03 / ADR 0009: prove the arm64 build actually runs on ARM hardware. GitHub's hosted
+  # `windows-11-arm` runners are free for public repositories, which this one is. If the label is
+  # ever withdrawn this job fails to start — the response is to delete it and say so in the ADR
+  # and README, never to leave a job that silently skips.
+  windows-arm:
+    name: windows-11-arm (arm64 installer smoke)
+    needs: build
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Point Electron caches outside the workspace
+        shell: bash
+        run: |
+          echo "ELECTRON_CACHE=$RUNNER_TEMP/electron-cache" >> "$GITHUB_ENV"
+          echo "ELECTRON_BUILDER_CACHE=$RUNNER_TEMP/electron-builder-cache" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: npm
+
+      - name: Confirm the runner really is arm64
+        shell: pwsh
+        run: |
+          "PROCESSOR_ARCHITECTURE = $env:PROCESSOR_ARCHITECTURE"
+          if ($env:PROCESSOR_ARCHITECTURE -ne 'ARM64') { throw 'not an ARM64 runner' }
+
+      # Playwright and Electron only; the app itself comes from the installer, not from a build.
+      - name: Install
+        run: npm ci
+
+      - name: Download the Windows installers
+        uses: actions/download-artifact@v5
+        with:
+          name: installers-windows-latest
+          path: installers
+
+      - name: Install the arm64 build silently
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem installers -Filter '*-win-arm64.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'no arm64 NSIS installer in the artifact' }
+          "installing $($exe.Name)"
+          Start-Process -FilePath $exe.FullName -ArgumentList '/S' -Wait
+          $app = "$env:LOCALAPPDATA\Programs\ynotPDF\ynotPDF.exe"
+          if (-not (Test-Path $app)) { throw "installer did not produce $app" }
+          "YNOT_E2E_EXECUTABLE=$app" >> $env:GITHUB_ENV
+
+      # Drives the installed arm64 app. YNOT_EXPECT_ARCH makes the About dialog assert exactly
+      # "Windows arm64" — emulated x64 would read "Windows x64 (emulated on arm64)" and fail.
+      - name: Smoke the installed arm64 app (Playwright)
+        env:
+          YNOT_EXPECT_ARCH: arm64
+        run: npx playwright test test/e2e/arch.spec.ts test/e2e/app.spec.ts
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-report-windows-11-arm
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore

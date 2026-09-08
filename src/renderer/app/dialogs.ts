@@ -5,6 +5,7 @@
  */
 
 import type { AppInfo } from '@shared/ipc';
+import { platformLabel } from '@shared/platform';
 
 /** Opens the About dialog and resolves when it closes. */
 export function showAbout(info: AppInfo | null): HTMLDialogElement {
@@ -31,7 +32,8 @@ export function showAbout(info: AppInfo | null): HTMLDialogElement {
         ['Electron', info.electron],
         ['Chromium', info.chrome],
         ['Node', info.node],
-        ['Platform', `${info.platform} ${info.arch}`],
+        // M03: named in words, and says so when an x64 build is running emulated on ARM.
+        ['Platform', platformLabel(info.platform, info.arch, info.hostArch)],
       ]
     : [['Version', 'development']];
   for (const [k, v] of rows) {
@@ -39,6 +41,7 @@ export function showAbout(info: AppInfo | null): HTMLDialogElement {
     dt.textContent = k;
     const dd = document.createElement('dd');
     dd.textContent = v;
+    dd.dataset['field'] = k.toLowerCase();
     dl.append(dt, dd);
   }
 

@@ -1,5 +1,5 @@
 {
-  "$comment": "Downloads performed by scripts/fetch-binaries.ts. Add entries per module (M10 fonts, M70 qpdf, M90 tesseract). sha256 is mandatory and is checked against the downloaded archive/file. `targets` keys are `<platform>-<arch>`, `<platform>-universal`, or `any` for platform-independent data. `dir` overrides the default destination resources/bin/<name>. `extract` unpacks the listed archive members (tar.gz or zip) into `dir`.",
+  "$comment": "Downloads performed by scripts/fetch-binaries.ts. Add entries per module (M10 fonts, M70 qpdf, M90 tesseract). sha256 is mandatory and is checked against the downloaded archive/file. `targets` keys are `<platform>-<arch>`, `<platform>-universal`, or `any` for platform-independent data. `dir` overrides the default destination resources/bin/<name>. `extract` unpacks the listed archive members (tar.gz or zip) into `dir`. Windows on ARM is a supported target (ADR 0009): any entry with a `win32-x64` target must also have `win32-arm64`, or `arm64Fallback: wasm` next to `module` declaring that the module uses a WebAssembly path on arm64 — `fetch-binaries` fails otherwise. Entries targeting `any` are architecture-independent and need neither.",
   "binaries": [
     {
       "name": "liberation-fonts",

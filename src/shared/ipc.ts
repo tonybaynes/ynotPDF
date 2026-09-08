@@ -58,7 +58,13 @@ export interface AppInfo {
   readonly chrome: string;
   readonly node: string;
   readonly platform: Platform;
+  /** Architecture this build was compiled for (M03). */
   readonly arch: string;
+  /**
+   * Architecture of the PC itself. Differs from `arch` only when the build runs under
+   * emulation — an x64 build on a Windows-on-ARM PC (M03, `src/main/arch.ts`).
+   */
+  readonly hostArch: string;
   readonly isPackaged: boolean;
   /** True when the e2e harness is enabled (env `YNOT_E2E=1`). Never true in a release build. */
   readonly e2e: boolean;
