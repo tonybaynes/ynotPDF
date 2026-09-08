@@ -6,6 +6,10 @@ import { defineConfig } from 'electron-vite';
  * (`src/engine/worker.ts`) is a fourth bundle emitted by the renderer build:
  * Vite discovers it through `new Worker(new URL('./worker.ts', import.meta.url))`
  * in `src/engine/EngineClient.ts` and compiles it as an ES-module worker.
+ *
+ * The main build has a second entry, `searchWorker`, for M13's folder search: it runs in a Node
+ * `worker_thread` started by `src/main/search/index.ts`, which loads it from `out/main/` by name
+ * (ADR 0011). Vite cannot discover it the way it discovers a Web Worker, so it is declared here.
  */
 const aliases = {
   '@shared': resolve(import.meta.dirname, 'src/shared'),
@@ -22,7 +26,12 @@ export default defineConfig({
     resolve: { alias: aliases },
     build: {
       externalizeDeps: true,
-      rollupOptions: { input: { index: resolve(import.meta.dirname, 'src/main/index.ts') } },
+      rollupOptions: {
+        input: {
+          index: resolve(import.meta.dirname, 'src/main/index.ts'),
+          searchWorker: resolve(import.meta.dirname, 'src/main/search/worker.ts'),
+        },
+      },
     },
   },
   preload: {

@@ -10,7 +10,9 @@ import { RecoveryStore } from './fs/recovery';
 import { FileWatchers } from './fs/watcher';
 import { registerIpcHandlers } from './ipc';
 import { buildMenu } from './menu';
+import { PrintJobs } from './print';
 import { RecentFiles } from './recent';
+import { FolderSearches } from './search';
 import { Settings, THEME_KEY } from './settings';
 import { broadcast, createMainWindow, getMainWindow, sendTo } from './window';
 import { readFileForRenderer } from './files';
@@ -74,6 +76,7 @@ function windowOptions(parent?: BrowserWindow | null): Parameters<typeof createM
     onClosed: (windowId) => {
       closeBroker.forget(windowId);
       watchers.release(windowId);
+      searches.release(windowId);
     },
   };
 }
@@ -99,6 +102,8 @@ const closeBroker = new CloseBroker();
 const watchers = new FileWatchers((path) => {
   broadcast('file:changedOnDisk', { path });
 });
+const printJobs = new PrintJobs();
+const searches = new FolderSearches();
 let recovery: RecoveryStore | null = null;
 
 /**
@@ -124,6 +129,8 @@ app.on('before-quit', (event) => {
 
 app.on('will-quit', () => {
   void watchers.closeAll();
+  printJobs.disposeAll();
+  searches.disposeAll();
 });
 
 app.on('second-instance', (_event, argv) => {
@@ -176,6 +183,8 @@ if (gotLock) {
       watchers,
       recovery,
       closeBroker,
+      printJobs,
+      searches,
     });
     pendingOpens.push(...pdfPathsFromArgv(process.argv));
     await boot();

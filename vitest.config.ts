@@ -67,6 +67,26 @@ export default defineConfig({
         'src/renderer/modules/M21-save/SaveService.ts',
         'src/renderer/modules/M21-save/dialogs.ts',
         'src/renderer/modules/M21-save/manifest.ts',
+        /*
+         * M13's DOM and shell half, for the same reason again: the find bar, the search panel,
+         * the print dialog, the highlighter, the selection controller's event plumbing, the
+         * canvas helpers and the service that wires them together are proved by Playwright in
+         * `test/e2e/select-find-print.spec.ts`. Everything they are built out of — the text
+         * layer, the matcher, the selection model, RTF, page ranges, the imposition, the plan,
+         * the settings and the snapshot arithmetic — is pure and gated below.
+         */
+        'src/renderer/modules/M13-select-find-print/SelectFindService.ts',
+        'src/renderer/modules/M13-select-find-print/canvas.ts',
+        'src/renderer/modules/M13-select-find-print/find/FindBar.ts',
+        'src/renderer/modules/M13-select-find-print/find/SearchPanel.ts',
+        'src/renderer/modules/M13-select-find-print/manifest.ts',
+        'src/renderer/modules/M13-select-find-print/print/PrintDialog.ts',
+        'src/renderer/modules/M13-select-find-print/print/PrintService.ts',
+        'src/renderer/modules/M13-select-find-print/print/render.ts',
+        'src/renderer/modules/M13-select-find-print/selection/Highlighter.ts',
+        'src/renderer/modules/M13-select-find-print/selection/TextSelectionController.ts',
+        'src/renderer/modules/M13-select-find-print/selection/clipboard.ts',
+        'src/renderer/modules/M13-select-find-print/tools.ts',
       ],
       reporter: ['text', 'lcov'],
       thresholds: {
@@ -113,6 +133,74 @@ export default defineConfig({
           lines: 75,
           functions: 80,
           statements: 75,
+        },
+        // M13's pure half: the text model everything textual reads, the matcher, the selection
+        // rules and the print arithmetic. These decide what is selected, found and printed.
+        'src/renderer/view/TextLayer.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/renderer/modules/M13-select-find-print/find/search.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M13-select-find-print/find/csv.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M13-select-find-print/selection/model.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M13-select-find-print/selection/rtf.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M13-select-find-print/print/pageRange.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M13-select-find-print/print/imposition.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M13-select-find-print/print/plan.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M13-select-find-print/print/paper.ts': {
+          lines: 85,
+          functions: 85,
+          statements: 85,
+        },
+        /*
+         * Only the *vector* half of "Print to PDF" can run in Node; the raster half needs a
+         * canvas, so it is proved by Playwright (`print to PDF as an image` in
+         * `test/e2e/select-find-print.spec.ts`). The gate covers what Node can reach.
+         */
+        'src/renderer/modules/M13-select-find-print/print/printToPdf.ts': {
+          lines: 70,
+          functions: 70,
+          statements: 65,
+        },
+        'src/renderer/modules/M13-select-find-print/settings.ts': {
+          lines: 85,
+          functions: 75,
+          statements: 85,
+        },
+        'src/renderer/modules/M13-select-find-print/TextService.ts': {
+          lines: 85,
+          functions: 80,
+          statements: 85,
+        },
+        'src/renderer/modules/M13-select-find-print/find/FindController.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
         },
       },
     },

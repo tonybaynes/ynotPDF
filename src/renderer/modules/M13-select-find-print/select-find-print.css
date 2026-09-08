@@ -1,0 +1,340 @@
+/*
+ * M13 — text selection, find, advanced search and the print dialog.
+ *
+ * Colours are theme tokens only. The two highlight kinds blend with the paper rather than
+ * covering it: an opaque rectangle over a word would hide the word, and translucency is not
+ * available here (overlays are opaque — CLAUDE.md). `multiply` darkens the paper where the
+ * highlight is and leaves the ink alone; under Night Mode, where the paper is already dark,
+ * `screen` lightens it instead. Both are fully opaque paints.
+ */
+
+/* ---- highlights ---------------------------------------------------------------------------- */
+
+.viewer-content .page {
+  /* Keep the blend inside the page: the highlight must mix with the paper, not with the app. */
+  isolation: isolate;
+}
+
+.text-highlight {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 1px;
+}
+
+.text-highlight-selection {
+  background: var(--selection);
+  mix-blend-mode: multiply;
+}
+
+.text-highlight-find {
+  background: var(--annot-highlight);
+  mix-blend-mode: multiply;
+}
+
+/* The hit the reader is on is the one with an outline: a second colour alone would not carry it. */
+.text-highlight-find-current {
+  background: var(--annot-highlight);
+  mix-blend-mode: multiply;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+html[data-night-mode='on'] .text-highlight-selection,
+html[data-night-mode='on'] .text-highlight-find,
+html[data-night-mode='on'] .text-highlight-find-current {
+  mix-blend-mode: screen;
+}
+
+/* ---- find bar ------------------------------------------------------------------------------ */
+
+.find-bar {
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-5);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--bg-panel);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation);
+  max-width: min(38rem, calc(100% - var(--sp-6)));
+}
+
+.find-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.find-input {
+  min-width: 14rem;
+  flex: 1;
+}
+
+.find-count {
+  min-width: 6rem;
+  text-align: right;
+  color: var(--fg);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+.find-status {
+  color: var(--fg-muted);
+  font-size: var(--fs-1);
+  min-height: 1em;
+}
+
+.find-bar[data-state='empty'] .find-count,
+.find-bar[data-state='error'] .find-status {
+  color: var(--danger);
+  font-weight: var(--fw-heading);
+}
+
+.find-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--sp-2) var(--sp-4);
+  padding-top: var(--sp-2);
+  border-top: var(--border-width) solid var(--border);
+}
+
+.find-option {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-2);
+}
+
+/* ---- advanced search panel ------------------------------------------------------------------ */
+
+.search-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+}
+
+.search-query {
+  width: 100%;
+}
+
+.search-buttons {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.search-scope,
+.search-options {
+  margin: 0 var(--sp-3) var(--sp-3);
+  padding: var(--sp-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+}
+
+.search-scope legend,
+.search-options legend {
+  font-weight: var(--fw-heading);
+  padding: 0 var(--sp-2);
+}
+
+.search-radio,
+.search-check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) 0;
+  font-size: var(--fs-2);
+}
+
+.search-folder {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.search-folder-path {
+  font-size: var(--fs-1);
+  color: var(--fg-muted);
+  word-break: break-all;
+}
+
+.search-proximity {
+  width: 5rem;
+}
+
+.search-progress,
+.search-summary {
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-2);
+  color: var(--fg);
+  min-height: 1em;
+}
+
+.search-results {
+  padding: 0 var(--sp-3) var(--sp-4);
+  overflow-y: auto;
+}
+
+.search-doc {
+  margin-bottom: var(--sp-3);
+}
+
+.search-doc-name {
+  cursor: pointer;
+  font-weight: var(--fw-heading);
+  padding: var(--sp-2);
+  border-radius: var(--radius);
+}
+
+.search-doc-name:hover {
+  background: var(--bg-hover);
+}
+
+.search-doc-count {
+  color: var(--fg-muted);
+  font-weight: var(--fw-body);
+}
+
+.search-page {
+  padding-left: var(--sp-3);
+}
+
+.search-page-label {
+  margin: var(--sp-2) 0 var(--sp-1);
+  font-size: var(--fs-1);
+  color: var(--fg-muted);
+}
+
+.search-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--sp-2);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--fs-2);
+  cursor: pointer;
+}
+
+.search-hit:hover {
+  background: var(--bg-hover);
+}
+
+.search-hit:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+.search-hit-where {
+  display: block;
+  font-size: var(--fs-1);
+  color: var(--fg-muted);
+}
+
+.search-hit-text {
+  display: block;
+}
+
+/* ---- print dialog ---------------------------------------------------------------------------- */
+
+.print-columns {
+  display: grid;
+  grid-template-columns: minmax(20rem, 1.2fr) minmax(14rem, 1fr);
+  gap: var(--sp-5);
+  align-items: start;
+}
+
+.print-columns-left,
+.print-columns-right {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.print-group {
+  margin: 0;
+  padding: var(--sp-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+}
+
+.print-group legend {
+  font-weight: var(--fw-heading);
+  padding: 0 var(--sp-2);
+}
+
+.print-subgroup {
+  margin-top: var(--sp-3);
+  padding-left: var(--sp-3);
+  border-left: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.print-check,
+.print-radio {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) 0;
+}
+
+.print-radio input[type='text'] {
+  margin-left: var(--sp-2);
+  width: 10rem;
+}
+
+.print-note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-1);
+  color: var(--fg-muted);
+}
+
+.print-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 16rem;
+  padding: var(--sp-3);
+  background: var(--bg-canvas);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+}
+
+.print-preview-image {
+  max-width: 100%;
+  max-height: 22rem;
+  border: var(--border-width) solid var(--border-strong);
+}
+
+.print-preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+}
+
+.print-preview-label,
+.print-summary {
+  font-size: var(--fs-2);
+  color: var(--fg);
+  text-align: center;
+}
+
+@media (max-width: 60rem) {
+  .print-columns {
+    grid-template-columns: 1fr;
+  }
+}

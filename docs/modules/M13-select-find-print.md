@@ -223,8 +223,141 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **One text model per page, and it lives in `view/`, not here.** `view/TextLayer.ts` turns
+  `textRuns(page)` into a flat reading-order string with one box per character, grouped into lines
+  and paragraphs. It is shared on purpose — M13 selects, searches and copies from it, M51 will
+  reflow from the same grouping, M54 replaces inside it, M111 reads it aloud — and it is pure, so
+  all of it is unit-tested in Node. `TextService` caches one model per page with the document, so
+  a find and a selection on the same page read the same object.
+- **`chars.length === text.length`, always.** A character outside the BMP is two UTF-16 units and
+  gets the _same_ box twice, so a string offset is always a valid index into the boxes and no
+  caller has to think about surrogates. Line separators are real newline characters with a
+  zero-width box parked at the end of the line they close, so slicing the text is already the text
+  to copy and a selection over a line break has somewhere to draw.
+- **Reading order is the content stream sorted into lines**, by angle bucket, then _across_ the
+  writing direction, then _along_ it. "Across" and "along" are the two components of the run's own
+  direction vector, so rotated text needs no special case.
+- **Drawn selection rectangles, not the browser's selection.** A text layer of transparent spans
+  would give `::selection` for free, but a selection colour drawn over a word hides the word
+  unless it is translucent, and translucency is not available here. The rectangles are ours and
+  blend with the paper — `mix-blend-mode: multiply` on a light page, `screen` under Night Mode —
+  which is fully opaque paint that darkens the paper and leaves the ink. It also means the
+  selection _model_ is ours, which is what makes column select, cross-page runs and "n of m" work
+  the same way on every platform (ADR 0011).
+- **Selection listens on the viewport, not on the page tool layer.** A drag that starts on page 3
+  and ends on page 5 has to keep producing coordinates after it has left the page it started on,
+  and a pointer capture on a page element reports that page's coordinates for ever. `ToolSpec` is
+  the switch; `TextSelectionController` is the machine.
+- **`tool.selectText` stays M11's id.** Two tools with one id would leave the shell dispatching to
+  whichever module registered first. M13 watches `ui.activeTool` instead. M13 contributes
+  `tool.snapshot`, which _is_ a marquee inside one page and so is a real `ToolSpec`.
+- **Case is the regular expression's `i` flag; only accents fold the text.** Lower-casing the
+  haystack and not the query is an easy bug to write (it was written, and the acceptance test
+  caught it), and lower-casing a regular expression's source turns a "not a digit" class into a
+  "digit" one. Diacritic folding does change the text, so normalisation returns a map from every
+  folded unit back to the offset it came from, and matches are always reported in **original**
+  offsets.
+- **Find scans the whole document, yielding every four pages.** "n of m" is a promise about the
+  document, not about what is on screen. The count climbs while the reader is still typing rather
+  than appearing at the end, and a newer query abandons the older one — checked _after_ every
+  await, not only before, or the old query's next result lands in the new query's list.
+- **The imposition is pure, and one plan feeds three consumers.** The preview renders sheet _n_ of
+  the plan, the printer rasterises the same plan, and "Print to PDF" draws it with pdf-lib. They
+  cannot disagree, and the acceptance test can state the imposition as a table with no printer.
+- **Printing is an HTML document of images in a hidden window** (ADR 0011) — the only
+  cross-platform route Electron offers. Sheets go to main one at a time and are referenced by
+  relative path, because a hundred 300-DPI sheets inlined as data URLs is about 300 MB of base64.
+- **"Print as image" is given the one place it can mean something.** Everything that reaches a
+  printer is a raster, so the switch would be meaningless there; for _Print to PDF_ it chooses
+  between embedding pages as Form XObjects (searchable text, but pdf-lib carries a page's content
+  and not its annotations) and embedding the rendered sheets (everything you can see, no text).
+  The dialog says so in words.
+- **The folder search is a Node worker thread started by main**, with its own PDFium and the
+  _same_ pure matcher the find bar uses, so it cannot disagree with a search of an open document.
+  The wasm bytes are read in main and handed over in `workerData`: in a packaged app they are
+  inside `app.asar`, and asar-aware `fs` is a main-process guarantee.
+- **Paper sizes are data** (`resources/print/paper-sizes.json`), per PLAN.md §4.4.
+- **Ctrl+C and Ctrl+A fall back to the focused field.** They act on the document selection in the
+  page area and on the field in the find bar or a dialog, so typing still behaves the way it does
+  everywhere else.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-08 on `mod/M13-select-find-print` (worktree `../ynotPDF-M13`).** Green locally on
+Windows: lint (eslint, prettier, the colour/opacity rules, `tsc` on both projects), 1 708 unit
+tests with the coverage gates, 157 Playwright tests.
+
+**Shipped:**
+
+- **`src/renderer/view/TextLayer.ts`** — the text model, shared with M51/M54/M111: reading order
+  from the runs' own direction vectors, line and paragraph grouping, hit testing, word and
+  paragraph spans, merged selection rectangles, column spans, and the conversion to and from
+  `core/Selection`'s run ranges. Pure; 29 unit tests.
+- **Selection.** `selection/model.ts` (pure: two carets, a granularity, an optional column
+  rectangle) plus a controller that listens on the viewport. Click-drag, double click (word),
+  triple click (paragraph), Shift-extend, Ctrl+A (page, then document), Alt-drag column select,
+  cross-page selection, arrow / Home / End movement, and the highlight rectangles.
+- **Copy.** Plain text and RTF in one clipboard item, so a word processor takes the formatting and
+  a plain editor takes the text. The RTF writer is in-house (`selection/rtf.ts`): font table,
+  colour table, bold, italic, sizes, and Unicode escapes for anything above ASCII. Copy Image
+  renders the image object under the pointer at its own resolution.
+- **Snapshot.** A marquee becomes a PNG at a chosen DPI, to the clipboard, a file, or both.
+- **Find.** The Ctrl+F bar (incremental, "n of m", next / previous / Enter / Shift+Enter, seven
+  options behind a disclosure) over a matcher that does case, whole word, regular expressions,
+  accent folding and proximity, and a controller that also searches bookmarks, comments and form
+  values. Every hit on a visible page is highlighted and the current one is outlined.
+- **Advanced search.** A left-pane panel: scope (this document / all open / a folder), the full
+  option set, a proximity box, a results tree grouped document → page with a line of context,
+  click-to-navigate-and-select, progress, cancel, and Export to CSV.
+- **Folder search** in a main-process worker thread with its own PDFium (ADR 0011), streaming
+  batched results and cancellable by `terminate()`.
+- **Printing.** Our own opaque dialog covering Foxit's option set — printer, copies, collate,
+  range (all / current / selection / custom), odd-even subset, reverse, scaling (fit / actual /
+  custom / shrink / fill), auto-rotate, auto-centre, paper and orientation, margins, n-up with
+  order and borders, booklet with binding and duplex subset, tiling with scale, overlap and marks,
+  comments and form fields, greyscale, print-as-image, DPI — with a live preview of any sheet. The
+  imposition is pure and shared by the preview, the paper and Print to PDF.
+- **Docs.** ADR 0011, `docs/shortcuts.md` rows for selection, copy, find, search and print,
+  READMEs for the module and the view layer.
+
+**Bugs the tests found, all real:**
+
+- Case-insensitive search folded the _text_ and not the _query_, so it found nothing at all: the
+  first acceptance test ("the same count as the engine's raw text") failed on it. Case is now the
+  regular expression's `i` flag, which cannot get out of step with itself.
+- A second find query started while the first was awaiting a page let that first query's next
+  result land in the new query's freshly cleared hit list — exactly what typing quickly does. The
+  generation is now checked after the await as well as before.
+- "Advanced Search" ran the Registry's generated `panel.nav.search` command, which _toggles_:
+  asking for the search panel while it was already open put it away.
+- The Snapshot icon was registered in `activate`, which runs after the shell has mounted, so the
+  ribbon painted a placeholder glyph on the first frame. `test/e2e/shell.spec.ts` catches exactly
+  that; icons are now registered at module scope.
+
+**Shared files touched (minimal, additive, per ADR 0011):** `src/shared/ipc.ts` and
+`src/main/ipc.ts` (clipboard, folder picker, folder search, printing; `SaveDialogOptions.filters`),
+`src/main/index.ts` (own the print jobs and the searches, release them with the window),
+`src/main/menu.ts` (Print, Print to PDF, and Copy / Copy with Formatting / Select All / Find as
+_commands_ rather than Chromium roles, so they act on the document), `electron.vite.config.ts` (a
+second `main` entry for the search worker), `src/renderer/main.ts` (register M13),
+`src/renderer/index.html` (link the module's CSS), `vitest.config.ts` (coverage include and
+gates), `docs/shortcuts.md`, `src/renderer/view/README.md`, `PLAN.md` section 0, and two
+expectations in `test/e2e/shell.spec.ts` — the navigation strip now has a third panel, and the
+backstage **Print** slot belongs to a real module (disabled until a document is open), exactly as
+**Save** came to belong to M21. The demo module itself is untouched.
+
+**Deferred, and why:**
+
+- **Find & replace and spell-check** — M54's, explicitly out of scope.
+- **Read aloud** — M111's, explicitly out of scope.
+- **A vector path to the printer.** Electron has none (ADR 0011). Everything that reaches paper is
+  a raster at the chosen DPI; the dialog exposes the DPI, and Print to PDF keeps a vector route.
+- **Print to PDF in vector mode does not carry annotation or widget appearances**, because
+  pdf-lib's `embedPage` carries a page's content and not its annotations. "Print as image" does,
+  and the dialog says so. Flattening (M41) would remove the trade-off.
+- **The folder search does not honour a document's password.** An encrypted file it cannot open is
+  skipped rather than prompting a hundred times through a folder.
+- **The status bar does not show a character count for the selection.** `selectionLength()` is
+  there for it; M02's status bar is a shared file and the slot is not worth an edit to it yet.
+- **Print preview renders one sheet at a time**, not a strip of thumbnails. The sheet stepper does
+  the job, and a strip would render every sheet of a long document to show six of them.
