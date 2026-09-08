@@ -517,15 +517,20 @@ test.describe('acceptance: split view, full screen, reading mode, guides', () =>
     expect(await app.page.evaluate(() => document.documentElement.dataset['readingMode'])).toBe(
       'on',
     );
-    await expect(app.page.locator('.ribbon')).toBeHidden();
-    await expect(app.page.locator('.status-bar')).toBeHidden();
+    // These must exist and be hidden — `toBeHidden` passes for an element that is simply not
+    // there, so each one is counted first.
+    for (const selector of ['#ribbon', '#tabstrip', '#statusbar', '.pane']) {
+      await expect(app.page.locator(selector).first(), selector).toHaveCount(1);
+      await expect(app.page.locator(selector).first(), selector).toBeHidden();
+    }
     const bar = app.page.locator('.viewer-reading-bar');
     await expect(bar).toBeVisible();
     // The bar keeps a keyboard path out; it is a toolbar, not a decoration.
     await expect(bar).toHaveAttribute('role', 'toolbar');
     await bar.locator('[data-command="view.readingMode.toggle"]').click();
     await app.page.waitForTimeout(200);
-    await expect(app.page.locator('.ribbon')).toBeVisible();
+    await expect(app.page.locator('#ribbon')).toBeVisible();
+    await expect(app.page.locator('#statusbar')).toBeVisible();
     expect((await state()).readingMode).toBe(false);
   });
 
@@ -867,7 +872,7 @@ test.describe('the shell contract', () => {
     await open('multipage.pdf');
     await app.run('app.ribbon.tab.view');
     await app.page.waitForTimeout(200);
-    const ribbon = app.page.locator('.ribbon');
+    const ribbon = app.page.locator('#ribbon');
     for (const command of [
       'view.rotate.clockwise',
       'view.rulers.toggle',

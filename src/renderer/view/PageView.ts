@@ -283,8 +283,14 @@ export class PageView {
     this.layers.root.remove();
   }
 
+  /**
+   * The canvas keeps its alpha channel. An opaque canvas composites as *black* wherever nothing
+   * has been drawn — including, on some drivers, in the moment after it is resized — and a black
+   * rectangle where a page should be is the worst possible failure mode. With alpha, an unpainted
+   * canvas simply shows the page's own `--page-paper` beneath it.
+   */
   private context(): CanvasRenderingContext2D | null {
-    return this.layers.raster.getContext('2d', { alpha: false });
+    return this.layers.raster.getContext('2d');
   }
 
   private layout(): void {

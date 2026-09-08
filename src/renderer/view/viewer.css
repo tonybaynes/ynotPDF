@@ -310,12 +310,16 @@
 
 /* ---- reading mode / full screen ----------------------------------------------------------- */
 
-html[data-reading-mode='on'] .ribbon,
-html[data-reading-mode='on'] .tab-strip,
-html[data-reading-mode='on'] .nav-pane,
-html[data-reading-mode='on'] .properties-pane,
-html[data-reading-mode='on'] .status-bar,
-html[data-reading-mode='on'] .qat {
+/*
+ * Reading mode hides the chrome. The class names are the shell's own (M02): `#ribbon`,
+ * `#tabstrip`, `.pane` for both side panes, `#statusbar` and `#qat`. `!important` is needed
+ * because each of those sets its own `display` (the same reason M02's `[hidden]` rule needs it).
+ */
+html[data-reading-mode='on'] #ribbon,
+html[data-reading-mode='on'] #tabstrip,
+html[data-reading-mode='on'] .pane,
+html[data-reading-mode='on'] #statusbar,
+html[data-reading-mode='on'] #qat {
   display: none !important;
 }
 
