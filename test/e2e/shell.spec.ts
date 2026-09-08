@@ -303,7 +303,7 @@ test('quick-access toolbar items come from ui.qat and persist', async () => {
 
 test('the navigation pane opens each demo panel and remembers the last one', async () => {
   const strip = app.page.locator('#nav-strip');
-  // The demo's two panels, plus whatever real modules contribute (M13's Search, and so on).
+  // The demo's two panels, plus whatever real modules contribute (M12's five, M13's Search).
   await expect(strip.locator('[data-panel^="demo."]')).toHaveCount(2);
   await strip.locator('[data-panel="demo.beta"]').click();
   await expect(app.page.locator('#demo-panel-beta')).toBeVisible();

@@ -434,13 +434,20 @@ describe('form field values', () => {
 });
 
 describe('what PDFium cannot do', () => {
-  it('reports metadata and layer visibility as not implemented, not as failures', async () => {
+  it('reports metadata as not implemented, not as a failure', async () => {
     await withDoc('text.pdf', async (doc) => {
       await expect(pdfium.setMetadata(doc, { title: 'x' })).rejects.toMatchObject({
         code: 'not-implemented',
       });
+    });
+  });
+
+  // Layer visibility *is* implemented since M12 (ADR 0011) — by deactivating the marked page
+  // objects — so a document with no such group answers "no layer", not "not implemented".
+  it('answers a layer id no document has with invalid-argument', async () => {
+    await withDoc('text.pdf', async (doc) => {
       await expect(pdfium.setLayerVisible(doc, 'ocg.1', false)).rejects.toMatchObject({
-        code: 'not-implemented',
+        code: 'invalid-argument',
       });
     });
   });

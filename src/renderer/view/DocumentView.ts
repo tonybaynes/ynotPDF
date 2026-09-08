@@ -244,6 +244,16 @@ export class DocumentView {
     this.paint({ force: true });
   }
 
+  /**
+   * Repaints every mounted page from scratch (M12, ADR 0011). The inputs the tile cache keys on
+   * have not changed but the pixels behind them have — a layer was toggled — so `setFlags` would
+   * correctly decide there was nothing to do. The caller drops the stale tiles first.
+   */
+  refresh(): void {
+    for (const view of this.views.values()) view.invalidate();
+    this.paint({ force: true });
+  }
+
   setFit(fit: FitMode): void {
     this.fitMode = fit;
     if (fit) {

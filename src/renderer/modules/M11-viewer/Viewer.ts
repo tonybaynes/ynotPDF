@@ -206,6 +206,11 @@ export class Viewer {
     for (const pane of this.panes) pane.setFlags(patch);
   }
 
+  /** Repaints both panes from the cache (M12, ADR 0011) — see `DocumentView.refresh`. */
+  refresh(): void {
+    for (const pane of this.panes) pane.refresh();
+  }
+
   setOverlays(patch: Partial<OverlayState>): void {
     this.overlayState = { ...this.overlayState, ...patch };
     for (const o of this.overlaysByPane) o.set(patch);

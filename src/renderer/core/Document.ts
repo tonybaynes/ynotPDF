@@ -716,6 +716,84 @@ export class Document {
     this.events.emit({ type: 'outline:changed' });
   }
 
+  /**
+   * Replaces the destination list (M12). Named destinations are the model's alone — the engine
+   * reads them and M21's writer rebuilds `/Names /Dests` from here.
+   */
+  setDestinationsRecord(destinations: ReadonlyArray<ModelDestination>): void {
+    this.store.set({ destinations });
+    this.events.emit({ type: 'destinations:changed' });
+  }
+
+  /** Adds or replaces one destination, keeping the rest in place (M12). */
+  putDestinationRecord(destination: ModelDestination, index?: number): void {
+    this.store.set((s) => {
+      const list = [...s.destinations];
+      const at = list.findIndex((d) => d.id === destination.id);
+      if (at >= 0) list[at] = destination;
+      else list.splice(index ?? list.length, 0, destination);
+      return { destinations: list };
+    });
+    this.events.emit({ type: 'destinations:changed' });
+  }
+
+  /** Removes a destination; returns it with its position, for undo (M12). */
+  removeDestinationRecord(id: ModelId): { destination: ModelDestination; index: number } | null {
+    const index = this.state.destinations.findIndex((d) => d.id === id);
+    if (index < 0) return null;
+    const destination = this.state.destinations[index];
+    if (!destination) return null;
+    this.store.set((s) => ({ destinations: s.destinations.filter((d) => d.id !== id) }));
+    this.events.emit({ type: 'destinations:changed' });
+    return { destination, index };
+  }
+
+  /** Adds or replaces one attachment record (M12). */
+  putAttachmentRecord(attachment: ModelAttachment, index?: number): void {
+    this.store.set((s) => {
+      const list = [...s.attachments];
+      const at = list.findIndex((a) => a.id === attachment.id);
+      if (at >= 0) list[at] = attachment;
+      else list.splice(index ?? list.length, 0, attachment);
+      return { attachments: list };
+    });
+    this.events.emit({ type: 'attachments:changed' });
+  }
+
+  /** Removes an attachment record; returns it with its position, for undo (M12). */
+  removeAttachmentRecord(id: ModelId): { attachment: ModelAttachment; index: number } | null {
+    const index = this.state.attachments.findIndex((a) => a.id === id);
+    if (index < 0) return null;
+    const attachment = this.state.attachments[index];
+    if (!attachment) return null;
+    this.store.set((s) => ({ attachments: s.attachments.filter((a) => a.id !== id) }));
+    this.events.emit({ type: 'attachments:changed' });
+    return { attachment, index };
+  }
+
+  /**
+   * Re-binds attachment ids to the engine's positional keys after an add or a delete (M12).
+   *
+   * PDFium names an embedded file by its index in the name tree, so removing one renumbers
+   * every attachment after it — the same hazard M20 met with annotations. The model's ids never
+   * move; this puts the *engine* keys back in step by walking the two lists together.
+   */
+  rebindAttachments(engineIds: ReadonlyArray<string>): void {
+    const list = this.state.attachments.filter((a) => a.pageId === null);
+    list.forEach((attachment, i) => {
+      const key = engineIds[i];
+      if (key === undefined) return;
+      this.idTable.bind('attachment', attachment.id, key);
+      if (attachment.engineId !== key) {
+        this.store.set((s) => ({
+          attachments: s.attachments.map((a) =>
+            a.id === attachment.id ? { ...a, engineId: key } : a,
+          ),
+        }));
+      }
+    });
+  }
+
   /** Writes into a module's namespace of the custom bag. */
   setCustomRecord(namespace: string, values: Readonly<Record<string, unknown>>): void {
     this.store.set((s) => ({

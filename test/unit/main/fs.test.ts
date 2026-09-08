@@ -1,6 +1,7 @@
 /**
  * The main process's filesystem layer (M21): atomic writes, the read-only probe, the recovery
- * store, the changed-on-disk watcher and the close broker.
+ * store, the changed-on-disk watcher and the close broker — plus M12's temp-file naming, which
+ * is the one place a string that came out of a PDF becomes a path on the operator's disk.
  *
  * These run against a real temporary directory rather than a mocked `fs`, because what is being
  * tested is exactly the behaviour of a real filesystem — that a rename is atomic, that a
@@ -17,12 +18,13 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { probeFile, writeAtomic } from '../../../src/main/fs/atomic';
 import { CloseBroker } from '../../../src/main/fs/lifecycle';
 import { RecoveryStore } from '../../../src/main/fs/recovery';
 import { FileWatchers } from '../../../src/main/fs/watcher';
+import { safeFileName } from '../../../src/main/files';
 
 let dir: string;
 
@@ -395,5 +397,43 @@ describe('the close broker', () => {
     broker.setUnsaved(1, true);
     broker.approve(1);
     expect(broker.shouldHold(1)).toBe(false);
+  });
+});
+
+describe('safeFileName (M12, ADR 0011)', () => {
+  it('keeps an ordinary name as it is', () => {
+    expect(safeFileName('boarding pass.pdf')).toBe('boarding pass.pdf');
+    expect(safeFileName('résumé (2).docx')).toBe('résumé (2).docx');
+  });
+
+  it('refuses to walk out of the temp directory', () => {
+    // A file specification inside a PDF is free to say this; nothing else stops it. What has to
+    // be true is that the result is one path segment — dots without a separator go nowhere.
+    for (const name of ['../../.bashrc', 'C:\\Windows\\evil.exe', '/etc/passwd', 'a/b/c']) {
+      const safe = safeFileName(name);
+      expect(basename(safe)).toBe(safe);
+      expect(safe.startsWith('.')).toBe(false);
+    }
+    expect(safeFileName('../../.bashrc')).not.toContain('/');
+    expect(safeFileName('C:\\Windows\\System32\\evil.exe')).not.toContain('\\');
+    expect(safeFileName('/etc/passwd')).not.toContain('/');
+  });
+
+  it('drops control characters and the punctuation Windows will not take', () => {
+    expect(safeFileName('a\u0000b\u001fc\u007fd')).toBe('a_b_c_d');
+    expect(safeFileName('a:b*c?d"e<f>g|h')).toBe('a_b_c_d_e_f_g_h');
+  });
+
+  it('never returns nothing, and never returns a name Windows reserves', () => {
+    expect(safeFileName('')).toBe('attachment');
+    expect(safeFileName('...')).toBe('attachment');
+    expect(safeFileName('   ')).toBe('attachment');
+    expect(safeFileName('CON')).toBe('_CON');
+    expect(safeFileName('lpt1.txt')).toBe('_lpt1.txt');
+    expect(safeFileName('connect.pdf')).toBe('connect.pdf');
+  });
+
+  it('caps the length', () => {
+    expect(safeFileName('x'.repeat(400)).length).toBeLessThanOrEqual(120);
   });
 });

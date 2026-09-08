@@ -479,6 +479,13 @@ export interface ModelAttachment {
   readonly mimeType: string | null;
   readonly size: number | null;
   readonly modified: string | null;
+  /** `/CreationDate` of the embedded stream (M12, ADR 0011). */
+  readonly created: string | null;
+  /**
+   * Values of a PDF Portfolio's custom schema fields for this file, keyed by field key (M12,
+   * ADR 0011). Empty for an ordinary attachment.
+   */
+  readonly collectionFields: Readonly<Record<string, string>>;
   /** Set when the attachment comes from a FileAttachment annotation. */
   readonly pageId: ModelId | null;
 }
@@ -551,6 +558,14 @@ export type WriteIntent =
   | 'metadata'
   | 'layers'
   | 'outline'
+  /** Named destinations were edited; the writer rebuilds `/Names /Dests` (M12, ADR 0011). */
+  | 'destinations'
+  /**
+   * Embedded files were edited (M12, ADR 0011). The engine took the bytes and the name; the
+   * description and the MIME type it could only write into `/Params`, so the writer moves them
+   * to the file specification where a reader looks for them.
+   */
+  | 'attachments'
   | 'annotations'
   | 'fields'
   | 'custom';
@@ -603,6 +618,8 @@ export function toModelAttachment(
     mimeType: attachment.mimeType ?? null,
     size: attachment.size ?? null,
     modified: attachment.modified ?? null,
+    created: attachment.created ?? null,
+    collectionFields: attachment.collectionFields ?? {},
     pageId,
   };
 }
