@@ -25,6 +25,8 @@ export interface App {
   run(commandId: string, args?: Record<string, unknown>): Promise<unknown>;
   /** All registered command ids. */
   commands(): Promise<string[]>;
+  /** Whether a command's `when` clause and permission allow it right now (M70). */
+  isEnabled(commandId: string): Promise<boolean>;
   close(): Promise<void>;
 }
 
@@ -76,6 +78,12 @@ export async function launchApp(options: LaunchOptions = {}): Promise<App> {
         },
         [id, args ?? {}] as const,
       ),
+    isEnabled: (id) =>
+      page.evaluate((cid) => {
+        const api: YnotTestApi | undefined = window.__ynot;
+        if (!api) throw new Error('window.__ynot missing (not an e2e build?)');
+        return api.isEnabled(cid);
+      }, id),
     commands: () =>
       page.evaluate(() => {
         const api: YnotTestApi | undefined = window.__ynot;

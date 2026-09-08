@@ -1,0 +1,271 @@
+/*
+ * M70 — the Protect dialog, the Security properties panel and the status item.
+ *
+ * Tokens only; nothing transparent. The one rule worth stating here rather than leaving implicit:
+ * the strength meter and the notes carry their meaning in the *word*, and colour is a third cue
+ * behind the word and the icon. The pair chosen separates on the blue–yellow axis and on
+ * lightness, never on red–green (PLAN §3.2), so it still reads for a dichromat.
+ */
+
+.security-lead {
+  margin: 0 0 var(--sp-4);
+  color: var(--fg);
+}
+
+.security-heading {
+  margin: var(--sp-5) 0 var(--sp-2);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-heading);
+  color: var(--fg);
+}
+
+.security-section[hidden] {
+  display: none;
+}
+
+/* ---- the mode switch ------------------------------------------------------------------------ */
+
+.security-modes {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.security-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-control);
+  color: var(--fg);
+  font-weight: var(--fw-body);
+  cursor: pointer;
+}
+
+.security-mode svg {
+  color: var(--icon);
+}
+
+/*
+ * The chosen mode is filled with the accent *and* keeps its `aria-checked`, so the state is
+ * announced as well as drawn. The 2 px border is what carries it for anyone who cannot separate
+ * the fill from the surface.
+ */
+.security-mode[aria-checked='true'] {
+  background: var(--accent);
+  color: var(--fg-on-accent);
+  border-color: var(--accent);
+  border-width: calc(var(--border-width) * 2);
+  font-weight: var(--fw-heading);
+}
+
+.security-mode[aria-checked='true'] svg {
+  color: var(--fg-on-accent);
+}
+
+/* ---- passwords ------------------------------------------------------------------------------ */
+
+.password-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.password-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0;
+}
+
+.check-row label {
+  color: var(--fg);
+}
+
+/* ---- the strength meter --------------------------------------------------------------------- */
+
+.security-strength {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0 0;
+  color: var(--fg);
+}
+
+.security-strength[hidden] {
+  display: none;
+}
+
+.security-strength-icon {
+  display: inline-flex;
+  align-self: center;
+  color: var(--icon);
+}
+
+.security-strength-word {
+  font-weight: var(--fw-heading);
+}
+
+.security-strength-advice {
+  color: var(--fg);
+}
+
+/*
+ * Colour is the third cue, after the word and the icon. Weak reads as warning yellow, strong as
+ * success — but "Very weak" and "Weak" are already spelled out beside them, so nothing is lost if
+ * the two are indistinguishable.
+ */
+.security-strength[data-band='Very weak'] .security-strength-icon,
+.security-strength[data-band='Weak'] .security-strength-icon {
+  color: var(--warning);
+}
+
+.security-strength[data-band='Fair'] .security-strength-icon {
+  color: var(--info);
+}
+
+.security-strength[data-band='Strong'] .security-strength-icon,
+.security-strength[data-band='Very strong'] .security-strength-icon {
+  color: var(--success);
+}
+
+/* ---- notes ---------------------------------------------------------------------------------- */
+
+.security-cautions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+}
+
+.security-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--fg);
+}
+
+.security-note-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--icon);
+}
+
+.security-note[data-kind='caution'] .security-note-icon {
+  color: var(--warning);
+}
+
+.security-note[data-kind='info'] .security-note-icon {
+  color: var(--info);
+}
+
+/* ---- recipients ----------------------------------------------------------------------------- */
+
+.security-recipients {
+  list-style: none;
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
+.security-recipient {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: 'name button' 'detail button';
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  padding: var(--sp-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
+.security-recipient-name {
+  grid-area: name;
+  font-weight: var(--fw-heading);
+  color: var(--fg);
+}
+
+.security-recipient-detail {
+  grid-area: detail;
+  color: var(--fg-muted);
+}
+
+.security-recipient button {
+  grid-area: button;
+}
+
+.security-recipient-empty {
+  padding: var(--sp-3);
+  border: var(--border-width) dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+}
+
+/* ---- the properties panel ------------------------------------------------------------------- */
+
+.security-properties {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.security-property {
+  display: grid;
+  grid-template-columns: minmax(12rem, auto) 1fr;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: var(--border-width) solid var(--border);
+}
+
+.security-property-label {
+  color: var(--fg-muted);
+}
+
+.security-property-value {
+  color: var(--fg);
+  font-weight: var(--fw-heading);
+}
+
+/* ---- the status item ------------------------------------------------------------------------ */
+
+.status-security {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-2);
+  white-space: nowrap;
+}
+
+.status-security[hidden] {
+  display: none;
+}
+
+.status-security-icon {
+  display: inline-flex;
+  color: var(--icon);
+}
+
+.status-security[data-state='Restricted'] .status-security-icon,
+.status-security[data-state='Protection pending'] .status-security-icon {
+  color: var(--warning);
+}
+
+.status-security[data-state='Unlocked'] .status-security-icon {
+  color: var(--info);
+}
