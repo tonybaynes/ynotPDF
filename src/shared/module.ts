@@ -46,6 +46,24 @@ export type CommandCategory =
   | 'Help'
   | 'Developer';
 
+/**
+ * A thing a PDF's security settings can forbid (M70, ADR 0012).
+ *
+ * Declared here rather than in the engine because it is part of the manifest contract: a command
+ * says which permission governs it, and the shell disables it when a registered gate says no.
+ * `src/engine/security/types.ts` re-exports it as `ProtectedAction`, which is the same list under
+ * the name the `/P` bitfield uses.
+ */
+export type CommandPermission =
+  | 'print'
+  | 'print-high'
+  | 'copy'
+  | 'extract-for-accessibility'
+  | 'modify'
+  | 'annotate'
+  | 'fill-forms'
+  | 'assemble';
+
 /** Arguments a command accepts. Must be structured-cloneable (they cross the e2e bridge). */
 export type CommandArgs = Readonly<Record<string, unknown>>;
 
@@ -86,6 +104,14 @@ export interface CommandSpec {
   readonly when?: WhenClause;
   /** If true the palette hides it (still runnable by id, e.g. internal or e2e-only commands). */
   readonly hidden?: boolean;
+  /**
+   * The document permission this command needs (M70, ADR 0012).
+   *
+   * When a `permissionGate` service is registered and says the document forbids it, the command
+   * is disabled and its tooltip says which permission is missing and that the owner password
+   * lifts it. With no gate registered — a build without M70 — this has no effect at all.
+   */
+  readonly permission?: CommandPermission;
   /**
    * Ribbon key tip (the letters shown after Alt), e.g. `"FO"`. Generated from the label when
    * absent (M02, ADR 0004).
