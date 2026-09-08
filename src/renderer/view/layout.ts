@@ -180,7 +180,10 @@ export function layoutPages(
       else col0 = Math.max(col0, box.width);
     }
   }
-  const contentWidth = facing ? (col1 > 0 ? col0 + gap + col1 : col0) : col0;
+  // The gap only exists when both columns do: a one-page book is a page, not a page and a gap.
+  const spine = facing && col0 > 0 && col1 > 0 ? gap : 0;
+  const rightColumnX = col0 > 0 ? col0 + spine : 0;
+  const contentWidth = facing ? rightColumnX + col1 : col0;
 
   const rects: PageRect[] = [];
   const rows: LayoutRow[] = [];
@@ -195,7 +198,7 @@ export function layoutPages(
       // Spine-aligned: the left column is right-aligned, the right column left-aligned.
       const x =
         facing && column === 1
-          ? padding + col0 + gap
+          ? padding + rightColumnX
           : facing
             ? padding + col0 - box.width
             : padding + (contentWidth - box.width) / 2;

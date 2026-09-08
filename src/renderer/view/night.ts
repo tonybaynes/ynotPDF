@@ -13,7 +13,8 @@
  * 2. Map `L` along the theme's ink → paper ramp: `L = 0` (black ink) becomes `--page-ink-night`
  *    (light), `L = 255` (white paper) becomes `--page-paper-night` (dark). That is the
  *    inversion, and it lands on the theme's own two colours rather than on pure black/white.
- * 3. Add the deviation back, scaled by `chroma`, and clamp.
+ * 3. Add the deviation back, scaling it down if a channel would otherwise leave 0..255 — which
+ *    keeps the hue exact instead of letting the clip bend it.
  *
  * A red heading therefore stays red, a blue link stays blue, and the paper turns the same dark
  * the placeholder page uses. Photographs read as photographs — but they still lose their
@@ -112,6 +113,11 @@ export const FALLBACK_PALETTE: NightPalette = {
 
 /**
  * Applies the night transform to RGBA pixels **in place**. Alpha is untouched.
+ *
+ * The colour deviation is scaled down rather than clipped when adding it back would take a
+ * channel outside 0..255. Letting `Uint8ClampedArray` clip instead would bend the hue — a
+ * saturated violet came out nearly 40° away — whereas scaling the whole deviation vector keeps
+ * its direction, so the hue is exact and only the saturation gives a little.
  */
 export function applyNight(
   rgba: Uint8ClampedArray,
@@ -125,10 +131,24 @@ export function applyNight(
     const b = rgba[i + 2] ?? 0;
     const l = luma(r, g, b);
     const base = Math.round(l) * 3;
-    rgba[i] = (ramp[base] ?? 0) + (r - l) * chroma;
-    rgba[i + 1] = (ramp[base + 1] ?? 0) + (g - l) * chroma;
-    rgba[i + 2] = (ramp[base + 2] ?? 0) + (b - l) * chroma;
+    const br = ramp[base] ?? 0;
+    const bg = ramp[base + 1] ?? 0;
+    const bb = ramp[base + 2] ?? 0;
+    const dr = r - l;
+    const dg = g - l;
+    const db = b - l;
+    const k = Math.min(chroma, headroom(br, dr), headroom(bg, dg), headroom(bb, db));
+    rgba[i] = br + dr * k;
+    rgba[i + 1] = bg + dg * k;
+    rgba[i + 2] = bb + db * k;
   }
+}
+
+/** How far a deviation can be applied to a base level before the channel leaves 0..255. */
+function headroom(base: number, deviation: number): number {
+  if (deviation > 0) return (255 - base) / deviation;
+  if (deviation < 0) return -base / deviation;
+  return Number.POSITIVE_INFINITY;
 }
 
 /** An integer pixel rectangle inside a bitmap. */
