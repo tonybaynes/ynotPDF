@@ -25,6 +25,9 @@ export interface PerfSample {
   readonly queued: number;
   readonly inFlight: number;
   readonly frames: number;
+  /** Tiles the engine has rendered since the last `reset()`. */
+  readonly rendered: number;
+  readonly cancelled: number;
 }
 
 /** Below this the HUD says so in words. */
@@ -37,6 +40,8 @@ export class PerfHud {
   private raf = 0;
   private running = false;
   private last = 0;
+  private renderedAtReset = 0;
+  private cancelledAtReset = 0;
 
   constructor(renderer: TileRenderer) {
     this.renderer = renderer;
@@ -87,6 +92,9 @@ export class PerfHud {
   reset(): void {
     this.times.length = 0;
     this.renderer.cache.resetStats();
+    const stats = this.renderer.stats();
+    this.renderedAtReset = stats.rendered;
+    this.cancelledAtReset = stats.cancelled;
     this.last = performance.now();
   }
 
@@ -107,6 +115,8 @@ export class PerfHud {
       queued: stats.queued,
       inFlight: stats.inFlight,
       frames,
+      rendered: stats.rendered - this.renderedAtReset,
+      cancelled: stats.cancelled - this.cancelledAtReset,
     };
   }
 
