@@ -486,11 +486,16 @@ export class SelectFindService {
 
   /**
    * Copies the image object under the last pointer position as a PNG. Foxit puts this on the
-   * right-click menu of an image; the page object list is how we know one is there.
+   * right-click menu of an image; the page object list is how we know one is there. `at` names a
+   * point in page space instead, which is how the e2e suite aims at a known picture.
    */
-  async copyImageUnderPointer(): Promise<boolean> {
+  async copyImageUnderPointer(at?: {
+    readonly page: number;
+    readonly x: number;
+    readonly y: number;
+  }): Promise<boolean> {
     const source = this.activeSource();
-    const point = this.lastPointer;
+    const point = at ?? this.lastPointer;
     if (!source || !point) return false;
     const objects = await this.engine.pageObjects(source.handle, point.page);
     // Topmost first: the object list is in z-order.

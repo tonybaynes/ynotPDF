@@ -281,6 +281,39 @@ test.describe('text selection', () => {
     expect(formats.some((t) => t.includes('rtf') || t === 'text/plain')).toBe(true);
   });
 
+  test('Copy Image takes the picture under the pointer, and nothing when there is none', async () => {
+    await open('image.pdf');
+    const model = (await app.run('dev.textLayer', { page: 0 })) as TextModel;
+    expect(model.text).toContain('Embedded');
+    // The fixture draws its 64 x 64 PNG at 256 pt square, with its top-left at (72, 493.89).
+    expect(await app.run('edit.copyImage', { page: 0, x: 200, y: 620 })).toBe(true);
+    const size = await app.electron.evaluate(async ({ clipboard }) => {
+      const items = await clipboard.read();
+      const image = items.find((item) => item.types.includes('image/png'));
+      if (!image) return null;
+      const blob = await image.getType('image/png');
+      return blob instanceof Blob ? blob.size : null;
+    });
+    expect(must(size, 'clipboard image size')).toBeGreaterThan(100);
+    // Blank paper is not a picture, and the command says so rather than copying the page.
+    expect(await app.run('edit.copyImage', { page: 0, x: 500, y: 100 })).toBe(false);
+  });
+
+  test('a right-click records where the pointer was, for the context menu', async () => {
+    await open('image.pdf');
+    const box = must(
+      await app.page.locator('.viewer-content .page').first().boundingBox(),
+      'page box',
+    );
+    // Right-click over the big image: page (72..328, 494..750) of an A4 page.
+    const scale = box.width / 595.28;
+    await app.page.mouse.move(box.x + 200 * scale, box.y + (841.89 - 620) * scale);
+    await app.page.mouse.down({ button: 'right' });
+    await app.page.mouse.up({ button: 'right' });
+    await app.page.keyboard.press('Escape');
+    expect(await app.run('edit.copyImage')).toBe(true);
+  });
+
   test('Deselect clears the selection and its highlights', async () => {
     await open('text.pdf');
     await app.run('edit.selectAll');

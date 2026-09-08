@@ -296,7 +296,7 @@ is colourblind: black and red read as the same colour):**
 
 **Built 2026-09-08 on `mod/M13-select-find-print` (worktree `../ynotPDF-M13`).** Green locally on
 Windows: lint (eslint, prettier, the colour/opacity rules, `tsc` on both projects), 1 708 unit
-tests with the coverage gates, 157 Playwright tests.
+tests with the coverage gates, 159 Playwright tests.
 
 **Shipped:**
 

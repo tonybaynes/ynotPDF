@@ -236,7 +236,16 @@ export default defineModule({
       icon: 'image',
       description: 'Copy the image under the pointer to the clipboard',
       when: open,
-      run: (ctx) => service(ctx).copyImageUnderPointer(),
+      run: (ctx) => {
+        // `{ page, x, y }` in page space aims at a picture without a pointer; the menu passes
+        // nothing and the last place the pointer went down is used.
+        const { page, x, y } = ctx.args as { page?: number; x?: number; y?: number };
+        const at =
+          typeof page === 'number' && typeof x === 'number' && typeof y === 'number'
+            ? { page, x, y }
+            : undefined;
+        return service(ctx).copyImageUnderPointer(at);
+      },
     },
     {
       id: 'edit.copyAsText',
