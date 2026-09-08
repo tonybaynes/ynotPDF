@@ -92,8 +92,15 @@ qualify, and is drawn by the annotation overlay until a save can attach real res
 ### 5. `fonts:list` IPC, and what a system font means
 
 Main walks the OS font directories and parses each file's sfnt `name` table for its family name
-(id 16 where a font has one, else id 1), caching the answer for the life of the process. About
-sixty lines, no new libraries.
+(id 16 where a font has one, else id 1), caching the answer for the life of the process. About a
+hundred lines, no new libraries.
+
+It reads **a few hundred bytes per font, not the font**. This runs in the main process, so a slow
+walk is a frozen window; the first version read each file whole and took over thirty seconds on a
+Windows CI runner. A font's table directory sits at a known offset and names its `name` table's
+offset and length, so two small reads answer the question whatever the file's size — and a
+wall-clock budget stops a network font folder or a spinning disk from holding the picker open
+anyway. The same walk now takes about 80 ms.
 
 A family that is not one of the base 14 is written into `/DA` and into a plain non-embedded
 TrueType font dictionary, and laid out with the metrics of the standard face it maps to. **Nothing

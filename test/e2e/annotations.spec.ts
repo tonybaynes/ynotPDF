@@ -622,16 +622,40 @@ test.describe('the properties panel', () => {
 test.describe('copy and paste', () => {
   test.afterEach(closeAll);
 
+  /**
+   * Whether this machine's clipboard works at all, asked of the OS with nothing of ours in the
+   * question.
+   *
+   * Windows' clipboard can wedge — the service keeps running, writes report success and reads come
+   * back empty, for every application on the machine at once. A comment test that failed then
+   * would be saying something false: it would report a broken feature where there is a broken
+   * desktop. So the round trip is checked first, and the test says which of the two it found.
+   */
+  async function clipboardWorks(): Promise<boolean> {
+    const probe = `ynot-clipboard-probe-${Date.now()}`;
+    return await app.electron.evaluate(async ({ clipboard }, value) => {
+      try {
+        await clipboard.writeText(value);
+        return (await clipboard.readText()) === value;
+      } catch {
+        return false;
+      }
+    }, probe);
+  }
+
   test('annotations copy and paste between two documents', async () => {
+    test.skip(!(await clipboardWorks()), 'this machine’s clipboard is not working at all');
     await openPath(stage('text.pdf', 'source.pdf'));
     await app.run('annot.note', { page: 0, x: 200, y: 600 });
     await app.run('annot.textbox', { page: 0, rect: { x0: 60, y0: 300, x1: 300, y1: 340 } });
     await app.page.waitForTimeout(200);
     await app.run('annot.selectAll');
+    // Two, not "it tried": a copy that the OS refused reports 0 rather than claiming it worked.
     expect(await app.run('annot.copy')).toBe(2);
-
     await openPath(stage('multipage.pdf', 'target.pdf'));
     expect((await annotations()).length).toBe(0);
+    // The payload really is on the OS clipboard, in the form the decoder expects.
+    expect(await app.run('dev.annotClipboard')).toMatchObject({ isOurs: true, annotations: 2 });
     const pasted = (await app.run('annot.paste')) as string[];
     await app.page.waitForTimeout(250);
     expect(pasted.length).toBe(2);
@@ -643,6 +667,7 @@ test.describe('copy and paste', () => {
   });
 
   test('cut removes the originals and paste puts them back, offset on the same page', async () => {
+    test.skip(!(await clipboardWorks()), 'this machine’s clipboard is not working at all');
     await openPath(stage('text.pdf', 'cut.pdf'));
     const id = (await app.run('annot.note', { page: 0, x: 200, y: 600 })) as string;
     await app.page.waitForTimeout(200);
@@ -778,6 +803,45 @@ test.describe('the saved file', () => {
     return await page.screenshot();
   }
 
+  /**
+   * The fraction of pixels that differ between two PNGs, measured in a browser.
+   *
+   * Node here has no image decoder, and the two pictures are Chromium's own output — so they are
+   * decoded and compared by a Chromium, on canvases of a common size. A channel has to move by
+   * more than 8/255 to count, which ignores the re-encoding and the anti-aliasing and notices
+   * anything a reader would.
+   */
+  async function differingFraction(page: Page, a: Buffer, b: Buffer): Promise<number> {
+    await page.goto('about:blank');
+    return await page.evaluate(
+      async ([first, second]) => {
+        const load = async (data: string): Promise<ImageBitmap> =>
+          await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
+        const [x, y] = await Promise.all([load(first ?? ''), load(second ?? '')]);
+        const width = Math.min(x.width, y.width);
+        const height = Math.min(x.height, y.height);
+        const pixels = (bitmap: ImageBitmap): Uint8ClampedArray => {
+          const canvas = new OffscreenCanvas(width, height);
+          const context = canvas.getContext('2d');
+          if (!context) throw new Error('no 2d context');
+          context.drawImage(bitmap, 0, 0);
+          return context.getImageData(0, 0, width, height).data;
+        };
+        const one = pixels(x);
+        const two = pixels(y);
+        let differing = 0;
+        for (let i = 0; i < one.length; i += 4) {
+          const dr = Math.abs((one[i] ?? 0) - (two[i] ?? 0));
+          const dg = Math.abs((one[i + 1] ?? 0) - (two[i + 1] ?? 0));
+          const db = Math.abs((one[i + 2] ?? 0) - (two[i + 2] ?? 0));
+          if (dr > 8 || dg > 8 || db > 8) differing++;
+        }
+        return differing / (width * height);
+      },
+      [a.toString('base64'), b.toString('base64')] as const,
+    );
+  }
+
   test('annotations survive a save and a reopen, and the raster then carries them all', async () => {
     const path = stage('text.pdf', 'saved.pdf');
     await openPath(path);
@@ -827,16 +891,35 @@ test.describe('the saved file', () => {
       const withAnnotations = await chromeShot(page, annotated);
       const without = await chromeShot(page, plain);
       const same = await chromeShot(page, annotated);
-      await page.close();
+      const scratch = await browser.newPage();
 
       /*
        * A perceptual comparison of the only kind that is fair between two renderers: the same
        * viewer, at the same size, on the file with our annotations and on the file without them.
-       * Identical bytes give an identical picture; ours give a different one — which is Chrome's
+       * The same file twice gives the same picture; ours gives a different one — which is Chrome's
        * PDFium drawing the appearance streams the writer attached.
+       *
+       * **Perceptual, not byte-for-byte.** The first version compared the PNG bytes and failed on
+       * a macOS runner: a viewer's toolbar fades, a focus ring blinks, and a scrollbar settles a
+       * frame late, so two screenshots of one file are alike without being identical. The pixels
+       * are counted instead, with a tolerance far below the difference an annotation makes.
        */
-      expect(withAnnotations.equals(same)).toBe(true);
-      expect(withAnnotations.equals(without)).toBe(false);
+      const noise = await differingFraction(scratch, withAnnotations, same);
+      const signal = await differingFraction(scratch, withAnnotations, without);
+      await scratch.close();
+      await page.close();
+
+      /*
+       * The thresholds are small because the screenshot is mostly viewer chrome and grey margin:
+       * three annotations on one page move about half a per cent of it. What carries the weight is
+       * the *ratio* — the difference our annotations make against the difference two shots of one
+       * file make, which is the only scale-free way to say "this is signal, not noise".
+       */
+      expect(noise, 'two shots of the same file should look the same').toBeLessThan(0.001);
+      expect(signal, 'our annotations should be visible in Chrome').toBeGreaterThan(0.002);
+      expect(signal, 'the annotations should stand out from the noise').toBeGreaterThan(
+        Math.max(noise * 10, 0.002),
+      );
       expect(withAnnotations.byteLength).toBeGreaterThan(1000);
     } finally {
       await browser.close();

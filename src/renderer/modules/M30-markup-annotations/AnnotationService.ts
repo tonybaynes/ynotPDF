@@ -33,6 +33,7 @@ import {
   draftAnnotation,
 } from '@core/commands';
 import type { PdfEngine } from '@engine/PdfEngine';
+import { hasBridge, invoke } from '@shared/ipc';
 import type { PdfPoint, PdfRect } from '@shared/pdf';
 import {
   appearanceInput,
@@ -903,7 +904,13 @@ export class AnnotationService {
       annotation: a,
       page: document?.pageIndex(a.pageId) ?? 0,
     }));
-    await writeText(encodeAnnotations(payload));
+    // A refused clipboard means nothing was copied, and saying "2 copied" would be a lie the
+    // reader only finds out about when the paste does nothing.
+    const written = await writeText(encodeAnnotations(payload));
+    if (!written) {
+      this.shell.toasts.show({ kind: 'error', text: 'The clipboard could not be written to' });
+      return 0;
+    }
     return annotations.length;
   }
 
@@ -1114,16 +1121,40 @@ function toEngineShape(a: ModelAnnotation): Record<string, unknown> {
   };
 }
 
-async function writeText(text: string): Promise<void> {
+/**
+ * The clipboard goes through **main**, not through `navigator.clipboard`.
+ *
+ * Electron's renderer has the async clipboard API but it is not the OS clipboard the app is
+ * really talking to: a write from a `page.evaluate` reports success and lands nowhere, and
+ * `readText()` resolves to an empty string because `clipboard-read` is a permission the app has
+ * not granted itself. Main's `clipboard` module is the one that works, and M13 already reaches it
+ * — this uses the same two channels.
+ *
+ * `navigator.clipboard` stays as the fallback for the dev server, where there is no bridge.
+ * Returns whether the write actually happened, so a refused copy can say so rather than claim it
+ * worked.
+ */
+async function writeText(text: string): Promise<boolean> {
   try {
+    if (hasBridge()) {
+      await invoke('clipboard:write', { text });
+      return true;
+    }
     await navigator.clipboard.writeText(text);
+    return true;
   } catch {
-    // A denied clipboard is not an error worth a dialog; the copy simply did not happen.
+    return false;
   }
+}
+
+/** What the clipboard holds, as text. Exported for the acceptance test's probe. */
+export async function readClipboardText(): Promise<string> {
+  return await readText();
 }
 
 async function readText(): Promise<string> {
   try {
+    if (hasBridge()) return (await invoke('clipboard:read')).text;
     return await navigator.clipboard.readText();
   } catch {
     return '';

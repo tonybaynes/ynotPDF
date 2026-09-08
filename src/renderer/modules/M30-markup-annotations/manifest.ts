@@ -29,12 +29,19 @@ import type { Registry } from '@core/Registry';
 import type { ModelId } from '@core/Ids';
 import type { EngineClient } from '@engine/EngineClient';
 import { appearanceInput, defaultAppearanceService, intentOf, styleOf } from '@engine/appearance';
+import { hasBridge } from '@shared/ipc';
 import { defineModule, type CommandSpec, type ServiceContext } from '@shared/module';
-import { AnnotationService, ANNOTATION_SERVICE, PROPERTIES_PANEL_ID } from './AnnotationService';
+import {
+  AnnotationService,
+  ANNOTATION_SERVICE,
+  PROPERTIES_PANEL_ID,
+  readClipboardText,
+} from './AnnotationService';
 import { AnnotationController } from './AnnotationController';
 import { openInlineEditor, type InlineEditorHandle } from './InlineEditor';
 import { openNotePopup, type NotePopupHandle } from './NotePopup';
 import { mountPropertiesPanel } from './PropertiesPanel';
+import { decodeAnnotations, looksLikeAnnotations } from './clipboard';
 import { drawnByOverlay, isOurs } from './shapes';
 import { ANNOTATION_SETTINGS_SCHEMA, type AnnotationToolId } from './settings';
 import {
@@ -46,7 +53,12 @@ import {
   TYPEWRITER_TOOL,
 } from './tools';
 
-export { AnnotationService, ANNOTATION_SERVICE, PROPERTIES_PANEL_ID } from './AnnotationService';
+export {
+  AnnotationService,
+  ANNOTATION_SERVICE,
+  PROPERTIES_PANEL_ID,
+  readClipboardText,
+} from './AnnotationService';
 
 /*
  * Registered at module scope, not in `activate`: the ribbon is built when the shell mounts, which
@@ -620,6 +632,24 @@ export default defineModule({
         return stream === null
           ? null
           : { content: stream.content, bbox: stream.bbox, fonts: stream.resources.fonts };
+      },
+    },
+    {
+      id: 'dev.annotClipboard',
+      label: 'What the clipboard holds for us',
+      category: 'Developer',
+      hidden: true,
+      description: 'Internal: the annotation payload on the clipboard, and what the OS offers',
+      when: hasService,
+      run: async () => {
+        const raw = await readClipboardText();
+        return {
+          bridge: hasBridge(),
+          length: raw.length,
+          isOurs: looksLikeAnnotations(raw),
+          annotations: decodeAnnotations(raw).length,
+          head: raw.slice(0, 40),
+        };
       },
     },
     {

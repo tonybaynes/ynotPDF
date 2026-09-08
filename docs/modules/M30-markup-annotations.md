@@ -365,6 +365,21 @@ is colourblind: black and red read as the same colour):**
 - **An empty typewriter draws nothing at all**, because it is words on the page and nothing else.
   That is correct, and it is why the inline editor removes a box nothing was typed into; the
   acceptance test states it rather than papering over it.
+- **The font list froze the main process for half a minute.** It read every font file whole to
+  find a name that lives in a few hundred bytes, and timed out at thirty seconds on a Windows CI
+  runner — which in the app is a window that does not repaint. It now reads the table directory and
+  then just the `name` table, through a file descriptor, with a wall-clock budget behind it. The
+  same walk takes about 80 ms, and the test times it rather than only checking its answer.
+- **`navigator.clipboard` reports success and reaches nothing.** Copy and paste went through the
+  renderer's async clipboard API; in Electron a write from a command resolves and lands nowhere,
+  and `readText()` resolves to an empty string because `clipboard-read` is a permission the app
+  never granted itself. They go through main now — the same two channels M13 uses — and a copy the
+  OS refuses returns 0 and says so, rather than reporting the count and leaving the reader to find
+  out at the paste.
+- **Two screenshots of one file are alike without being identical.** The Chrome acceptance compared
+  PNG bytes, and a macOS runner disagreed: a toolbar fades, a focus ring blinks, a scrollbar settles
+  a frame late. The pixels are counted now, in a Chromium — a channel has to move by more than
+  8/255 to count — with a tolerance far below the difference an annotation makes.
 - **A page can be pushed under the chrome.** Choosing the Comment tab makes the ribbon taller and
   selecting an annotation opens the right pane, and either can move the part of a page a test was
   clicking at behind them. The e2e clicks pages through their own coordinates now, which is also
