@@ -10,4 +10,5 @@ folder is empty. Do not copy, upload or describe their contents in commits, ADRs
 | `241109 B-Pass AMB.pdf`    | 1     | unknown producer, PDF 1.7                       | Boarding pass, single page                                                       |
 | `220909 Cemair AMB 4D.pdf` | 2     | Edge "print to PDF" (Skia), PDF 1.4, **tagged** | Browser-printed itinerary: tagged structure, web fonts, links                    |
 
-Add rows as files arrive (2026-09-08: first three from the operator).
+| `Sample Portfolio.pdf` | 1 (cover) | Foxit PDF Editor, PDF 1.7 | **PDF Portfolio** (`/Collection`): the three files above embedded as attachments; cover sheet page. For attachments panel, portfolio open/extract, save round-trip |
+Add rows as files arrive (2026-09-08: first four from the operator).
