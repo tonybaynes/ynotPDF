@@ -112,17 +112,37 @@ one**: the job picked up a `windows-11-arm` runner on the first push of this bra
 arm64 installer installed on it. ARM CI is available to this repository — the fallback of
 documenting an untested arm64 build is not needed.
 
-The job takes the packaged arm64 NSIS installer from the Windows job, installs it silently, and
-drives the installed `ynotPDF.exe` through the Playwright `app.about` smoke with
-`YNOT_EXPECT_ARCH=arm64`, which asserts the About dialog reads exactly `Windows arm64` — i.e. the
-arm64 binaries really are running natively, not under emulation.
+The job takes the packaged arm64 installers from the Windows job, installs silently, and drives
+the installed `ynotPDF.exe` through the Playwright `app.about` smoke with `YNOT_EXPECT_ARCH=arm64`,
+which asserts the About dialog reads exactly `Windows arm64` — i.e. the arm64 binaries really are
+running natively, not under emulation. The engine worker round-trip runs there too, so PDFium's
+WebAssembly is exercised on ARM.
 
-One trap, worth keeping: **`perMachine: false` only sets the installer's default.** The runner
-user is an administrator, so the first elevated `/S` install chose all-users and landed in
-`C:\Program Files\ynotPDF`, not `%LOCALAPPDATA%\Programs`. The step now passes `/S /currentuser`
-and reads the location back from the uninstall registry key rather than assuming a path —
-and because electron-builder leaves `InstallLocation` empty, it parses `DisplayIcon` and
-`UninstallString` as well.
+Two traps, both worth keeping.
+
+**`perMachine: false` only sets the installer's default.** The runner user is an administrator, so
+the first elevated `/S` install chose all-users and landed in `C:\Program Files\ynotPDF`, not
+`%LOCALAPPDATA%\Programs`. The step passes `/S /currentuser` and reads the location back from the
+uninstall registry key rather than assuming a path — and because electron-builder leaves
+`InstallLocation` empty there, it parses `DisplayIcon` and `UninstallString` as well.
+
+**The NSIS installer does not survive this runner, so CI installs the MSI.** On every attempt the
+NSIS silent install exited 0 and produced an install directory containing `locales/`,
+`resources/app.asar` and every `.pak`/`.dat`/`.bin` data file — and _none_ of the PE binaries: no
+`ynotPDF.exe`, no DLLs. NSIS unpacks to `%TEMP%` and then `CopyFiles /SILENT` into the install
+directory, swallowing failures, and Defender removes the unsigned binaries in between. It cannot
+be switched off on the hosted image: `Set-MpPreference -DisableRealtimeMonitoring $true` reports
+success and `Get-MpPreference` still returns `False` (Tamper Protection), and path exclusions
+changed nothing. `msiexec /qn` works because Windows Installer writes the files itself instead of
+copying them out of a temp directory. The job therefore tries NSIS first, falls back to the MSI,
+and prints which one produced the app; today that is always the MSI.
+
+This is a property of unsigned binaries on an aggressive scanner, not of the arm64 build — the
+same NSIS installer installs correctly on a normal machine (verified on x64, and it is what the
+operator's manual smoke checks on real ARM hardware). **M131 signs the installers, which is the
+actual fix**; when it lands, re-check whether the NSIS path passes here and drop the fallback.
+Until then, an unsigned NSIS install can silently lose its executable on any machine with strict
+AV — which is why step 3 of the manual checklist below is "check the executable is there".
 
 The job is `continue-on-error: false` and part of the definition of done for Windows on ARM. If
 GitHub ever withdraws the label from this repository the job will fail to start; the response is
@@ -131,15 +151,19 @@ never to leave a job that silently skips.
 
 ## Manual smoke on a real ARM device
 
-Kept regardless of CI, because CI installs into a clean runner image and the operator's PC is
-not one. Run after any change to packaging or to a native binary:
+Kept regardless of CI, and it covers what CI cannot: CI installs the **MSI** into a clean runner
+image, so the **NSIS** installer — the one users are pointed at — is only ever exercised on ARM by
+hand. Run after any change to packaging or to a native binary:
 
-1. Download `ynotPDF-<ver>-win-arm64.exe` from the run's `installers-windows-latest` artifact.
+1. Download `ynotPDF-<ver>-win-arm64.exe` from the run's `installers-win-arm64` artifact.
 2. Install it (per-user, no elevation needed).
-3. Launch, open Help ▸ About ynotPDF. The **Platform** row must read `Windows arm64`. If it
+3. Check `%LOCALAPPDATA%\Programs\ynotPDF` actually contains `ynotPDF.exe` and the `.dll` files.
+   Until M131 signs the builds, a strict AV can remove the unsigned binaries mid-install while
+   NSIS still reports success — that is exactly what happens on GitHub's ARM runner.
+4. Launch, open Help ▸ About ynotPDF. The **Platform** row must read `Windows arm64`. If it
    reads `Windows x64 (emulated on arm64)` the x64 installer was used by mistake.
-4. Open a PDF and check it renders — that exercises the WebAssembly engine on ARM.
-5. Run `ynotPDF-<ver>-win-arm64.exe` on an **x64** PC and confirm the refusal message appears
+5. Open a PDF and check it renders — that exercises the WebAssembly engine on ARM.
+6. Run `ynotPDF-<ver>-win-arm64.exe` on an **x64** PC and confirm the refusal message appears
    instead of a broken install.
 
 ## Consequences

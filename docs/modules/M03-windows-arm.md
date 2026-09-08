@@ -284,13 +284,93 @@ electron-builder 26.15.3's own NSIS/MSI code, not from its documentation.
    smoke. If the run cannot get a runner, the job goes and the ADR/README say
    so plainly. Either way the operator's own ARM PC gets a manual checklist.
 
-   Outcome: the runner **is** available — the job picked one up on the first
-   push and the arm64 installer installed on it. The one correction needed was
-   in the job, not the packaging: `perMachine: false` only sets the installer's
-   *default*, and the runner user is an admin, so the elevated `/S` install
-   went all-users. The step now passes `/S /currentuser` and reads the install
-   location back from the uninstall registry key.
+   Outcome: the runner **is** available and the smoke passes on real ARM
+   hardware. Two corrections were needed, both in the job rather than the
+   packaging. First, `perMachine: false` only sets the installer's *default*,
+   and the runner user is an admin, so the elevated `/S` install went
+   all-users; the step now passes `/S /currentuser` and reads the install
+   location back from the uninstall registry key. Second — and this one is
+   worth remembering — **the NSIS installer cannot complete on that image**:
+   Defender removes the unsigned PE binaries from NSIS's `%TEMP%` unpack
+   directory while `CopyFiles /SILENT` swallows the failure, leaving an install
+   with `app.asar` and every `.pak` but no `ynotPDF.exe` and no DLLs, and
+   Tamper Protection makes `Set-MpPreference` a no-op that still reports
+   success. CI installs the arm64 **MSI** instead (msiexec writes through
+   Windows Installer, so it is unaffected). Signing in M131 is the real fix.
+   Consequence: the NSIS path on ARM is covered only by the operator's manual
+   smoke, and the checklist now starts by checking the executable is there.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Shipped (2026-09-08).** Branch `mod/M03-windows-arm` in worktree `../ynotPDF-M03`.
+
+- `electron-builder.yml`: Windows `nsis` and `msi` for `arch: [x64, arm64]`,
+  `nsis.buildUniversalInstaller: false` (one installer per arch, no combined
+  double-payload one), `nsis.include: resources/build/installer.nsh`.
+  Four artifacts per push: `ynotPDF-<ver>-win-{x64,arm64}.{exe,msi}`.
+- `resources/build/installer.nsh` (new): `customInit` macro refusing an
+  arm64-only installer on a non-ARM64 PC. **electron-builder has no such guard
+  of its own** — the brief's premise was wrong, and the ADR records what its
+  NSIS templates actually do.
+- `scripts/fetch-binaries.ts`: `resolveTarget()` (flags → `YNOT_TARGET` → host)
+  and `checkArm64Coverage()`, which fails before any download when an entry has
+  `win32-x64` without `win32-arm64` or `"arm64Fallback": "wasm"`, naming the
+  module. `BinaryEntry`/`Manifest` exported for the tests.
+- `src/main/arch.ts` (new): `targetArch()`, `targetPlatform()`,
+  `binaryTarget()`, `hostArch()`, `isEmulated()`, `archLabel()`.
+  `src/shared/platform.ts` (new): `platformName()`, `platformLabel()`,
+  `binaryTargetKey()`.
+- Shared-file edits, minimal and additive: `AppInfo.hostArch` (`src/shared/ipc.ts`),
+  `app:info` fills it (`src/main/ipc.ts`), About dialog shows
+  `platformLabel(...)` and tags each `<dd>` with `data-field`
+  (`src/renderer/app/dialogs.ts`).
+- Tests: `test/unit/arch.test.ts` (24 assertions over injected arch/platform/env,
+  including the emulation cases), `test/unit/fetch-binaries.test.ts` (+9:
+  coverage rule, `resolveTarget` precedence, and the real manifest passes),
+  `test/e2e/arch.spec.ts` (About names the arch; `YNOT_EXPECT_ARCH` asserts an
+  exact one). 1161 unit tests and 62 e2e green.
+- CI: Windows job cross-packages both arches (`--win --x64 --arm64`) and fails if
+  any of the four installers is missing; new `windows-11-arm` job installs the
+  arm64 build on GitHub's hosted ARM runner and runs the smoke with
+  `YNOT_EXPECT_ARCH=arm64`.
+
+**Verified.**
+
+- Locally on x64 (2026-09-08): arm64 NSIS `/S` → exit 1, nothing installed
+  (guard holds); x64 NSIS `/S /currentuser` → installs, smoke passes, About reads
+  `Windows x64`; x64 MSI `/qn` → installs, smoke passes. `fetch-binaries` fails
+  with the worded message on a test entry, and passes once `arm64Fallback` is set.
+- On ARM in CI (run 34207087608, all four jobs green): the arm64 build installed
+  on a `windows-11-arm` runner, launched, and the About dialog read exactly
+  `Windows arm64` — plus the engine-worker round trip, so PDFium's WASM ran on
+  ARM.
+- Operator's manual smoke on his own ARM device: _pending_ — he is taking the
+  arm64 NSIS installer from the CI artifact. It matters because CI installs the
+  MSI (below), so nothing else exercises the NSIS path on ARM.
+
+**What cost the most time, and what future modules should know.**
+
+- `perMachine: false` only sets the NSIS installer's *default*. The CI runner
+  user is an admin, so an elevated `/S` install went all-users. Pass
+  `/currentuser`, and read the install location from the uninstall registry key
+  (`InstallLocation` is empty; `DisplayIcon` and `UninstallString` carry it).
+- **The NSIS installer cannot complete on GitHub's ARM image.** It exits 0 and
+  leaves `locales/`, `resources/app.asar` and every `.pak` — and none of the PE
+  binaries. Defender takes the unsigned `ynotPDF.exe` and DLLs out of NSIS's
+  `%TEMP%` unpack directory, and `CopyFiles /SILENT` swallows the failure.
+  Tamper Protection makes `Set-MpPreference -DisableRealtimeMonitoring` a no-op
+  that still reports success, and path exclusions changed nothing. CI installs
+  the arm64 MSI instead; `msiexec` writes through Windows Installer and is
+  unaffected. **M131 signing is the real fix** — when it lands, re-check the
+  NSIS path and drop the fallback. Until then an unsigned NSIS install can lose
+  its executable on any strict-AV machine, which is now step 3 of the manual
+  checklist in ADR 0009.
+
+**Deferred / notes.**
+
+- Linux arm64 is not covered (not a supported target); the same mechanism extends
+  to it when it is.
+- The arm64 MSI is an x64-declared WiX package carrying arm64 binaries and has no
+  architecture guard at all — M131 revisits it with a newer WiX.
+- No change to the render-hash fixtures: PDFium is WASM, so ARM renders
+  identically and needs no baseline of its own.

@@ -10,12 +10,12 @@ Editor 14. Electron + TypeScript, PDFium engine, four colour themes, dark by def
 
 ## Supported platforms
 
-| Platform                 | Architecture          | Installers               | Verified by                                    |
-| ------------------------ | --------------------- | ------------------------ | ---------------------------------------------- |
-| Windows 10/11            | x64                   | NSIS `.exe`, MSI         | CI `windows-latest` (build, unit, e2e)         |
-| **Windows 10/11 on ARM** | **arm64**             | NSIS `.exe`, MSI         | CI `windows-11-arm` — installs and launches it |
-| macOS 12+                | universal (x64+arm64) | DMG                      | CI `macos-latest`                              |
-| Linux                    | x64                   | AppImage, `.deb`, `.rpm` | CI `ubuntu-latest`                             |
+| Platform                 | Architecture          | Installers               | Verified by                                                     |
+| ------------------------ | --------------------- | ------------------------ | --------------------------------------------------------------- |
+| Windows 10/11            | x64                   | NSIS `.exe`, MSI         | CI `windows-latest` (build, unit, e2e)                          |
+| **Windows 10/11 on ARM** | **arm64**             | NSIS `.exe`, MSI         | CI `windows-11-arm` — installs and launches it (MSI; see below) |
+| macOS 12+                | universal (x64+arm64) | DMG                      | CI `macos-latest`                                               |
+| Linux                    | x64                   | AppImage, `.deb`, `.rpm` | CI `ubuntu-latest`                                              |
 
 Both Windows architectures are cross-packaged on the x64 runner, so every push produces four
 Windows installers: `ynotPDF-<version>-win-{x64,arm64}.{exe,msi}`.
@@ -144,10 +144,21 @@ what the build was compiled for — the value a module uses to choose a bundled 
 WebAssembly path — and `hostArch()` is what the PC actually is, seen through Windows' x64
 emulation. Never read `process.arch` directly for that decision.
 
-CI runs a `windows-11-arm` job that installs the packaged arm64 NSIS installer and drives the
-installed app through the Playwright smoke, asserting the About dialog reads exactly
-`Windows arm64`. On top of that, run the manual checklist in
-[ADR 0009](docs/adr/0009-windows-arm.md) on a real ARM device after any packaging change.
+CI runs a `windows-11-arm` job on GitHub's hosted ARM runner: it installs the packaged arm64 build
+and drives the installed app through the Playwright smoke, asserting the About dialog reads
+exactly `Windows arm64`.
+
+It installs the **MSI** there, not the NSIS `.exe`. The runner's Defender removes the unsigned
+binaries out of NSIS's temporary unpack directory mid-install — you get `locales/` and
+`resources/app.asar` but no `ynotPDF.exe` and no DLLs, and NSIS reports success anyway — and
+Tamper Protection makes it impossible to switch off there. `msiexec` writes through Windows
+Installer instead, so it is unaffected. Signing the builds (M131) is the real fix; until then an
+unsigned NSIS install can lose its executable on any machine with strict AV, so **check that
+`%LOCALAPPDATA%\Programs\ynotPDF` contains `ynotPDF.exe` after installing**.
+
+Because CI installs the MSI, the NSIS installer on ARM is only exercised by hand: run the manual
+checklist in [ADR 0009](docs/adr/0009-windows-arm.md) on a real ARM device after any packaging
+change.
 
 ## PDF engine (M10)
 
