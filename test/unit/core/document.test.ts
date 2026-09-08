@@ -534,3 +534,29 @@ describe('model mutators are no-ops for entities that are not there', () => {
     expect(doc.snapshot()).toEqual(before);
   });
 });
+
+describe('the idle merge barrier', () => {
+  it('splits a run of edits once the user has paused', async () => {
+    const { doc } = await openFake();
+    doc.mergeIdleMs = 500;
+    const pageId = doc.page(0).id;
+    const clock = vi.spyOn(Date, 'now');
+
+    clock.mockReturnValue(10_000);
+    await doc.apply(new SetPageLabelCommand(doc, pageId, 'a'));
+    clock.mockReturnValue(10_100);
+    await doc.apply(new SetPageLabelCommand(doc, pageId, 'ab'));
+    expect(doc.undo.state.length).toBe(1);
+
+    // A pause longer than the barrier starts a new entry.
+    clock.mockReturnValue(20_000);
+    await doc.apply(new SetPageLabelCommand(doc, pageId, 'abc'));
+    expect(doc.undo.state.length).toBe(2);
+
+    clock.mockRestore();
+    await doc.undoLast();
+    expect(doc.page(0).label).toBe('ab');
+    await doc.undoLast();
+    expect(doc.page(0).label).toBe('i');
+  });
+});

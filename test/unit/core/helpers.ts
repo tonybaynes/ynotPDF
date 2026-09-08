@@ -97,6 +97,10 @@ export async function openFake(
   const engine = new FakeEngine(support);
   const handle = engine.create(spec);
   const doc = await Document.fromHandle(engine, handle, { name: 'fixture.pdf' });
+  // Merging is otherwise governed by a wall-clock idle gap, which would make "these two edits
+  // collapse into one undo step" depend on how busy the machine is. Tests that want a break ask
+  // for one with `breakMerge()`; the idle barrier itself has its own test with a fake clock.
+  doc.mergeIdleMs = Number.POSITIVE_INFINITY;
   return { doc, engine };
 }
 
