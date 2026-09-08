@@ -31,6 +31,9 @@ export default defineConfig({
         // handler. `qpdf-asset.ts` is gone (qpdf lives in main now, ADR 0011) and `qpdf.ts` is
         // the Emscripten wrapper, proved against a real qpdf rather than by line count.
         'src/engine/security/**/*.ts',
+        // M91's converters: pure over bytes, so all of them are gated.
+        'src/engine/create/**/*.ts',
+        'src/shared/pageSizes.ts',
         'scripts/lib/**/*.ts',
         'src/renderer/theme/**/*.ts',
         'src/renderer/modules/**/*.ts',
@@ -84,6 +87,21 @@ export default defineConfig({
         'src/renderer/modules/M70-encryption/dialogs.ts',
         'src/renderer/modules/M70-encryption/manifest.ts',
         'src/engine/security/qpdf.ts',
+        /*
+         * M91's DOM and shell half, for the same reason again: `CreateService` orchestrates the
+         * file dialogs, the Worker, main's printer and the tab strip; `dialogs.ts` and `forms.ts`
+         * are the option dialogs themselves; `manifest.ts` is the contribution points; and the
+         * two decoders and the Worker entry need a browser. All are proved by Playwright in
+         * `test/e2e/create.spec.ts`, and everything they are built out of is pure and gated
+         * above (`src/engine/create/**`) or below.
+         */
+        'src/renderer/modules/M91-create-pdf/CreateService.ts',
+        'src/renderer/modules/M91-create-pdf/dialogs.ts',
+        'src/renderer/modules/M91-create-pdf/forms.ts',
+        'src/renderer/modules/M91-create-pdf/manifest.ts',
+        'src/renderer/modules/M91-create-pdf/open.ts',
+        'src/renderer/modules/M91-create-pdf/rasterDecoder.ts',
+        'src/renderer/modules/M91-create-pdf/create.worker.ts',
       ],
       reporter: ['text', 'lcov'],
       thresholds: {
@@ -154,6 +172,35 @@ export default defineConfig({
           lines: 95,
           functions: 95,
           statements: 95,
+        },
+        // M91. The converters decide what a created document says, so their gates are high; the
+        // header parsers are the highest because everything downstream trusts what they report.
+        'src/engine/create/images/headers.ts': { lines: 90, functions: 95, statements: 90 },
+        'src/engine/create/images/layout.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/create/images/raster.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/engine/create/images/tiff.ts': { lines: 85, functions: 90, statements: 85 },
+        'src/engine/create/images/ImageConverter.ts': { lines: 85, functions: 90, statements: 85 },
+        'src/engine/create/text/TextConverter.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/engine/create/text/decode.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/create/blank/BlankConverter.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/engine/create/html/HtmlConverter.ts': { lines: 85, functions: 85, statements: 85 },
+        'src/engine/create/web/crawl.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/engine/create/web/assemble.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/engine/create/web/urls.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/create/web/WebConverter.ts': { lines: 85, functions: 85, statements: 85 },
+        'src/engine/create/registry.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/engine/create/types.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/engine/create/markdown.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/shared/pageSizes.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/renderer/modules/M91-create-pdf/settings.ts': {
+          lines: 80,
+          functions: 70,
+          statements: 80,
+        },
+        'src/renderer/modules/M91-create-pdf/ConvertClient.ts': {
+          lines: 75,
+          functions: 80,
+          statements: 75,
         },
       },
     },

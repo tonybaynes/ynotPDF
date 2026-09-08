@@ -92,6 +92,15 @@ Destinations, plus Fields/Signatures/Comments panels that later modules add.
   file via IPC → OS default app), save as, add file(s), delete, edit
   description — all Commands. Also lists file-attachment *annotations*
   (read-only here; M31 creates them).
+- **PDF Portfolios open properly (operator requirement).** A file with a
+  `/Collection` dictionary is a portfolio: show its cover sheet as the
+  page, open the Attachments panel automatically listing the embedded
+  files, and let an embedded PDF open **in a new tab** (double-click /
+  "Open") as a read-only-until-saved-as document; other types open in the
+  OS default app. Show the collection's schema columns if present. Sample:
+  `test/fixtures/local/Sample Portfolio.pdf` (Foxit-made, three PDFs).
+  Creating/editing portfolios is **M42** (wave 4), which extends your
+  attachments code — keep it extensible, not forked.
 - Destinations panel: named destinations list, click navigates, rename/
   delete as Commands, "create from current view".
 - Panel toggles in View ribbon and shortcuts (F4 style) as Foxit.
@@ -132,6 +141,8 @@ None new.
   thumbnails rendered. Set `ui.leftPaneOnOpen = 'closed'`, reopen ⇒ pane
   closed; set `'pages'` again ⇒ back, including for a `/PageMode
   /UseOutlines` fixture.
+- `Sample Portfolio.pdf` (local, skip if absent): opens on its cover sheet,
+  Attachments panel lists three PDFs, double-click opens one in a new tab.
 - Fresh profile: Pages panel shows exactly one column; press `+` twice ⇒
   thumbnails larger, panel visibly wider, still one column, current page
   still in view; press `−` ⇒ narrower again. Drag the splitter to ~2.5×
@@ -227,6 +238,17 @@ is colourblind: black and red read as the same colour):**
 - Commits: `<Mid>: <what>` and end with
   `Co-Authored-By: Claude <noreply@anthropic.com>`. Never commit real
   customer PDFs, binaries, or secrets — fixtures are public-domain/synthetic.
+- **Real sample PDFs for hands-on testing live in `test/fixtures/local/`**
+  (git-ignored; the operator drops files there, so they carry personal
+  data). Currently: three airline boarding passes and **`Sample
+  Portfolio.pdf`, a Foxit-made PDF Portfolio (`/Collection`) containing
+  those three** — use it for attachments, embedded-file and portfolio
+  behaviour. Open them when you manually check
+  your module against real-world files, and prefer them over synthetic
+  fixtures for "does it look right" judgements. Tests may use them only
+  with `it.skipIf(!existsSync(...))` — CI and other machines don't have
+  them. Never copy, commit or quote their contents; `local/README.md`
+  lists what is there.
 - Replies to the operator: short and plain (eyesight). Never leave the
   operator a to-do you could do yourself.
 

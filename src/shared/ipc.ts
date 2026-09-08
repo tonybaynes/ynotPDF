@@ -9,6 +9,14 @@
  * Payloads must be structured-cloneable; bytes travel as `Uint8Array`.
  */
 
+import type {
+  ClipboardContents,
+  DecodedRaster,
+  OpenFilesOptions,
+  WebRenderRequest,
+  WebRenderResult,
+} from './create';
+
 /** A file opened from disk. */
 export interface OpenedFile {
   /** Absolute path. */
@@ -277,6 +285,16 @@ export interface IpcInvokeMap {
   'shell:openExternal': { args: [url: string]; result: void };
   'shell:showItemInFolder': { args: [path: string]; result: void };
   'devtools:toggle': { args: []; result: void };
+  /** A multi-select open dialog with the caller's filters (M91). Empty when cancelled. */
+  'file:openFilesDialog': { args: [options?: OpenFilesOptions]; result: OpenedFile[] };
+  /** Loads a URL or generated HTML in a hidden window and prints it to PDF (M91, ADR 0011). */
+  'webpdf:render': { args: [request: WebRenderRequest]; result: WebRenderResult };
+  /** Destroys a render job's window; a no-op when the job has finished. */
+  'webpdf:cancel': { args: [jobId: string]; result: void };
+  /** Text, HTML and image (PNG) on the clipboard (M91). */
+  'clipboard:read': { args: []; result: ClipboardContents };
+  /** Decodes an image with the platform's own codecs; `null` when it cannot (M91). */
+  'image:decode': { args: [bytes: Uint8Array]; result: DecodedRaster | null };
 }
 
 /** Push channels main → renderer. Key = channel name; value = payload. */
@@ -367,6 +385,11 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'shell:openExternal',
   'shell:showItemInFolder',
   'devtools:toggle',
+  'file:openFilesDialog',
+  'webpdf:render',
+  'webpdf:cancel',
+  'clipboard:read',
+  'image:decode',
 ];
 
 /** Full list of event channels main may push. */

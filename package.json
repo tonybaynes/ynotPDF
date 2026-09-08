@@ -20,7 +20,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "lint": "eslint . && prettier --check . && node scripts/check-styles.ts && npm run typecheck",
+    "lint": "eslint . && prettier --check . && node scripts/check-styles.ts && node scripts/make-icon.ts && npm run typecheck",
     "format": "prettier --write .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
@@ -41,8 +41,11 @@
     "@neslinesli93/qpdf-wasm": "^0.3.0",
     "chokidar": "^4.0.3",
     "electron-store": "^11.0.2",
+    "marked": "^16.4.2",
     "node-forge": "^1.4.0",
-    "pdf-lib": "1.17.1"
+    "pako": "^1.0.11",
+    "pdf-lib": "1.17.1",
+    "utif": "^3.1.0"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",
@@ -51,6 +54,7 @@
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.4.1",
     "@types/node-forge": "^1.3.14",
+    "@types/pako": "^1.0.7",
     "@vitest/coverage-v8": "^5.0.0",
     "axe-core": "^4.13.0",
     "electron": "^44.2.0",
@@ -60,6 +64,7 @@
     "eslint-config-prettier": "^10.1.8",
     "fast-check": "^4.9.0",
     "husky": "^9.1.7",
+    "jpeg-js": "^0.4.4",
     "license-checker": "^25.0.1",
     "lint-staged": "^17.5.0",
     "lucide": "^1.42.0",

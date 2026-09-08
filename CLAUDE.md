@@ -29,4 +29,9 @@ brief. Otherwise pick the next unchecked module whose dependencies are ☑.
 
 ## Toolchain
 `npm run dev` · `npm test` · `npm run e2e` · `npm run build` · `npm run lint`
+
+**Sample PDFs:** the operator's real-world test files are in `test/fixtures/local/`
+(git-ignored — personal data; only its README is committed): three boarding passes and
+`Sample Portfolio.pdf`, a Foxit PDF Portfolio containing them. Use them for manual checks;
+tests may open them only behind `existsSync` skips. Never commit or quote their contents.
 — all defined by M00. Replies to the operator: short, plain — eyesight.

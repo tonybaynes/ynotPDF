@@ -13,7 +13,7 @@ Full plan: PLAN.md    Briefs: docs\modules\
 HOW TO START A MODULE  (do exactly this every time)
 ----------------------------------------------------
 1. Check the module's "needs" line. Every module named there must
-   already be ticked [x] below. If not, wait - do not start it.
+   already be ticked [✔] below. If not, wait - do not start it.
 2. Open a NEW Claude Code conversation.
 3. Set its working folder to  D:\Projects\ynotPDF
    (in the app: choose the folder when creating the session, or run
@@ -26,7 +26,7 @@ HOW TO START A MODULE  (do exactly this every time)
 6. Run up to 3-4 modules from the SAME wave at once, one conversation
    each. Never two conversations on the same module.
 7. When a conversation reports "merged to main, CI green", tick the
-   module [x] here AND check it shows as done in PLAN.md section 0.
+   module [✔] here AND check it shows as done in PLAN.md section 0.
 8. If a conversation says a dependency is not finished, it will stop by
    itself - finish that dependency first, then re-run the prompt.
 
@@ -83,7 +83,7 @@ WAVE 2
       needs: M02 M10
       prompt: Read D:\Projects\ynotPDF\docs\modules\M11-viewer.md and carry out the "Your task" section in full.
 
-[ ] M21  Save, Save As, autosave & recovery
+[✔] M21  Save, Save As, autosave & recovery
       model:  Opus
       needs: M20 M11
       prompt: Read D:\Projects\ynotPDF\docs\modules\M21-save.md and carry out the "Your task" section in full.
@@ -93,7 +93,7 @@ WAVE 2
       needs: M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M70-encryption.md and carry out the "Your task" section in full.
 
-[ ] M91  Create PDF from images, web pages, clipboard, HTML/Markdown & text
+[✔] M91  Create PDF from images, web pages, clipboard, HTML/Markdown & text
       model:  Opus
       needs: M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M91-create-pdf.md and carry out the "Your task" section in full.
@@ -124,6 +124,11 @@ WAVE 3
 
 WAVE 4
 ------
+[ ] M42  PDF Portfolios — create, edit, cover sheet, extract
+      model:  Opus
+      needs: M12 M21
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M42-portfolios.md and carry out the "Your task" section in full.
+
 [ ] M31  Annotations — shapes, ink & eraser, stamps, file attachments
       model:  Opus
       needs: M30
@@ -227,7 +232,7 @@ WAVE 7
       prompt: Read D:\Projects\ynotPDF\docs\modules\M120-batch-actions.md and carry out the "Your task" section in full.
 
   >>> MILESTONE 2 — everyday editor (v0.5)
-      forms fill & design, measuring, object move/resize, watermarks/Bates/headers, OCR (searchable), compare, export, batch, image editing
+      PDF portfolios (create/edit), forms fill & design, measuring, object move/resize, watermarks/Bates/headers, OCR (searchable), compare, export, batch, image editing
 
 
 WAVE 8
@@ -294,10 +299,10 @@ WAVE 10
 
 THINGS ONLY TONY CAN DO
 -----------------------
-[x] Create private GitHub repo tonybaynes/ynotPDF (before M00)
-[ ] Confirm app name / supply logo (M00)
-[ ] Approve tier list in PLAN.md section 1 (wave 1)
+[✔] Create private GitHub repo tonybaynes/ynotPDF (before M00)
+[✔] Confirm app name / supply logo (M00) - "ynotPDF Logo.jpg"
+[✔] Approve tier list in PLAN.md section 1 (wave 1)
 [✔] Approve the four theme palettes (M01 gallery page)   - approved 2026-09-07
-[ ] Provide a few non-confidential real PDFs for the test corpus (M10)
+[✔] Provide real PDFs for hands-on testing - 3 boarding passes in testixtures\local\ (git-ignored, 2026-09-08); add more there any time
 [ ] Windows code-signing certificate + Apple Developer account (M131)
 [ ] Decide: is LibreOffice acceptable for Office conversion? (M93)

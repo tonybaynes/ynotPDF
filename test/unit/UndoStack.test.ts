@@ -457,3 +457,43 @@ describe('UndoStack transactions', () => {
     expect(u.state.length).toBe(0);
   });
 });
+
+describe('UndoStack.markUnsaved (M91)', () => {
+  it('makes an empty stack dirty and notifies subscribers', () => {
+    const u = new UndoStack();
+    expect(u.isDirty).toBe(false);
+    const seen: boolean[] = [];
+    u.subscribe((s) => seen.push(s.isDirty));
+    u.markUnsaved();
+    expect(u.isDirty).toBe(true);
+    expect(u.state.isDirty).toBe(true);
+    expect(seen).toEqual([true]);
+  });
+
+  it('stays dirty through undo and redo', async () => {
+    const u = new UndoStack();
+    const log: string[] = [];
+    u.markUnsaved();
+    await u.push(logCmd(log, 'a'));
+    expect(u.isDirty).toBe(true);
+    await u.undo();
+    expect(u.state.length).toBe(0);
+    expect(u.isDirty).toBe(true);
+    await u.redo();
+    expect(u.isDirty).toBe(true);
+    await u.undo();
+    expect(u.isDirty).toBe(true);
+  });
+
+  it('is cleared by markSaved()', () => {
+    const u = new UndoStack();
+    u.markUnsaved();
+    const seen: boolean[] = [];
+    u.subscribe((s) => seen.push(s.isDirty));
+    u.markSaved();
+    expect(u.isDirty).toBe(false);
+    expect(seen).toEqual([false]);
+    u.markUnsaved();
+    expect(u.isDirty).toBe(true);
+  });
+});
