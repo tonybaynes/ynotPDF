@@ -27,6 +27,10 @@ export default defineConfig({
         'src/engine/Writer.ts',
         'src/engine/writers/**/*.ts',
         'src/engine/appearance/**/*.ts',
+        // M70's engine half: the security façade, the permission arithmetic and the public-key
+        // handler. `qpdf-asset.ts` is gone (qpdf lives in main now, ADR 0011) and `qpdf.ts` is
+        // the Emscripten wrapper, proved against a real qpdf rather than by line count.
+        'src/engine/security/**/*.ts',
         // M91's converters: pure over bytes, so all of them are gated.
         'src/engine/create/**/*.ts',
         'src/shared/pageSizes.ts',
@@ -84,6 +88,39 @@ export default defineConfig({
         'src/renderer/modules/M21-save/SaveService.ts',
         'src/renderer/modules/M21-save/dialogs.ts',
         'src/renderer/modules/M21-save/manifest.ts',
+        /*
+         * M13's DOM and shell half, for the same reason again: the find bar, the search panel,
+         * the print dialog, the highlighter, the selection controller's event plumbing, the
+         * canvas helpers and the service that wires them together are proved by Playwright in
+         * `test/e2e/select-find-print.spec.ts`. Everything they are built out of — the text
+         * layer, the matcher, the selection model, RTF, page ranges, the imposition, the plan,
+         * the settings and the snapshot arithmetic — is pure and gated below.
+         */
+        'src/renderer/modules/M13-select-find-print/SelectFindService.ts',
+        'src/renderer/modules/M13-select-find-print/canvas.ts',
+        'src/renderer/modules/M13-select-find-print/find/FindBar.ts',
+        'src/renderer/modules/M13-select-find-print/find/SearchPanel.ts',
+        'src/renderer/modules/M13-select-find-print/manifest.ts',
+        'src/renderer/modules/M13-select-find-print/print/PrintDialog.ts',
+        'src/renderer/modules/M13-select-find-print/print/PrintService.ts',
+        'src/renderer/modules/M13-select-find-print/print/render.ts',
+        'src/renderer/modules/M13-select-find-print/selection/Highlighter.ts',
+        'src/renderer/modules/M13-select-find-print/selection/TextSelectionController.ts',
+        'src/renderer/modules/M13-select-find-print/selection/clipboard.ts',
+        'src/renderer/modules/M13-select-find-print/tools.ts',
+        /*
+         * M70's DOM and shell half, for the same reason. `dialogs.ts` *is* the Protect dialog and
+         * `manifest.ts` the contribution points; `SecurityService` orchestrates them, IPC and the
+         * save pipeline. All three are proved by Playwright in `test/e2e/security.spec.ts` —
+         * which is where "the file on disk is encrypted and Chrome asks for the password"
+         * belongs — while the decisions underneath them are unit-tested in
+         * `test/unit/security/`. `qpdf.ts` is the Emscripten wrapper: what matters about it is
+         * that qpdf answers, which every test in that folder depends on.
+         */
+        'src/renderer/modules/M70-encryption/SecurityService.ts',
+        'src/renderer/modules/M70-encryption/dialogs.ts',
+        'src/renderer/modules/M70-encryption/manifest.ts',
+        'src/engine/security/qpdf.ts',
         /*
          * M91's DOM and shell half, for the same reason again: `CreateService` orchestrates the
          * file dialogs, the Worker, main's printer and the tab strip; `dialogs.ts` and `forms.ts`
@@ -172,6 +209,98 @@ export default defineConfig({
           lines: 75,
           functions: 80,
           statements: 75,
+        },
+        // M13's pure half: the text model everything textual reads, the matcher, the selection
+        // rules and the print arithmetic. These decide what is selected, found and printed.
+        'src/renderer/view/TextLayer.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/renderer/modules/M13-select-find-print/find/search.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M13-select-find-print/find/csv.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M13-select-find-print/selection/model.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M13-select-find-print/selection/rtf.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M13-select-find-print/print/pageRange.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M13-select-find-print/print/imposition.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M13-select-find-print/print/plan.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M13-select-find-print/print/paper.ts': {
+          lines: 85,
+          functions: 85,
+          statements: 85,
+        },
+        /*
+         * Only the *vector* half of "Print to PDF" can run in Node; the raster half needs a
+         * canvas, so it is proved by Playwright (`print to PDF as an image` in
+         * `test/e2e/select-find-print.spec.ts`). The gate covers what Node can reach.
+         */
+        'src/renderer/modules/M13-select-find-print/print/printToPdf.ts': {
+          lines: 70,
+          functions: 70,
+          statements: 65,
+        },
+        'src/renderer/modules/M13-select-find-print/settings.ts': {
+          lines: 85,
+          functions: 75,
+          statements: 85,
+        },
+        'src/renderer/modules/M13-select-find-print/TextService.ts': {
+          lines: 85,
+          functions: 80,
+          statements: 85,
+        },
+        'src/renderer/modules/M13-select-find-print/find/FindController.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+        },
+        // M70. The permission arithmetic and the public-key handler decide what a protected file
+        // allows and who can open it, so their gates are the highest here.
+        'src/engine/security/permissions.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/engine/security/pubsec/crypto.ts': { lines: 85, functions: 85, statements: 85 },
+        'src/engine/security/pubsec/standard.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/security/pubsec/envelope.ts': { lines: 85, functions: 85, statements: 85 },
+        'src/engine/security/pubsec/encrypt.ts': { lines: 80, functions: 80, statements: 80 },
+        'src/engine/security/pubsec/certificates.ts': { lines: 80, functions: 75, statements: 80 },
+        'src/engine/security/Security.ts': { lines: 80, functions: 80, statements: 80 },
+        'src/renderer/modules/M70-encryption/intent.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M70-encryption/commands.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M70-encryption/strength.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
         },
         // M91. The converters decide what a created document says, so their gates are high; the
         // header parsers are the highest because everything downstream trusts what they report.

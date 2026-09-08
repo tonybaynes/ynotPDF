@@ -10,7 +10,9 @@ import { RecoveryStore } from './fs/recovery';
 import { FileWatchers } from './fs/watcher';
 import { registerIpcHandlers } from './ipc';
 import { buildMenu } from './menu';
+import { PrintJobs } from './print';
 import { RecentFiles } from './recent';
+import { FolderSearches } from './search';
 import { Settings, THEME_KEY } from './settings';
 import { WebPdfPrinter } from './webpdf/WebPdfPrinter';
 import { broadcast, createMainWindow, getMainWindow, sendTo } from './window';
@@ -75,6 +77,7 @@ function windowOptions(parent?: BrowserWindow | null): Parameters<typeof createM
     onClosed: (windowId) => {
       closeBroker.forget(windowId);
       watchers.release(windowId);
+      searches.release(windowId);
     },
   };
 }
@@ -100,6 +103,8 @@ const closeBroker = new CloseBroker();
 const watchers = new FileWatchers((path) => {
   broadcast('file:changedOnDisk', { path });
 });
+const printJobs = new PrintJobs();
+const searches = new FolderSearches();
 const webpdf = new WebPdfPrinter();
 let recovery: RecoveryStore | null = null;
 
@@ -127,6 +132,8 @@ app.on('before-quit', (event) => {
 app.on('will-quit', () => {
   webpdf.dispose();
   void watchers.closeAll();
+  printJobs.disposeAll();
+  searches.disposeAll();
   // Temporary copies of attachments the reader opened in another application (M12, ADR 0011).
   void cleanTempFiles();
 });
@@ -181,6 +188,8 @@ if (gotLock) {
       watchers,
       recovery,
       closeBroker,
+      printJobs,
+      searches,
       webpdf,
     });
     pendingOpens.push(...pdfPathsFromArgv(process.argv));

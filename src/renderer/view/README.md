@@ -2,7 +2,7 @@
 
 The page view: coordinate transforms, the per-page layer stack, tiling, and the scrolling
 viewport every editing tool will draw on. M00 stubbed the transforms and the layers; M11 built
-the rest.
+the rest; M13 added the text model the layer stack reserved a layer for.
 
 The split is deliberate. Everything that is **maths** is a pure module with no DOM and no engine,
 unit-tested in Node; everything that is **DOM** is proved by Playwright in
@@ -22,6 +22,7 @@ sure of anyway.
 | `units.ts`     | pt / mm / cm / in, and the ruler's tick spacing at any zoom.                            |
 | `guides.ts`    | The guide model, grid lines and snapping.                                               |
 | `history.ts`   | Back / forward through view positions (Alt+← / Alt+→).                                  |
+| `TextLayer.ts` | The page's text as a model: reading order, lines, paragraphs, hit testing (M13).        |
 
 ## DOM
 

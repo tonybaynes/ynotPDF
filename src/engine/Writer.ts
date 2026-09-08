@@ -332,3 +332,74 @@ export function phaseProgress(
         progress(fraction, phase);
       };
 }
+
+// ---- save pipeline stages (M70, ADR 0012) --------------------------------------------------------
+
+/**
+ * Context a {@link SavePipelineStage} is given about the save it is part of. Deliberately thin:
+ * a stage transforms bytes and must not need a document, a shell or a window to do it, so the
+ * identical stage runs in an interactive save and in a batch run with nothing on screen.
+ */
+export interface SaveStageContext {
+  /** `Document.id`, so a stage can find whatever it holds for this document. */
+  readonly documentId: string;
+  /** Absolute path the bytes are about to be written to. */
+  readonly path: string;
+  /** True when this is a Save As rather than a save over the same file. */
+  readonly saveAs: boolean;
+}
+
+export interface SaveStageInput {
+  /** The document as the writer produced it. */
+  readonly bytes: Uint8Array;
+  readonly context: SaveStageContext;
+  readonly signal?: AbortSignal;
+}
+
+export interface SaveStageResult {
+  readonly bytes: Uint8Array;
+  /** Things worth telling the reader. Never a reason to fail the save. */
+  readonly warnings?: ReadonlyArray<string>;
+}
+
+/**
+ * A transformation applied to the writer's output before it reaches the disk.
+ *
+ * M70 registers one to put encryption back on a protected document, which is why it exists: doing
+ * that after the save would mean writing the file twice and leaving it unprotected in between.
+ * A stage that throws fails the save, and the reader is told what it said — so a stage should
+ * return a warning for anything it merely could not do.
+ */
+export interface SavePipelineStage {
+  /** Stable id, so a stage can be replaced rather than added twice. */
+  readonly id: string;
+  /** Lower runs first. Encryption is 100, and nothing should run after it. */
+  readonly order: number;
+  run(input: SaveStageInput): Promise<SaveStageResult>;
+  /**
+   * Whether this stage is responsible for what happens to this document's protection.
+   *
+   * M21 warns before saving an encrypted document, because a full rewrite loses the password and
+   * a reader who was not told would find out from the file. A stage answering `true` here is
+   * saying "I decide that, and the reader has already been asked" — so M21 stays quiet, whether
+   * the answer turns out to be *re-protect it* or *the reader asked to remove it*. Warning in the
+   * second case would put the same question twice for one decision.
+   */
+  handlesSecurity?(documentId: string): boolean;
+}
+
+/** Runs stages in order. Exported so batch (M120) can use the pipeline without a `SaveService`. */
+export async function runSaveStages(
+  stages: ReadonlyArray<SavePipelineStage>,
+  input: SaveStageInput,
+): Promise<SaveStageResult> {
+  let bytes = input.bytes;
+  const warnings: string[] = [];
+  for (const stage of [...stages].sort((a, b) => a.order - b.order)) {
+    if (input.signal?.aborted) throw new WriteCancelled();
+    const result = await stage.run({ ...input, bytes });
+    bytes = result.bytes;
+    if (result.warnings) warnings.push(...result.warnings);
+  }
+  return { bytes, warnings };
+}

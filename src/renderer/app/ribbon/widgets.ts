@@ -36,6 +36,10 @@ export function commandTitle(
   const parts = [label];
   if (key) parts[0] = `${label} (${formatShortcut(key, services.isMac)})`;
   if (desc) parts.push(desc);
+  // A control the document's security has disabled says which permission is missing and what
+  // would lift it (M70). A disabled control with no explanation is the thing this app avoids.
+  const blocked = commandId ? services.registry.reasonDisabled(commandId) : '';
+  if (blocked !== '') parts.push(blocked);
   return parts.join('\n');
 }
 

@@ -15,6 +15,7 @@
 import type {
   CommandArgs,
   CommandContext,
+  CommandPermission,
   CommandSpec,
   ModuleManifest,
   PanelSpec,
@@ -24,6 +25,21 @@ import type {
   ShortcutSpec,
   ToolSpec,
 } from '@shared/module';
+
+/**
+ * The service name a permission gate registers under (M70, ADR 0012).
+ *
+ * With nothing registered under it, `CommandSpec.permission` has no effect — which is what a
+ * build without M70 gets, and why this is a service lookup rather than a hard dependency.
+ */
+export const PERMISSION_GATE = 'permissionGate';
+
+/** Answers whether the open document's security settings allow something. */
+export interface PermissionGate {
+  allows(permission: CommandPermission): boolean;
+  /** Why not, as a sentence for a tooltip. */
+  reasonAgainst(permission: CommandPermission): string;
+}
 
 /** A palette row: the command plus its resolved shortcut label. */
 export interface PaletteEntry {
@@ -126,11 +142,37 @@ export class Registry {
     return Array.from(this.commands.values(), (c) => c.spec);
   }
 
-  /** True when the command exists and its `when` clause (if any) passes. */
+  /**
+   * True when the command exists, its `when` clause (if any) passes, and the document's security
+   * settings allow it (M70, ADR 0012).
+   */
   isEnabled(id: string): boolean {
     const entry = this.commands.get(id);
     if (!entry) return false;
-    return entry.spec.when ? entry.spec.when(this.context()) : true;
+    if (entry.spec.when && !entry.spec.when(this.context())) return false;
+    return this.permitted(entry.spec);
+  }
+
+  /**
+   * Why a command is unavailable, as a sentence, or `''` when it is available.
+   *
+   * Only a permission has a reason worth showing: a `when` clause that is false usually means
+   * "there is nothing to do this to", which the reader can already see. A permission that is
+   * false means "the document forbids it", which they cannot.
+   */
+  reasonDisabled(id: string): string {
+    const spec = this.commands.get(id)?.spec;
+    const permission = spec?.permission;
+    if (!permission) return '';
+    const gate = this.services.get(PERMISSION_GATE) as PermissionGate | undefined;
+    return gate?.allows(permission) === false ? gate.reasonAgainst(permission) : '';
+  }
+
+  /** Whether a registered permission gate allows this command. No gate means yes. */
+  private permitted(spec: CommandSpec): boolean {
+    if (!spec.permission) return true;
+    const gate = this.services.get(PERMISSION_GATE) as PermissionGate | undefined;
+    return gate === undefined || gate.allows(spec.permission);
   }
 
   /**
@@ -140,7 +182,12 @@ export class Registry {
   async run(id: string, args: CommandArgs = {}): Promise<unknown> {
     const entry = this.commands.get(id);
     if (!entry) throw new CommandNotFoundError(id);
-    if (!this.isEnabled(id)) throw new Error(`Command ${id} is not available right now`);
+    if (!this.isEnabled(id)) {
+      // A permission refusal says why; anything else is a `when` clause, which has no wording to
+      // offer beyond the fact that the command does not apply.
+      const reason = this.reasonDisabled(id);
+      throw new Error(reason === '' ? `Command ${id} is not available right now` : reason);
+    }
     const ctx: CommandContext = { ...this.context(), args };
     return await entry.spec.run(ctx);
   }

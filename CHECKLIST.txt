@@ -88,12 +88,12 @@ WAVE 2
       needs: M20 M11
       prompt: Read D:\Projects\ynotPDF\docs\modules\M21-save.md and carry out the "Your task" section in full.
 
-[ ] M70  Encryption, permissions & certificate security
+[✔] M70  Encryption, permissions & certificate security
       model:  Opus
       needs: M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M70-encryption.md and carry out the "Your task" section in full.
 
-[x] M91  Create PDF from images, web pages, clipboard, HTML/Markdown & text
+[✔] M91  Create PDF from images, web pages, clipboard, HTML/Markdown & text
       model:  Opus
       needs: M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M91-create-pdf.md and carry out the "Your task" section in full.
@@ -106,7 +106,7 @@ WAVE 3
       needs: M11 M20
       prompt: Read D:\Projects\ynotPDF\docs\modules\M12-navigation-panels.md and carry out the "Your task" section in full.
 
-[ ] M13  Text selection, find, copy, snapshot & print
+[✔] M13  Text selection, find, copy, snapshot & print
       model:  Opus
       needs: M11
       prompt: Read D:\Projects\ynotPDF\docs\modules\M13-select-find-print.md and carry out the "Your task" section in full.

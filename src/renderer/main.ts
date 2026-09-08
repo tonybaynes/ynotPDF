@@ -20,8 +20,10 @@ import shellManifest from '@modules/M02-app-shell/manifest';
 import engineManifest from '@modules/M10-engine-layer/manifest';
 import viewerManifest from '@modules/M11-viewer/manifest';
 import navigationManifest from '@modules/M12-navigation-panels/manifest';
+import selectFindManifest from '@modules/M13-select-find-print/manifest';
 import documentManifest from '@modules/M20-document-model/manifest';
 import saveManifest from '@modules/M21-save/manifest';
+import securityManifest from '@modules/M70-encryption/manifest';
 import createManifest from '@modules/M91-create-pdf/manifest';
 import { ThemeManager } from '@theme/ThemeManager';
 
@@ -63,6 +65,8 @@ registry.register(documentManifest);
 registry.register(viewerManifest);
 registry.register(navigationManifest);
 registry.register(saveManifest);
+registry.register(selectFindManifest);
+registry.register(securityManifest);
 registry.register(createManifest);
 
 const e2e = hasBridge() && getBridge().e2e;

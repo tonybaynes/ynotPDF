@@ -61,6 +61,15 @@ export interface FileProbe {
   readonly readOnly: boolean;
 }
 
+/**
+ * What kind of file an open dialog should ask for (M70).
+ *
+ * `pdf` is M21's; the other two are M70's — certificates a document is encrypted *to*, and the
+ * digital ID it is opened *with*. The filters live in main because that is where the native
+ * dialog is, and because the extensions differ per platform in ways the renderer should not know.
+ */
+export type FileKind = 'pdf' | 'certificate' | 'digital-id';
+
 /** Options for the Save As dialog (M21). */
 export interface SaveDialogOptions {
   /** Pre-filled path or file name. */
@@ -68,6 +77,97 @@ export interface SaveDialogOptions {
   readonly title?: string;
   /** Label of the confirm button ("Save", "Export"). */
   readonly buttonLabel?: string;
+  /**
+   * File-type filters. Absent means PDF plus "all files" — M21's original behaviour. M13 passes
+   * PNG for a snapshot and CSV for exported search results (ADR 0012).
+   */
+  readonly filters?: ReadonlyArray<{
+    readonly name: string;
+    readonly extensions: ReadonlyArray<string>;
+  }>;
+}
+
+// ---- clipboard, search and printing (M13, ADR 0012) -----------------------------------------
+
+/** What to put on the clipboard. Every format given is offered at once, as one item. */
+export interface ClipboardPayload {
+  readonly text?: string;
+  /** Rich Text Format, for "Copy with formatting". */
+  readonly rtf?: string;
+  readonly html?: string;
+}
+
+/** A printer the OS knows about. */
+export interface PrinterInfo {
+  readonly name: string;
+  readonly displayName: string;
+  readonly isDefault: boolean;
+  readonly description?: string;
+}
+
+/** Everything a print job needs before its sheets arrive. */
+export interface PrintJobSetup {
+  /** Sheet size in PDF points; every sheet of a job is the same size. */
+  readonly widthPt: number;
+  readonly heightPt: number;
+  /** Empty means the system default printer. */
+  readonly printer?: string;
+  readonly copies?: number;
+  readonly collate?: boolean;
+  /** Print in the printer's greyscale mode as well as rendering grey. */
+  readonly grayscale?: boolean;
+  /** Document name shown in the print queue. */
+  readonly title?: string;
+  /**
+   * Build the job and return the HTML that would have been printed without sending it to a
+   * printer. The e2e suite uses it; nothing in the app does.
+   */
+  readonly dryRun?: boolean;
+}
+
+/** How a print job ended. */
+export interface PrintJobResult {
+  readonly sheets: number;
+  /** False for a dry run or a job the reader cancelled at the OS dialog. */
+  readonly printed: boolean;
+  /** The generated HTML's path, for a dry run. */
+  readonly documentPath: string | null;
+  readonly error?: string;
+}
+
+/** Find options as they cross the IPC boundary (M13). */
+export interface FolderSearchOptions {
+  readonly matchCase: boolean;
+  readonly wholeWord: boolean;
+  readonly regex: boolean;
+  readonly ignoreDiacritics: boolean;
+  readonly proximity: number;
+  readonly includeBookmarks: boolean;
+  readonly includeComments: boolean;
+  readonly includeFormFields: boolean;
+}
+
+/** A folder search request. Results arrive on `search:results`. */
+export interface FolderSearchRequest {
+  readonly root: string;
+  readonly query: string;
+  readonly options: FolderSearchOptions;
+  readonly recursive: boolean;
+  /** Stop after this many hits so a large tree cannot run away. */
+  readonly maxHits: number;
+}
+
+/** One hit from a folder search. */
+export interface FolderSearchHit {
+  readonly path: string;
+  readonly name: string;
+  /** 0-based, or -1 for a hit that belongs to the document rather than a page. */
+  readonly page: number;
+  readonly source: 'page' | 'bookmark' | 'comment' | 'field';
+  readonly start: number;
+  readonly end: number;
+  readonly snippet: string;
+  readonly label?: string;
 }
 
 /** One document a crash left behind, as the recovery dialog lists it (M21). */
@@ -78,6 +178,35 @@ export interface RecoveryEntry {
   readonly size: number;
   /** The record, for the renderer to parse. */
   readonly payload: string;
+}
+
+/**
+ * What a file's `/Encrypt` dictionary says (M70). Structurally `SecurityInfo` from
+ * `src/engine/security/types.ts`; restated here as data so `src/shared` keeps its place at the
+ * bottom of the dependency graph and does not import from the engine.
+ */
+export interface SecurityInfoDto {
+  readonly encrypted: boolean;
+  readonly handler: 'standard' | 'public-key' | null;
+  readonly algorithm: string | null;
+  readonly revision: number | null;
+  readonly rawPermissions: number | null;
+  readonly permissions: unknown;
+  readonly opensWithoutPassword: boolean;
+  readonly metadataEncrypted: boolean;
+  readonly recipients: ReadonlyArray<unknown>;
+}
+
+/** A certificate read off disk, as the recipient list shows it (M70). */
+export interface CertificateDto {
+  readonly name: string;
+  readonly issuer: string;
+  readonly serial: string;
+  readonly validFrom: string;
+  readonly validTo: string;
+  readonly expired: boolean;
+  /** Base64 DER, so the bytes need not cross back and forth. */
+  readonly certificateBase64: string;
 }
 
 /** Window state reported by main (M02). */
@@ -146,6 +275,17 @@ export interface IpcInvokeMap {
   'file:probe': { args: [path: string]; result: FileProbe };
   /** Save As dialog with a title and button label of our choosing (M21). `null` when cancelled. */
   'file:saveAsDialog': { args: [options?: SaveDialogOptions]; result: string | null };
+  /**
+   * Open dialog filtered to one kind of file, returning the bytes (M70).
+   *
+   * A certificate or a digital ID is not a document: it is never added to Recent, never opened in
+   * a tab, and its bytes go straight to the security worker. That is why this is a separate
+   * channel from `file:openDialog` rather than an option on it.
+   */
+  'file:pickFile': {
+    args: [kind: FileKind, options?: { title?: string; multiple?: boolean }];
+    result: OpenedFile[];
+  };
   /** Starts or stops watching a document for changes made outside the app (M21). */
   'file:watch': { args: [path: string, watching: boolean]; result: void };
   /** Mutes the watcher for a path while we write to it ourselves (M21). */
@@ -157,6 +297,33 @@ export interface IpcInvokeMap {
   'recovery:read': { args: [id: string]; result: string | null };
   'recovery:discard': { args: [id: string]; result: void };
   'recovery:clear': { args: []; result: void };
+  /**
+   * Document security (M70, ADR 0011). qpdf runs in main, so these carry bytes both ways — the
+   * same crossing a save already makes for `file:writeAtomic`.
+   *
+   * Passwords and `.p12` bytes travel over these channels. That is a process boundary inside one
+   * application, not a network: nothing is written down on either side, and the alternative —
+   * qpdf in the renderer — kills the renderer process (`src/main/security.ts`).
+   */
+  'security:inspect': { args: [bytes: Uint8Array]; result: SecurityInfoDto };
+  'security:isOwnerPassword': { args: [bytes: Uint8Array, password: string]; result: boolean };
+  'security:protect': {
+    args: [bytes: Uint8Array, intent: unknown, secrets: { user?: string; owner?: string }];
+    result: { bytes: Uint8Array; warnings: string[] };
+  };
+  'security:remove': {
+    args: [bytes: Uint8Array, password: string];
+    result: { bytes: Uint8Array; warnings: string[] };
+  };
+  'security:unlock': {
+    args: [bytes: Uint8Array, p12: Uint8Array, password: string];
+    result: { bytes: Uint8Array; permissions: unknown; openedAs: string };
+  };
+  'security:readCertificates': {
+    args: [bytes: Uint8Array, fileName: string];
+    result: CertificateDto[];
+  };
+  'security:version': { args: []; result: string };
   'recent:list': { args: []; result: RecentFile[] };
   'recent:add': { args: [path: string]; result: RecentFile[] };
   'recent:clear': { args: []; result: RecentFile[] };
@@ -215,6 +382,28 @@ export interface IpcInvokeMap {
   'shell:openTempFile': { args: [name: string, bytes: Uint8Array]; result: string };
   'shell:showItemInFolder': { args: [path: string]; result: void };
   'devtools:toggle': { args: []; result: void };
+  /** Puts text / RTF / HTML on the system clipboard as one item (M13). */
+  'clipboard:write': { args: [payload: ClipboardPayload]; result: void };
+  /** Puts a PNG on the system clipboard as an image (M13: Copy image, Snapshot). */
+  'clipboard:writeImage': { args: [png: Uint8Array]; result: void };
+  /** Native folder picker, for the advanced search panel's folder scope. `null` on cancel. */
+  'dialog:pickFolder': { args: [title?: string]; result: string | null };
+  /**
+   * Starts a folder search in a main-process worker (M13, ADR 0012). Resolves with a job id;
+   * hits arrive on `search:results` and the job ends with `search:done`.
+   */
+  'search:folder': { args: [request: FolderSearchRequest]; result: string };
+  'search:cancel': { args: [jobId: string]; result: void };
+  /** Printers the OS knows about (M13). */
+  'print:printers': { args: []; result: PrinterInfo[] };
+  /** Opens a print job; sheets follow one at a time (M13, ADR 0012). */
+  'print:begin': { args: [setup: PrintJobSetup]; result: string };
+  /** Adds one rendered sheet, as PNG bytes, to an open job. */
+  'print:sheet': { args: [jobId: string, png: Uint8Array]; result: void };
+  /** Sends the job to the printer (or, for a dry run, just builds it) and cleans up. */
+  'print:finish': { args: [jobId: string]; result: PrintJobResult };
+  /** Abandons an open job and deletes its temporary files. */
+  'print:cancel': { args: [jobId: string]; result: void };
   /** A multi-select open dialog with the caller's filters (M91). Empty when cancelled. */
   'file:openFilesDialog': { args: [options?: OpenFilesOptions]; result: OpenedFile[] };
   /** Loads a URL or generated HTML in a hidden window and prints it to PDF (M91, ADR 0011). */
@@ -246,6 +435,22 @@ export interface IpcEventMap {
   'window:closeRequested': { readonly reason: 'window' | 'quit' };
   /** The app is trying to quit and was held back the same way. Answer with `app:confirmQuit`. */
   'app:quitRequested': Record<string, never>;
+  /** A batch of folder-search hits (M13). Batched so a big tree does not flood the channel. */
+  'search:results': { readonly jobId: string; readonly hits: ReadonlyArray<FolderSearchHit> };
+  /** Progress of a folder search: files looked at so far, and the one being read now. */
+  'search:progress': {
+    readonly jobId: string;
+    readonly scanned: number;
+    readonly total: number;
+    readonly file: string;
+  };
+  /** A folder search has ended, one way or another. */
+  'search:done': {
+    readonly jobId: string;
+    readonly cancelled: boolean;
+    readonly hits: number;
+    readonly error?: string;
+  };
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeMap;
@@ -276,6 +481,7 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'file:writeAtomic',
   'file:probe',
   'file:saveAsDialog',
+  'file:pickFile',
   'file:watch',
   'file:suspendWatch',
   'recovery:list',
@@ -283,6 +489,13 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'recovery:read',
   'recovery:discard',
   'recovery:clear',
+  'security:inspect',
+  'security:isOwnerPassword',
+  'security:protect',
+  'security:remove',
+  'security:unlock',
+  'security:readCertificates',
+  'security:version',
   'recent:list',
   'recent:add',
   'recent:clear',
@@ -308,6 +521,16 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'shell:openTempFile',
   'shell:showItemInFolder',
   'devtools:toggle',
+  'clipboard:write',
+  'clipboard:writeImage',
+  'dialog:pickFolder',
+  'search:folder',
+  'search:cancel',
+  'print:printers',
+  'print:begin',
+  'print:sheet',
+  'print:finish',
+  'print:cancel',
   'file:openFilesDialog',
   'webpdf:render',
   'webpdf:cancel',
@@ -325,6 +548,9 @@ export const EVENT_CHANNELS: readonly IpcEventChannel[] = [
   'file:changedOnDisk',
   'window:closeRequested',
   'app:quitRequested',
+  'search:results',
+  'search:progress',
+  'search:done',
 ];
 
 /**
