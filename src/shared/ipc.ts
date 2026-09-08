@@ -53,6 +53,15 @@ export interface FileProbe {
   readonly readOnly: boolean;
 }
 
+/**
+ * What kind of file an open dialog should ask for (M70).
+ *
+ * `pdf` is M21's; the other two are M70's — certificates a document is encrypted *to*, and the
+ * digital ID it is opened *with*. The filters live in main because that is where the native
+ * dialog is, and because the extensions differ per platform in ways the renderer should not know.
+ */
+export type FileKind = 'pdf' | 'certificate' | 'digital-id';
+
 /** Options for the Save As dialog (M21). */
 export interface SaveDialogOptions {
   /** Pre-filled path or file name. */
@@ -70,6 +79,35 @@ export interface RecoveryEntry {
   readonly size: number;
   /** The record, for the renderer to parse. */
   readonly payload: string;
+}
+
+/**
+ * What a file's `/Encrypt` dictionary says (M70). Structurally `SecurityInfo` from
+ * `src/engine/security/types.ts`; restated here as data so `src/shared` keeps its place at the
+ * bottom of the dependency graph and does not import from the engine.
+ */
+export interface SecurityInfoDto {
+  readonly encrypted: boolean;
+  readonly handler: 'standard' | 'public-key' | null;
+  readonly algorithm: string | null;
+  readonly revision: number | null;
+  readonly rawPermissions: number | null;
+  readonly permissions: unknown;
+  readonly opensWithoutPassword: boolean;
+  readonly metadataEncrypted: boolean;
+  readonly recipients: ReadonlyArray<unknown>;
+}
+
+/** A certificate read off disk, as the recipient list shows it (M70). */
+export interface CertificateDto {
+  readonly name: string;
+  readonly issuer: string;
+  readonly serial: string;
+  readonly validFrom: string;
+  readonly validTo: string;
+  readonly expired: boolean;
+  /** Base64 DER, so the bytes need not cross back and forth. */
+  readonly certificateBase64: string;
 }
 
 /** Window state reported by main (M02). */
@@ -138,6 +176,17 @@ export interface IpcInvokeMap {
   'file:probe': { args: [path: string]; result: FileProbe };
   /** Save As dialog with a title and button label of our choosing (M21). `null` when cancelled. */
   'file:saveAsDialog': { args: [options?: SaveDialogOptions]; result: string | null };
+  /**
+   * Open dialog filtered to one kind of file, returning the bytes (M70).
+   *
+   * A certificate or a digital ID is not a document: it is never added to Recent, never opened in
+   * a tab, and its bytes go straight to the security worker. That is why this is a separate
+   * channel from `file:openDialog` rather than an option on it.
+   */
+  'file:pickFile': {
+    args: [kind: FileKind, options?: { title?: string; multiple?: boolean }];
+    result: OpenedFile[];
+  };
   /** Starts or stops watching a document for changes made outside the app (M21). */
   'file:watch': { args: [path: string, watching: boolean]; result: void };
   /** Mutes the watcher for a path while we write to it ourselves (M21). */
@@ -149,6 +198,33 @@ export interface IpcInvokeMap {
   'recovery:read': { args: [id: string]; result: string | null };
   'recovery:discard': { args: [id: string]; result: void };
   'recovery:clear': { args: []; result: void };
+  /**
+   * Document security (M70, ADR 0011). qpdf runs in main, so these carry bytes both ways — the
+   * same crossing a save already makes for `file:writeAtomic`.
+   *
+   * Passwords and `.p12` bytes travel over these channels. That is a process boundary inside one
+   * application, not a network: nothing is written down on either side, and the alternative —
+   * qpdf in the renderer — kills the renderer process (`src/main/security.ts`).
+   */
+  'security:inspect': { args: [bytes: Uint8Array]; result: SecurityInfoDto };
+  'security:isOwnerPassword': { args: [bytes: Uint8Array, password: string]; result: boolean };
+  'security:protect': {
+    args: [bytes: Uint8Array, intent: unknown, secrets: { user?: string; owner?: string }];
+    result: { bytes: Uint8Array; warnings: string[] };
+  };
+  'security:remove': {
+    args: [bytes: Uint8Array, password: string];
+    result: { bytes: Uint8Array; warnings: string[] };
+  };
+  'security:unlock': {
+    args: [bytes: Uint8Array, p12: Uint8Array, password: string];
+    result: { bytes: Uint8Array; permissions: unknown; openedAs: string };
+  };
+  'security:readCertificates': {
+    args: [bytes: Uint8Array, fileName: string];
+    result: CertificateDto[];
+  };
+  'security:version': { args: []; result: string };
   'recent:list': { args: []; result: RecentFile[] };
   'recent:add': { args: [path: string]; result: RecentFile[] };
   'recent:clear': { args: []; result: RecentFile[] };
@@ -252,6 +328,7 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'file:writeAtomic',
   'file:probe',
   'file:saveAsDialog',
+  'file:pickFile',
   'file:watch',
   'file:suspendWatch',
   'recovery:list',
@@ -259,6 +336,13 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'recovery:read',
   'recovery:discard',
   'recovery:clear',
+  'security:inspect',
+  'security:isOwnerPassword',
+  'security:protect',
+  'security:remove',
+  'security:unlock',
+  'security:readCertificates',
+  'security:version',
   'recent:list',
   'recent:add',
   'recent:clear',

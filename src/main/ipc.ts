@@ -7,7 +7,7 @@
  */
 
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron';
-import type { IpcHandlers, IpcInvokeChannel } from '../shared/ipc';
+import type { FileKind, IpcHandlers, IpcInvokeChannel } from '../shared/ipc';
 import { hostArch, targetArch } from './arch';
 import { readFileForRenderer, writeBytes } from './files';
 import { probeFile, writeAtomic } from './fs/atomic';
@@ -16,6 +16,10 @@ import type { RecoveryStore } from './fs/recovery';
 import type { FileWatchers } from './fs/watcher';
 import type { RecentFiles } from './recent';
 import type { Settings } from './settings';
+import { loadCertificates } from '../engine/security/pubsec/certificates';
+import { toBase64 } from '../engine/security/pubsec/crypto';
+import type { SecurityIntent } from '../engine/security/types';
+import { security } from './security';
 import { allWindows, broadcast, getMainWindow } from './window';
 
 export interface IpcDeps {
@@ -35,6 +39,29 @@ function windowOf(event: { readonly sender: unknown }): BrowserWindow | null {
   const win = BrowserWindow.fromWebContents(event.sender as Electron.WebContents);
   return win && !win.isDestroyed() ? win : getMainWindow();
 }
+
+/**
+ * Filters for the open dialog, by kind (M70).
+ *
+ * Windows shows the first filter by default and macOS uses the union of the extensions, so the
+ * kind's own filter comes first and "All files" last in both. `.pfx` is Windows' name for a
+ * `.p12` and `.p7c` is macOS's for a `.p7b`; a reader should not have to know that, so every
+ * spelling is accepted.
+ */
+const FILE_FILTERS: Record<FileKind, Electron.FileFilter[]> = {
+  pdf: [{ name: 'PDF documents', extensions: ['pdf'] }],
+  certificate: [
+    { name: 'Certificates', extensions: ['cer', 'crt', 'der', 'pem', 'p7b', 'p7c'] },
+    { name: 'Certificate bundles', extensions: ['p7b', 'p7c'] },
+  ],
+  'digital-id': [{ name: 'Digital IDs', extensions: ['p12', 'pfx'] }],
+};
+
+const FILE_TITLES: Record<FileKind, string> = {
+  pdf: 'Open PDF',
+  certificate: 'Choose a certificate',
+  'digital-id': 'Choose your digital ID',
+};
 
 /** The native Save dialog, filtered to PDFs. `null` when the reader cancelled. */
 async function saveDialog(
@@ -92,6 +119,20 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     'file:saveDialog': (e, defaultPath) =>
       saveDialog(windowOf(e), defaultPath === undefined ? {} : { defaultPath }),
     'file:saveAsDialog': (e, options) => saveDialog(windowOf(e), options ?? {}),
+    'file:pickFile': async (e, kind, options) => {
+      const win = windowOf(e);
+      const dialogOptions: Electron.OpenDialogOptions = {
+        title: options?.title ?? FILE_TITLES[kind],
+        properties: options?.multiple ? ['openFile', 'multiSelections'] : ['openFile'],
+        filters: [...FILE_FILTERS[kind], { name: 'All files', extensions: ['*'] }],
+      };
+      const result = win
+        ? await dialog.showOpenDialog(win, dialogOptions)
+        : await dialog.showOpenDialog(dialogOptions);
+      if (result.canceled) return [];
+      // Deliberately not added to Recent: a certificate is not a document the reader reopens.
+      return Promise.all(result.filePaths.map((path) => readFileForRenderer(path)));
+    },
     'file:writeAtomic': async (_e, path, bytes, options) => {
       // Our own write must not come back as "someone changed your file"; the mute is set before
       // the bytes land and expires by itself, and is lifted early when the write fails.
@@ -108,6 +149,38 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       }
     },
     'file:probe': (_e, path) => probeFile(path),
+
+    // ---- document security (M70, ADR 0011) -----------------------------------------------------
+    'security:inspect': async (_e, bytes) => security().inspect(bytes),
+    'security:isOwnerPassword': (_e, bytes, password) =>
+      security().isOwnerPassword(bytes, password),
+    'security:protect': async (_e, bytes, intent, secrets) => {
+      const result = await security().protect(bytes, intent as SecurityIntent, secrets);
+      return { bytes: result.bytes, warnings: [...result.warnings] };
+    },
+    'security:remove': async (_e, bytes, password) => {
+      const result = await security().remove(bytes, password);
+      return { bytes: result.bytes, warnings: [...result.warnings] };
+    },
+    'security:unlock': async (_e, bytes, p12, password) => {
+      const result = await security().unlockWithDigitalId(bytes, p12, password);
+      return {
+        bytes: result.bytes,
+        permissions: result.permissions,
+        openedAs: result.openedAs,
+      };
+    },
+    'security:readCertificates': (_e, bytes, fileName) =>
+      loadCertificates(bytes, fileName).map((cert) => ({
+        name: cert.name,
+        issuer: cert.issuer,
+        serial: cert.serial,
+        validFrom: cert.validFrom,
+        validTo: cert.validTo,
+        expired: cert.expired,
+        certificateBase64: toBase64(cert.der),
+      })),
+    'security:version': () => security().version(),
     'file:watch': (e, path, watching) => {
       const win = windowOf(e);
       if (!win) return;

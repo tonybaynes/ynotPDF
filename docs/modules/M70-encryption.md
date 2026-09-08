@@ -197,7 +197,96 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **qpdf ships as WebAssembly, and the package is `@neslinesli93/qpdf-wasm` (qpdf 12.2.0).** The
+  brief's preferred `@jspawn/qpdf-wasm` is qpdf 10 from July 2022 and does not load on Node 26 at
+  all — its Emscripten shim decides it is a browser, then `fetch()`es a `file://` URL and throws.
+  The chosen build is current and runs unmodified under Node. WASM rather than a bundled CLI is
+  not only the arm64 argument: qpdf publishes release binaries for Windows only, so a CLI would
+  mean building qpdf ourselves for macOS and Linux, and `binaries.json` would carry four entries
+  that CI has to produce. One 1.3 MB `.wasm` is the same file on every OS and every CPU. ADR 0011.
+- **qpdf runs in the main process, not in a renderer Worker — and that answer was arrived at the
+  hard way.** The Worker was built first, beside M21's writer. It does not work: this build of
+  qpdf-wasm has had its `wasmBinary` option minified away, so it can only be pointed at a URL,
+  and every URL a `file://` renderer can offer it (`data:`, `blob:`, even a `Response` served
+  from a wrapped `fetch`) ends with the renderer **process dying** — no exception, no window,
+  exit code 143. The same module and the same bytes work perfectly in a plain Chromium worker.
+  Main is Node: the module reads its own `.wasm` off disk, and the renderer reaches it through
+  typed `security:*` channels exactly as it reaches `file:writeAtomic`. It is also where M120 and
+  M121 will want it. ADR 0011 records the whole of it, because the next module reaching for a
+  Worker to hold a big WebAssembly module needs to know.
+- **Each qpdf command gets its own module instance.** qpdf is a command-line program: `main`
+  returning means `exit()`, and a second `callMain` on the same instance runs a program that has
+  already ended. Node tolerates it and returns nonsense; a Chromium renderer does not survive it.
+  A fresh instance per run costs about 40 ms, once or twice per save, and is what a real `qpdf`
+  would do anyway.
+- **qpdf does the standard security handler; it cannot do the certificate one.** qpdf 12 has no
+  public-key encryption — no `--recipient`, no `/Adobe.PubSec`, and an open upstream issue rather
+  than an implementation. So "qpdf is the single implementation of the crypto" holds for
+  passwords, which is where it matters and where nearly every file lands, and certificate
+  security is ours. ADR 0012 says so in full.
+- **Certificate security is built on the two halves qpdf leaves us, and verified against qpdf.**
+  Writing a public-key file needs (a) the CMS envelopes — node-forge — and (b) AES-256-CBC over
+  every string and stream, which is the *same* content encryption the standard handler uses:
+  for AESV3 the object key is the file key itself. So the encryptor is a walk over pdf-lib's
+  object graph, and its correctness is provable: swap the `/Adobe.PubSec` dictionary for a
+  `/Standard` R6 one wrapping the identical file key under a password we choose, and
+  `qpdf --check` reads every stream in the file. That is the certificate acceptance test.
+- **Opening a certificate-encrypted file swaps the dictionary the other way, and never parses
+  the body.** From the recipient's `.p12` we recover the seed, derive the file key, then append
+  an incremental update whose only content is a `/Standard` R6 `/Encrypt` dictionary wrapping
+  that key under a throwaway password. `qpdf --decrypt` then does all the parsing — object
+  streams, cross-reference streams, damaged files and every other case pdf-lib would refuse —
+  and PDFium is handed plaintext. Twelve lines of appended bytes instead of a second PDF parser.
+- **Nothing we write is encrypted twice.** Our public-key writer emits no object streams: pdf-lib
+  builds those at save time, after our pass has encrypted the strings, and a string inside an
+  object stream must not be encrypted separately from the stream that holds it. The password
+  path has no such constraint because qpdf does the whole job itself.
+- **The document carries a security *intent*, never a password.** `SecurityIntent` lives in the
+  model's custom bag under `M70` and says what the file should become — algorithm, permissions,
+  what to encrypt, recipients — with the passwords held in a module-private map keyed by document
+  id and never written to the store, the journal, a recovery record or a log. After a crash the
+  journal replays the intent and the reader is asked for the passwords again, which is the only
+  honest thing a recovery file can do.
+- **Setting security is an undoable `Command` like everything else.** `SetSecurityCommand` and
+  `RemoveSecurityCommand` swap the intent slice and record the `custom` write intent; undo puts
+  the previous intent back, and the passwords ride along in the command object rather than the
+  journal so undo works in-session without ever persisting them.
+- **Encryption is a stage of the save pipeline, not a second save.** M21 hands its written bytes
+  to any registered `SavePipelineStage` before they reach `file:writeAtomic`, so the file that
+  lands on disk is encrypted the first time and there is never a plaintext window. The stage
+  interface is M21's (`src/engine/Writer.ts`, additive) and M70 registers into it; M120 gets the
+  same stage for batch. A stage also answers `handlesSecurity(documentId)`, which does two things
+  in M21: it silences the "saving will remove the password" warning, which would be either false
+  or a second question, and it makes the save ask the engine for **decrypted** bytes — pdf-lib
+  cannot rewrite an encrypted document, and the stage is what puts the protection back. ADR 0012.
+- **A protected file re-encrypts itself on save.** M21 refuses to rewrite an encrypted document
+  because pdf-lib would emit plaintext under an encrypted trailer. With M70 present that warning
+  is replaced by the real behaviour: the engine's decrypted bytes go through the writer, and the
+  pipeline stage puts the same protection back — same algorithm, same permissions, same
+  passwords — using the passwords held in memory. If they are not in memory (a file opened with
+  the user password, or recovered) the reader is asked before the save, not after it.
+- **Permission enforcement is a declaration, not a copied `when` clause.** `CommandSpec.permission`
+  (additive, `src/shared/module.ts`) names the permission a command needs; the Registry consults a
+  registered `permissionGate` and the ribbon's tooltip gains a sentence saying which permission is
+  missing and that the owner password lifts it. M70 registers the gate, so a build without M70
+  leaves every command enabled and nothing else has to know. `SecurityService.allows(action)` is
+  the single answer behind it: true when unprotected, true when opened with the owner password or
+  a digital ID, otherwise what `/P` says.
+- **A certificate-protected file cannot be re-protected on its own, and the save says so.** Such a
+  file names its recipients inside sealed envelopes but does not carry their certificates, and
+  nothing can encrypt to a certificate it does not have. A document opened with a digital ID and
+  saved without being protected again therefore comes out in the clear, with a warning that says
+  exactly that and asks the reader to choose the recipients again. Silence there would be the
+  worst failure this module could have.
+- **Passwords are compared and measured, not judged.** The strength meter reports a word
+  (Very weak · Weak · Fair · Strong · Very strong) with the reason beside it, computed from
+  length, character classes and a small list of the obvious ones in `resources/`; it never blocks
+  a save, because the reader's document is the reader's business.
+- **The permission model is one type, three representations.** `PermissionFlags` in the engine is
+  the app's vocabulary; `permissionsToP()` and `pToPermissions()` convert to and from the `/P`
+  bitfield, and `permissionsToQpdfArgs()` to qpdf's command line. All three are pure and tested
+  against qpdf's own `--show-encryption` output, so a flag cannot mean one thing to us and
+  another to the file.
 
 ## Build log (fill in at merge)
 

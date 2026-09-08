@@ -21,6 +21,7 @@ import engineManifest from '@modules/M10-engine-layer/manifest';
 import viewerManifest from '@modules/M11-viewer/manifest';
 import documentManifest from '@modules/M20-document-model/manifest';
 import saveManifest from '@modules/M21-save/manifest';
+import securityManifest from '@modules/M70-encryption/manifest';
 import { ThemeManager } from '@theme/ThemeManager';
 
 /**
@@ -60,6 +61,7 @@ registry.register(engineManifest);
 registry.register(documentManifest);
 registry.register(viewerManifest);
 registry.register(saveManifest);
+registry.register(securityManifest);
 
 const e2e = hasBridge() && getBridge().e2e;
 if (e2e) {

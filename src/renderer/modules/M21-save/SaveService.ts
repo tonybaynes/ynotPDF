@@ -24,7 +24,14 @@ import type { ShellServices } from '@app/services';
 import type { Documents, DocumentTab } from '@app/tabs/Documents';
 import type { Document } from '@core/Document';
 import type { Registry } from '@core/Registry';
-import { WriteCancelled, WriteUnsupported, planIsEmpty, type WriteResult } from '@engine/Writer';
+import {
+  WriteCancelled,
+  WriteUnsupported,
+  planIsEmpty,
+  runSaveStages,
+  type SavePipelineStage,
+  type WriteResult,
+} from '@engine/Writer';
 import type { DocumentService } from '@modules/M20-document-model/manifest';
 import { DOCUMENT_SERVICE } from '@modules/M20-document-model/DocumentService';
 import { hasBridge, invoke, on, type FileProbe } from '@shared/ipc';
@@ -145,6 +152,35 @@ export class SaveService {
 
   get settings(): SaveSettings {
     return this.settingsValue;
+  }
+
+  /**
+   * Transformations applied to the writer's output before it reaches the disk (ADR 0012).
+   *
+   * M70 registers one here to put encryption back on a protected document. Doing that *after* the
+   * save would mean writing the file twice and leaving it unprotected in between, which is the
+   * one thing a protect feature must not do.
+   */
+  private readonly stages = new Map<string, SavePipelineStage>();
+
+  /** Registers a pipeline stage, replacing any stage with the same id. */
+  addStage(stage: SavePipelineStage): () => void {
+    this.stages.set(stage.id, stage);
+    return () => {
+      this.removeStage(stage.id);
+    };
+  }
+
+  removeStage(id: string): void {
+    this.stages.delete(id);
+  }
+
+  /** Whether a registered stage owns this document's protection, so the warning is not ours. */
+  private stageHandlesSecurity(documentId: string): boolean {
+    for (const stage of this.stages.values()) {
+      if (stage.handlesSecurity?.(documentId) === true) return true;
+    }
+    return false;
   }
 
   /** The state of one document, or null when the service has never seen it. */
@@ -419,18 +455,32 @@ export class SaveService {
     entry.saving = true;
     this.shell.invalidate();
     try {
-      const base = await document.engine.save(document.handle);
+      // Plaintext for the writer when a stage owns the protection (M70): pdf-lib cannot rewrite
+      // an encrypted document, and the stage will put the protection back — or deliberately not —
+      // once the writer has finished. Without a stage this stays false and an encrypted document
+      // is refused by the writer, which is what the warning above was about.
+      const removeSecurity = this.stageHandlesSecurity(document.id);
+      const base = await document.engine.save(document.handle, { removeSecurity });
       const written = await this.runWriter(document, base, plan, path);
       if (!written) return { saved: false, path: null, reason: 'cancelled' };
 
-      const result = await this.writeBytes(path, written.bytes, options.backup);
+      const staged = await runSaveStages([...this.stages.values()], {
+        bytes: written.bytes,
+        context: {
+          documentId: document.id,
+          path,
+          saveAs: options.rename === true || entry.path !== path,
+        },
+      });
+
+      const result = await this.writeBytes(path, staged.bytes, options.backup);
       if (!result.ok) {
         return await this.handleWriteFailure(entry, result.message);
       }
 
       // The document is saved: nothing to recover, and the file on disk is now ours.
       await this.recoveryStorage.discard(entry.recoveryId);
-      entry.source = fingerprintBytes(written.bytes, result.modifiedAt);
+      entry.source = fingerprintBytes(staged.bytes, result.modifiedAt);
       document.undo.markSaved();
       if (options.rename || entry.path !== path) {
         this.documents.update(entry.tabId, { path });
@@ -438,7 +488,7 @@ export class SaveService {
         if (hasBridge()) await invoke('recent:add', path).catch(() => []);
       }
       this.reportUnsaved();
-      const warnings = [...planWarnings, ...written.warnings];
+      const warnings = [...planWarnings, ...written.warnings, ...(staged.warnings ?? [])];
       return {
         saved: true,
         path,
@@ -471,7 +521,10 @@ export class SaveService {
       });
       if (answer !== 'save') return answer === 'saveAs' ? 'saveAs' : 'cancel';
     }
-    if (state.security.encrypted) {
+    // The warning only applies when nothing else is in charge of the protection. With M70
+    // registered the file is either encrypted again or deliberately not, and the reader has
+    // already been asked which — so saying it here would be either false or a second question.
+    if (state.security.encrypted && !this.stageHandlesSecurity(document.id)) {
       const answer = await askAboutEncryption(this.shell.dialogs, { title: state.title });
       if (answer === 'cancel') return 'cancel';
     }

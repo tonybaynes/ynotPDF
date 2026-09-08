@@ -27,6 +27,10 @@ export default defineConfig({
         'src/engine/Writer.ts',
         'src/engine/writers/**/*.ts',
         'src/engine/appearance/**/*.ts',
+        // M70's engine half: the security façade, the permission arithmetic and the public-key
+        // handler. `qpdf-asset.ts` is gone (qpdf lives in main now, ADR 0011) and `qpdf.ts` is
+        // the Emscripten wrapper, proved against a real qpdf rather than by line count.
+        'src/engine/security/**/*.ts',
         'scripts/lib/**/*.ts',
         'src/renderer/theme/**/*.ts',
         'src/renderer/modules/**/*.ts',
@@ -67,6 +71,19 @@ export default defineConfig({
         'src/renderer/modules/M21-save/SaveService.ts',
         'src/renderer/modules/M21-save/dialogs.ts',
         'src/renderer/modules/M21-save/manifest.ts',
+        /*
+         * M70's DOM and shell half, for the same reason. `dialogs.ts` *is* the Protect dialog and
+         * `manifest.ts` the contribution points; `SecurityService` orchestrates them, IPC and the
+         * save pipeline. All three are proved by Playwright in `test/e2e/security.spec.ts` —
+         * which is where "the file on disk is encrypted and Chrome asks for the password"
+         * belongs — while the decisions underneath them are unit-tested in
+         * `test/unit/security/`. `qpdf.ts` is the Emscripten wrapper: what matters about it is
+         * that qpdf answers, which every test in that folder depends on.
+         */
+        'src/renderer/modules/M70-encryption/SecurityService.ts',
+        'src/renderer/modules/M70-encryption/dialogs.ts',
+        'src/renderer/modules/M70-encryption/manifest.ts',
+        'src/engine/security/qpdf.ts',
       ],
       reporter: ['text', 'lcov'],
       thresholds: {
@@ -113,6 +130,30 @@ export default defineConfig({
           lines: 75,
           functions: 80,
           statements: 75,
+        },
+        // M70. The permission arithmetic and the public-key handler decide what a protected file
+        // allows and who can open it, so their gates are the highest here.
+        'src/engine/security/permissions.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/engine/security/pubsec/crypto.ts': { lines: 85, functions: 85, statements: 85 },
+        'src/engine/security/pubsec/standard.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/security/pubsec/envelope.ts': { lines: 85, functions: 85, statements: 85 },
+        'src/engine/security/pubsec/encrypt.ts': { lines: 80, functions: 80, statements: 80 },
+        'src/engine/security/pubsec/certificates.ts': { lines: 80, functions: 75, statements: 80 },
+        'src/engine/security/Security.ts': { lines: 80, functions: 80, statements: 80 },
+        'src/renderer/modules/M70-encryption/intent.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M70-encryption/commands.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M70-encryption/strength.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
         },
       },
     },

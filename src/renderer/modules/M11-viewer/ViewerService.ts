@@ -211,11 +211,18 @@ export class ViewerService {
       this.documents.activate(existing.id);
       return existing;
     }
+    // A certificate-protected document has to be decrypted before PDFium ever sees it: PDFium
+    // knows only the standard security handler, so such a file is not "wrong password" to it, it
+    // is unreadable. M70 registers the `security` service and does the decryption with the
+    // reader's digital ID; without M70 the bytes pass through untouched (ADR 0012).
+    const prepared = await this.prepareBytes(file);
+    if (!prepared) return null;
+
     const opened = await openWithPassword(
       (password) =>
         // The engine transfers the buffer into its worker, which detaches it — so every attempt
         // gets its own copy, or the second one would find an empty ArrayBuffer.
-        service.open(file.bytes.slice(), {
+        service.open(prepared.bytes.slice(), {
           path: file.path,
           name: file.name,
           ...(password === undefined ? {} : { password }),
@@ -223,9 +230,32 @@ export class ViewerService {
       { dialogs: this.shell.dialogs, name: file.name },
     );
     if (!opened) return null;
+    if (prepared.openedAs !== null) {
+      this.registry
+        .service<{ noteOpenedAs(id: string, openedAs: string | null): void }>('security')
+        .noteOpenedAs(opened.document.id, prepared.openedAs);
+    }
     await this.attach(opened.tab, opened.document);
     if (hasBridge() && file.path) await invoke('recent:add', file.path).catch(() => []);
     return opened.tab;
+  }
+
+  /**
+   * Gives a registered `security` service a chance to decrypt the bytes before the engine opens
+   * them. Returns `null` when the reader cancelled, which leaves no tab behind and shows no
+   * error, because cancelling is not a failure.
+   */
+  private async prepareBytes(
+    file: OpenedFile,
+  ): Promise<{ bytes: Uint8Array; openedAs: string | null } | null> {
+    if (!this.registry.hasService('security')) return { bytes: file.bytes, openedAs: null };
+    const security = this.registry.service<{
+      prepareForOpen(
+        bytes: Uint8Array,
+        name: string,
+      ): Promise<{ bytes: Uint8Array; openedAs: string | null } | null>;
+    }>('security');
+    return security.prepareForOpen(file.bytes, file.name);
   }
 
   /** Builds the viewport for a tab whose `Document` already exists. */
