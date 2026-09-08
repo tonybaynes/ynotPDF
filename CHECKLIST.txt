@@ -83,7 +83,7 @@ WAVE 2
       needs: M02 M10
       prompt: Read D:\Projects\ynotPDF\docs\modules\M11-viewer.md and carry out the "Your task" section in full.
 
-[ ] M21  Save, Save As, autosave & recovery
+[✔] M21  Save, Save As, autosave & recovery
       model:  Opus
       needs: M20 M11
       prompt: Read D:\Projects\ynotPDF\docs\modules\M21-save.md and carry out the "Your task" section in full.
@@ -294,9 +294,9 @@ WAVE 10
 
 THINGS ONLY TONY CAN DO
 -----------------------
-[x] Create private GitHub repo tonybaynes/ynotPDF (before M00)
-[ ] Confirm app name / supply logo (M00)
-[ ] Approve tier list in PLAN.md section 1 (wave 1)
+[✔] Create private GitHub repo tonybaynes/ynotPDF (before M00)
+[✔] Confirm app name / supply logo (M00) - "ynotPDF Logo.jpg"
+[✔] Approve tier list in PLAN.md section 1 (wave 1)
 [✔] Approve the four theme palettes (M01 gallery page)   - approved 2026-09-07
 [ ] Provide a few non-confidential real PDFs for the test corpus (M10)
 [ ] Windows code-signing certificate + Apple Developer account (M131)

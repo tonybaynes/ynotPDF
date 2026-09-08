@@ -20,7 +20,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "lint": "eslint . && prettier --check . && node scripts/check-styles.ts && npm run typecheck",
+    "lint": "eslint . && prettier --check . && node scripts/check-styles.ts && node scripts/make-icon.ts && npm run typecheck",
     "format": "prettier --write .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",

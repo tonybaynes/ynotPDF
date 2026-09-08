@@ -299,7 +299,7 @@ is colourblind: black and red read as the same colour):**
 - Docs: `README.md`, `docs/adr/0001-stack.md`.
 
 **Deferred / notes:**
-- App icon: none yet (electron-builder default). Needs the operator's logo (PLAN.md §10.1);
+- App icon: **real logo in place since 2026-09-08** (`resources/build/icon.png` from `resources/brand/`; `npm run icon` now verifies instead of generating). Earlier note: none yet (electron-builder default). Needs the operator's logo (PLAN.md §10.1);
   M131 adds it under `resources/build/`.
 - `file.open` only reflects the file name in the shell; rendering arrives with M10/M11.
 - `Document` and `Selection` are typed shells with minimal behaviour (no unit tests yet);
