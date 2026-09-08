@@ -93,7 +93,7 @@ WAVE 2
       needs: M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M70-encryption.md and carry out the "Your task" section in full.
 
-[x] M91  Create PDF from images, web pages, clipboard, HTML/Markdown & text
+[✔] M91  Create PDF from images, web pages, clipboard, HTML/Markdown & text
       model:  Opus
       needs: M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M91-create-pdf.md and carry out the "Your task" section in full.
