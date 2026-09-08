@@ -13,7 +13,7 @@ import { buildMenu } from './menu';
 import { RecentFiles } from './recent';
 import { Settings, THEME_KEY } from './settings';
 import { broadcast, createMainWindow, getMainWindow, sendTo } from './window';
-import { readFileForRenderer } from './files';
+import { cleanTempFiles, readFileForRenderer } from './files';
 
 const E2E = process.env['YNOT_E2E'] === '1';
 
@@ -124,6 +124,8 @@ app.on('before-quit', (event) => {
 
 app.on('will-quit', () => {
   void watchers.closeAll();
+  // Temporary copies of attachments the reader opened in another application (M12, ADR 0011).
+  void cleanTempFiles();
 });
 
 app.on('second-instance', (_event, argv) => {

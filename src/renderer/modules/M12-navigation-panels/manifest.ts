@@ -236,16 +236,20 @@ const BOOKMARK_COMMANDS: ReadonlyArray<CommandSpec> = [
     category: 'View',
     icon: 'bookmark',
     shortcut: 'Mod+B',
-    description: 'Add a bookmark pointing at the current view',
+    description: 'Add a bookmark pointing at the current view (pass { title } to skip the prompt)',
     when: hasDocument,
     run: async (ctx) => {
       const service = nav(ctx);
       const document = doc(ctx);
-      const title = await service.dialogs.prompt({
-        title: 'Add bookmark',
-        label: 'Bookmark title',
-        value: defaultBookmarkTitle(service),
-      });
+      const given = ctx.args['title'];
+      const title =
+        typeof given === 'string'
+          ? given
+          : await service.dialogs.prompt({
+              title: 'Add bookmark',
+              label: 'Bookmark title',
+              value: defaultBookmarkTitle(service),
+            });
       if (title === null || title.trim() === '') return null;
       const selected = service.selectedBookmark;
       const at =
@@ -275,11 +279,15 @@ const BOOKMARK_COMMANDS: ReadonlyArray<CommandSpec> = [
       const document = doc(ctx);
       const id = bookmarkOf(ctx);
       const current = document.outlineItem(id)?.title ?? '';
-      const title = await nav(ctx).dialogs.prompt({
-        title: 'Rename bookmark',
-        label: 'Bookmark title',
-        value: current,
-      });
+      const given = ctx.args['title'];
+      const title =
+        typeof given === 'string'
+          ? given
+          : await nav(ctx).dialogs.prompt({
+              title: 'Rename bookmark',
+              label: 'Bookmark title',
+              value: current,
+            });
       if (title === null || title.trim() === '' || title === current) return null;
       await document.apply(new RenameBookmarkCommand(document, id, title.trim()));
       document.breakMerge();
@@ -798,13 +806,24 @@ const DEV_COMMANDS: ReadonlyArray<CommandSpec> = [
           scrollTop: scroll?.scrollTop ?? 0,
           labels: cells.map((c) => c.querySelector('.thumb-label')?.textContent ?? ''),
         },
-        bookmarks: [...document.querySelectorAll<HTMLElement>('.nav-tree [data-row]')].map((r) => ({
-          id: r.dataset['id'] ?? '',
-          title: r.querySelector('.nav-title')?.textContent ?? '',
-          level: Number(r.getAttribute('aria-level') ?? '1'),
-          expanded: r.getAttribute('aria-expanded'),
-          current: r.classList.contains('is-current'),
-        })),
+        bookmarks: [...document.querySelectorAll<HTMLElement>('.nav-tree [data-row]')].map((r) => {
+          const id = (r.dataset['id'] ?? '') as ModelId;
+          const item = service.document?.outlineItem(id) ?? null;
+          const dest =
+            item?.destinationId == null
+              ? null
+              : (service.document?.destination(item.destinationId) ?? null);
+          const page = dest?.pageId == null ? -1 : (service.document?.pageIndex(dest.pageId) ?? -1);
+          return {
+            id,
+            title: r.querySelector('.nav-title')?.textContent ?? '',
+            level: Number(r.getAttribute('aria-level') ?? '1'),
+            expanded: r.getAttribute('aria-expanded'),
+            current: r.classList.contains('is-current'),
+            page,
+            uri: item?.uri ?? null,
+          };
+        }),
         layers: [...document.querySelectorAll<HTMLElement>('.layer-row')].map((r) => ({
           id: r.dataset['id'] ?? '',
           name: r.querySelector('.nav-title')?.textContent ?? '',
@@ -825,6 +844,12 @@ const DEV_COMMANDS: ReadonlyArray<CommandSpec> = [
         ),
         portfolio:
           service.collection === null ? null : { fields: service.collection.fields.length },
+        attachmentModel: (service.document?.state.attachments ?? []).map((a) => ({
+          id: a.id,
+          name: a.name,
+          mimeType: a.mimeType,
+          description: a.description,
+        })),
         thumbnailStats: service.thumbnails.stats,
       };
     },
@@ -851,6 +876,31 @@ const DEV_COMMANDS: ReadonlyArray<CommandSpec> = [
         attachment: service.selectedAttachment,
         destination: service.selectedDestination,
       };
+    },
+  },
+  {
+    id: 'dev.navAttach',
+    label: 'Attach bytes',
+    category: 'Developer',
+    hidden: true,
+    description: 'Internal: attach a file without the native dialog (pass { name, bytes })',
+    when: hasDocument,
+    run: async (ctx) => {
+      const document = doc(ctx);
+      const name = ctx.args['name'];
+      const raw = ctx.args['bytes'];
+      if (typeof name !== 'string' || !Array.isArray(raw)) {
+        throw new Error('dev.navAttach needs { name, bytes }');
+      }
+      const description = ctx.args['description'];
+      const command = new AddAttachmentCommand(document, {
+        name,
+        bytes: Uint8Array.from(raw as number[]),
+        ...(typeof description === 'string' ? { description } : {}),
+      });
+      await document.apply(command);
+      nav(ctx).selectedAttachment = command.newId;
+      return command.newId;
     },
   },
   {

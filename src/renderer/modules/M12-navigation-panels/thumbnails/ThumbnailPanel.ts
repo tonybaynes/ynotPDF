@@ -27,7 +27,6 @@ import {
   pagesInRow,
   rangeBetween,
   scrollToPage,
-  stepSize,
   thumbnailBox,
   visibleRows,
   type GridMetrics,
@@ -47,13 +46,13 @@ export function mountThumbnailPanel(
     label: 'Smaller thumbnails',
     icon: 'minus',
     id: 'thumbnails-smaller',
-    onPress: () => void step(-1),
+    onPress: () => void nav.run('view.thumbnails.smaller'),
   });
   const larger = toolButton({
     label: 'Larger thumbnails',
     icon: 'plus',
     id: 'thumbnails-larger',
-    onPress: () => void step(1),
+    onPress: () => void nav.run('view.thumbnails.larger'),
   });
   const sizeLabel = el('span.nav-size', { 'aria-live': 'polite' });
   const bar = toolbar('Page thumbnails', smaller, larger, sizeLabel);
@@ -233,17 +232,13 @@ export function mountThumbnailPanel(
     paint();
   };
 
-  /** `+` / `−`: step the ladder, re-fit the pane, keep the current page in view. */
-  const step = async (direction: 1 | -1): Promise<void> => {
-    const next = stepSize(size(), direction);
-    if (next === size()) return;
-    await nav.setThumbnailSize(next);
-    // The pane resize arrives through a `ResizeObserver`; scrolling back to the current page has
-    // to happen after that, or it measures the old grid.
-    requestAnimationFrame(() => {
-      render();
-      keepCurrentInView();
-    });
+  /**
+   * Ctrl+wheel steps the ladder through the same command the `+` and `−` buttons run, so there
+   * is one path and the palette, the ribbon and the wheel cannot drift apart.
+   */
+  const step = (direction: 1 | -1): void => {
+    if (!canStep(size(), direction)) return;
+    void nav.run(direction > 0 ? 'view.thumbnails.larger' : 'view.thumbnails.smaller');
   };
 
   const keepCurrentInView = (): void => {
@@ -271,7 +266,7 @@ export function mountThumbnailPanel(
     (event) => {
       if (!event.ctrlKey) return;
       event.preventDefault();
-      void step(event.deltaY < 0 ? 1 : -1);
+      step(event.deltaY < 0 ? 1 : -1);
     },
     { passive: false },
   );
@@ -365,7 +360,13 @@ export function mountThumbnailPanel(
       schedule();
     }),
     nav.onSettingsChange(() => {
+      // The pane resize arrives through the `ResizeObserver`, so the scroll correction has to
+      // wait a frame or it measures the grid the panel is about to stop having.
       render();
+      requestAnimationFrame(() => {
+        render();
+        keepCurrentInView();
+      });
     }),
     selection.subscribe(() => {
       paint();
@@ -383,9 +384,10 @@ export function mountThumbnailPanel(
     }),
   );
 
-  render();
   // The panel opens at exactly one column — the operator's rule — unless the reader has already
-  // widened the pane themselves this session.
+  // dragged the splitter themselves this session.
+  nav.fitPaneToOneColumn();
+  render();
   requestAnimationFrame(() => {
     render();
     keepCurrentInView();

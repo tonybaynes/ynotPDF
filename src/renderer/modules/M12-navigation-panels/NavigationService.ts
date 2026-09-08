@@ -95,6 +95,8 @@ export class NavigationService {
    * something to return to. Filled by the Layers panel the first time it renders a document.
    */
   readonly initialLayerState = new Map<string, Readonly<Record<string, boolean>>>();
+  /** Whether the pane has already been sized to one column of thumbnails this session. */
+  private paneFitted = false;
 
   constructor(options: NavigationServiceOptions) {
     this.registry = options.registry;
@@ -379,6 +381,19 @@ export class NavigationService {
     }
   }
 
+  /**
+   * Sizes the pane to exactly one column the first time the Pages panel is shown in this
+   * session — the operator's rule that it "opens as a single column ... the panel's initial
+   * width is whatever one thumbnail plus margins needs". Afterwards the reader's own splitter
+   * drag is left alone, which is what makes the extra columns theirs to ask for.
+   */
+  fitPaneToOneColumn(): boolean {
+    if (this.paneFitted) return false;
+    this.paneFitted = true;
+    this.setPaneWidth(paneWidthFor(this.settingsValue.thumbnailSize));
+    return true;
+  }
+
   /** Sets the thumbnail size and the pane width that shows exactly one column of it. */
   async setThumbnailSize(size: number): Promise<number> {
     await this.setSetting('thumbnailSize', size);
@@ -412,6 +427,23 @@ export class NavigationService {
     return this.collection !== null;
   }
 
+  /**
+   * The open document that holds an attachment — the active one first, then any other tab.
+   *
+   * Opening an embedded PDF activates the tab it goes into, so a second "open" would otherwise
+   * be looking for the next attachment in the file that has just arrived rather than in the
+   * portfolio it came from.
+   */
+  documentOwning(attachmentId: ModelId): Document | null {
+    const active = this.document;
+    if (active?.attachment(attachmentId)) return active;
+    if (!this.registry.hasService(DOCUMENT_SERVICE)) return null;
+    for (const document of this.registry.service<DocumentService>(DOCUMENT_SERVICE).all()) {
+      if (document.attachment(attachmentId)) return document;
+    }
+    return null;
+  }
+
   /** The bytes of an attachment. */
   async attachmentBytes(document: Document, attachment: ModelAttachment): Promise<Uint8Array> {
     return await document.engine.attachmentData(document.handle, attachment.engineId);
@@ -423,15 +455,15 @@ export class NavigationService {
    * handed to the OS through a temporary file.
    */
   async openAttachment(attachmentId: ModelId): Promise<'tab' | 'os' | 'failed'> {
-    const context = this.context;
-    const attachment = context?.document.attachment(attachmentId);
-    if (!context || !attachment) return 'failed';
-    const bytes = await this.attachmentBytes(context.document, attachment);
+    const document = this.documentOwning(attachmentId);
+    const attachment = document?.attachment(attachmentId);
+    if (!document || !attachment) return 'failed';
+    const bytes = await this.attachmentBytes(document, attachment);
     if (bytes.length === 0) {
       this.toast('error', `${attachment.name} is empty`);
       return 'failed';
     }
-    if (isPdf(attachment.name, attachment.mimeType)) {
+    if (isPdf(attachment.name, attachment.mimeType, bytes)) {
       const opened = await this.openBytesInTab(attachment.name, bytes);
       return opened ? 'tab' : 'failed';
     }
@@ -468,10 +500,10 @@ export class NavigationService {
 
   /** Saves an attachment to a path the reader chooses. Returns the path, or null. */
   async saveAttachment(attachmentId: ModelId): Promise<string | null> {
-    const context = this.context;
-    const attachment = context?.document.attachment(attachmentId);
-    if (!context || !attachment || !hasBridge()) return null;
-    const bytes = await this.attachmentBytes(context.document, attachment);
+    const document = this.documentOwning(attachmentId);
+    const attachment = document?.attachment(attachmentId);
+    if (!document || !attachment || !hasBridge()) return null;
+    const bytes = await this.attachmentBytes(document, attachment);
     const path = await invoke('file:saveAsDialog', {
       defaultPath: attachment.name,
       title: `Save ${attachment.name}`,
@@ -526,10 +558,23 @@ export class NavigationService {
   }
 }
 
-/** Whether an attachment is a PDF — by MIME type when the file says, by extension otherwise. */
-export function isPdf(name: string, mimeType: string | null | undefined): boolean {
-  if (mimeType != null && mimeType !== '') return mimeType.toLowerCase().includes('pdf');
-  return name.toLowerCase().endsWith('.pdf');
+/**
+ * Whether an attachment is a PDF.
+ *
+ * The extension and the bytes are believed before the declared MIME type, because real files
+ * lie about it: the operator's own Foxit-made portfolio declares `/Subtype /text#2Fplain` on
+ * three embedded PDFs. A viewer that trusted that would hand a PDF to Notepad.
+ */
+export function isPdf(
+  name: string,
+  mimeType: string | null | undefined,
+  bytes?: Uint8Array,
+): boolean {
+  if (name.toLowerCase().endsWith('.pdf')) return true;
+  if ((bytes?.length ?? 0) >= 5 && bytes) {
+    if (String.fromCharCode(...bytes.subarray(0, 5)) === '%PDF-') return true;
+  }
+  return mimeType?.toLowerCase().includes('pdf') ?? false;
 }
 
 function messageOf(error: unknown): string {

@@ -660,7 +660,10 @@ export class AddAttachmentCommand extends NavCommand {
     super(doc);
     this.file = {
       name: file.name,
-      bytes: file.bytes,
+      // The engine *transfers* a Uint8Array into its worker, which detaches the buffer here —
+      // so the command keeps its own copy, or its second `do()` (a redo) and its `toJSON()`
+      // would both be reading an empty array.
+      bytes: file.bytes.slice(),
       description: file.description ?? null,
       mimeType: file.mimeType ?? null,
     };
@@ -675,7 +678,7 @@ export class AddAttachmentCommand extends NavCommand {
   async do(): Promise<void> {
     const added = await this.doc.engine.addAttachment(this.doc.handle, {
       name: this.file.name,
-      bytes: this.file.bytes,
+      bytes: this.file.bytes.slice(),
       ...(this.file.description === null ? {} : { description: this.file.description }),
       ...(this.file.mimeType === null ? {} : { mimeType: this.file.mimeType }),
       modified: new Date().toISOString(),
@@ -747,6 +750,7 @@ export class DeleteAttachmentCommand extends NavCommand {
     this.bytes = await this.doc.engine
       .attachmentData(this.doc.handle, record.engineId)
       .catch(() => new Uint8Array(0));
+    // Same reason as the add: undo hands these bytes back to the engine, which detaches them.
     await this.doc.engine.deleteAttachment(this.doc.handle, record.engineId);
     this.removed = this.doc.removeAttachmentRecord(this.attachmentId);
     this.doc.rebindAttachments(await engineAttachmentIds(this.doc));
@@ -758,7 +762,7 @@ export class DeleteAttachmentCommand extends NavCommand {
     if (!removed) return;
     const added = await this.doc.engine.addAttachment(this.doc.handle, {
       name: removed.attachment.name,
-      bytes: this.bytes ?? new Uint8Array(0),
+      bytes: (this.bytes ?? new Uint8Array(0)).slice(),
       ...(removed.attachment.description === null
         ? {}
         : { description: removed.attachment.description }),

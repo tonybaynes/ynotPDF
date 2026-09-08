@@ -107,7 +107,23 @@ export function mountBookmarkPanel(
     }
   };
 
+  /**
+   * Opens whatever is hiding the selected bookmark. Indenting one nests it under a neighbour
+   * that may well be collapsed, and a bookmark that vanishes when you move it is a bookmark you
+   * have lost.
+   */
+  const revealSelected = (): void => {
+    if (selected === null) return;
+    const list = outline();
+    let parentId = list.find((o) => o.id === selected)?.parentId ?? null;
+    for (let guard = 0; parentId !== null && guard < 64; guard++) {
+      expanded.add(parentId);
+      parentId = list.find((o) => o.id === parentId)?.parentId ?? null;
+    }
+  };
+
   const rowsInView = (): Array<{ item: ModelOutlineItem; depth: number }> => {
+    revealSelected();
     const all = walk(outline());
     const out: Array<{ item: ModelOutlineItem; depth: number }> = [];
     let hiddenBelow: number | null = null;
@@ -123,6 +139,8 @@ export function mountBookmarkPanel(
   const render = (): void => {
     const context = nav.context;
     seed();
+    // The commands act on the service's selection, and so does the panel.
+    if (nav.selectedBookmark !== null) selected = nav.selectedBookmark;
     const rows = context ? rowsInView() : [];
     empty.hidden = rows.length > 0;
     if (!context) empty.textContent = '';
