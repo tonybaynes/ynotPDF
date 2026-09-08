@@ -28,6 +28,7 @@ commit. Sub-conversations working in parallel follow **§12**.
 | 3 | M13 Text selection, find, copy, snapshot & print | [M13-select-find-print.md](docs/modules/M13-select-find-print.md) | ☐ |
 | 3 | M30 Annotations — text markup, notes, typewriter, text box, callout | [M30-markup-annotations.md](docs/modules/M30-markup-annotations.md) | ☐ |
 | 3 | M40 Organise pages — insert, delete, extract, replace, rotate, move, labels | [M40-organise-pages.md](docs/modules/M40-organise-pages.md) | ☐ |
+| 4 | M42 PDF Portfolios — create, edit, cover sheet, extract | [M42-portfolios.md](docs/modules/M42-portfolios.md) | ☐ |
 | 4 | M31 Annotations — shapes, ink & eraser, stamps, file attachments | [M31-shapes-ink-stamps.md](docs/modules/M31-shapes-ink-stamps.md) | ☐ |
 | 4 | M32 Comments panel, replies & status, FDF/XFDF, summarise | [M32-comments-panel.md](docs/modules/M32-comments-panel.md) | ☐ |
 | 4 | M41 Merge, split, extract to files, crop & flatten | [M41-merge-split-crop.md](docs/modules/M41-merge-split-crop.md) | ☐ |
@@ -87,7 +88,8 @@ tiers:
 |---|---|---|
 | **Core** | Build fully; parity with Foxit is realistic | View, annotate, organise pages, forms, protect, redact, sign, OCR, optimise, compare, batch, watermarks/Bates, create-from-image/web |
 | **Pro** | Build, but expect ~80 % of Foxit's polish | Text editing with reflow (see §8), auto form-field recognition, PDF/A conversion, OCR "editable text" mode |
-| **Parked** | Not planned unless asked — cost far exceeds value for one operator | XFA forms, Acrobat-JavaScript compatibility, PDF→Word/Excel with layout fidelity, 3D/video/rich media, PDF portfolios, tag-tree accessibility editor, full preflight, cloud/ECM connectors, virtual printer driver, scanner drivers |
+| **Un-parked 2026-09-08** | PDF Portfolios — create/edit/cover/extract, operator's daily workflow | **M42** (wave 4); opening/extracting already in M12 |
+| **Parked** | Not planned unless asked — cost far exceeds value for one operator | XFA forms, Acrobat-JavaScript compatibility, PDF→Word/Excel with layout fidelity, 3D/video/rich media, tag-tree accessibility editor, full preflight, cloud/ECM connectors, virtual printer driver, scanner drivers |
 
 Anything Parked can be promoted later; the engine layer does not block it.
 
@@ -387,7 +389,7 @@ Full per-module detail is in each `docs/modules/*.md`.
 - **Wave 1:** M01 (M00) · M02 (M00, M01) · M10 (M00) · M20 (M00, M10)
 - **Wave 2:** M03 (M00, M10) · M11 (M02, M10) · M21 (M20, M11) · M70 (M21) · M91 (M21)
 - **Wave 3:** M12 (M11, M20) · M13 (M11) · M30 (M21, M11, M13) · M40 (M21, M12)
-- **Wave 4:** M31 (M30) · M32 (M30) · M41 (M40) · M72 (M21) · M130 (M02, M01)
+- **Wave 4:** M31 (M30) · M32 (M30) · M41 (M40) · M42 (M12, M21) · M72 (M21) · M130 (M02, M01)
   - → *MILESTONE 1 — usable viewer & annotator (v0.1)*
 - **Wave 5:** M33 (M31) · M50 (M21, M11) · M60 (M21, M30) · M92 (M11, M13) · M100 (M21)
 - **Wave 6:** M53 (M50, M21) · M61 (M60) · M82 (M30, M60) · M90 (M21) · M110 (M11, M13)

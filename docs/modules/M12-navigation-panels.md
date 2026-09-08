@@ -99,8 +99,8 @@ Destinations, plus Fields/Signatures/Comments panels that later modules add.
   "Open") as a read-only-until-saved-as document; other types open in the
   OS default app. Show the collection's schema columns if present. Sample:
   `test/fixtures/local/Sample Portfolio.pdf` (Foxit-made, three PDFs).
-  Creating/editing portfolios is NOT in this module (PLAN §1 parked list —
-  see the operator's decision there).
+  Creating/editing portfolios is **M42** (wave 4), which extends your
+  attachments code — keep it extensible, not forked.
 - Destinations panel: named destinations list, click navigates, rename/
   delete as Commands, "create from current view".
 - Panel toggles in View ribbon and shortcuts (F4 style) as Foxit.

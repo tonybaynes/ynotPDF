@@ -124,6 +124,11 @@ WAVE 3
 
 WAVE 4
 ------
+[ ] M42  PDF Portfolios — create, edit, cover sheet, extract
+      model:  Opus
+      needs: M12 M21
+      prompt: Read D:\Projects\ynotPDF\docs\modules\M42-portfolios.md and carry out the "Your task" section in full.
+
 [ ] M31  Annotations — shapes, ink & eraser, stamps, file attachments
       model:  Opus
       needs: M30
@@ -227,7 +232,7 @@ WAVE 7
       prompt: Read D:\Projects\ynotPDF\docs\modules\M120-batch-actions.md and carry out the "Your task" section in full.
 
   >>> MILESTONE 2 — everyday editor (v0.5)
-      forms fill & design, measuring, object move/resize, watermarks/Bates/headers, OCR (searchable), compare, export, batch, image editing
+      PDF portfolios (create/edit), forms fill & design, measuring, object move/resize, watermarks/Bates/headers, OCR (searchable), compare, export, batch, image editing
 
 
 WAVE 8
