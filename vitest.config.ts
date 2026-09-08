@@ -21,6 +21,12 @@ export default defineConfig({
       provider: 'v8',
       include: [
         'src/renderer/core/**/*.ts',
+        // M21's engine half: the writer contract, the pdf-lib writer and the appearance
+        // generators. M10's PDFium adapter stays out — it is proved against the corpus, not by
+        // line coverage.
+        'src/engine/Writer.ts',
+        'src/engine/writers/**/*.ts',
+        'src/engine/appearance/**/*.ts',
         'scripts/lib/**/*.ts',
         'src/renderer/theme/**/*.ts',
         'src/renderer/modules/**/*.ts',
@@ -51,6 +57,16 @@ export default defineConfig({
         'src/renderer/modules/M11-viewer/ViewerService.ts',
         'src/renderer/modules/M11-viewer/password.ts',
         'src/renderer/modules/M11-viewer/tools.ts',
+        /*
+         * M21's DOM and shell half, for the same reason: `SaveService` orchestrates dialogs,
+         * IPC and the tab strip, and `dialogs.ts` and `manifest.ts` are the dialogs and the
+         * contribution points themselves. All three are proved by Playwright in
+         * `test/e2e/save.spec.ts`, which is where a Save / Don't save / Cancel flow belongs;
+         * the decisions underneath them are unit-tested in `test/unit/save/service.test.ts`.
+         */
+        'src/renderer/modules/M21-save/SaveService.ts',
+        'src/renderer/modules/M21-save/dialogs.ts',
+        'src/renderer/modules/M21-save/manifest.ts',
       ],
       reporter: ['text', 'lcov'],
       thresholds: {
@@ -82,6 +98,21 @@ export default defineConfig({
           lines: 90,
           functions: 85,
           statements: 90,
+        },
+        // M21. The writer decides what the file on disk says, so its gate is the highest here.
+        'src/engine/writers/FullRewriteWriter.ts': { lines: 85, functions: 90, statements: 85 },
+        'src/engine/appearance/generators.ts': { lines: 90, functions: 95, statements: 90 },
+        'src/engine/appearance/content.ts': { lines: 90, functions: 85, statements: 90 },
+        'src/engine/appearance/metrics.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/appearance/index.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/renderer/modules/M21-save/plan.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/renderer/modules/M21-save/recovery.ts': { lines: 85, functions: 75, statements: 85 },
+        'src/renderer/modules/M21-save/commands.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/renderer/modules/M21-save/settings.ts': { lines: 80, functions: 70, statements: 80 },
+        'src/renderer/modules/M21-save/WriterClient.ts': {
+          lines: 75,
+          functions: 80,
+          statements: 75,
         },
       },
     },

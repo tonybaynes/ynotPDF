@@ -29,6 +29,49 @@ export interface RecentFile {
   readonly pinned?: boolean;
 }
 
+/** Where a save actually went, and what happened to the file that was there (M21). */
+export interface WriteFileResult {
+  readonly path: string;
+  /** `<path>.bak`, when the backup setting is on and there was a previous version. */
+  readonly backupPath: string | null;
+  readonly bytesWritten: number;
+  /** Modification time of the file we just wrote, so the watcher can tell ours from theirs. */
+  readonly modifiedAt: number;
+}
+
+/** What main can tell the renderer about a path before it saves to it (M21). */
+export interface FileProbe {
+  readonly path: string;
+  readonly exists: boolean;
+  readonly size: number;
+  /** Unix ms; 0 when the file is not there. */
+  readonly modifiedAt: number;
+  readonly writable: boolean;
+  /** Whether a file can be created in the containing folder — what the atomic rename needs. */
+  readonly directoryWritable: boolean;
+  /** The file is there and cannot be replaced: Save has to become Save As. */
+  readonly readOnly: boolean;
+}
+
+/** Options for the Save As dialog (M21). */
+export interface SaveDialogOptions {
+  /** Pre-filled path or file name. */
+  readonly defaultPath?: string;
+  readonly title?: string;
+  /** Label of the confirm button ("Save", "Export"). */
+  readonly buttonLabel?: string;
+}
+
+/** One document a crash left behind, as the recovery dialog lists it (M21). */
+export interface RecoveryEntry {
+  readonly id: string;
+  /** Unix ms of the last autosave. */
+  readonly savedAt: number;
+  readonly size: number;
+  /** The record, for the renderer to parse. */
+  readonly payload: string;
+}
+
 /** Window state reported by main (M02). */
 export interface WindowState {
   readonly maximized: boolean;
@@ -83,6 +126,29 @@ export interface IpcInvokeMap {
   'file:write': { args: [path: string, bytes: Uint8Array]; result: void };
   /** Shows the native save dialog. `null` when cancelled. */
   'file:saveDialog': { args: [defaultPath?: string]; result: string | null };
+  /**
+   * Writes bytes through a temporary file and a rename, so an interrupted save can never leave
+   * a half-written document behind (M21). `backup` renames the previous version to `<path>.bak`.
+   */
+  'file:writeAtomic': {
+    args: [path: string, bytes: Uint8Array, options?: { backup?: boolean }];
+    result: WriteFileResult;
+  };
+  /** Whether a path exists, its size and modification time, and whether it can be saved to (M21). */
+  'file:probe': { args: [path: string]; result: FileProbe };
+  /** Save As dialog with a title and button label of our choosing (M21). `null` when cancelled. */
+  'file:saveAsDialog': { args: [options?: SaveDialogOptions]; result: string | null };
+  /** Starts or stops watching a document for changes made outside the app (M21). */
+  'file:watch': { args: [path: string, watching: boolean]; result: void };
+  /** Mutes the watcher for a path while we write to it ourselves (M21). */
+  'file:suspendWatch': { args: [path: string, ms?: number]; result: void };
+  /** Every document a crash left behind, newest first (M21). */
+  'recovery:list': { args: []; result: RecoveryEntry[] };
+  /** Writes one autosave record. `id` must be `[A-Za-z0-9_-]{1,120}`. */
+  'recovery:save': { args: [id: string, payload: string]; result: void };
+  'recovery:read': { args: [id: string]; result: string | null };
+  'recovery:discard': { args: [id: string]; result: void };
+  'recovery:clear': { args: []; result: void };
   'recent:list': { args: []; result: RecentFile[] };
   'recent:add': { args: [path: string]; result: RecentFile[] };
   'recent:clear': { args: []; result: RecentFile[] };
@@ -117,6 +183,21 @@ export interface IpcInvokeMap {
   'window:setFullScreen': { args: [fullScreen?: boolean]; result: boolean };
   /** Number of open app windows (tests). */
   'window:count': { args: []; result: number };
+  /**
+   * Tells main whether this window is holding unsaved work (M21).
+   *
+   * Main intercepts a window close or an app quit **only** while at least one window has said
+   * yes, so a clean app still shuts down instantly and nothing can be lost by a race between the
+   * two processes. See `window:closeRequested` and `app:quitRequested`.
+   */
+  'window:setUnsaved': { args: [unsaved: boolean]; result: void };
+  /**
+   * The renderer has finished its close flow and the window may go (M21). `false` means the
+   * reader cancelled, and the window stays.
+   */
+  'window:confirmClose': { args: [close: boolean]; result: void };
+  /** The same answer for a quit that main asked about (M21). */
+  'app:confirmQuit': { args: [quit: boolean]; result: void };
   'shell:openExternal': { args: [url: string]; result: void };
   'shell:showItemInFolder': { args: [path: string]; result: void };
   'devtools:toggle': { args: []; result: void };
@@ -132,6 +213,15 @@ export interface IpcEventMap {
   'window:focusChanged': { readonly focused: boolean };
   /** Maximised / full-screen changed (M02). */
   'window:stateChanged': WindowState;
+  /** A watched document changed on disk (M21). The renderer offers Reload or Keep mine. */
+  'file:changedOnDisk': { readonly path: string };
+  /**
+   * The window is trying to close and main has held it back because this window reported
+   * unsaved work (M21). Answer with `window:confirmClose`.
+   */
+  'window:closeRequested': { readonly reason: 'window' | 'quit' };
+  /** The app is trying to quit and was held back the same way. Answer with `app:confirmQuit`. */
+  'app:quitRequested': Record<string, never>;
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeMap;
@@ -159,6 +249,16 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'file:read',
   'file:write',
   'file:saveDialog',
+  'file:writeAtomic',
+  'file:probe',
+  'file:saveAsDialog',
+  'file:watch',
+  'file:suspendWatch',
+  'recovery:list',
+  'recovery:save',
+  'recovery:read',
+  'recovery:discard',
+  'recovery:clear',
   'recent:list',
   'recent:add',
   'recent:clear',
@@ -177,6 +277,9 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'window:getState',
   'window:setFullScreen',
   'window:count',
+  'window:setUnsaved',
+  'window:confirmClose',
+  'app:confirmQuit',
   'shell:openExternal',
   'shell:showItemInFolder',
   'devtools:toggle',
@@ -189,6 +292,9 @@ export const EVENT_CHANNELS: readonly IpcEventChannel[] = [
   'recent:changed',
   'window:focusChanged',
   'window:stateChanged',
+  'file:changedOnDisk',
+  'window:closeRequested',
+  'app:quitRequested',
 ];
 
 /**

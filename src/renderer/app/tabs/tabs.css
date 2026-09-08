@@ -61,6 +61,21 @@
   font-style: italic;
 }
 
+/* Status is a word plus a style, never a style alone (M21). */
+.tab-readonly-badge {
+  display: none;
+  padding: 0 var(--sp-2);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg-muted);
+  font-size: var(--fs-1);
+  white-space: nowrap;
+}
+
+.tab-readonly .tab-readonly-badge {
+  display: inline;
+}
+
 .tab-close {
   min-width: 1.4rem;
   min-height: 1.4rem;

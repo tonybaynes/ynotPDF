@@ -532,11 +532,13 @@ test('the File tab is a horizontal ribbon: Open, Recent, New, the module slots a
   await item('file.new').click();
   await expect(menu.locator('[data-command="demo.create.blank"]')).toBeVisible();
   await app.page.keyboard.press('Escape');
-  // Unfilled slots are disabled and say so; the demo fills Print (command) and Properties (page).
-  await expect(item('file.slot.save')).toBeDisabled();
-  await expect(item('file.slot.save')).toHaveAttribute('title', /not available yet/);
-  await expect(item('file.slot.saveAs')).toBeDisabled();
+  // Unfilled slots are disabled and say so; the demo fills Print (command) and Properties (page),
+  // and M21 fills Save and Save As — which are enabled, because a document is open.
   await expect(item('file.slot.preferences')).toBeDisabled();
+  await expect(item('file.slot.preferences')).toHaveAttribute('title', /not available yet/);
+  // A filled command slot renders as that command's own button, so Save appears as `file.save`.
+  await expect(item('file.save')).toBeVisible();
+  await expect(item('file.saveAs')).toBeVisible();
   await expect(item('demo.hello')).toBeEnabled(); // Print (demo)
   await item('file.slot.properties').click();
   const page = app.page.locator('#file-page-properties');

@@ -69,6 +69,8 @@ export function mountTabStrip(host: HTMLElement, services: ShellServices): TabSt
     });
     const label = el('span.tab-title', null, tab.title);
     const dirty = el('span.tab-dirty', { 'aria-hidden': 'true' }, '●');
+    // A word, not a style: italics alone are not a status anyone can read (M21).
+    const readOnly = el('span.tab-readonly-badge', { 'aria-hidden': 'true' }, 'Read-only');
     const dirtyWord = srOnly('');
     const closeBtn = button(
       'icon-btn tab-close',
@@ -79,7 +81,7 @@ export function mountTabStrip(host: HTMLElement, services: ShellServices): TabSt
       e.stopPropagation();
       void documents.close(tab.id);
     });
-    t.append(label, dirty, dirtyWord, closeBtn);
+    t.append(label, dirty, readOnly, dirtyWord, closeBtn);
 
     t.addEventListener('click', () => {
       documents.activate(tab.id);

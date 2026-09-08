@@ -206,8 +206,242 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **The writer's base is the engine's serialisation, not the bytes on disk.** PDFium has already
+  applied everything it can reverse — rotation, crop/media boxes, annotations, field values,
+  pages we inserted — and `FPDF_SaveAsCopy` keeps every object it does not understand. Re-doing
+  that work in pdf-lib would mean two implementations of every mutation and two chances to
+  disagree. So `FullRewriteWriter` takes `(base bytes, WritePlan)` and applies only what the
+  engine could not: page order and presence, page labels, the three boxes PDFium has no setter
+  for, the information dictionary and XMP, the outline, named destinations, layer visibility, and
+  appearance streams. Determinism is unchanged — the base bytes are themselves a pure function of
+  (original bytes, journal), so `write()` remains a pure function of its inputs and a recovery or
+  a batch run reproduces the same file. ADR 0010.
+- **The plan is data, and it is sparse.** `buildWritePlan(document)` (in the module, pure) turns
+  the model into a JSON-shaped `WritePlan`. Every section is nullable and is filled **only** when
+  the document carries the matching write intent, so a no-op save touches nothing and a save that
+  only renamed a page rewrites only `/PageLabels`. That is what makes the round-trip acceptance
+  test achievable: what the writer does not plan, it does not touch.
+- **The engine knows nothing about the model.** `src/engine/Writer.ts` defines `Writer`,
+  `WritePlan` and the result types in terms of page indexes and plain values; nothing under
+  `src/engine/` imports from `src/renderer/`. The appearance generators take an `AppearanceInput`
+  and return an `AppearanceStream` of `{ bbox, content, resources }` — content-stream text, not
+  pdf-lib objects — so they are unit-testable in plain Node and the writer is the only file that
+  knows which PDF library we use.
+- **Appearance streams fill PDFium's gaps, they do not replace it.** The writer walks each page's
+  `/Annots` and generates an `/AP` only for annotations that have none. PDFium synthesises
+  Highlight, Underline, StrikeOut, Squiggly, Square, Circle, Ink, Text and Popup; it does not
+  synthesise Line, Polygon, PolyLine, FreeText, FileAttachment or Caret, and those are what
+  `engine/appearance/` ships generators for, plus the markup and shape families so a file written
+  by a viewer that did not generate them still looks right. Later modules register their own
+  generator for their subtype; the service is a registry, not a switch.
+- **Encrypted files never reach pdf-lib.** pdf-lib does not decrypt strings, and a rewrite would
+  emit plaintext under a trailer that still claims encryption — a broken file. So: if the plan
+  needs no pdf-lib pass the engine bytes are written as they are, encryption intact; if it does,
+  Save says plainly that saving will remove the password protection and offers Save As a copy or
+  Cancel. Re-encrypting on save is M70's, which hooks into the same pipeline.
+- **Atomic writes, in main, always.** `writeAtomic()` writes `<name>.ynot-tmp-<n>` beside the
+  target, flushes it, optionally renames the previous file to `<name>.bak` (`save.keepBackup`,
+  off by default), then renames the temp over the target — so an interrupted save can never leave
+  a half-written PDF where the document was. The renderer cannot reach `fs`; every path goes
+  through the new `file:*` IPC channels (ADR 0010).
+- **A save does not reload the engine handle**, which is the one place this module knowingly
+  departs from its brief. After a full rewrite the engine still holds the pages the model deleted,
+  and those pages are what `undo` puts back; reopening from the saved bytes would throw them away,
+  so a save would quietly cost the reader their undo history. The model stays the source of truth
+  for intent and the engine for content, and every later save re-derives the same file from the
+  same pair. The cost is memory, and it is the lesser harm. The one path that does reload is
+  "the file changed on disk, reload it", where the reader was told exactly that first.
+- **Save is cancellable up to the rename and no further.** The writer runs in M21's own Web
+  Worker (`writer.worker.ts`), reports progress by phase and honours an `AbortSignal`; the
+  progress dialog appears only after 400 ms so a small file never flashes one. Once the bytes
+  reach main, the write is atomic and Cancel is disabled — cancelling a rename is a lie.
+- **A recovery record is the journal plus a fingerprint of the source.** `<userData>/recovery/
+  <id>.ynot` holds `{ path, title, savedAt, source: { size, sha256 }, journal }`. On launch the
+  app lists them, opens the source, checks the fingerprint and replays the journal; a source that
+  has changed underneath is offered as "recover into the file as it is now" with the mismatch
+  stated in words. Commands with no journal codec are counted, not dropped, so the dialog can say
+  "3 of 40 changes could not be restored" rather than quietly restoring the wrong document.
+- **Autosave never blocks and never touches the user's file.** The interval timer
+  (`save.autosaveMinutes`, default 5, 0 = off) writes recovery records for every dirty document;
+  a save or a close clears that document's record. Nothing is written when nothing is dirty.
+- **The plan names what the session changed, not what kind of thing changed.** A write intent
+  says the engine could not do *a metadata change* or *an annotation change*; it cannot say which
+  annotation. Walking the journal can, because every command serialises to data naming its target
+  — so clearing one note's text plans that note, and leaves every other annotation alone.
+- **The close flow is one function with three answers.** `confirmClose(document)` returns
+  `save` / `discard` / `cancel` from an opaque dialog with worded buttons (Save · Don't save ·
+  Cancel), reachable by keyboard, and is used identically for one tab, all tabs and app quit.
+  Quit and window close are vetoed in main **only while a window has reported unsaved work**, so
+  a clean app still quits instantly and a wedged renderer cannot hold the app open (5 s timeout).
+- **Read-only is a property of the file, not of a failed save.** Opening probes the path for
+  write access (and its directory, for the atomic rename); the tab shows the word "Read-only",
+  and `file.save` runs Save As instead, saying why. A save that fails on permissions at the last
+  moment falls back the same way, so a network share that goes away mid-session behaves like a
+  read-only file rather than losing the edit.
+- **Changed-on-disk is watched in main and answered in the renderer.** chokidar (MIT) watches
+  each open document's path; the prompt offers Reload (throw away my edits) or Keep mine, and
+  the watcher is suspended around our own writes so a save never prompts about itself.
+- **Round-trip fidelity is a harness, not a snapshot.** `test/unit/roundtrip.ts` opens two files
+  in the real engine and diffs page count, sizes, rotation, boxes, text runs, annotation lists,
+  field values, outline, destinations, layers, attachments and metadata, returning a list of
+  differences. Every later module adds cases to it rather than writing its own comparison.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-08 on `mod/M21-save` (worktree `../ynotPDF-M21`).**
+
+### What shipped
+
+- **`Writer`** (`src/engine/Writer.ts`) — the contract, and `WritePlan`: the finished document as
+  plain data, with every section nullable so that what the plan does not mention, the writer does
+  not touch. `FullRewriteWriter` (pdf-lib) applies page order and presence, page labels, the three
+  boxes PDFium has no setter for, the information dictionary and XMP, the outline, named
+  destinations, layer visibility, annotation entries that had to be *removed*, cleared field
+  values, and appearance streams — with object streams, the file's own `/ID` and version kept, and
+  every object it has never heard of preserved. Progress by phase, cancellable between phases.
+- **Appearance streams** (`src/engine/appearance/`) — a registry, not a switch, with generators
+  for Square, Circle, Line, Polygon, PolyLine, Ink, Highlight, Underline, StrikeOut, Squiggly,
+  FreeText, FileAttachment and Caret; a small content-stream emitter; and the Standard-14 metrics
+  FreeText needs to wrap text. Later modules register their own subtype and the writer draws it.
+- **Save** (`Ctrl+S`) — no-op when nothing changed; Save As when the document has no path or
+  cannot be written where it is; a warning before a save that would invalidate signatures or
+  remove password protection; the writer in its own Worker with a progress dialog after 400 ms;
+  an atomic write with an optional `.bak`; dirty cleared.
+- **Save As** (`Ctrl+Shift+S`) — the OS dialog, a default name from the title, the folder
+  remembered. The flatten checkbox is hidden: M41 and M61 do not exist yet, so there is nothing
+  honest to put behind it.
+- **Autosave and recovery** — a record every 5 minutes (setting, 0 = off) holding the journal and
+  a fingerprint of the source, in `<userData>/recovery/<id>.ynot`; cleared on save or close; an
+  opaque Recover / Discard / Not now dialog on the next launch that reopens each source and
+  replays. A source that has changed underneath the journal is said so in words.
+- **Close flow** — Save · Don't save · Cancel, worded buttons and keyboard-reachable, identical
+  for one tab, for Close All and for quitting the app.
+- **Changed on disk** — chokidar in main, muted around our own writes, with a Reload / Keep mine
+  prompt that says what reloading would cost.
+- **Read-only** — probed on open (the file *and* its folder, because the last step is a rename
+  into it); the tab carries a "Read-only" badge in words and the status bar says so too; Save
+  becomes Save As with a message naming the reason. A permission failure part-way through a save
+  is offered the same way rather than as an error the reader can do nothing with.
+- **Status bar** — "Saved", "Unsaved changes", "Read-only" or "Saving…", a word and an icon, with
+  colour only as a third cue.
+- **Round-trip harness** (`test/unit/roundtrip.ts`) — opens two documents in the engine and diffs
+  page count, sizes, rotation, boxes, text, annotations, fields, outline, destinations, layers,
+  attachments and metadata. Every later module adds cases here rather than writing its own.
+
+### Decisions worth knowing about
+
+- **The writer's base is the engine's bytes, not the file's.** PDFium has already applied
+  everything it can reverse, and doing it a second time in pdf-lib would mean two implementations
+  of every mutation with no way to tell which was right. The plan carries only the leftovers.
+  Determinism is unchanged: the base is itself a function of (original bytes, journal). ADR 0010.
+- **Saving does not reload the engine handle**, which is the one place this module knowingly
+  departs from its brief. After a rewrite the engine still holds the pages the model deleted, and
+  those pages are what `undo` puts back — so reopening from the saved bytes would quietly cost the
+  reader their undo history, which Foxit does not do. The cost is memory: pages deleted during a
+  long session stay in the engine until the document is closed. The reload path that *does* exist
+  is "the file changed on disk, reload it", where the reader is told exactly that first.
+- **Encrypted documents are refused by the writer.** pdf-lib does not decrypt strings, so a
+  rewrite would emit plaintext under a trailer still claiming encryption. When the plan needs no
+  pdf-lib pass the engine's bytes go to disk with the protection intact; when it does, the reader
+  is told that saving would remove the password. M70 re-encrypts here.
+- **A close or a quit is intercepted only while a window has reported unsaved work**, and a
+  renderer that stops answering releases the window after five seconds — with main then closing or
+  quitting itself, not merely resolving a promise. An app that cannot be closed is a worse bug
+  than a lost edit.
+- **The plan names the annotations and fields the session actually changed**, read from the
+  journal rather than guessed from the write intents. Intents say what *kind* of thing the engine
+  could not do; they cannot say which one, and clearing one note's text must not rewrite every
+  annotation in the document.
+
+### Bugs found while building, and what they were
+
+- **`file.closeAll` asked about every document twice** — once itself and once through the tab's
+  own before-close hook. A reader who answered would find the same question still in the way. The
+  command now just closes the tabs; the hook is where the question belongs.
+- **The close/quit timeout resolved a promise and did nothing else**, so a renderer that never
+  answered left an app that could not be quit — the exact failure the timeout existed to prevent.
+  Main now closes the window (or quits) itself when the wait runs out.
+- **`SaveService` never learned that a document had been attached to a tab.** Opening a tab and
+  attaching its `Document` are two steps and the store notification comes on the first, so every
+  document opened after the service started was invisible to it: no watcher, no read-only check,
+  no path. `Documents.onAttached` is the missing signal (ADR 0010).
+- **M21's close hook silently disarmed the shell's own question.** `Documents.close` treated a
+  registered hook as a *replacement* for the default, so a dirty tab that M21 had nothing to say
+  about — one with no `Document` behind it — closed without a word. The default is a backstop now.
+- **A save could fail because an antivirus scanner blinked.** On Windows a rename over an existing
+  file fails with `EPERM`/`EBUSY` while anything holds the target open, even for milliseconds.
+  Telling the reader "the document was not saved" for that would be both wrong and alarming; the
+  rename is retried for about a third of a second first.
+- **An appearance stream could be emitted with no ink in it** — state changes and a path that was
+  never painted. That is worse than no stream at all: a viewer honours the empty `/AP` and draws
+  nothing where it would otherwise have guessed. The builder now knows whether it painted.
+- **`num()` could write exponent notation**, which a PDF cannot read, for a coordinate large
+  enough that `String()` reached for it. Clamped and formatted without one.
+- **A repaired file lost its metadata on save.** PDFium rebuilds the cross-reference table of a
+  damaged document, reads its `/Info` perfectly well, and then serialises without one — so opening
+  `broken-xref.pdf` and saving it dropped the title, the author and the dates. The plan carries a
+  metadata fallback that applies only when the base has no information dictionary at all.
+- **Deleting a page left everything that pointed at it dangling** — the outline's `/Dest`, the
+  name tree, `/OpenAction` and links on the pages that remained, all referring to an object that
+  was about to go. The writer prunes them; the bookmark stays and simply does nothing, which is
+  what Foxit does and better than deleting a heading the reader wrote.
+
+### Shared files touched (PLAN.md §12.3)
+
+- `src/shared/ipc.ts` — additive: `file:writeAtomic`, `file:probe`, `file:saveAsDialog`,
+  `file:watch`, `file:suspendWatch`, the five `recovery:*` channels, `window:setUnsaved`,
+  `window:confirmClose`, `app:confirmQuit`, and the push channels `file:changedOnDisk`,
+  `window:closeRequested`, `app:quitRequested`, with their payload types (ADR 0010).
+- `src/main/{index,ipc,window,menu}.ts` — additive: the handlers for the above, the close/quit
+  interception (`beforeClose` / `onClosed` window options), and Save and Save As in the File menu.
+- `src/renderer/app/tabs/Documents.ts` — additive: `onAttached`; and one behaviour change, the
+  default close hook running as a backstop after the module hooks rather than instead of them
+  (ADR 0010).
+- `src/renderer/app/tabs/TabStrip.ts`, `tabs.css` — additive: a visible "Read-only" badge. The
+  italics that were there said nothing a reader could read.
+- `src/renderer/main.ts`, `src/renderer/index.html` — registers the M21 manifest and its CSS.
+- `vitest.config.ts` — coverage gates for the new engine and module files; the DOM and shell half
+  excluded from the gate as M11's is, and proved by Playwright.
+- `.github/workflows/ci.yml` — installs Playwright's Chromium, which the "opens in a plain
+  browser" acceptance test needs and Electron does not bring.
+- `package.json` — `chokidar` 4.0.3 (MIT) as a dependency, `@pdf-lib/standard-fonts` 1.0.0 (MIT)
+  as a dev dependency for the font-metrics drift test.
+- `test/e2e/shell.spec.ts`, `test/unit/documents.test.ts` — updated for the two consequences of
+  M21 landing that M02's own comments predicted: the File backstage's Save slots are filled now,
+  and the close question is M21's.
+
+### Tests
+
+1 520 unit tests and 131 e2e tests, green on Windows locally and in CI on Windows, macOS and
+Linux. The four acceptance tests:
+
+- **No-op save round-trips every fixture** — the whole pipeline (model → plan → engine bytes →
+  writer), then both files opened in the engine and compared field by field: zero differences on
+  all 27 openable fixtures. Encrypted ones are checked for the opposite, that the writer refuses
+  them. The saved file then opens in a plain Chromium, whose own viewer is asked for its page
+  count and its error state rather than merely being pointed at the file.
+- **Rotate, reorder, bookmark, title → save → reopen** — all four present, plus page labels, the
+  boxes PDFium cannot set, and a deleted page taking its dangling references with it.
+- **Kill the app after edits** — the process tree is killed outright, the next launch offers the
+  work back in an opaque dialog, and Recover replays the journal into the reopened file.
+- **Save to a read-only path** — the tab says "Read-only" in a word, Save opens the Save As offer
+  with the reason in it, and the file on disk is untouched.
+
+Plus: the close flow (Cancel, Don't save, Save, Close All) and a real app quit with unsaved work,
+both driven through the running app.
+
+### Deferred, and why
+
+- **The "flatten annotations/forms" checkbox on Save As is hidden**, as the brief allows: M41 and
+  M61 own flattening and neither exists, so there is nothing behind it yet.
+- **Attachments are carried, not edited.** No module mutates them yet, so the writer preserves
+  what is there and the plan has no section for them. M31 adds file attachments.
+- **Named destinations are preserved, not rebuilt.** Nothing edits them before M12; when a page
+  goes, the writer prunes the references to it rather than rewriting the name tree, which loses
+  nothing else in it.
+- **Incremental saves are M80's**, optimisation options M100's, encryption on save M70's — all
+  three hook into this writer rather than replacing it.
+- **A document deleted down and saved keeps its removed pages in the engine** until it is closed,
+  which is the memory cost of not reloading the handle (above). If a long editing session ever
+  shows this as a real problem, the fix is a handle swap that also rebases the undo stack, and
+  that is a `Document` contract change with an ADR of its own.

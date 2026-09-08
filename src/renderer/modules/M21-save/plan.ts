@@ -1,0 +1,316 @@
+/**
+ * `buildWritePlan` — the model, as instructions for the writer (M21).
+ *
+ * A pure function of the `Document`: no I/O, no clock, no UI. What it produces is JSON-shaped
+ * data, which is why the same plan can be built in the renderer, sent to a Worker, and replayed
+ * by a batch run later and still mean the same thing.
+ *
+ * It is **sparse on purpose**. A section is filled only when the document actually carries the
+ * matching write intent, so a save that renamed one page plans `/PageLabels` and nothing else,
+ * and a save of a document nobody has touched plans nothing at all. What the plan does not
+ * mention, the writer does not touch — which is what makes a no-op save round-trip.
+ */
+
+import type { Document } from '@core/Document';
+import type { ModelId } from '@core/Ids';
+import { serialiseCommand, type JournalEntry } from '@core/Journal';
+import { COMPOSITE_COMMAND_ID } from '@core/Command';
+import { COMMAND_ID } from '@core/commands';
+import type { ModelAnnotation, ModelDestination, ModelOutlineItem, ModelPage } from '@core/model';
+import { PDFIUM_GENERATES } from '@engine/appearance';
+import { appearanceInput, type AppearanceInput } from '@engine/appearance/types';
+import type {
+  PlannedAnnotation,
+  PlannedAnnotationProperties,
+  PlannedBoxes,
+  PlannedDestination,
+  PlannedField,
+  PlannedLayer,
+  PlannedMetadata,
+  PlannedOutlineItem,
+  PlannedPage,
+  WritePlan,
+} from '@engine/Writer';
+
+/** What the plan could not express, for the caller to tell the user about. */
+export interface PlanResult {
+  readonly plan: WritePlan;
+  readonly warnings: ReadonlyArray<string>;
+}
+
+export function buildWritePlan(doc: Document): PlanResult {
+  const state = doc.state;
+  const intents = new Set(state.writeIntents);
+  const warnings: string[] = [];
+  const touched = touchedEntities(doc);
+
+  const pages: PlannedPage[] = [];
+  state.pages.forEach((page) => {
+    const source = doc.enginePage(page.id);
+    if (source === undefined) {
+      warnings.push(`The page "${page.label}" is not in the engine and could not be saved`);
+      return;
+    }
+    const planned: {
+      source: number;
+      label?: string;
+      boxes?: PlannedBoxes;
+      annotations?: PlannedAnnotation[];
+    } = { source };
+    if (intents.has('page-labels')) planned.label = page.label;
+    if (intents.has('page-boxes')) {
+      const boxes = plannedBoxes(page);
+      if (boxes) planned.boxes = boxes;
+    }
+    const annotations = plannedAnnotations(doc, page, touched.annotations);
+    if (annotations.length > 0) planned.annotations = annotations;
+    pages.push(planned);
+  });
+
+  const metadataFallback = plannedMetadata(doc);
+  const plan: WritePlan = {
+    pages,
+    pagesUnchanged: !intents.has('page-order'),
+    labels: intents.has('page-labels'),
+    metadata: intents.has('metadata') ? metadataFallback : null,
+    metadataFallback,
+    outline: intents.has('outline') ? plannedOutline(state.outline, state.destinations, doc) : null,
+    // Named destinations are read-only until M12 edits them; when a page goes, the writer prunes
+    // the references to it rather than rebuilding the name tree, so nothing else in it is lost.
+    namedDestinations: null,
+    layers: intents.has('layers') ? plannedLayers(doc) : null,
+    fields: intents.has('fields') ? plannedFields(doc, touched.fields) : null,
+  };
+  return { plan, warnings };
+}
+
+// ---- pages ---------------------------------------------------------------------------------
+
+/**
+ * The three boxes PDFium has no setter for. MediaBox and CropBox are already in the engine's
+ * bytes, and a `null` here means "the model never read one", not "remove it" — so only boxes the
+ * model actually holds are planned.
+ */
+function plannedBoxes(page: ModelPage): PlannedBoxes | null {
+  const boxes: { bleed?: PdfRectLike; trim?: PdfRectLike; art?: PdfRectLike } = {};
+  if (page.bleedBox) boxes.bleed = page.bleedBox;
+  if (page.trimBox) boxes.trim = page.trimBox;
+  if (page.artBox) boxes.art = page.artBox;
+  return Object.keys(boxes).length > 0 ? boxes : null;
+}
+
+type PdfRectLike = ModelPage['mediaBox'];
+
+// ---- annotations ---------------------------------------------------------------------------
+
+/**
+ * Annotation work for one page.
+ *
+ * Two kinds. **Changed** annotations — added or updated in this session — get their model values
+ * written and their appearance regenerated, because an engine patch says what a value *becomes*
+ * and can never say "and empty that one", and because an edited annotation's old appearance is
+ * stale. **Every other** annotation on a loaded page is offered for appearance generation with
+ * `replace: false`, so the writer fills a missing `/AP` and touches nothing that has one — which
+ * repairs a Line or a FreeText that arrived from a viewer that never drew it.
+ */
+function plannedAnnotations(
+  doc: Document,
+  page: ModelPage,
+  changed: ReadonlySet<string>,
+): PlannedAnnotation[] {
+  const list = doc.annotations(page.id);
+  const out: PlannedAnnotation[] = [];
+  list.forEach((annotation, index) => {
+    const wasChanged = changed.has(annotation.id);
+    // PDFium draws these subtypes itself as it loads a page, so the engine's bytes already carry
+    // an `/AP` for them; the rest reach other viewers undrawn unless we draw them here.
+    const needsRepair = !PDFIUM_GENERATES.has(annotation.subtype);
+    if (!wasChanged && !needsRepair) return;
+    const input = toAppearanceInput(annotation);
+    const entry: {
+      index: number;
+      subtype: ModelAnnotation['subtype'];
+      rect: ModelAnnotation['rect'];
+      properties?: PlannedAnnotationProperties;
+      appearance?: { input: AppearanceInput; replace: boolean };
+    } = { index, subtype: annotation.subtype, rect: annotation.rect };
+    if (wasChanged) {
+      const properties = clearedProperties(annotation);
+      if (properties) entry.properties = properties;
+    }
+    entry.appearance = { input, replace: wasChanged };
+    out.push(entry);
+  });
+  return out;
+}
+
+/**
+ * The entries that have to be **removed** from the dictionary. Only nulls: a value the engine
+ * could set is already in its bytes, and writing it again would risk overwriting something the
+ * model reads less exactly than the file holds it.
+ */
+function clearedProperties(a: ModelAnnotation): PlannedAnnotationProperties | null {
+  const props: Record<string, unknown> = {};
+  const clear = (key: string, value: unknown): void => {
+    if (value === null) props[key] = null;
+  };
+  clear('contents', a.contents);
+  clear('author', a.author);
+  clear('subject', a.subject);
+  clear('name', a.name);
+  clear('state', a.state);
+  clear('color', a.color);
+  clear('interiorColor', a.interiorColor);
+  clear('opacity', a.opacity);
+  clear('borderWidth', a.borderWidth);
+  if ('quadPoints' in a && a.quadPoints.length === 0) props['quadPoints'] = null;
+  if ('paths' in a && a.paths.length === 0) props['paths'] = null;
+  if ('vertices' in a && a.vertices.length === 0) props['vertices'] = null;
+  return Object.keys(props).length > 0 ? props : null;
+}
+
+/** The model annotation as the appearance generators want it. */
+export function toAppearanceInput(a: ModelAnnotation): AppearanceInput {
+  return appearanceInput({
+    subtype: a.subtype,
+    rect: a.rect,
+    color: a.color,
+    interiorColor: a.interiorColor,
+    opacity: a.opacity,
+    borderWidth: a.borderWidth,
+    contents: a.contents,
+    quadPoints: 'quadPoints' in a ? a.quadPoints : [],
+    paths: 'paths' in a ? a.paths : [],
+    vertices: 'vertices' in a ? a.vertices : [],
+    extra: a.extra,
+  });
+}
+
+// ---- metadata, outline, layers, fields -------------------------------------------------------
+
+function plannedMetadata(doc: Document): PlannedMetadata {
+  const m = doc.state.metadata;
+  return {
+    title: m.title,
+    author: m.author,
+    subject: m.subject,
+    keywords: m.keywords,
+    creator: m.creator,
+    producer: m.producer,
+    created: m.created,
+    modified: m.modified,
+    xmp: m.xmp,
+  };
+}
+
+function plannedOutline(
+  outline: ReadonlyArray<ModelOutlineItem>,
+  destinations: ReadonlyArray<ModelDestination>,
+  doc: Document,
+): PlannedOutlineItem[] {
+  const index = new Map(outline.map((o, i) => [o.id, i]));
+  const destById = new Map(destinations.map((d) => [d.id, d]));
+  return outline.map((item) => ({
+    title: item.title,
+    parent: item.parentId === null ? null : (index.get(item.parentId) ?? null),
+    dest: item.destinationId
+      ? plannedDestination(destById.get(item.destinationId) ?? null, doc)
+      : null,
+    uri: item.uri,
+    open: item.open,
+    bold: item.bold,
+    italic: item.italic,
+    color: item.color,
+  }));
+}
+
+function plannedDestination(
+  dest: ModelDestination | null,
+  doc: Document,
+): PlannedDestination | null {
+  if (dest?.pageId == null) return null;
+  const page = doc.pageIndex(dest.pageId);
+  if (page < 0) return null;
+  return {
+    page,
+    fit: dest.fit,
+    left: dest.left,
+    top: dest.top,
+    zoom: dest.zoom,
+    rect: dest.rect,
+  };
+}
+
+function plannedLayers(doc: Document): PlannedLayer[] {
+  return doc.state.layers.map((l, index) => ({
+    id: l.engineId,
+    name: l.name,
+    index,
+    visible: l.visible,
+  }));
+}
+
+/** Cleared field values. An empty string is a cleared field, which is a removed `/V`. */
+function plannedFields(doc: Document, changed: ReadonlySet<string>): PlannedField[] {
+  const out: PlannedField[] = [];
+  for (const field of doc.state.fields) {
+    if (!changed.has(field.id)) continue;
+    out.push({ name: field.name, value: field.value === '' ? null : field.value });
+  }
+  return out;
+}
+
+// ---- what this session touched ---------------------------------------------------------------
+
+interface Touched {
+  readonly annotations: ReadonlySet<string>;
+  readonly fields: ReadonlySet<string>;
+}
+
+/**
+ * The entities this session edited, read from the journal.
+ *
+ * The write intents say *what kind* of thing the engine could not do; they cannot say *which*
+ * one. Walking the journal can, because every command serialises to plain data naming its
+ * target — so clearing one note's text plans that note, not every annotation in the document.
+ */
+export function touchedEntities(doc: Document): Touched {
+  const annotations = new Set<string>();
+  const fields = new Set<string>();
+  const visit = (entry: JournalEntry): void => {
+    if (entry.type === COMPOSITE_COMMAND_ID) {
+      const { children } = (entry.payload ?? {}) as {
+        children?: ReadonlyArray<JournalEntry | null>;
+      };
+      for (const child of children ?? []) if (child) visit(child);
+      return;
+    }
+    const payload = (entry.payload ?? {}) as Record<string, unknown>;
+    switch (entry.type) {
+      case COMMAND_ID.addAnnotation: {
+        const annotation = payload['annotation'] as { id?: unknown } | undefined;
+        if (typeof annotation?.id === 'string') annotations.add(annotation.id);
+        break;
+      }
+      case COMMAND_ID.updateAnnotation: {
+        const id = payload['annotationId'];
+        if (typeof id === 'string') annotations.add(id);
+        break;
+      }
+      case COMMAND_ID.setFieldValue: {
+        const id = payload['fieldId'];
+        if (typeof id === 'string') fields.add(id);
+        break;
+      }
+      default:
+        break;
+    }
+  };
+  for (const command of doc.undo.journal) visit(serialiseCommand(command));
+  return { annotations, fields };
+}
+
+/** True when the id names an entity this session changed (exported for tests). */
+export function wasTouched(touched: ReadonlySet<string>, id: ModelId): boolean {
+  return touched.has(id);
+}
