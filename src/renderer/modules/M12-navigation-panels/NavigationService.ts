@@ -82,8 +82,6 @@ export class NavigationService {
   private readonly collections = new Map<string, PdfCollection | null>();
   /** Tabs whose "which panel opens" decision has already been made. */
   private readonly opened = new Set<string>();
-  /** Tabs opened from inside a portfolio, so a Save reaches for Save As. */
-  readonly fromPortfolio = new Set<string>();
   /**
    * What each panel has selected. The panels own the DOM; the *commands* need to know what a
    * palette entry or a shortcut would act on, and this is where the two meet.
@@ -116,7 +114,6 @@ export class NavigationService {
         this.thumbnails.forget(tab.id);
         this.collections.delete(tab.id);
         this.opened.delete(tab.id);
-        this.fromPortfolio.delete(tab.id);
       }),
     );
   }
@@ -513,8 +510,9 @@ export class NavigationService {
     try {
       // The engine transfers the buffer into its worker, which detaches it — hand it a copy so
       // the panel can still offer "Save as" for the same attachment afterwards.
+      // No path, so M21's Save already reaches for Save As: an embedded file is unsaved until
+      // the reader says where it goes.
       const opened = await service.open(bytes.slice(), { path: null, name, title: name });
-      this.fromPortfolio.add(opened.tab.id);
       if (this.registry.hasService(VIEWER_SERVICE)) {
         await this.registry
           .service<ViewerService>(VIEWER_SERVICE)
