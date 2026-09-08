@@ -186,48 +186,55 @@ test.describe('acceptance: 500-page scroll at ≥ 55 fps with bounded memory', (
     // A deliberately small cache, so "bounded by the cache setting" is a real constraint.
     await app.run('view.cache.size', { megabytes: 64 });
     await app.run('dev.viewerHud');
+
+    /** Turns `frames` animation frames over, optionally scrolling on each one. */
+    const spin = async (frames: number, scroll: boolean): Promise<void> => {
+      await app.page.evaluate(
+        async ([count, scrolling]) => {
+          const scroller = document.querySelector<HTMLElement>('.viewer-scroll');
+          const content = document.querySelector<HTMLElement>('.viewer-content');
+          if (!scroller || !content) throw new Error('no viewport');
+          const max = content.offsetHeight - scroller.clientHeight;
+          for (let i = 0; i <= count; i++) {
+            if (scrolling) scroller.scrollTop = (max * i) / count;
+            await new Promise<void>((resolve) => {
+              requestAnimationFrame(() => {
+                resolve();
+              });
+            });
+          }
+        },
+        [frames, scroll] as const,
+      );
+    };
+
+    // First, how fast this machine turns animation frames over with the viewer settled and
+    // doing nothing. A CI runner with software rendering may not reach 60 whatever is asked of
+    // it; what has to be true either way is that scrolling a thousand pages costs almost
+    // nothing on top of that. Measured *before* the scroll, so no leftover tile work can
+    // depress the baseline and flatter the comparison.
+    await settle(app.page);
     await app.run('dev.viewerPerf', { reset: true });
-
-    // Scroll the whole document in 150 steps, one per animation frame.
-    await app.page.evaluate(async () => {
-      const scroller = document.querySelector<HTMLElement>('.viewer-scroll');
-      const content = document.querySelector<HTMLElement>('.viewer-content');
-      if (!scroller || !content) throw new Error('no viewport');
-      const max = content.offsetHeight - scroller.clientHeight;
-      const steps = 150;
-      for (let i = 0; i <= steps; i++) {
-        scroller.scrollTop = (max * i) / steps;
-        await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => {
-            resolve();
-          });
-        });
-      }
-    });
-
-    const sample = await perf();
-    expect(sample.frames).toBeGreaterThan(100);
-
-    // How fast this machine turns animation frames over when the viewer is doing nothing. A CI
-    // runner with software rendering may not reach 60; what has to be true either way is that
-    // scrolling a thousand pages costs almost nothing on top of that.
-    await app.run('dev.viewerPerf', { reset: true });
-    await app.page.evaluate(async () => {
-      for (let i = 0; i < 60; i++) {
-        await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => {
-            resolve();
-          });
-        });
-      }
-    });
+    await spin(60, false);
     const idle = await perf();
 
-    expect(sample.fps, 'scrolling frame rate').toBeGreaterThanOrEqual(idle.fps * 0.9);
+    // Then the same thing while scrolling the whole document, a step per frame.
+    await app.run('dev.viewerPerf', { reset: true });
+    await spin(150, true);
+    const sample = await perf();
+
+    expect(sample.frames).toBeGreaterThan(100);
+    expect(idle.frames).toBeGreaterThan(40);
+    expect(
+      sample.fps,
+      `scrolling ${sample.fps.toFixed(1)} vs idle ${idle.fps.toFixed(1)} fps`,
+    ).toBeGreaterThanOrEqual(idle.fps * 0.9);
     if (idle.fps >= 55) {
       // The acceptance number, on any machine that can actually reach it.
       expect(sample.fps).toBeGreaterThanOrEqual(55);
     }
+    // The scroll really did ask the engine for pages, rather than sailing over a warm cache.
+    expect(sample.rendered).toBeGreaterThan(0);
 
     // Memory stays inside the setting throughout — this is what the LRU is for.
     expect(sample.cacheMaxMb).toBeCloseTo(64, 0);
