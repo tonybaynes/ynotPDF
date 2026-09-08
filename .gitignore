@@ -48,3 +48,7 @@ resources/fonts/.*.sha256
 test/fixtures/external/**
 !test/fixtures/external/README.md
 !test/fixtures/external/manifest.json
+
+# operator-supplied real-world PDFs (personal data — NEVER committed; the folder is local only)
+test/fixtures/local/**
+!test/fixtures/local/README.md

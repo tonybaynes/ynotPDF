@@ -52,3 +52,10 @@ derived from fixed dates, ids and labelled pseudo-random seeds). Expected facts 
 SHA-256; `npm run fetch-fixtures` downloads them into `external/` (git-ignored). They cover
 real-world encryption, annotation appearance streams, widgets, XFA, damaged files, CJK/RTL
 text and scan codecs (CCITT, JBIG2, JPX). See `external/README.md`.
+
+## `local/` — operator's real-world PDFs (never committed)
+
+Real files the operator supplies for hands-on testing live in `test/fixtures/local/`. The
+folder is git-ignored except its README (they carry personal data). Tests may use them only
+opportunistically — `it.skipIf(!existsSync(...))` — never as a required fixture, because CI
+and other machines do not have them. See `local/README.md` for what is there.
