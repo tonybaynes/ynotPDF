@@ -58,6 +58,15 @@ const item = (id: string): Locator => app.page.locator(`#ribbon-body [data-item=
 
 test.beforeAll(async () => {
   app = await launchApp();
+  /*
+   * The ribbon collapses groups that do not fit, from the right, so what is on screen depends on
+   * how wide the window is — and a runner's default display is not the same on every OS (the
+   * Linux job already pins 1280x800 through xvfb; the macOS and Windows runners are 1024x768).
+   * These tests assert on ribbon layout, so they pin the width themselves rather than inherit it.
+   */
+  await app.electron.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.setSize(1280, 800);
+  });
   await app.run('view.theme.set', { theme: 'graphite' });
 });
 

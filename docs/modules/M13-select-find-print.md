@@ -333,6 +333,11 @@ tests with the coverage gates, 157 Playwright tests.
 - The Snapshot icon was registered in `activate`, which runs after the shell has mounted, so the
   ribbon painted a placeholder glyph on the first frame. `test/e2e/shell.spec.ts` catches exactly
   that; icons are now registered at module scope.
+- Two Home ribbon groups with three large buttons between them pushed the demo module's own group
+  into a collapsed popup on a 1024 px-wide window — which is what the macOS and Windows CI runners
+  are, while the Linux job pins 1280 through xvfb. M13 now contributes **one** compact Home group
+  with one large button, and `shell.spec.ts` pins its own window width rather than inheriting the
+  runner's, so the next module to reach for the Home tab does not learn this the same way.
 
 **Shared files touched (minimal, additive, per ADR 0011):** `src/shared/ipc.ts` and
 `src/main/ipc.ts` (clipboard, folder picker, folder search, printing; `SaveDialogOptions.filters`),
@@ -342,9 +347,11 @@ _commands_ rather than Chromium roles, so they act on the document), `electron.v
 second `main` entry for the search worker), `src/renderer/main.ts` (register M13),
 `src/renderer/index.html` (link the module's CSS), `vitest.config.ts` (coverage include and
 gates), `docs/shortcuts.md`, `src/renderer/view/README.md`, `PLAN.md` section 0, and two
-expectations in `test/e2e/shell.spec.ts` — the navigation strip now has a third panel, and the
-backstage **Print** slot belongs to a real module (disabled until a document is open), exactly as
-**Save** came to belong to M21. The demo module itself is untouched.
+expectations plus a pinned window width in `test/e2e/shell.spec.ts` — the navigation strip now
+has a third panel, the backstage **Print** slot belongs to a real module (disabled until a
+document is open, exactly as **Save** came to belong to M21), and the ribbon-layout tests set
+their own 1280 px window rather than inheriting the runner's display, which differs per OS. The
+demo module itself is untouched.
 
 **Deferred, and why:**
 

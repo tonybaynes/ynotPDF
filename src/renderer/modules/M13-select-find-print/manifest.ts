@@ -660,28 +660,29 @@ export default defineModule({
     { key: 'Mod+Shift+G', command: 'edit.findPrevious', scope: 'editor' },
   ],
 
+  /*
+   * One group, not two, and one large button in it. The Home tab is where every later module
+   * puts its own controls, and a ribbon group that does not fit collapses into a single button —
+   * so a module that spreads itself across the tab does not just cost itself, it pushes its
+   * neighbours into a popup. Two large buttons here collapsed the demo module's pickers group at
+   * 1024 px, which is what CI runs at.
+   */
   ribbon: [
     {
       id: 'home.select',
       tab: 'home',
-      label: 'Select',
+      label: 'Select & find',
       order: 10,
       items: [
         { kind: 'toggle', command: 'tool.selectText.activate', pressed: toolIs('tool.selectText') },
         { kind: 'toggle', command: 'tool.snapshot.activate', pressed: toolIs('tool.snapshot') },
-        '-',
         'edit.copy',
         'edit.copyFormatted',
+        'edit.find',
+        'edit.search',
+        'file.print',
       ],
-      large: ['tool.selectText.activate'],
-    },
-    {
-      id: 'home.find',
-      tab: 'home',
-      label: 'Find',
-      order: 20,
-      items: ['edit.find', 'edit.search', '-', 'file.print'],
-      large: ['edit.find', 'file.print'],
+      large: ['edit.find'],
     },
   ],
 
