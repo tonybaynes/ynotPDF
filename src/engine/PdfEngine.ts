@@ -318,8 +318,72 @@ export interface Attachment {
   readonly mimeType?: string;
   readonly size?: number;
   readonly modified?: string;
+  /** `/CreationDate` of the embedded stream, ISO 8601 (ADR 0011). */
+  readonly created?: string;
+  /**
+   * Values of the portfolio's custom schema fields for this file, from the file
+   * specification's `/CI` dictionary (ADR 0011). Keyed by schema field key. Empty or absent
+   * for an ordinary attachment.
+   */
+  readonly collectionFields?: Readonly<Record<string, string>>;
   /** Present when the attachment comes from a FileAttachment annotation. */
   readonly page?: PageIndex;
+}
+
+/** A new embedded file, for {@link PdfEngine.addAttachment} (ADR 0011). */
+export interface NewAttachment {
+  readonly name: string;
+  readonly bytes: Uint8Array;
+  readonly description?: string;
+  readonly mimeType?: string;
+  /** ISO 8601; defaults to now. */
+  readonly modified?: string;
+  readonly created?: string;
+}
+
+/** What {@link PdfEngine.updateAttachment} may change (ADR 0011). */
+export interface AttachmentPatch {
+  readonly name?: string;
+  readonly description?: string;
+  readonly mimeType?: string;
+  readonly modified?: string;
+  readonly bytes?: Uint8Array;
+}
+
+/**
+ * One column of a PDF Portfolio's `/Collection /Schema` (PDF 12.3.5, ADR 0011).
+ *
+ * `kind` is the field's `/Subtype`: the five standard ones name a property of the embedded
+ * file itself (`F` its name, `Desc` its description, `ModDate` / `CreationDate` its dates,
+ * `Size` / `CompressedSize` its size); `S`, `D` and `N` are a custom string, date or number
+ * whose value lives in each file specification's `/CI` dictionary under `key`.
+ */
+export interface CollectionField {
+  /** Key in `/Schema` and in each file's `/CI`, e.g. `"FileName"` or `"foxit:Order"`. */
+  readonly key: string;
+  /** `/N` — what a viewer shows as the column heading. */
+  readonly label: string;
+  readonly kind:
+    'F' | 'Desc' | 'ModDate' | 'CreationDate' | 'Size' | 'CompressedSize' | 'S' | 'D' | 'N';
+  /** `/O` — column order, lower first. */
+  readonly order: number;
+  /** `/V` — false when the file asks for the column to be hidden. */
+  readonly visible: boolean;
+}
+
+/**
+ * The catalogue's `/Collection` dictionary: the document is a **PDF Portfolio** (ADR 0011).
+ * `null` from {@link PdfEngine.collection} means an ordinary document.
+ */
+export interface PdfCollection {
+  /** `/View`: details grid, tiles, hidden (show the cover only) or a custom navigator. */
+  readonly view: 'details' | 'tile' | 'hidden' | 'custom';
+  /** Schema columns in `/O` order. Empty when the file defines no schema. */
+  readonly fields: ReadonlyArray<CollectionField>;
+  /** `/D` — name of the file a viewer should show first, when the file names one. */
+  readonly initialFile?: string;
+  /** Number of `/Folders` entries, so a viewer can say a portfolio has folders it ignores. */
+  readonly folderCount: number;
 }
 
 /** Document information dictionary + a few catalogue facts. */
@@ -404,6 +468,11 @@ export interface PdfEngine {
   attachments(doc: DocHandle): Promise<ReadonlyArray<Attachment>>;
   /** Raw bytes of an attachment. */
   attachmentData(doc: DocHandle, attachmentId: string): Promise<Uint8Array>;
+  /**
+   * The catalogue's `/Collection` dictionary, or `null` for an ordinary document (ADR 0011).
+   * A non-null answer means the file is a PDF Portfolio.
+   */
+  collection(doc: DocHandle): Promise<PdfCollection | null>;
 
   // ---- content -----------------------------------------------------------------------------
 
@@ -463,6 +532,17 @@ export interface PdfEngine {
     patch: Partial<Omit<Annotation, 'id' | 'page'>>,
   ): Promise<Annotation>;
   deleteAnnotation(doc: DocHandle, id: string): Promise<void>;
+
+  /** Embeds a file in the `/EmbeddedFiles` name tree (ADR 0011). */
+  addAttachment(doc: DocHandle, file: NewAttachment): Promise<Attachment>;
+  /** Changes an embedded file's name, description, type, date or bytes (ADR 0011). */
+  updateAttachment(
+    doc: DocHandle,
+    attachmentId: string,
+    patch: AttachmentPatch,
+  ): Promise<Attachment>;
+  /** Removes an embedded file. Ids of later attachments shift down by one (ADR 0011). */
+  deleteAttachment(doc: DocHandle, attachmentId: string): Promise<void>;
 
   setFieldValue(doc: DocHandle, fieldName: string, value: string): Promise<void>;
   setMetadata(
@@ -545,6 +625,9 @@ export class NotImplementedEngine implements PdfEngine {
   attachmentData(..._args: unknown[]): Promise<Uint8Array> {
     return Promise.reject(new NotImplementedError('attachmentData'));
   }
+  collection(..._args: unknown[]): Promise<PdfCollection | null> {
+    return Promise.reject(new NotImplementedError('collection'));
+  }
   render(..._args: unknown[]): Promise<RenderResult> {
     return Promise.reject(new NotImplementedError('render'));
   }
@@ -596,6 +679,15 @@ export class NotImplementedEngine implements PdfEngine {
   deleteAnnotation(..._args: unknown[]): Promise<void> {
     return Promise.reject(new NotImplementedError('deleteAnnotation'));
   }
+  addAttachment(..._args: unknown[]): Promise<Attachment> {
+    return Promise.reject(new NotImplementedError('addAttachment'));
+  }
+  updateAttachment(..._args: unknown[]): Promise<Attachment> {
+    return Promise.reject(new NotImplementedError('updateAttachment'));
+  }
+  deleteAttachment(..._args: unknown[]): Promise<void> {
+    return Promise.reject(new NotImplementedError('deleteAttachment'));
+  }
   setFieldValue(..._args: unknown[]): Promise<void> {
     return Promise.reject(new NotImplementedError('setFieldValue'));
   }
@@ -624,6 +716,7 @@ export const ENGINE_METHODS = [
   'layers',
   'attachments',
   'attachmentData',
+  'collection',
   'render',
   'textRuns',
   'pageObjects',
@@ -641,6 +734,9 @@ export const ENGINE_METHODS = [
   'addAnnotation',
   'updateAnnotation',
   'deleteAnnotation',
+  'addAttachment',
+  'updateAttachment',
+  'deleteAttachment',
   'setFieldValue',
   'setMetadata',
   'setLayerVisible',

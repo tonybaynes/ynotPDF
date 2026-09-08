@@ -1,0 +1,344 @@
+/*
+ * Navigation panels (M12): thumbnails, bookmarks, layers, attachments, destinations.
+ *
+ * Every colour is a theme token — there is not a literal in this file — and nothing is
+ * translucent: a selected row is a filled surface plus a border, not a tint. Selection and
+ * "current" are always carried by a word or a border as well as a fill, because the operator
+ * cannot rely on colour alone.
+ */
+
+/* The panel fills the pane and scrolls inside itself, so the toolbar stays put. */
+.panel[data-panel^='nav.'] {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.nav-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: var(--border-width) solid var(--border);
+  flex: none;
+  flex-wrap: wrap;
+}
+
+.nav-tool {
+  flex: none;
+}
+
+.nav-size {
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-size: var(--fs-2);
+  padding-right: var(--sp-1);
+}
+
+.nav-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+}
+
+.nav-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-4) var(--sp-3);
+  color: var(--fg-muted);
+}
+
+.nav-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: var(--border-width) solid var(--border);
+  background: var(--bg-ribbon);
+  color: var(--fg);
+  font-size: var(--fs-2);
+}
+
+.nav-heading {
+  margin: var(--sp-3) 0 var(--sp-1);
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-2);
+  font-weight: var(--fw-heading);
+  color: var(--fg-muted);
+}
+
+/* ---- rows shared by the tree and the list panels ------------------------------------------- */
+
+.nav-tree,
+.nav-list,
+.nav-table {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-1) 0;
+}
+
+.nav-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  cursor: default;
+  min-height: 1.9rem;
+}
+
+.nav-row:hover {
+  background: var(--bg-hover);
+}
+
+.nav-row.is-selected {
+  background: var(--bg-selected);
+  border-color: var(--border-strong);
+}
+
+.nav-row.is-current {
+  /* A word carries this too (the row's tooltip and `aria-current`); the bar is the quick signal. */
+  box-shadow: inset 3px 0 0 0 var(--accent);
+}
+
+.nav-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-tree.is-wrapped .nav-title {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.nav-title.is-bold {
+  font-weight: var(--fw-heading);
+}
+
+.nav-title.is-italic {
+  font-style: italic;
+}
+
+.nav-page,
+.nav-state {
+  color: var(--fg-muted);
+  font-size: var(--fs-2);
+  flex: none;
+}
+
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: none;
+  padding: 0 var(--sp-1);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  font-size: var(--fs-1);
+  color: var(--fg-muted);
+}
+
+.nav-badge.is-warning {
+  border-color: var(--warning);
+  color: var(--warning-fg);
+  background: var(--warning);
+}
+
+.nav-twisty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: none;
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+  color: var(--icon);
+}
+
+.nav-twisty:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+
+.nav-twisty-space {
+  width: 1.2rem;
+  flex: none;
+}
+
+.nav-edit {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg-input);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 0 var(--sp-1);
+}
+
+/* Drag feedback: a solid line where the bookmark would land. */
+.nav-row.is-drop-before {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+
+.nav-row.is-drop-after {
+  box-shadow: inset 0 -2px 0 0 var(--accent);
+}
+
+.nav-row.is-drop-into {
+  border-color: var(--accent);
+}
+
+/* ---- attachments table ---------------------------------------------------------------------- */
+
+/*
+ * A portfolio brings its own columns — the operator's has seven — and squeezing seven of them
+ * into a one-column-wide pane truncates every cell to two characters. So the table keeps a
+ * readable minimum width and scrolls sideways inside the panel instead, and the first column (the
+ * file name, always) gets twice the share of whatever room there is.
+ */
+.nav-table {
+  padding: 0;
+  min-width: max-content;
+}
+
+[data-panel-scroll='attachments'] {
+  overflow-x: auto;
+}
+
+.nav-tr {
+  display: grid;
+  grid-template-columns: minmax(14ch, 2fr) repeat(calc(var(--nav-columns, 4) - 1), minmax(8ch, 1fr));
+  gap: var(--sp-2);
+  align-items: center;
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: var(--border-width) solid var(--border);
+  cursor: default;
+}
+
+.nav-th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-ribbon);
+  color: var(--fg-muted);
+  font-weight: var(--fw-heading);
+  font-size: var(--fs-2);
+}
+
+.nav-tr:hover:not(.nav-th) {
+  background: var(--bg-hover);
+}
+
+.nav-tr.is-selected {
+  background: var(--bg-selected);
+}
+
+.nav-tr.is-readonly .nav-td:first-child {
+  color: var(--fg-muted);
+}
+
+.nav-td {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- thumbnails ------------------------------------------------------------------------------ */
+
+.thumb-scroll {
+  background: var(--bg-panel);
+}
+
+.thumb-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.thumb-cell {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  padding: 2px;
+}
+
+.thumb-frame {
+  display: block;
+  background: var(--page-paper);
+  border: var(--border-width) solid var(--border);
+  box-sizing: content-box;
+}
+
+.thumb-cell canvas {
+  display: block;
+}
+
+.thumb-label {
+  font-size: var(--fs-1);
+  color: var(--fg-muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thumb-cell:hover .thumb-frame {
+  border-color: var(--border-strong);
+}
+
+.thumb-cell.is-selected {
+  background: var(--bg-selected);
+  border-color: var(--border-strong);
+}
+
+.thumb-cell.is-selected .thumb-label {
+  color: var(--fg);
+}
+
+/*
+ * The current page: a thick accent border *and* a heavier label, so it is still obvious to
+ * someone who cannot separate the accent from the border colour.
+ */
+.thumb-cell.is-current .thumb-frame {
+  border-color: var(--accent);
+  border-width: calc(var(--border-width) * 2);
+}
+
+.thumb-cell.is-current .thumb-label {
+  color: var(--fg);
+  font-weight: var(--fw-heading);
+}
+
+/* ---- layers ---------------------------------------------------------------------------------- */
+
+.layer-row input[type='checkbox'] {
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.layer-row .nav-title {
+  cursor: pointer;
+}

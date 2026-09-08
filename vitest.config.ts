@@ -71,6 +71,20 @@ export default defineConfig({
          * `test/e2e/save.spec.ts`, which is where a Save / Don't save / Cancel flow belongs;
          * the decisions underneath them are unit-tested in `test/unit/save/service.test.ts`.
          */
+        /*
+         * M12's DOM half, for the same reason: the five panels, the service that mounts them and
+         * the manifest that wires them up are proved by Playwright in `test/e2e/panels.spec.ts`,
+         * which is where a virtualised grid and a drag-to-reorder belong. Everything they are
+         * built out of — the tree algebra, the grid geometry, the destination maths, the
+         * settings, the thumbnail queue — is pure and gated below.
+         */
+        'src/renderer/modules/M12-navigation-panels/manifest.ts',
+        'src/renderer/modules/M12-navigation-panels/NavigationService.ts',
+        'src/renderer/modules/M12-navigation-panels/panelChrome.ts',
+        'src/renderer/modules/M12-navigation-panels/thumbnails/ThumbnailPanel.ts',
+        'src/renderer/modules/M12-navigation-panels/bookmarks/BookmarkPanel.ts',
+        'src/renderer/modules/M12-navigation-panels/destinations/DestinationPanel.ts',
+        'src/renderer/modules/M12-navigation-panels/attachments/AttachmentPanel.ts',
         'src/renderer/modules/M21-save/SaveService.ts',
         'src/renderer/modules/M21-save/dialogs.ts',
         'src/renderer/modules/M21-save/manifest.ts',
@@ -160,6 +174,33 @@ export default defineConfig({
         'src/engine/appearance/content.ts': { lines: 90, functions: 85, statements: 90 },
         'src/engine/appearance/metrics.ts': { lines: 95, functions: 95, statements: 95 },
         'src/engine/appearance/index.ts': { lines: 90, functions: 90, statements: 90 },
+        // M12's pure half. The tree is what a bookmark edit is, and the grid is the operator's
+        // layout rule, so both are held high.
+        'src/renderer/modules/M12-navigation-panels/bookmarks/tree.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M12-navigation-panels/thumbnails/grid.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M12-navigation-panels/destinations/navigate.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M12-navigation-panels/settings.ts': {
+          lines: 85,
+          functions: 80,
+          statements: 85,
+        },
+        'src/renderer/modules/M12-navigation-panels/commands.ts': {
+          lines: 85,
+          functions: 85,
+          statements: 85,
+        },
         'src/renderer/modules/M21-save/plan.ts': { lines: 90, functions: 90, statements: 90 },
         'src/renderer/modules/M21-save/recovery.ts': { lines: 85, functions: 75, statements: 85 },
         'src/renderer/modules/M21-save/commands.ts': { lines: 90, functions: 90, statements: 90 },

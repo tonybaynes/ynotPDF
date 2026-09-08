@@ -11,7 +11,7 @@ modal dialog is open, so typing "z" into the page number does not switch tools. 
 live everywhere are marked **global**.
 
 Started by M11 (viewer); each later module adds its own rows. M21 added Save and Save As, and
-M13 added selection, copy, find, search and printing.
+M12 the navigation panels, and M13 selection, copy, find, search and printing.
 
 ## Files and windows
 
@@ -124,18 +124,42 @@ and `Escape` (close). A **guide** takes `Delete` or `Backspace` when focused.
 
 ## Interface
 
-| Keys                      | Command                  | What it does                                                  |
-| ------------------------- | ------------------------ | ------------------------------------------------------------- |
-| `Mod+Shift+P`             | `app.commandPalette`     | Command palette — every command, searchable                   |
-| `Alt` (tap)               | `app.keyTips`            | Show the ribbon key tips                                      |
-| `F6`, `Shift+F6`          | `app.focus.next`         | Cycle ribbon → document → left pane → right pane → status bar |
-| `F4`                      | `view.pane.left.toggle`  | Left navigation pane                                          |
-| `Mod+F4`                  | `view.pane.right.toggle` | Right properties pane                                         |
-| `Mod+F1`                  | `app.ribbon.minimise`    | Minimise the ribbon                                           |
-| `Mod+Alt+T`               | `theme.next`             | Next theme                                                    |
-| `Mod+Alt+Shift+T`         | `theme.previous`         | Previous theme                                                |
-| `Mod+Alt++` / `Mod+Alt+-` | `theme.scale.*`          | UI scale up / down                                            |
-| `Mod+Alt+0`               | `theme.scale.reset`      | UI scale back to 100 %                                        |
+| Keys                      | Command                   | What it does                                                  |
+| ------------------------- | ------------------------- | ------------------------------------------------------------- |
+| `Mod+Shift+P`             | `app.commandPalette`      | Command palette — every command, searchable                   |
+| `Alt` (tap)               | `app.keyTips`             | Show the ribbon key tips                                      |
+| `F6`, `Shift+F6`          | `app.focus.next`          | Cycle ribbon → document → left pane → right pane → status bar |
+| `F4`                      | `view.pane.left.toggle`   | Left navigation pane                                          |
+| `Mod+F4`                  | `view.pane.right.toggle`  | Right properties pane                                         |
+| `Mod+Shift+1`             | `view.panel.pages`        | Pages panel — thumbnails                                      |
+| `Mod+Shift+2`             | `view.panel.bookmarks`    | Bookmarks panel                                               |
+| `Mod+Shift+3`             | `view.panel.layers`       | Layers panel                                                  |
+| `Mod+Shift+4`             | `view.panel.attachments`  | Attachments panel                                             |
+| `Mod+Shift+5`             | `view.panel.destinations` | Destinations panel                                            |
+| `Mod+B`                   | `bookmarks.add`           | Add a bookmark pointing at this view                          |
+| `Mod+F1`                  | `app.ribbon.minimise`     | Minimise the ribbon                                           |
+| `Mod+Alt+T`               | `theme.next`              | Next theme                                                    |
+| `Mod+Alt+Shift+T`         | `theme.previous`          | Previous theme                                                |
+| `Mod+Alt++` / `Mod+Alt+-` | `theme.scale.*`           | UI scale up / down                                            |
+| `Mod+Alt+0`               | `theme.scale.reset`       | UI scale back to 100 %                                        |
+
+## The navigation panels
+
+The pane itself is `F4`; each panel has a number. Inside a panel the keys are the ones the shape
+asks for, and none of them is registered globally — they belong to the panel that has focus.
+
+| Keys                   | Where                   | What it does                                        |
+| ---------------------- | ----------------------- | --------------------------------------------------- |
+| `↑` `↓` `Home` `End`   | any panel               | Move the selected row                               |
+| `Enter`, `Space`       | any panel               | Go there (a page, a bookmark, a destination)        |
+| `←` `→`                | Bookmarks               | Collapse / expand a bookmark                        |
+| `←` `→` `↑` `↓`        | Pages                   | Move a column / a row through the thumbnail grid    |
+| `PageUp` `PageDown`    | Pages                   | A screen of thumbnails at a time                    |
+| `Shift`+click / arrows | Pages                   | Extend the page selection (M40 acts on it)          |
+| `Mod`+click            | Pages                   | Add or remove one page from the selection           |
+| `Mod`+wheel            | Pages                   | Larger / smaller thumbnails, pane width and all     |
+| `F2`                   | Bookmarks, Destinations | Rename in place (`Enter` commits, `Escape` cancels) |
+| `Menu`, `Shift+F10`    | any panel               | The panel's own context menu                        |
 
 ## Developer builds
 

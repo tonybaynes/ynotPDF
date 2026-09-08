@@ -21,12 +21,14 @@ import { PDFIUM_GENERATES } from '@engine/appearance';
 import { appearanceInput, type AppearanceInput } from '@engine/appearance/types';
 import type {
   PlannedAnnotation,
+  PlannedAttachment,
   PlannedAnnotationProperties,
   PlannedBoxes,
   PlannedDestination,
   PlannedField,
   PlannedLayer,
   PlannedMetadata,
+  PlannedNamedDestination,
   PlannedOutlineItem,
   PlannedPage,
   WritePlan,
@@ -75,11 +77,13 @@ export function buildWritePlan(doc: Document): PlanResult {
     metadata: intents.has('metadata') ? metadataFallback : null,
     metadataFallback,
     outline: intents.has('outline') ? plannedOutline(state.outline, state.destinations, doc) : null,
-    // Named destinations are read-only until M12 edits them; when a page goes, the writer prunes
-    // the references to it rather than rebuilding the name tree, so nothing else in it is lost.
-    namedDestinations: null,
+    // Named destinations are rebuilt only when M12 has edited them; when a page merely goes, the
+    // writer prunes the references to it rather than rebuilding the name tree, so nothing else
+    // in it is lost.
+    namedDestinations: intents.has('destinations') ? plannedNamedDestinations(state) : null,
     layers: intents.has('layers') ? plannedLayers(doc) : null,
     fields: intents.has('fields') ? plannedFields(doc, touched.fields) : null,
+    attachments: intents.has('attachments') ? plannedAttachments(state) : null,
   };
   return { plan, warnings };
 }
@@ -239,6 +243,47 @@ function plannedDestination(
     zoom: dest.zoom,
     rect: dest.rect,
   };
+}
+
+/**
+ * Every named destination in the model, for `/Names /Dests` (M12). Destinations without a name
+ * belong to a bookmark and are written with the outline instead; one whose page has gone is
+ * dropped, because a name tree entry pointing nowhere is worse than a missing one.
+ */
+function plannedNamedDestinations(state: Document['state']): PlannedNamedDestination[] {
+  const pageIndex = new Map(state.pages.map((p, i) => [p.id, i]));
+  const out: PlannedNamedDestination[] = [];
+  for (const dest of state.destinations) {
+    if (dest.name === null || dest.pageId === null) continue;
+    const page = pageIndex.get(dest.pageId);
+    if (page === undefined) continue;
+    out.push({
+      name: dest.name,
+      dest: {
+        page,
+        fit: dest.fit,
+        left: dest.left,
+        top: dest.top,
+        zoom: dest.zoom,
+        rect: dest.rect,
+      },
+    });
+  }
+  return out;
+}
+
+/**
+ * Embedded files whose description or type the writer has to move out of `/Params` (M12,
+ * ADR 0011). Attachment *annotations* are M31's and are left alone.
+ */
+function plannedAttachments(state: Document['state']): PlannedAttachment[] {
+  return state.attachments
+    .filter((a) => a.pageId === null)
+    .map((a) => ({
+      name: a.name,
+      description: a.description,
+      mimeType: a.mimeType,
+    }));
 }
 
 function plannedLayers(doc: Document): PlannedLayer[] {

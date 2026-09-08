@@ -24,6 +24,9 @@ import {
   type AnnotationFlags,
   type AnnotationSubtype,
   type Attachment,
+  type AttachmentPatch,
+  type NewAttachment,
+  type PdfCollection,
   type Destination,
   type DocHandle,
   type FormField,
@@ -65,7 +68,14 @@ import {
   SAVE,
 } from './constants';
 import { Ffi, readMatrix, readRectF, type WasmModule } from './ffi';
-import { assertRotation, readByteRange, subtypeValue, writeAnnotation } from './mutations';
+import {
+  applyLayerVisibility,
+  assertRotation,
+  isoToPdfDate,
+  readByteRange,
+  subtypeValue,
+  writeAnnotation,
+} from './mutations';
 import { FontRegistry, type SubstitutionTable } from './fonts';
 import { readRawInfo, type RawInfo } from './rawdoc';
 import { addFunction, instantiatePdfium, removeFunction } from './wasm';
@@ -119,6 +129,12 @@ interface OpenDoc {
    * as it is now, so the raw catalogue pass has to re-serialise instead of re-reading them.
    */
   mutated: boolean;
+  /**
+   * Names of the optional-content groups the caller has hidden (M12, ADR 0011). PDFium has no
+   * OCG API: visibility is applied by deactivating the page objects marked with the group, and
+   * that lives on the *loaded* page — so it is re-applied every time a page is loaded.
+   */
+  hiddenLayerNames: Set<string>;
 }
 
 /** Engines that can abort the request currently executing (used by the worker on `cancel`). */
@@ -292,6 +308,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       pages: new Map(),
       raw: null,
       mutated: false,
+      hiddenLayerNames: new Set(),
     });
     return handle;
   }
@@ -338,6 +355,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
     if (page === 0) throw new EngineError('corrupt', `page ${index} could not be loaded`);
     if (d.form !== 0) this.ffi.call('FORM_OnAfterLoadPage', page, d.form);
     const loaded: LoadedPage = { index, page, textPage: 0, geometry: null, objectIndex: null };
+    if (d.hiddenLayerNames.size > 0) applyLayerVisibility(this.ffi, page, d.hiddenLayerNames);
     d.pages.set(index, loaded);
     while (d.pages.size > this.pageCacheSize) {
       const oldest = d.pages.keys().next().value;
@@ -653,6 +671,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         ...a,
         ...optional('description', a.description ?? extra.description),
         ...optional('mimeType', a.mimeType ?? extra.mimeType),
+        ...optional('collectionFields', extra.collectionFields),
       };
     });
   }
@@ -679,9 +698,14 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
             ? ffi.u32(outLen)
             : undefined;
         });
-        const mime = ffi.has('FPDFAttachment_GetSubtype')
-          ? ffi.utf16Call((buf, len) => ffi.call('FPDFAttachment_GetSubtype', att, buf, len))
-          : '';
+        // `/Subtype` is a name on the embedded stream. PDFium can only *write* strings, and
+        // writes them into `/Params`, so a type set in this session is read back from there
+        // until M21's writer moves it into place on save (ADR 0011).
+        const mime =
+          (ffi.has('FPDFAttachment_GetSubtype')
+            ? ffi.utf16Call((buf, len) => ffi.call('FPDFAttachment_GetSubtype', att, buf, len))
+            : '') ||
+          (str('Subtype') ?? '');
         return {
           id,
           name,
@@ -689,6 +713,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
           ...optional('mimeType', mime === '' ? undefined : mime),
           ...optional('size', size),
           ...optional('modified', pdfDateToIso(str('ModDate'))),
+          ...optional('created', pdfDateToIso(str('CreationDate'))),
           ...optional('page', page),
         };
       };
@@ -749,6 +774,167 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         }
       }
       throw new EngineError('invalid-argument', `bad attachment id ${attachmentId}`);
+    });
+  }
+
+  /** The catalogue's `/Collection` — a PDF Portfolio — read with pdf-lib (ADR 0011). */
+  async collection(doc: DocHandle): Promise<PdfCollection | null> {
+    return (await this.rawInfo(this.doc(doc))).collection;
+  }
+
+  /**
+   * Embeds a file in the `/EmbeddedFiles` name tree (ADR 0011).
+   *
+   * PDFium keeps the name tree sorted by name, so a new attachment's index — and therefore its
+   * id — is wherever the sort puts it. The id is looked up by name afterwards rather than
+   * assumed to be the last one.
+   */
+  addAttachment(doc: DocHandle, file: NewAttachment): Promise<Attachment> {
+    return run(() => {
+      const d = this.doc(doc);
+      if (file.name === '') throw new EngineError('invalid-argument', 'an attachment needs a name');
+      return this.addAttachmentSync(d, doc, file);
+    });
+  }
+
+  /** Changes an embedded file's name, description, type, date or bytes (ADR 0011). */
+  updateAttachment(
+    doc: DocHandle,
+    attachmentId: string,
+    patch: AttachmentPatch,
+  ): Promise<Attachment> {
+    return run(() => {
+      const d = this.doc(doc);
+      const index = this.embeddedIndex(attachmentId);
+      const att = this.ffi.call('FPDFDoc_GetAttachment', d.doc, index);
+      if (att === 0) throw new EngineError('invalid-argument', `no attachment ${attachmentId}`);
+      if (patch.name !== undefined && patch.name !== '') {
+        // PDFium has no rename: re-embed under the new name and drop the old entry.
+        const before = this.attachmentsSync(doc).find((a) => a.id === attachmentId);
+        const bytes = patch.bytes ?? this.readAttachment(att);
+        this.ffi.call('FPDFDoc_DeleteAttachment', d.doc, index);
+        d.raw = null;
+        d.mutated = true;
+        return this.addAttachmentSync(d, doc, {
+          name: patch.name,
+          bytes,
+          ...optional('description', patch.description ?? before?.description),
+          ...optional('mimeType', patch.mimeType ?? before?.mimeType),
+          modified: patch.modified ?? new Date().toISOString(),
+          ...optional('created', before?.created),
+        });
+      }
+      this.writeAttachment(d, att, patch);
+      d.raw = null;
+      d.mutated = true;
+      const after = this.attachmentsSync(doc).find((a) => a.id === attachmentId);
+      if (!after) throw new EngineError('internal', `attachment ${attachmentId} vanished`);
+      return after;
+    });
+  }
+
+  /** Removes an embedded file. Attachments after it shift down one index (ADR 0011). */
+  deleteAttachment(doc: DocHandle, attachmentId: string): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      const index = this.embeddedIndex(attachmentId);
+      const count = this.ffi.call('FPDFDoc_GetAttachmentCount', d.doc);
+      if (index >= count)
+        throw new EngineError('invalid-argument', `no attachment ${attachmentId}`);
+      if (this.ffi.call('FPDFDoc_DeleteAttachment', d.doc, index) === 0) {
+        throw new EngineError('internal', `PDFium would not delete ${attachmentId}`);
+      }
+      d.raw = null;
+      d.mutated = true;
+    });
+  }
+
+  /** `att.<n>` -> n. A file-attachment annotation is M31's, not editable through here. */
+  private embeddedIndex(attachmentId: string): number {
+    const m = /^att\.(\d+)$/.exec(attachmentId);
+    if (!m?.[1]) {
+      throw new EngineError(
+        'invalid-argument',
+        `${attachmentId} is a file-attachment annotation, not an embedded file`,
+      );
+    }
+    return Number(m[1]);
+  }
+
+  /** Index of the embedded file with this name, or -1. */
+  private attachmentIndexOf(d: OpenDoc, name: string): number {
+    const ffi = this.ffi;
+    const count = ffi.call('FPDFDoc_GetAttachmentCount', d.doc);
+    for (let i = count - 1; i >= 0; i--) {
+      const att = ffi.call('FPDFDoc_GetAttachment', d.doc, i);
+      if (att === 0) continue;
+      const found = ffi.utf16Call((buf, len) => ffi.call('FPDFAttachment_GetName', att, buf, len));
+      if (found === name) return i;
+    }
+    return -1;
+  }
+
+  /** Embeds a file and reads back the attachment record PDFium ended up with. */
+  private addAttachmentSync(d: OpenDoc, doc: DocHandle, file: NewAttachment): Attachment {
+    const ffi = this.ffi;
+    const att = ffi.scope((s) => ffi.call('FPDFDoc_AddAttachment', d.doc, s.utf16(file.name)));
+    if (att === 0) throw new EngineError('internal', `PDFium would not embed "${file.name}"`);
+    this.writeAttachment(d, att, {
+      bytes: file.bytes,
+      ...optional('description', file.description),
+      ...optional('mimeType', file.mimeType),
+      modified: file.modified ?? new Date().toISOString(),
+      ...optional('created', file.created),
+    });
+    d.raw = null;
+    d.mutated = true;
+    const index = this.attachmentIndexOf(d, file.name);
+    const found = this.attachmentsSync(doc).find((a) => a.id === `att.${index}`);
+    if (!found) throw new EngineError('internal', `"${file.name}" was embedded but not found`);
+    return found;
+  }
+
+  /** Writes the parts of an attachment PDFium has setters for. */
+  private writeAttachment(
+    d: OpenDoc,
+    att: number,
+    patch: AttachmentPatch & { readonly created?: string },
+  ): void {
+    const ffi = this.ffi;
+    const bytes = patch.bytes;
+    if (bytes) {
+      ffi.scope((s) => {
+        const ptr = s.bytes(bytes);
+        // FPDFAttachment_SetFile(attachment, document, contents, len) — the document is not
+        // optional: PDFium needs it to create the embedded stream.
+        if (ffi.call('FPDFAttachment_SetFile', att, d.doc, ptr, bytes.length) === 0) {
+          throw new EngineError('internal', 'PDFium would not write the attachment bytes');
+        }
+      });
+    }
+    const setString = (key: string, value: string): void => {
+      ffi.scope((s) => {
+        ffi.call('FPDFAttachment_SetStringValue', att, s.utf8(key), s.utf16(value));
+      });
+    };
+    if (patch.description !== undefined) setString('Desc', patch.description);
+    if (patch.mimeType !== undefined) setString('Subtype', patch.mimeType);
+    const modified = isoToPdfDate(patch.modified);
+    if (modified) setString('ModDate', modified);
+    const created = isoToPdfDate(patch.created);
+    if (created) setString('CreationDate', created);
+  }
+
+  /** The bytes behind an open attachment handle. */
+  private readAttachment(att: number): Uint8Array {
+    const ffi = this.ffi;
+    return ffi.scope((s) => {
+      const outLen = s.alloc(4);
+      if (!ffi.call('FPDFAttachment_GetFile', att, 0, 0, outLen)) return new Uint8Array(0);
+      const len = ffi.u32(outLen);
+      const buf = s.alloc(len);
+      ffi.call('FPDFAttachment_GetFile', att, buf, len, outLen);
+      return ffi.copyBytes(buf, ffi.u32(outLen));
     });
   }
 
@@ -1931,11 +2117,25 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
   }
 
   /**
-   * Not available as a document mutation: PDFium can only deactivate individual page objects
-   * (`FPDFPageObj_SetIsActive`), which is a rendering concern and belongs to M12's layer panel.
+   * Shows or hides an optional-content group (M12, ADR 0011).
+   *
+   * PDFium has no OCG API, so visibility is applied by deactivating every page object marked
+   * with the group - see `applyLayerVisibility`. The set of hidden groups is kept on the open
+   * document and re-applied whenever a page is loaded, because the activity flag lives on the
+   * loaded page rather than in the file. `FPDFPage_GenerateContent` is never called, so the
+   * bytes are untouched and undo is exact; writing the visibility into a saved file is M21's
+   * job, through the `layers` write intent.
    */
-  setLayerVisible(..._args: unknown[]): Promise<void> {
-    return Promise.reject(new NotImplementedError('setLayerVisible'));
+  async setLayerVisible(doc: DocHandle, layerId: string, visible: boolean): Promise<void> {
+    const d = this.doc(doc);
+    const raw = await this.rawInfo(d);
+    const layer = raw.layers.find((l) => l.id === layerId);
+    if (!layer) throw new EngineError('invalid-argument', `no layer ${layerId}`);
+    // Groups are matched by name, which is what the marked content carries: two groups sharing a
+    // name are indistinguishable to a content stream, and are treated as one.
+    if (visible) d.hiddenLayerNames.delete(layer.name);
+    else d.hiddenLayerNames.add(layer.name);
+    for (const p of d.pages.values()) applyLayerVisibility(this.ffi, p.page, d.hiddenLayerNames);
   }
 
   // ---- PdfEngine: signatures and named destinations (ADR 0007) ----------------------------------

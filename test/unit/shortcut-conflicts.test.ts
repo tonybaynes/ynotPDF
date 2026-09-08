@@ -25,3 +25,29 @@ describe('shortcut conflicts', () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * The real app, not a hand-written list: every manifest the renderer registers, together. A
+ * module that quietly takes a key another one already had is exactly the bug `findConflicts`
+ * exists for, and nothing was checking the app's own set until M12 added six more keys.
+ */
+describe('the shortcuts the app actually registers', () => {
+  it('no two commands claim the same key', async () => {
+    const { Registry } = await import('@core/Registry');
+    const registry = new Registry();
+    for (const path of [
+      '@modules/M00-scaffold/manifest',
+      '@modules/M01-theme-system/manifest',
+      '@modules/M02-app-shell/manifest',
+      '@modules/M10-engine-layer/manifest',
+      '@modules/M11-viewer/manifest',
+      '@modules/M12-navigation-panels/manifest',
+      '@modules/M20-document-model/manifest',
+      '@modules/M21-save/manifest',
+    ]) {
+      const module = (await import(/* @vite-ignore */ path)) as { default: never };
+      registry.register(module.default);
+    }
+    expect(findConflicts(registry.allShortcuts())).toEqual([]);
+  });
+});

@@ -140,6 +140,24 @@ export interface PlannedOutlineItem {
   readonly color: number | null;
 }
 
+/**
+ * Metadata of one embedded file the writer must put where the PDF specification says it goes
+ * (M12, ADR 0011).
+ *
+ * PDFium's attachment API writes `/Desc` and `/Subtype` into the embedded stream's `/Params`
+ * dictionary, which is not where a reader looks: a description belongs on the file
+ * *specification* and the MIME type is a name on the stream itself. The engine's bytes carry
+ * the file and its name correctly; this section moves the rest into place. Matched by name.
+ */
+export interface PlannedAttachment {
+  /** Name in the `/EmbeddedFiles` name tree. */
+  readonly name: string;
+  /** `null` removes the description. */
+  readonly description: string | null;
+  /** MIME type, written as the stream's `/Subtype` name. `null` removes it. */
+  readonly mimeType: string | null;
+}
+
 /** A named destination for `/Names /Dests`. */
 export interface PlannedNamedDestination {
   readonly name: string;
@@ -185,6 +203,8 @@ export interface WritePlan {
   readonly namedDestinations: ReadonlyArray<PlannedNamedDestination> | null;
   readonly layers: ReadonlyArray<PlannedLayer> | null;
   readonly fields: ReadonlyArray<PlannedField> | null;
+  /** Embedded-file metadata to normalise (M12, ADR 0011). */
+  readonly attachments: ReadonlyArray<PlannedAttachment> | null;
 }
 
 /** An empty plan over `pageCount` pages: a straight re-serialisation. */
@@ -199,6 +219,7 @@ export function emptyWritePlan(pageCount: number): WritePlan {
     namedDestinations: null,
     layers: null,
     fields: null,
+    attachments: null,
   };
 }
 
@@ -212,6 +233,7 @@ export function planIsEmpty(plan: WritePlan): boolean {
     plan.namedDestinations === null &&
     plan.layers === null &&
     plan.fields === null &&
+    plan.attachments === null &&
     plan.pages.every((p) => p.boxes === undefined && (p.annotations?.length ?? 0) === 0)
   );
 }
@@ -235,6 +257,7 @@ export const WRITE_PHASES = [
   'outline',
   'destinations',
   'layers',
+  'attachments',
   'annotations',
   'fields',
   'serialise',

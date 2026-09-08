@@ -18,7 +18,7 @@ import {
   ParseSpeeds,
   decodePDFRawStream,
 } from 'pdf-lib';
-import type { Layer } from '../PdfEngine';
+import type { CollectionField, Layer, PdfCollection } from '../PdfEngine';
 
 /** `/C`, `/IC` (0xRRGGBB) and `/BS /W` or `/Border` width of one annotation, as in the file. */
 export interface AnnotColors {
@@ -40,13 +40,16 @@ export interface RawInfo {
   annotationColors(page: number): ReadonlyArray<AnnotColors>;
   /**
    * `/EmbeddedFiles` name-tree entries in tree order (the order PDFium enumerates them):
-   * the file specification's `/Desc` and the embedded stream's `/Subtype`, which PDFium's
-   * attachment API does not expose.
+   * the file specification's `/Desc`, the embedded stream's `/Subtype`, and the portfolio
+   * collection values in `/CI` — none of which PDFium's attachment API exposes (ADR 0011).
    */
   readonly embeddedFiles: ReadonlyArray<{
     readonly description?: string;
     readonly mimeType?: string;
+    readonly collectionFields?: Readonly<Record<string, string>>;
   }>;
+  /** The catalogue's `/Collection`: the file is a PDF Portfolio (ADR 0011). */
+  readonly collection: PdfCollection | null;
 }
 
 /** Converts a PDF colour array (gray / RGB / CMYK components 0..1) to 0xRRGGBB. */
@@ -96,6 +99,7 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
     layerIdByName: new Map(),
     annotationColors: () => [],
     embeddedFiles: [],
+    collection: null,
   };
   let doc: PDFDocument;
   try {
@@ -225,9 +229,28 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
         file instanceof PDFRawStream
           ? file.dict.lookupMaybe(PDFName.of('Subtype'), PDFName)
           : undefined;
+      const ci = spec?.lookupMaybe(PDFName.of('CI'), PDFDict);
+      const fields: Record<string, string> = {};
+      if (ci) {
+        for (const [key, value] of ci.entries()) {
+          const resolved = ctx.lookup(value);
+          const text =
+            textOf(resolved) ??
+            (resolved instanceof PDFNumber
+              ? String(resolved.asNumber())
+              : resolved instanceof PDFName
+                ? resolved.decodeText()
+                : undefined);
+          if (text !== undefined) fields[key.decodeText()] = text;
+        }
+      }
       embeddedFiles.push({
         ...optional('description', description),
         ...optional('mimeType', subtype?.decodeText()),
+        ...optional(
+          'collectionFields',
+          Object.keys(fields).length > 0 ? (fields as Readonly<Record<string, string>>) : undefined,
+        ),
       });
     }
   };
@@ -238,7 +261,113 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
     embeddedFiles.length = 0;
   }
 
-  return { layers, layerIdByName, ...optional('xmp', xmp), annotationColors, embeddedFiles };
+  return {
+    layers,
+    layerIdByName,
+    ...optional('xmp', xmp),
+    annotationColors,
+    embeddedFiles,
+    collection: readCollection(ctx, catalog),
+  };
+}
+
+/** `/View` values a viewer understands; anything else is a custom navigator. */
+const COLLECTION_VIEWS: Readonly<Record<string, PdfCollection['view']>> = {
+  D: 'details',
+  T: 'tile',
+  H: 'hidden',
+  C: 'custom',
+};
+
+/** Field `/Subtype` values, standard first (PDF 12.3.5). */
+const FIELD_KINDS = new Set<CollectionField['kind']>([
+  'F',
+  'Desc',
+  'ModDate',
+  'CreationDate',
+  'Size',
+  'CompressedSize',
+  'S',
+  'D',
+  'N',
+]);
+
+/**
+ * The catalogue's `/Collection` dictionary — a PDF Portfolio (PDF 12.3.5, ADR 0011).
+ *
+ * Returns `null` for an ordinary file, and a collection with no fields for a portfolio that
+ * defines no schema of its own: the presence of the dictionary is what makes a portfolio, not
+ * the schema, and a viewer still has to show the embedded files.
+ */
+function readCollection(
+  ctx: PDFDocument['context'],
+  catalog: PDFDocument['catalog'],
+): PdfCollection | null {
+  let dict: PDFDict | undefined;
+  try {
+    dict = catalog.lookupMaybe(PDFName.of('Collection'), PDFDict);
+  } catch {
+    return null;
+  }
+  if (!dict) return null;
+  const fields: CollectionField[] = [];
+  try {
+    const schema = dict.lookupMaybe(PDFName.of('Schema'), PDFDict);
+    if (schema) {
+      for (const [key, value] of schema.entries()) {
+        const field = ctx.lookupMaybe(value, PDFDict);
+        if (!field) continue;
+        const subtype = field.lookupMaybe(PDFName.of('Subtype'), PDFName)?.decodeText() ?? 'S';
+        const kind = (
+          FIELD_KINDS.has(subtype as CollectionField['kind']) ? subtype : 'S'
+        ) as CollectionField['kind'];
+        const name = key.decodeText();
+        fields.push({
+          key: name,
+          label: textOf(field.lookup(PDFName.of('N'))) ?? name,
+          kind,
+          order: field.lookupMaybe(PDFName.of('O'), PDFNumber)?.asNumber() ?? fields.length,
+          visible: field.lookup(PDFName.of('V')) !== undefined ? isTrue(field, 'V') : true,
+        });
+      }
+    }
+  } catch {
+    fields.length = 0;
+  }
+  fields.sort((a, b) => a.order - b.order || a.key.localeCompare(b.key));
+  let folderCount: number;
+  let initialFile: string | undefined;
+  try {
+    const folders = dict.lookupMaybe(PDFName.of('Folders'), PDFDict);
+    folderCount = folders ? 1 + countFolders(ctx, folders, 0) : 0;
+    initialFile = textOf(dict.lookup(PDFName.of('D')));
+  } catch {
+    folderCount = 0;
+  }
+  const view = dict.lookupMaybe(PDFName.of('View'), PDFName)?.decodeText() ?? 'D';
+  return {
+    view: COLLECTION_VIEWS[view] ?? 'custom',
+    fields,
+    ...optional('initialFile', initialFile),
+    folderCount,
+  };
+}
+
+/** `/Folders` is a linked tree of `/Child` and `/Next` nodes; we only need how many there are. */
+function countFolders(ctx: PDFDocument['context'], node: PDFDict, depth: number): number {
+  if (depth > 32) return 0;
+  let n = 0;
+  for (const key of ['Child', 'Next'] as const) {
+    const next = node.lookupMaybe(PDFName.of(key), PDFDict);
+    if (next) n += 1 + countFolders(ctx, next, depth + 1);
+  }
+  return n;
+}
+
+/** A boolean entry that may be a direct `PDFBool` or a reference to one. */
+function isTrue(dict: PDFDict, key: string): boolean {
+  const value = dict.lookup(PDFName.of(key));
+  return String(value) === 'true';
 }
 
 /** Helper for `exactOptionalPropertyTypes`: include a key only when defined. */

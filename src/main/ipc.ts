@@ -20,7 +20,7 @@ import type { FileKind, IpcHandlers, IpcInvokeChannel, SaveDialogOptions } from 
 import type { PrintJobs } from './print';
 import type { FolderSearches } from './search';
 import { hostArch, targetArch } from './arch';
-import { readFileForRenderer, writeBytes } from './files';
+import { readFileForRenderer, writeBytes, writeTempFile } from './files';
 import { probeFile, writeAtomic } from './fs/atomic';
 import type { CloseBroker } from './fs/lifecycle';
 import type { RecoveryStore } from './fs/recovery';
@@ -54,6 +54,16 @@ export interface IpcDeps {
   /** Prints web pages and generated HTML in a hidden window (M91). */
   readonly webpdf: WebPdfPrinter;
 }
+
+/**
+ * True in an e2e run (`YNOT_E2E=1`).
+ *
+ * The two channels that hand something to the operating system — "open this attachment" and
+ * "open this link" — do everything except the last step when it is set. A test must never make
+ * the machine it runs on open Foxit, or a browser: it asserts that the app asked, which is the
+ * part that is ours. (It found this the hard way: a debugging run opened three PDFs in Foxit.)
+ */
+const E2E = process.env['YNOT_E2E'] === '1';
 
 function windowOf(event: { readonly sender: unknown }): BrowserWindow | null {
   const win = BrowserWindow.fromWebContents(event.sender as Electron.WebContents);
@@ -310,8 +320,16 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       deps.closeBroker.answerQuit(quit);
       if (quit) app.quit();
     },
+    'shell:openTempFile': async (_e, name, bytes) => {
+      const path = await writeTempFile(name, bytes);
+      if (E2E) return path;
+      const error = await shell.openPath(path);
+      if (error) throw new Error(error);
+      return path;
+    },
     'shell:openExternal': async (_e, url) => {
       if (!/^https?:\/\//.test(url)) throw new Error('Only http(s) URLs may be opened');
+      if (E2E) return;
       await shell.openExternal(url);
     },
     'shell:showItemInFolder': (_e, path) => {
