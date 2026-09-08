@@ -510,6 +510,29 @@ test.describe('acceptance: split view, full screen, reading mode, guides', () =>
     expect((await state()).zoom).toBeCloseTo(2, 2);
   });
 
+  test('both halves of a split render their own pages', async () => {
+    await open('text.pdf', { path: 'C:/fixtures/splitrender.pdf' });
+    await app.run('view.split.vertical');
+    await app.page.waitForTimeout(400);
+    await settle(app.page);
+    const inked = await app.page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('.viewer-pane')].map((pane) => {
+        const canvas = pane.querySelector<HTMLCanvasElement>('.page .layer-raster');
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx || canvas.width === 0) return -1;
+        const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        let dark = 0;
+        for (let i = 0; i < data.length; i += 4) if ((data[i] ?? 255) < 128) dark++;
+        return dark;
+      }),
+    );
+    expect(inked).toHaveLength(2);
+    for (const [index, dark] of inked.entries()) {
+      expect(dark, `pane ${index} has ink`).toBeGreaterThan(50);
+    }
+    await app.run('view.split.off');
+  });
+
   test('reading mode hides the chrome and its bar brings the reader back', async () => {
     await open('multipage.pdf');
     await app.page.keyboard.press('Control+h');

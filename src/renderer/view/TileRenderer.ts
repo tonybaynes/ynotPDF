@@ -8,9 +8,12 @@
  * The rules the viewport relies on:
  * - **A cache hit is synchronous.** `peek()` returns a bitmap without a promise, so painting on
  *   scroll never waits and never re-renders.
- * - **Superseded work is dropped.** `reprioritise()` throws away everything queued that is no
- *   longer wanted and cancels the matching in-flight engine calls, which is what keeps a fast
- *   scroll from queueing a thousand tiles.
+ * - **Superseded work is dropped.** `reprioritise()` replaces what *one viewport* wants and
+ *   cancels the in-flight renders nobody wants any more, which is what keeps a fast scroll from
+ *   queueing a thousand tiles. It is keyed by viewport because a split view has two of them
+ *   sharing this renderer: a global replace still converges — each pane's next paint re-adds
+ *   what the other cancelled — but the two spend the scroll cancelling and restarting each
+ *   other's renders, which is work the reader pays for and never sees.
  * - **Nothing is ever rendered twice concurrently.** In-flight ids are tracked, so a tile that
  *   two viewports both want is one engine call.
  */
@@ -155,6 +158,8 @@ export class TileRenderer {
   private readonly concurrency: number;
   private readonly palette: () => NightPalette;
   private queue: QueueItem[] = [];
+  /** What each viewport currently wants, keyed by viewport id. */
+  private readonly wantedBy = new Map<string, Map<string, QueueItem>>();
   private readonly inFlight = new Map<string, { cancel(): void }>();
   private readonly listeners = new Set<TileListener>();
   /** Image-object rectangles per page, for Night Mode's "leave photographs alone". */
@@ -224,10 +229,13 @@ export class TileRenderer {
   }
 
   /**
-   * Replaces the queue with exactly the tiles wanted now, in priority order, and cancels
-   * in-flight renders that are no longer in the set. Called on every scroll/zoom settle.
+   * Replaces what one viewport wants, in priority order, and cancels the in-flight renders that
+   * no viewport wants any more. Called on every scroll/zoom settle.
+   *
+   * `viewport` scopes the replacement. Both halves of a split view share this renderer, so a
+   * global replace would have each pane throw away the other's work on every frame.
    */
-  reprioritise(requests: ReadonlyArray<TileRequest>): void {
+  reprioritise(viewport: string, requests: ReadonlyArray<TileRequest>): void {
     if (this.disposed) return;
     const wanted = new Map<string, QueueItem>();
     for (const request of requests) {
@@ -240,16 +248,36 @@ export class TileRenderer {
       }
       wanted.set(id, { id, request, priority: request.priority });
     }
+    this.wantedBy.set(viewport, wanted);
+    this.rebuildQueue();
+  }
+
+  /** Forgets a viewport's wants (its pane closed, or the split was removed). */
+  release(viewport: string): void {
+    if (!this.wantedBy.delete(viewport)) return;
+    this.rebuildQueue();
+  }
+
+  /** The union of every viewport's wants, minus what is already in flight. */
+  private rebuildQueue(): void {
+    const union = new Map<string, QueueItem>();
+    for (const wanted of this.wantedBy.values()) {
+      for (const [id, item] of wanted) {
+        const existing = union.get(id);
+        if (existing) existing.priority = Math.min(existing.priority, item.priority);
+        else union.set(id, { ...item });
+      }
+    }
     for (const [id, handle] of [...this.inFlight]) {
-      if (wanted.has(id)) {
-        wanted.delete(id); // already being rendered
+      if (union.has(id)) {
+        union.delete(id); // already being rendered
         continue;
       }
       handle.cancel();
       this.inFlight.delete(id);
       this.cancelled++;
     }
-    this.queue = [...wanted.values()].sort((a, b) => a.priority - b.priority);
+    this.queue = [...union.values()].sort((a, b) => a.priority - b.priority);
     this.pump();
   }
 
@@ -317,6 +345,10 @@ export class TileRenderer {
         this.inFlight.delete(id);
       }
     }
+    for (const [viewport, wanted] of this.wantedBy) {
+      for (const [id, item] of wanted) if (item.request.docKey === docKey) wanted.delete(id);
+      if (wanted.size === 0) this.wantedBy.delete(viewport);
+    }
     this.queue = this.queue.filter((q) => q.request.docKey !== docKey);
     this.cache.deleteWhere((key) => key.startsWith(`${docKey}|`));
     for (const key of [...this.imageRects.keys()]) {
@@ -347,6 +379,7 @@ export class TileRenderer {
     for (const handle of this.inFlight.values()) handle.cancel();
     this.inFlight.clear();
     this.queue = [];
+    this.wantedBy.clear();
     this.cache.clear();
     this.listeners.clear();
     this.imageRects.clear();

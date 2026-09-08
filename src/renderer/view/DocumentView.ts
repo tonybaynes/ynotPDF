@@ -68,6 +68,9 @@ export interface DocumentViewOptions {
 /** How far beyond the viewport pages are kept mounted, in screens. */
 const MOUNT_MARGIN = 1;
 
+/** Distinguishes the two halves of a split view to the shared tile renderer. */
+let nextViewportId = 0;
+
 export class DocumentView {
   readonly element: HTMLElement;
   readonly scroller: HTMLElement;
@@ -75,6 +78,8 @@ export class DocumentView {
   readonly overlay: HTMLElement;
 
   private readonly renderer: TileRenderer;
+  /** This viewport's identity to the shared renderer. */
+  private readonly viewportId = `viewport-${++nextViewportId}`;
   private readonly docKey: string;
   private readonly doc: DocHandle;
   private sizes: ReadonlyArray<PageSize>;
@@ -440,6 +445,7 @@ export class DocumentView {
 
   dispose(): void {
     this.disposed = true;
+    this.renderer.release(this.viewportId);
     if (this.frame) cancelAnimationFrame(this.frame);
     if (this.idle) cancelIdle(this.idle);
     for (const d of this.disposers.splice(0)) d();
@@ -620,7 +626,7 @@ export class DocumentView {
       void this.ensurePlaceholder(view, page);
     }
 
-    this.renderer.reprioritise(requests);
+    this.renderer.reprioritise(this.viewportId, requests);
     this.schedulePrefetch(wanted, bucket, bucketId);
     this.onFrame?.();
   }
