@@ -14,6 +14,15 @@
  *   ("Undo Move annotation").
  */
 
+/**
+ * The plain-data form of a command (M20, ADR 0007). `data` must be JSON values only: the
+ * journal is written to a recovery file (M21) and replayed for batch (M120).
+ */
+export interface CommandJson {
+  readonly id: string;
+  readonly data: unknown;
+}
+
 export interface Command {
   /** Kind of change, dotted lowercase, e.g. `"page.rotate"`. */
   readonly id: string;
@@ -31,10 +40,11 @@ export interface Command {
   /** Whether this command may participate in merging (default true when `merge` exists). */
   readonly mergeable?: boolean;
   /**
-   * Serialisable description for the journal/recovery file (M21). Optional in M00; commands
-   * without it are replayed from memory only.
+   * Serialisable description for the journal/recovery file (M21) and batch replay (M120).
+   * Optional: a command without it is replayed from memory only, and `Journal` records that the
+   * sequence is not fully replayable rather than silently dropping a step.
    */
-  toJSON?(): { readonly id: string; readonly data: unknown };
+  toJSON?(): CommandJson;
 }
 
 /** Build a command from two closures. */
@@ -73,7 +83,30 @@ export class CompositeCommand implements Command {
       if (c) await c.undo();
     }
   }
+
+  /**
+   * Serialises the whole transaction as one entry. Children are written in the journal's own
+   * `{ type, payload }` shape, so `Journal` can walk a nested composite with the same code it
+   * uses for a top-level entry. A child that cannot serialise contributes `null`, which the
+   * journal reads as "this sequence cannot be fully replayed" rather than dropping a step.
+   */
+  toJSON(): CommandJson {
+    return {
+      id: COMPOSITE_COMMAND_ID,
+      data: {
+        id: this.id,
+        label: this.label,
+        children: this.commands.map((c) => {
+          const json = c.toJSON?.();
+          return json ? { type: json.id, payload: json.data } : null;
+        }),
+      },
+    };
+  }
 }
+
+/** The journal type used for a {@link CompositeCommand}. */
+export const COMPOSITE_COMMAND_ID = 'core.composite';
 
 /**
  * A command that swaps a property on a target object. Handy for simple state changes and

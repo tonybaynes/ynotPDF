@@ -356,3 +356,104 @@ describe('UndoStack', () => {
     expect(l).toHaveBeenCalledTimes(5);
   });
 });
+
+/**
+ * Transactions (M20, ADR 0007). `group(label, fn)` covers the callback shape; this is the
+ * explicit form, for an interaction that begins on one event and ends on another — a drag
+ * that starts on pointer-down and finishes on pointer-up cannot be a callback.
+ */
+describe('UndoStack transactions', () => {
+  it('reports whether one is open, and how deep', async () => {
+    const u = new UndoStack();
+    expect(u.inTransaction).toBe(false);
+    expect(u.transactionDepth).toBe(0);
+    u.beginTransaction('Outer');
+    expect(u.inTransaction).toBe(true);
+    expect(u.transactionDepth).toBe(1);
+    u.beginTransaction('Inner');
+    expect(u.transactionDepth).toBe(2);
+    await u.commit();
+    expect(u.transactionDepth).toBe(1);
+    await u.commit();
+    expect(u.inTransaction).toBe(false);
+  });
+
+  it('records everything between begin and commit as one entry', async () => {
+    const u = new UndoStack();
+    const log: string[] = [];
+    u.beginTransaction('Three things');
+    await u.push(logCmd(log, 'a'));
+    await u.push(logCmd(log, 'b'));
+    await u.push(logCmd(log, 'c'));
+    expect(log).toEqual(['a', 'b', 'c']);
+    expect(u.state.length).toBe(0);
+    await u.commit();
+    expect(u.state.length).toBe(1);
+    expect(u.state.undoLabel).toBe('Three things');
+    await u.undo();
+    expect(log).toEqual([]);
+    await u.redo();
+    expect(log).toEqual(['a', 'b', 'c']);
+  });
+
+  it('rolls back in reverse and records nothing', async () => {
+    const u = new UndoStack();
+    const log: string[] = [];
+    u.beginTransaction('Abandoned');
+    await u.push(logCmd(log, 'a'));
+    await u.push(logCmd(log, 'b'));
+    await u.rollback();
+    expect(log).toEqual([]);
+    expect(u.state.length).toBe(0);
+    expect(u.canUndo).toBe(false);
+  });
+
+  it('an empty transaction records nothing', async () => {
+    const u = new UndoStack();
+    u.beginTransaction('Nothing');
+    await u.commit();
+    expect(u.state.length).toBe(0);
+  });
+
+  it('nests into one entry, whichever way round the two forms are used', async () => {
+    const u = new UndoStack();
+    const log: string[] = [];
+    u.beginTransaction('Outer');
+    await u.push(logCmd(log, 'a'));
+    await u.group('Inner', async () => {
+      await u.push(logCmd(log, 'b'));
+    });
+    await u.commit();
+    expect(u.state.length).toBe(1);
+    expect(u.state.undoLabel).toBe('Outer');
+    await u.undo();
+    expect(log).toEqual([]);
+  });
+
+  it('a transaction inside group() folds into the group', async () => {
+    const u = new UndoStack();
+    const log: string[] = [];
+    await u.group('Group', async () => {
+      u.beginTransaction('Inner');
+      await u.push(logCmd(log, 'a'));
+      await u.commit();
+    });
+    expect(u.state.length).toBe(1);
+    expect(u.state.undoLabel).toBe('Group');
+  });
+
+  it('committing or rolling back with none open is an error, not a silent no-op', async () => {
+    const u = new UndoStack();
+    await expect(u.commit()).rejects.toThrow('commit() without beginTransaction()');
+    await expect(u.rollback()).rejects.toThrow('rollback() without beginTransaction()');
+  });
+
+  it('clear() abandons an open transaction', async () => {
+    const u = new UndoStack();
+    u.beginTransaction('Open');
+    await u.push(logCmd([], 'a'));
+    u.clear();
+    expect(u.inTransaction).toBe(false);
+    expect(u.state.length).toBe(0);
+  });
+});

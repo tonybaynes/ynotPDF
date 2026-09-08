@@ -6,6 +6,10 @@
  * - `undo()` / `redo()` step through history. Operations are serialised: a second call while
  *   one is in flight waits for the first.
  * - `group(label, fn)` records everything pushed inside `fn` as a single composite entry.
+ * - `beginTransaction(label)` / `commit()` / `rollback()` are the same thing for interactions
+ *   that span events — a drag that starts on pointer-down and ends on pointer-up cannot be
+ *   expressed as a callback. Both forms share one group stack, so nesting either way flattens
+ *   into a single composite entry and a single undo step (M20, ADR 0007).
  * - `markSaved()` remembers the current position; `isDirty` compares against it.
  * - `subscribe` notifies after every change so menus and the status bar can update.
  */
@@ -155,6 +159,60 @@ export class UndoStack {
     });
   }
 
+  /**
+   * Opens a transaction. Every `push` until the matching `commit()` becomes part of one
+   * composite entry labelled `label`. Transactions nest, and nest inside `group()`; only the
+   * outermost one produces an undo entry.
+   */
+  beginTransaction(label: string, id = 'group'): void {
+    this.groupStack.push({ label, id, commands: [] });
+  }
+
+  /** True while at least one transaction or `group()` is open. */
+  get inTransaction(): boolean {
+    return this.groupStack.length > 0;
+  }
+
+  /** Nesting depth of open transactions and groups. */
+  get transactionDepth(): number {
+    return this.groupStack.length;
+  }
+
+  /**
+   * Closes the innermost transaction and records it as one entry (or folds it into its parent).
+   * A transaction that applied nothing records nothing. Throws when none is open.
+   */
+  async commit(): Promise<void> {
+    const entry = this.groupStack.pop();
+    if (!entry) throw new Error('commit() without beginTransaction()');
+    if (entry.commands.length === 0) return;
+    const composite = new CompositeCommand(entry.id, entry.label, entry.commands);
+    const parent = this.groupStack[this.groupStack.length - 1];
+    if (parent) {
+      parent.commands.push(composite);
+      return;
+    }
+    await this.enqueue(() => {
+      this.record(composite);
+      this.notify();
+    });
+  }
+
+  /**
+   * Closes the innermost transaction and undoes everything it applied, in reverse. Nothing is
+   * recorded, so the history reads as though the interaction never happened. Throws when no
+   * transaction is open.
+   */
+  async rollback(): Promise<void> {
+    const entry = this.groupStack.pop();
+    if (!entry) throw new Error('rollback() without beginTransaction()');
+    for (let i = entry.commands.length - 1; i >= 0; i--) {
+      const c = entry.commands[i];
+      if (c) await c.undo();
+    }
+    this.notify();
+  }
+
   /** Prevents the next push from merging with the current top (e.g. after a typing pause). */
   breakMerge(): void {
     this.mergeBarrier = true;
@@ -166,12 +224,13 @@ export class UndoStack {
     this.notify();
   }
 
-  /** Drops all history. The saved marker resets to "clean". */
+  /** Drops all history, including any open transaction. The saved marker resets to "clean". */
   clear(): void {
     this.undoList = [];
     this.redoList = [];
     this.savedIndex = 0;
     this.mergeBarrier = false;
+    this.groupStack = [];
     this.notify();
   }
 

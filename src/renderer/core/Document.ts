@@ -1,11 +1,21 @@
 /**
- * `Document` — the in-memory model of one open PDF (M00 typed shell; M20 fills it in).
+ * `Document` — the in-memory model of one open PDF (M20; typed shell by M00, ADR 0007).
  *
  * The engine is the source of truth for **bytes**; the Document is the source of truth for
- * **intent**: it holds what the user sees (pages, annotations, fields, metadata) and a journal
- * of `Command`s (its `UndoStack`). Saving (M21) replays the journal into the writer.
+ * **intent**. It holds everything editable — pages, annotations, fields, outline, destinations,
+ * layers, attachments, metadata, security, signatures, view settings — plus a journal of
+ * `Command`s (its `UndoStack`). Saving (M21) replays the journal into the writer.
  *
  * Every change goes through `apply(command)`. Never mutate the engine directly from UI code.
+ *
+ * **Structure lives here, content lives in the engine.** Page order, page presence and labels
+ * are the model's alone: `FPDFPage_Delete` cannot be undone, so a delete that went to PDFium
+ * would make undo a lie. Views resolve a model page id to the live PDFium index through
+ * {@link Document.enginePage}. Everything PDFium can reverse exactly — rotation, boxes,
+ * annotations, field values, blank pages we inserted ourselves — is pushed to the engine
+ * immediately so a render reflects the edit. What the engine cannot take is recorded as a
+ * {@link WriteIntent} for M21's writer.
+ *
  * Geometry: PDF points, origin bottom-left, page-relative. Page indexes 0-based.
  */
 
@@ -13,41 +23,107 @@ import type {
   Annotation,
   DocHandle,
   FormField,
-  Metadata,
-  OutlineItem,
-  Layer,
-  Attachment,
-  PdfEngine,
+  NamedDestination,
   OpenOptions,
+  PageObject,
+  PdfEngine,
+  Permissions,
 } from '@engine/PdfEngine';
-import type { PageIndex, PageSize } from '@shared/pdf';
+import type { PageIndex, PageSize, PdfRect } from '@shared/pdf';
 import type { Command } from './Command';
+import { DocumentEvents } from './events';
+import { IdAllocator, IdTable, type ModelId } from './Ids';
+import {
+  DEFAULT_VIEW_SETTINGS,
+  flattenOutline,
+  pageBox,
+  pageSizeOf,
+  toModelAnnotation,
+  toModelAttachment,
+  toModelDestination,
+  toModelLayer,
+  toModelMetadata,
+  type CustomBag,
+  type ModelAnnotation,
+  type ModelAttachment,
+  type ModelDestination,
+  type ModelField,
+  type ModelLayer,
+  type ModelMetadata,
+  type ModelOutlineItem,
+  type ModelPage,
+  type ModelWidget,
+  type PageBoxName,
+  type SecurityState,
+  type SignatureSummary,
+  type ViewSettings,
+  type WriteIntent,
+} from './model';
 import { createStore, type Store, type Unsubscribe } from './Store';
 import { UndoStack } from './UndoStack';
 
-/** One page as the model sees it. */
-export interface PageInfo {
-  readonly index: PageIndex;
-  readonly label: string;
-  readonly size: PageSize;
-}
+export * from './model';
+export type { DocumentEvent, DocumentEventType, PageChange } from './events';
+
+/** Kept from M00, where a page was `{ index, label, size }`. Prefer {@link ModelPage}. */
+export type PageInfo = ModelPage;
 
 /** Observable document state. Modules subscribe to slices of this via `document.store`. */
 export interface DocumentState {
   /** Absolute path on disk, or `null` for a new/unsaved document. */
   readonly path: string | null;
   readonly title: string;
-  readonly pages: ReadonlyArray<PageInfo>;
-  /** Annotations by page index (only pages that have been loaded). */
-  readonly annotations: Readonly<Record<number, ReadonlyArray<Annotation>>>;
-  readonly fields: ReadonlyArray<FormField>;
-  readonly outline: ReadonlyArray<OutlineItem>;
-  readonly layers: ReadonlyArray<Layer>;
-  readonly attachments: ReadonlyArray<Attachment>;
-  readonly metadata: Metadata | null;
+  /** Pages in document order. */
+  readonly pages: ReadonlyArray<ModelPage>;
+  /** Annotations by **page id**, for pages whose annotations have been loaded. */
+  readonly annotations: Readonly<Record<string, ReadonlyArray<ModelAnnotation>>>;
+  /** Fields as a flat list; the tree is `parentId` / `childIds`. */
+  readonly fields: ReadonlyArray<ModelField>;
+  /** Outline nodes, parents before children; roots have `parentId === null`. */
+  readonly outline: ReadonlyArray<ModelOutlineItem>;
+  readonly destinations: ReadonlyArray<ModelDestination>;
+  readonly layers: ReadonlyArray<ModelLayer>;
+  readonly attachments: ReadonlyArray<ModelAttachment>;
+  readonly metadata: ModelMetadata;
+  readonly security: SecurityState;
+  readonly signatures: ReadonlyArray<SignatureSummary>;
+  readonly view: ViewSettings;
+  /** Module-owned state, one namespace per module id. Read yours, not other modules'. */
+  readonly custom: CustomBag;
+  /** What the engine could not apply, for M21's writer. Derived from the undo stack. */
+  readonly writeIntents: ReadonlyArray<WriteIntent>;
   /** Bumped after every applied command so views can re-render cheaply. */
   readonly revision: number;
 }
+
+/** A command that knows what it left for the writer to do. */
+export interface DocumentCommand extends Command {
+  /** Kinds of change the engine did not take. Empty when the engine applied everything. */
+  readonly writeIntents: ReadonlyArray<WriteIntent>;
+}
+
+function isDocumentCommand(c: Command): c is DocumentCommand {
+  return Array.isArray((c as Partial<DocumentCommand>).writeIntents);
+}
+
+/** A model invariant that does not hold. `Document.validate()` returns these. */
+export interface ValidationIssue {
+  /** Stable machine-readable code, e.g. `"page.duplicate-id"`. */
+  readonly code: string;
+  readonly message: string;
+  readonly entityId?: ModelId;
+}
+
+const ALL_PERMISSIONS: Permissions = {
+  print: true,
+  printHighQuality: true,
+  modify: true,
+  copy: true,
+  annotate: true,
+  fillForms: true,
+  extractForAccessibility: true,
+  assemble: true,
+};
 
 let nextDocumentId = 1;
 
@@ -58,13 +134,32 @@ export class Document {
   readonly handle: DocHandle;
   readonly store: Store<DocumentState>;
   readonly undo: UndoStack;
+  /** Fine-grained change events (ADR 0007). */
+  readonly events = new DocumentEvents();
+  /** Allocates model ids. Exposed so commands can mint ids for entities they create. */
+  readonly ids: IdAllocator;
+  /** Model id ↔ engine key. Commands rebind it after engine calls that renumber. */
+  readonly idTable: IdTable;
 
-  private constructor(engine: PdfEngine, handle: DocHandle, initial: DocumentState) {
+  /** Milliseconds of inactivity after which the next edit starts a new undo entry. */
+  mergeIdleMs = 600;
+  private lastEditAt = 0;
+  private closed = false;
+
+  private constructor(
+    engine: PdfEngine,
+    handle: DocHandle,
+    initial: DocumentState,
+    ids: IdAllocator,
+    idTable: IdTable,
+  ) {
     this.id = `doc-${nextDocumentId++}`;
     this.engine = engine;
     this.handle = handle;
     this.store = createStore(initial);
     this.undo = new UndoStack();
+    this.ids = ids;
+    this.idTable = idTable;
   }
 
   /**
@@ -78,30 +173,134 @@ export class Document {
   ): Promise<Document> {
     const { path, ...openOptions } = options;
     const handle = await engine.open(bytes, openOptions);
-    const [count, labels, metadata] = await Promise.all([
-      engine.pageCount(handle),
-      engine.pageLabels(handle),
-      engine.metadata(handle),
-    ]);
-    const pages: PageInfo[] = [];
+    try {
+      return await Document.build(engine, handle, path ?? null, options.name ?? null);
+    } catch (error) {
+      await engine.close(handle).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /**
+   * Builds the model around a handle the caller already has. Use this when the document was
+   * *created* rather than opened — M91's "new from images", a document assembled by the engine —
+   * and in tests that construct a synthetic document. `open()` is this plus `engine.open`.
+   */
+  static fromHandle(
+    engine: PdfEngine,
+    handle: DocHandle,
+    options: { readonly path?: string | null; readonly name?: string | null } = {},
+  ): Promise<Document> {
+    return Document.build(engine, handle, options.path ?? null, options.name ?? null);
+  }
+
+  private static async build(
+    engine: PdfEngine,
+    handle: DocHandle,
+    path: string | null,
+    name: string | null,
+  ): Promise<Document> {
+    const ids = new IdAllocator();
+    const idTable = new IdTable();
+    const [count, labels, metadata, permissions, outlineItems, layers, attachments] =
+      await Promise.all([
+        engine.pageCount(handle),
+        engine.pageLabels(handle),
+        engine.metadata(handle),
+        engine.permissions(handle).catch(() => ALL_PERMISSIONS),
+        engine.outline(handle).catch(() => []),
+        engine.layers(handle).catch(() => []),
+        engine.attachments(handle).catch(() => []),
+      ]);
+
+    // Pages first: everything else refers to them by id.
+    const pages: ModelPage[] = [];
     for (let i = 0; i < count; i++) {
       const size = await engine.pageSize(handle, i);
-      pages.push({ index: i, label: labels[i] ?? String(i + 1), size });
+      const id = ids.next('page');
+      idTable.bind('page', id, String(i));
+      pages.push(pageFromSize(id, labels[i] ?? String(i + 1), size));
     }
-    const title = metadata.title ?? basename(path ?? options.name ?? 'Untitled');
-    return new Document(engine, handle, {
-      path: path ?? null,
-      title,
-      pages,
-      annotations: {},
-      fields: [],
-      outline: [],
-      layers: [],
-      attachments: [],
-      metadata,
-      revision: 0,
+    const pageIdAt = (index: PageIndex): ModelId | null => pages[index]?.id ?? null;
+
+    // Destinations: named ones from the catalogue, plus one per outline target.
+    const destinations: ModelDestination[] = [];
+    const named: ReadonlyArray<NamedDestination> = await engine
+      .namedDestinations(handle)
+      .catch(() => []);
+    for (const n of named) {
+      destinations.push(
+        toModelDestination(ids.next('destination'), n.dest, pageIdAt(n.dest.page), n.name),
+      );
+    }
+    const outline = flattenOutline(
+      outlineItems,
+      () => ids.next('outline'),
+      (item) => {
+        if (!item.dest) return null;
+        const dest = toModelDestination(
+          ids.next('destination'),
+          item.dest,
+          pageIdAt(item.dest.page),
+        );
+        destinations.push(dest);
+        return dest.id;
+      },
+    );
+
+    const fields = buildFieldTree(await engine.formFields(handle).catch(() => []), ids, pageIdAt);
+
+    const signatures: SignatureSummary[] = (await engine.signatures(handle).catch(() => [])).map(
+      (s) => ({
+        id: ids.next('signature'),
+        reason: s.reason ?? null,
+        subFilter: s.subFilter ?? null,
+        time: s.time ?? null,
+        byteRange: s.byteRange,
+        docMdpPermission: s.docMdpPermission ?? null,
+      }),
+    );
+
+    const modelLayers = layers.map((l) => {
+      const id = ids.next('layer');
+      idTable.bind('layer', id, l.id);
+      return toModelLayer(id, l);
     });
+    const modelAttachments = attachments.map((a) => {
+      const id = ids.next('attachment');
+      idTable.bind('attachment', id, a.id);
+      return toModelAttachment(id, a, a.page === undefined ? null : pageIdAt(a.page));
+    });
+
+    const meta = toModelMetadata(metadata);
+    const title = meta.title ?? basename(path ?? name ?? 'Untitled');
+    return new Document(
+      engine,
+      handle,
+      {
+        path,
+        title,
+        pages,
+        annotations: {},
+        fields,
+        outline,
+        destinations,
+        layers: modelLayers,
+        attachments: modelAttachments,
+        metadata: meta,
+        security: { encrypted: metadata.encrypted, permissions },
+        signatures,
+        view: DEFAULT_VIEW_SETTINGS,
+        custom: {},
+        writeIntents: [],
+        revision: 0,
+      },
+      ids,
+      idTable,
+    );
   }
+
+  // ---- reading ---------------------------------------------------------------------------------
 
   get state(): DocumentState {
     return this.store.get();
@@ -115,21 +314,141 @@ export class Document {
     return this.undo.isDirty;
   }
 
-  page(index: PageIndex): PageInfo {
+  /** True once `close()` has run. Using the document afterwards throws. */
+  get isClosed(): boolean {
+    return this.closed;
+  }
+
+  /** The page at a visual index. Throws `RangeError` when out of range. */
+  page(index: PageIndex): ModelPage {
     const p = this.state.pages[index];
     if (!p) throw new RangeError(`Page ${index} out of range (0..${this.pageCount - 1})`);
     return p;
   }
 
+  /** The page with an id, or `null`. */
+  pageById(id: ModelId): ModelPage | null {
+    return this.state.pages.find((p) => p.id === id) ?? null;
+  }
+
+  /** Visual index of a page id, or `-1`. */
+  pageIndex(id: ModelId): number {
+    return this.state.pages.findIndex((p) => p.id === id);
+  }
+
+  /**
+   * The engine's current page index for a model page, or `undefined` when the engine does not
+   * hold it. Every engine call about a page must go through this — the model's order and the
+   * engine's order are not the same thing.
+   */
+  enginePage(id: ModelId): PageIndex | undefined {
+    const key = this.idTable.engineKey('page', id);
+    return key === undefined ? undefined : Number(key);
+  }
+
+  /** Displayed size of a page (CropBox, rotation applied). */
+  pageSize(id: ModelId): PageSize | null {
+    const p = this.pageById(id);
+    return p ? pageSizeOf(p) : null;
+  }
+
+  /** A named box of a page, with the spec's fallbacks applied. */
+  pageBox(id: ModelId, box: PageBoxName): PdfRect | null {
+    const p = this.pageById(id);
+    return p ? pageBox(p, box) : null;
+  }
+
+  /** Annotations of a page. Empty until `loadAnnotations` has run for it. */
+  annotations(pageId: ModelId): ReadonlyArray<ModelAnnotation> {
+    return this.state.annotations[pageId] ?? [];
+  }
+
+  /** Finds an annotation anywhere in the document. */
+  annotation(id: ModelId): ModelAnnotation | null {
+    for (const list of Object.values(this.state.annotations)) {
+      const found = list.find((a) => a.id === id);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  field(id: ModelId): ModelField | null {
+    return this.state.fields.find((f) => f.id === id) ?? null;
+  }
+
+  fieldByName(name: string): ModelField | null {
+    return this.state.fields.find((f) => f.name === name) ?? null;
+  }
+
+  outlineItem(id: ModelId): ModelOutlineItem | null {
+    return this.state.outline.find((o) => o.id === id) ?? null;
+  }
+
+  destination(id: ModelId): ModelDestination | null {
+    return this.state.destinations.find((d) => d.id === id) ?? null;
+  }
+
+  layer(id: ModelId): ModelLayer | null {
+    return this.state.layers.find((l) => l.id === id) ?? null;
+  }
+
+  attachment(id: ModelId): ModelAttachment | null {
+    return this.state.attachments.find((a) => a.id === id) ?? null;
+  }
+
+  /** A module's slice of the custom bag. Namespaces are module ids (`"M30"`). */
+  custom(namespace: string): Readonly<Record<string, unknown>> {
+    return this.state.custom[namespace] ?? {};
+  }
+
+  // ---- events ----------------------------------------------------------------------------------
+
+  /** Subscribes to one change event type. See `events.ts`. */
+  on = this.events.on.bind(this.events);
+  /** Subscribes to every change event. */
+  onAny = this.events.onAny.bind(this.events);
+
+  /** Subscribes to whole-state changes (coarse). Prefer `on()` for anything specific. */
+  subscribe(listener: (state: DocumentState) => void): Unsubscribe {
+    return this.store.subscribe(listener);
+  }
+
+  // ---- applying changes ------------------------------------------------------------------------
+
   /** Applies a command through the undo stack and bumps `revision`. */
   async apply(command: Command): Promise<void> {
+    this.assertOpen();
+    if (Date.now() - this.lastEditAt > this.mergeIdleMs) this.undo.breakMerge();
     await this.undo.push(command);
+    this.lastEditAt = Date.now();
     this.touch();
   }
 
   /** Groups several commands into one undo entry. */
-  async batch(label: string, fn: () => void | Promise<void>): Promise<void> {
-    await this.undo.group(label, fn);
+  async batch(label: string, fn: () => void | Promise<void>, id = 'group'): Promise<void> {
+    this.assertOpen();
+    await this.undo.group(label, fn, id);
+    this.lastEditAt = Date.now();
+    this.touch();
+  }
+
+  /**
+   * Opens a transaction that is committed or rolled back explicitly — for interactions that
+   * span events, like a drag that starts on pointer-down and ends on pointer-up.
+   */
+  beginTransaction(label: string, id = 'group'): void {
+    this.assertOpen();
+    this.undo.beginTransaction(label, id);
+  }
+
+  async commit(): Promise<void> {
+    await this.undo.commit();
+    this.lastEditAt = Date.now();
+    this.touch();
+  }
+
+  async rollback(): Promise<void> {
+    await this.undo.rollback();
     this.touch();
   }
 
@@ -143,44 +462,605 @@ export class Document {
     this.touch();
   }
 
-  /** Reloads structural data from the engine (after page operations). */
+  /** Stops the next edit merging with the last one (selection change, tool change, blur). */
+  breakMerge(): void {
+    this.undo.breakMerge();
+  }
+
+  // ---- loading more of the file ----------------------------------------------------------------
+
+  /**
+   * Rebuilds page records from the engine. Only for a fresh open or an external reload — normal
+   * page edits go through commands, which keep the model and the engine in step themselves.
+   */
   async refreshPages(): Promise<void> {
+    this.assertOpen();
     const count = await this.engine.pageCount(this.handle);
     const labels = await this.engine.pageLabels(this.handle);
-    const pages: PageInfo[] = [];
+    const pages: ModelPage[] = [];
     for (let i = 0; i < count; i++) {
       const size = await this.engine.pageSize(this.handle, i);
-      pages.push({ index: i, label: labels[i] ?? String(i + 1), size });
+      const existing = this.idTable.modelId('page', String(i));
+      const id = existing ?? this.ids.next('page');
+      this.idTable.bind('page', id, String(i));
+      const previous = existing === undefined ? null : this.pageById(existing);
+      pages.push({
+        ...pageFromSize(id, labels[i] ?? String(i + 1), size),
+        objects: previous?.objects ?? null,
+      });
     }
     this.store.set({ pages });
   }
 
   /** Loads (or reloads) the annotations of one page into the model. */
-  async loadAnnotations(page: PageIndex): Promise<ReadonlyArray<Annotation>> {
-    const list = await this.engine.annotations(this.handle, page);
-    this.store.set((s) => ({ annotations: { ...s.annotations, [page]: list } }));
-    return list;
+  async loadAnnotations(pageId: ModelId): Promise<ReadonlyArray<ModelAnnotation>> {
+    this.assertOpen();
+    const index = this.enginePage(pageId);
+    if (index === undefined) return this.annotations(pageId);
+    const list = await this.engine.annotations(this.handle, index);
+    const model = this.adoptAnnotations(pageId, list);
+    this.store.set((s) => ({ annotations: { ...s.annotations, [pageId]: model } }));
+    return model;
   }
 
-  /** Serialises via the engine. Marks the undo stack clean on success. */
+  /** Loads a page's content objects (lazy — see {@link ModelPage.objects}). */
+  async loadObjects(pageId: ModelId): Promise<ReadonlyArray<PageObject>> {
+    this.assertOpen();
+    const index = this.enginePage(pageId);
+    if (index === undefined) return [];
+    const objects = await this.engine.pageObjects(this.handle, index);
+    this.replacePage(pageId, (p) => ({ ...p, objects }), 'objects');
+    return objects;
+  }
+
+  /**
+   * Binds engine annotations to model ids, reusing the id an engine annotation already had so a
+   * reload does not invalidate selections. Returns the model list for the page.
+   */
+  adoptAnnotations(
+    pageId: ModelId,
+    list: ReadonlyArray<Annotation>,
+  ): ReadonlyArray<ModelAnnotation> {
+    const bindings: [ModelId, string][] = [];
+    const resolve = (engineId: string): ModelId | null =>
+      this.idTable.modelId('annotation', engineId) ?? null;
+    const out = list.map((a) => {
+      const id = this.idTable.modelId('annotation', a.id) ?? this.ids.next('annotation');
+      bindings.push([id, a.id]);
+      return toModelAnnotation(id, pageId, a, resolve);
+    });
+    for (const [id, key] of bindings) this.idTable.bind('annotation', id, key);
+    return out;
+  }
+
+  // ---- model mutation (called by commands, not by UI code) --------------------------------------
+
+  /** Replaces one page record and emits `page:changed`. */
+  replacePage(
+    pageId: ModelId,
+    update: (page: ModelPage) => ModelPage,
+    what: 'rotation' | 'boxes' | 'label' | 'objects',
+    box?: PageBoxName,
+  ): void {
+    let changed = false;
+    this.store.set((s) => ({
+      pages: s.pages.map((p) => {
+        if (p.id !== pageId) return p;
+        changed = true;
+        return update(p);
+      }),
+    }));
+    if (!changed) return;
+    this.events.emit(
+      box ? { type: 'page:changed', pageId, what, box } : { type: 'page:changed', pageId, what },
+    );
+  }
+
+  /** Inserts a page record at a visual index. */
+  insertPageRecord(page: ModelPage, index: number): void {
+    this.store.set((s) => {
+      const pages = [...s.pages];
+      pages.splice(Math.max(0, Math.min(index, pages.length)), 0, page);
+      return { pages };
+    });
+    this.events.emit({ type: 'page:added', pageId: page.id, index });
+  }
+
+  /**
+   * Removes a page record and the annotations that lived on it (the engine keeps its page — see
+   * the class comment). Returns everything needed to put it back, for undo.
+   */
+  removePageRecord(pageId: ModelId): {
+    page: ModelPage;
+    index: number;
+    /** Null when the page's annotations had never been loaded — different from "none". */
+    annotations: ReadonlyArray<ModelAnnotation> | null;
+  } | null {
+    const index = this.pageIndex(pageId);
+    if (index < 0) return null;
+    const page = this.page(index);
+    const annotations = this.state.annotations[pageId] ?? null;
+    this.store.set((s) => ({
+      pages: s.pages.filter((p) => p.id !== pageId),
+      annotations: without(s.annotations, pageId),
+    }));
+    this.events.emit({ type: 'page:removed', pageId, index });
+    return { page, index, annotations };
+  }
+
+  /**
+   * Puts a page's annotations back, wholesale (undo of a page deletion). An empty list still
+   * restores the entry, because "loaded and empty" is not the same state as "never loaded".
+   */
+  restoreAnnotations(pageId: ModelId, list: ReadonlyArray<ModelAnnotation> | null): void {
+    if (list === null) return;
+    this.store.set((s) => ({ annotations: { ...s.annotations, [pageId]: list } }));
+    for (const a of list) {
+      this.events.emit({ type: 'annotation:added', annotationId: a.id, pageId });
+    }
+  }
+
+  /** Replaces a field's widget list (a page deletion takes its widgets with it). */
+  setFieldWidgetsRecord(fieldId: ModelId, widgets: ReadonlyArray<ModelWidget>): void {
+    let name = '';
+    this.store.set((s) => ({
+      fields: s.fields.map((f) => {
+        if (f.id !== fieldId) return f;
+        name = f.name;
+        return { ...f, widgets };
+      }),
+    }));
+    if (name !== '') this.events.emit({ type: 'field:changed', fieldId, name });
+  }
+
+  /** Points a destination at another page, or at none when its page has been removed. */
+  setDestinationPageRecord(destinationId: ModelId, pageId: ModelId | null): void {
+    this.store.set((s) => ({
+      destinations: s.destinations.map((d) => (d.id === destinationId ? { ...d, pageId } : d)),
+    }));
+  }
+
+  /** Moves a page record to a new visual index. */
+  movePageRecord(pageId: ModelId, to: number): void {
+    const from = this.pageIndex(pageId);
+    if (from < 0) return;
+    this.store.set((s) => {
+      const pages = [...s.pages];
+      const [p] = pages.splice(from, 1);
+      if (!p) return {};
+      pages.splice(Math.max(0, Math.min(to, pages.length)), 0, p);
+      return { pages };
+    });
+    this.events.emit({ type: 'page:moved', pageId, from, to });
+  }
+
+  /** Adds or replaces an annotation record on its page. */
+  putAnnotation(annotation: ModelAnnotation, index?: number): void {
+    const pageId = annotation.pageId;
+    let existed = false;
+    this.store.set((s) => {
+      const list = s.annotations[pageId] ?? [];
+      existed = list.some((a) => a.id === annotation.id);
+      let next: ModelAnnotation[];
+      if (existed) {
+        next = list.map((a) => (a.id === annotation.id ? annotation : a));
+      } else {
+        next = [...list];
+        next.splice(index ?? next.length, 0, annotation);
+      }
+      return { annotations: { ...s.annotations, [pageId]: next } };
+    });
+    this.events.emit({
+      type: existed ? 'annotation:changed' : 'annotation:added',
+      annotationId: annotation.id,
+      pageId,
+    });
+  }
+
+  /** Removes an annotation record; returns it with its position, for undo. */
+  removeAnnotationRecord(id: ModelId): { annotation: ModelAnnotation; index: number } | null {
+    const annotation = this.annotation(id);
+    if (!annotation) return null;
+    const pageId = annotation.pageId;
+    const index = this.annotations(pageId).findIndex((a) => a.id === id);
+    this.store.set((s) => ({
+      annotations: {
+        ...s.annotations,
+        [pageId]: (s.annotations[pageId] ?? []).filter((a) => a.id !== id),
+      },
+    }));
+    this.events.emit({ type: 'annotation:removed', annotationId: id, pageId });
+    return { annotation, index };
+  }
+
+  /**
+   * Drops a page's annotation entry entirely, returning it to "not loaded yet". Undoing the
+   * *first* annotation added to a page uses this: leaving an empty list behind would say the
+   * page has been read and has none, which is a different state and would stop a later load.
+   */
+  forgetAnnotations(pageId: ModelId): void {
+    if (!(pageId in this.state.annotations)) return;
+    this.store.set((s) => ({ annotations: without(s.annotations, pageId) }));
+  }
+
+  /** Sets a field's value in the model. */
+  setFieldValueRecord(fieldId: ModelId, value: string): void {
+    let name = '';
+    this.store.set((s) => ({
+      fields: s.fields.map((f) => {
+        if (f.id !== fieldId) return f;
+        name = f.name;
+        return { ...f, value };
+      }),
+    }));
+    if (name !== '') this.events.emit({ type: 'field:changed', fieldId, name });
+  }
+
+  /** Merges a metadata patch into the model. */
+  setMetadataRecord(patch: Partial<ModelMetadata>): void {
+    this.store.set((s) => ({ metadata: { ...s.metadata, ...patch } }));
+    this.events.emit({ type: 'metadata:changed' });
+  }
+
+  /** Sets a layer's visibility in the model. */
+  setLayerVisibleRecord(layerId: ModelId, visible: boolean): void {
+    this.store.set((s) => ({
+      layers: s.layers.map((l) => (l.id === layerId ? { ...l, visible } : l)),
+    }));
+    this.events.emit({ type: 'layer:changed', layerId });
+  }
+
+  /** Replaces the outline. M12 owns the editing UI; this is the model primitive. */
+  setOutlineRecord(outline: ReadonlyArray<ModelOutlineItem>): void {
+    this.store.set({ outline });
+    this.events.emit({ type: 'outline:changed' });
+  }
+
+  /** Writes into a module's namespace of the custom bag. */
+  setCustomRecord(namespace: string, values: Readonly<Record<string, unknown>>): void {
+    this.store.set((s) => ({
+      custom: { ...s.custom, [namespace]: { ...(s.custom[namespace] ?? {}), ...values } },
+    }));
+    this.events.emit({ type: 'custom:changed', namespace });
+  }
+
+  /** Replaces a module's namespace outright (used by undo to restore a previous slice). */
+  replaceCustomRecord(namespace: string, values: Readonly<Record<string, unknown>>): void {
+    this.store.set((s) => ({ custom: { ...s.custom, [namespace]: values } }));
+    this.events.emit({ type: 'custom:changed', namespace });
+  }
+
+  /** Removes a namespace entirely, so undoing the first write leaves no empty shell behind. */
+  deleteCustomRecord(namespace: string): void {
+    if (!(namespace in this.state.custom)) return;
+    this.store.set((s) => ({ custom: without(s.custom, namespace) }));
+    this.events.emit({ type: 'custom:changed', namespace });
+  }
+
+  // ---- saving and lifecycle --------------------------------------------------------------------
+
+  /**
+   * Serialises through the engine and marks the stack clean. M21 replaces this with a writer
+   * that also applies `writeIntents`; until then, intents that the engine never took are
+   * reported by {@link DocumentState.writeIntents} and are *not* in these bytes.
+   */
   async save(): Promise<Uint8Array> {
+    this.assertOpen();
     const bytes = await this.engine.save(this.handle);
     this.undo.markSaved();
+    this.touch();
     return bytes;
   }
 
-  subscribe(listener: (state: DocumentState) => void): Unsubscribe {
-    return this.store.subscribe(listener);
-  }
-
-  /** Closes the engine handle. The document must not be used afterwards. */
+  /** Closes the engine handle and drops every subscription. The document is unusable after. */
   async close(): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
+    this.events.clear();
     await this.engine.close(this.handle);
   }
 
-  private touch(): void {
-    this.store.set((s) => ({ revision: s.revision + 1 }));
+  // ---- invariants ------------------------------------------------------------------------------
+
+  /**
+   * Checks the model's invariants. Empty means healthy. Used by the tests after every random
+   * command sequence, and by M21 before writing.
+   */
+  validate(): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+    const s = this.state;
+    const seen = new Set<string>();
+    const unique = (id: ModelId, what: string): void => {
+      if (seen.has(id)) {
+        issues.push({ code: `${what}.duplicate-id`, message: `Duplicate id ${id}`, entityId: id });
+      }
+      seen.add(id);
+    };
+    const pageIds = new Set<string>(s.pages.map((p) => p.id));
+
+    for (const p of s.pages) {
+      unique(p.id, 'page');
+      if (![0, 90, 180, 270].includes(p.rotation)) {
+        issues.push({
+          code: 'page.bad-rotation',
+          message: `Page ${p.label} has rotation ${p.rotation}`,
+          entityId: p.id,
+        });
+      }
+      for (const [name, box] of [
+        ['mediaBox', p.mediaBox],
+        ['cropBox', p.cropBox],
+        ['bleedBox', p.bleedBox],
+        ['trimBox', p.trimBox],
+        ['artBox', p.artBox],
+      ] as const) {
+        if (box && !isSaneRect(box)) {
+          issues.push({
+            code: 'page.bad-box',
+            message: `Page ${p.label} has an invalid ${name}`,
+            entityId: p.id,
+          });
+        }
+      }
+    }
+
+    for (const [pageId, list] of Object.entries(s.annotations)) {
+      if (!pageIds.has(pageId)) {
+        issues.push({
+          code: 'annotation.orphan-page',
+          message: `Annotations are held for page ${pageId}, which is not in the document`,
+        });
+      }
+      for (const a of list) {
+        unique(a.id, 'annotation');
+        if (a.pageId !== pageId) {
+          issues.push({
+            code: 'annotation.page-mismatch',
+            message: `Annotation ${a.id} is filed under ${pageId} but names ${a.pageId}`,
+            entityId: a.id,
+          });
+        }
+        if (!isSaneRect(a.rect)) {
+          issues.push({
+            code: 'annotation.bad-rect',
+            message: `Annotation ${a.id} has an invalid rectangle`,
+            entityId: a.id,
+          });
+        }
+        if (a.opacity !== null && (a.opacity < 0 || a.opacity > 1)) {
+          issues.push({
+            code: 'annotation.bad-opacity',
+            message: `Annotation ${a.id} has opacity ${a.opacity}`,
+            entityId: a.id,
+          });
+        }
+      }
+    }
+
+    const fieldIds = new Set<string>(s.fields.map((f) => f.id));
+    for (const f of s.fields) {
+      unique(f.id, 'field');
+      if (f.parentId && !fieldIds.has(f.parentId)) {
+        issues.push({
+          code: 'field.missing-parent',
+          message: `Field ${f.name} names a parent that is not in the document`,
+          entityId: f.id,
+        });
+      }
+      for (const w of f.widgets) {
+        if (!pageIds.has(w.pageId)) {
+          issues.push({
+            code: 'field.widget-orphan-page',
+            message: `Widget of ${f.name} is on a page that is not in the document`,
+            entityId: f.id,
+          });
+        }
+      }
+    }
+
+    const outlineIds = new Set<string>(s.outline.map((o) => o.id));
+    for (const o of s.outline) {
+      unique(o.id, 'outline');
+      if (o.parentId && !outlineIds.has(o.parentId)) {
+        issues.push({
+          code: 'outline.missing-parent',
+          message: `Bookmark "${o.title}" names a parent that is not in the document`,
+          entityId: o.id,
+        });
+      }
+      for (const c of o.childIds) {
+        if (!outlineIds.has(c)) {
+          issues.push({
+            code: 'outline.missing-child',
+            message: `Bookmark "${o.title}" names a child that is not in the document`,
+            entityId: o.id,
+          });
+        }
+      }
+    }
+
+    for (const d of s.destinations) {
+      unique(d.id, 'destination');
+      if (d.pageId !== null && !pageIds.has(d.pageId)) {
+        issues.push({
+          code: 'destination.orphan-page',
+          message: `Destination ${d.name ?? d.id} points at a page that is not in the document`,
+          entityId: d.id,
+        });
+      }
+    }
+
+    for (const l of s.layers) unique(l.id, 'layer');
+    for (const a of s.attachments) unique(a.id, 'attachment');
+    for (const g of s.signatures) unique(g.id, 'signature');
+
+    if (s.pages.length === 0) {
+      issues.push({ code: 'document.no-pages', message: 'The document has no pages' });
+    }
+    return issues;
   }
+
+  /**
+   * A structural, JSON-safe copy of the model, without `revision`. Two snapshots compare equal
+   * exactly when the documents are in the same state, which is what the property test asserts
+   * after undoing everything.
+   */
+  snapshot(): unknown {
+    const s = this.state;
+    return JSON.parse(
+      JSON.stringify({
+        path: s.path,
+        title: s.title,
+        pages: s.pages,
+        annotations: s.annotations,
+        fields: s.fields,
+        outline: s.outline,
+        destinations: s.destinations,
+        layers: s.layers,
+        attachments: s.attachments,
+        metadata: s.metadata,
+        security: s.security,
+        signatures: s.signatures,
+        view: s.view,
+        custom: s.custom,
+        writeIntents: [...s.writeIntents].sort(),
+      }),
+    ) as unknown;
+  }
+
+  // ---- internals -------------------------------------------------------------------------------
+
+  private assertOpen(): void {
+    if (this.closed) throw new Error(`Document ${this.id} is closed`);
+  }
+
+  /** Bumps `revision` and recomputes the write intents from the undo journal. */
+  private touch(): void {
+    const intents = collectIntents(this.undo.journal);
+    this.store.set((s) => {
+      const changed =
+        intents.length !== s.writeIntents.length || intents.some((i, n) => s.writeIntents[n] !== i);
+      return changed
+        ? { revision: s.revision + 1, writeIntents: intents }
+        : { revision: s.revision + 1 };
+    });
+    this.events.emit({ type: 'document:revision', revision: this.state.revision });
+  }
+}
+
+/** Write intents of every command in the journal, de-duplicated and sorted. */
+function collectIntents(journal: ReadonlyArray<Command>): WriteIntent[] {
+  const set = new Set<WriteIntent>();
+  const walk = (commands: ReadonlyArray<Command>): void => {
+    for (const c of commands) {
+      if (isDocumentCommand(c)) for (const i of c.writeIntents) set.add(i);
+      const children = (c as { commands?: ReadonlyArray<Command> }).commands;
+      if (children) walk(children);
+    }
+  };
+  walk(journal);
+  return [...set].sort();
+}
+
+/** A copy of a record without one key.  on a computed key is banned by the lint rules. */
+function without<T>(record: Readonly<Record<string, T>>, key: string): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const [k, v] of Object.entries(record)) if (k !== key) out[k] = v;
+  return out;
+}
+
+function pageFromSize(id: ModelId, label: string, size: PageSize): ModelPage {
+  return {
+    id,
+    label,
+    rotation: size.rotation,
+    mediaBox: size.mediaBox,
+    cropBox: size.cropBox,
+    bleedBox: null,
+    trimBox: null,
+    artBox: null,
+    objects: null,
+  };
+}
+
+function isSaneRect(r: PdfRect): boolean {
+  return (
+    Number.isFinite(r.x0) &&
+    Number.isFinite(r.y0) &&
+    Number.isFinite(r.x1) &&
+    Number.isFinite(r.y1) &&
+    r.x1 >= r.x0 &&
+    r.y1 >= r.y0
+  );
+}
+
+/**
+ * Builds the field tree from the engine's flat, fully-qualified field list. Intermediate nodes
+ * that the file does not define as dictionaries are synthesised so a panel can group by them.
+ */
+function buildFieldTree(
+  fields: ReadonlyArray<FormField>,
+  ids: IdAllocator,
+  pageIdAt: (index: PageIndex) => ModelId | null,
+): ModelField[] {
+  const byName = new Map<string, ModelField>();
+  const order: string[] = [];
+
+  const ensure = (name: string, synthetic: boolean): ModelField => {
+    const existing = byName.get(name);
+    if (existing) return existing;
+    const dot = name.lastIndexOf('.');
+    const parentName = dot > 0 ? name.slice(0, dot) : null;
+    const parent = parentName === null ? null : ensure(parentName, true);
+    const node: ModelField = {
+      id: ids.next('field'),
+      name,
+      partialName: dot > 0 ? name.slice(dot + 1) : name,
+      parentId: parent ? parent.id : null,
+      childIds: [],
+      type: 'unknown',
+      value: '',
+      defaultValue: null,
+      readOnly: false,
+      required: false,
+      options: [],
+      tooltip: null,
+      widgets: [],
+      synthetic,
+    };
+    byName.set(name, node);
+    order.push(name);
+    if (parent) {
+      byName.set(parent.name, { ...parent, childIds: [...parent.childIds, node.id] });
+    }
+    return node;
+  };
+
+  for (const f of fields) {
+    const node = ensure(f.name, false);
+    const widgets: ModelWidget[] = f.widgets.flatMap((w) => {
+      const pageId = pageIdAt(w.page);
+      return pageId === null
+        ? []
+        : [{ id: ids.next('widget'), pageId, rect: w.rect, annotationId: null }];
+    });
+    byName.set(f.name, {
+      ...(byName.get(f.name) ?? node),
+      type: f.type,
+      value: f.value,
+      defaultValue: f.defaultValue ?? null,
+      readOnly: f.readOnly,
+      required: f.required,
+      options: f.options ?? [],
+      tooltip: f.tooltip ?? null,
+      widgets,
+      synthetic: false,
+    });
+  }
+  return order.flatMap((n) => {
+    const f = byName.get(n);
+    return f ? [f] : [];
+  });
 }
 
 function basename(path: string): string {
