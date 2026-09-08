@@ -1,0 +1,161 @@
+/*
+ * Stylesheet for Markdown documents converted to PDF (M91). A data file, not code: change the
+ * look of every converted Markdown document here. The palette is declared once as `--doc-*`
+ * tokens at the top; nothing below names a colour directly. These are printed-page colours,
+ * not interface colours, which is why they are literals and why this file lives in resources/.
+ */
+
+:root {
+  --doc-fg: #1a1a1a;
+  --doc-bg: #ffffff;
+  --doc-muted: #4a4a4a;
+  --doc-accent: #0b4f9c;
+  --doc-border: #b8b8b8;
+  --doc-code-bg: #f0f0f0;
+  --doc-quote-bar: #8a8a8a;
+  --doc-font: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Liberation Sans', sans-serif;
+  --doc-mono: Consolas, 'Cascadia Mono', 'Liberation Mono', Menlo, monospace;
+  --doc-size: 11pt;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+  font-family: var(--doc-font);
+  font-size: var(--doc-size);
+  line-height: 1.5;
+}
+
+.ynot-markdown-body {
+  max-width: 100%;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--doc-fg);
+  line-height: 1.25;
+  margin: 1.4em 0 0.5em;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+h1 {
+  font-size: 2em;
+  border-bottom: 1px solid var(--doc-border);
+  padding-bottom: 0.2em;
+}
+
+h2 {
+  font-size: 1.5em;
+  border-bottom: 1px solid var(--doc-border);
+  padding-bottom: 0.2em;
+}
+
+h3 {
+  font-size: 1.25em;
+}
+
+p,
+ul,
+ol,
+blockquote,
+pre,
+table {
+  margin: 0 0 1em;
+}
+
+a {
+  color: var(--doc-accent);
+  text-decoration: underline;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--doc-mono);
+  font-size: 0.9em;
+}
+
+code {
+  background: var(--doc-code-bg);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+pre {
+  background: var(--doc-code-bg);
+  padding: 0.8em 1em;
+  border-radius: 4px;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+}
+
+blockquote {
+  margin-left: 0;
+  padding: 0.2em 1em;
+  border-left: 4px solid var(--doc-quote-bar);
+  color: var(--doc-muted);
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--doc-border);
+  margin: 2em 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  page-break-inside: auto;
+}
+
+th,
+td {
+  border: 1px solid var(--doc-border);
+  padding: 0.4em 0.7em;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: var(--doc-code-bg);
+  font-weight: 600;
+}
+
+tr {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+ul.contains-task-list {
+  list-style: none;
+  padding-left: 1.2em;
+}
+
+input[type='checkbox'] {
+  margin-right: 0.4em;
+}
+
+@page {
+  margin: 0;
+}

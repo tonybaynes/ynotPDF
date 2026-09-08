@@ -32,6 +32,20 @@
  *   corrupt.pdf            a PDF header followed by garbage
  *   huge-page-count.pdf    1000 tiny pages
  *   scanned.pdf            one full-page 150-dpi grayscale "scan" (for OCR later)
+ *   --- M91 (test/fixtures/create/: inputs for "Create PDF from …") ---
+ *   photo-landscape.jpg    300×200 baseline JPEG, JFIF density 72 dpi
+ *   photo-exif-rotated.jpg 200×300 JPEG with EXIF Orientation 6 (rotate 90° CW), 150 dpi
+ *   chart-300dpi.png       600×450 RGB PNG, pHYs 300 dpi, a bar chart
+ *   logo-alpha.png         128×128 RGBA PNG: filled circle, transparent corners, soft edge
+ *   scan-gray.png          200×280 8-bit grayscale PNG, pHYs 200 dpi, "text lines"
+ *   pages-3.tif            3-page uncompressed RGB TIFF (120×80, 80×120, 100×100), 96 dpi
+ *   deflate.tif            64×64 RGB TIFF, Compression 8 (Adobe deflate)
+ *   tiny.bmp               32×24 24-bit bottom-up BMP
+ *   not-an-image.png       64 bytes of ASCII text with a .png name (corrupt input)
+ *   site/*.html            4 linked pages (index → about, contact#team; about → deep)
+ *   notes.md               GitHub-flavoured Markdown: headings, lists, table, code, image
+ *   long.txt               250 lines, every 10th very long with a 120-char token, tabs
+ *   unicode.txt            12 lines: accents, curly quotes, €, one CJK + emoji line
  *
  * Usage: `node scripts/make-fixtures.ts` (writes into test/fixtures/).
  */
@@ -40,6 +54,7 @@ import { createCipheriv, createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
+import { encode as encodeJpeg } from 'jpeg-js';
 import type { PDFDict } from 'pdf-lib';
 import {
   PDFArray,
@@ -151,12 +166,18 @@ async function text(): Promise<Uint8Array> {
 }
 
 // ---- 4. image ------------------------------------------------------------------------------
+interface PngOptions {
+  /** Physical resolution, written as a pHYs chunk (px per metre, unit 1) when present. */
+  dpi?: number;
+}
+
 /** Minimal PNG encoder (RGB or 8-bit grayscale) so we need no binary asset in the repo. */
 function makePng(
   width: number,
   height: number,
   pixel: (x: number, y: number) => [number, number, number] | number,
   gray = false,
+  opts: PngOptions = {},
 ): Uint8Array {
   const bpp = gray ? 1 : 3;
   const raw = Buffer.alloc((width * bpp + 1) * height);
@@ -173,6 +194,39 @@ function makePng(
       }
     }
   }
+  return encodePng(width, height, gray ? 0 : 2, raw, opts);
+}
+
+/** RGBA (colour type 6) variant of `makePng`. */
+function makePngRgba(
+  width: number,
+  height: number,
+  pixel: (x: number, y: number) => [number, number, number, number],
+  opts: PngOptions = {},
+): Uint8Array {
+  const raw = Buffer.alloc((width * 4 + 1) * height);
+  for (let y = 0; y < height; y++) {
+    raw[y * (width * 4 + 1)] = 0; // filter: none
+    for (let x = 0; x < width; x++) {
+      const p = pixel(x, y);
+      const o = y * (width * 4 + 1) + 1 + x * 4;
+      raw[o] = p[0];
+      raw[o + 1] = p[1];
+      raw[o + 2] = p[2];
+      raw[o + 3] = p[3];
+    }
+  }
+  return encodePng(width, height, 6, raw, opts);
+}
+
+/** Wraps filtered scanlines (`raw` carries the per-row filter byte) in IHDR/[pHYs]/IDAT/IEND. */
+function encodePng(
+  width: number,
+  height: number,
+  colourType: 0 | 2 | 6,
+  raw: Buffer,
+  opts: PngOptions,
+): Uint8Array {
   const crcTable = new Int32Array(256);
   for (let n = 0; n < 256; n++) {
     let c = n;
@@ -196,18 +250,24 @@ function makePng(
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
   ihdr[8] = 8; // bit depth
-  ihdr[9] = gray ? 0 : 2; // colour type
+  ihdr[9] = colourType;
   ihdr[10] = 0;
   ihdr[11] = 0;
   ihdr[12] = 0;
-  return new Uint8Array(
-    Buffer.concat([
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      chunk('IHDR', ihdr),
-      chunk('IDAT', deflateSync(raw, { level: 9 })),
-      chunk('IEND', Buffer.alloc(0)),
-    ]),
-  );
+  const chunks: Buffer[] = [
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+  ];
+  if (opts.dpi !== undefined) {
+    const phys = Buffer.alloc(9);
+    const perMetre = Math.round(opts.dpi / 0.0254);
+    phys.writeUInt32BE(perMetre, 0);
+    phys.writeUInt32BE(perMetre, 4);
+    phys[8] = 1; // unit: metre
+    chunks.push(chunk('pHYs', phys));
+  }
+  chunks.push(chunk('IDAT', deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0)));
+  return new Uint8Array(Buffer.concat(chunks));
 }
 
 async function image(): Promise<void> {
@@ -1300,6 +1360,513 @@ async function scanned(): Promise<void> {
   await save(doc, 'scanned.pdf');
 }
 
+// ---- M91: inputs for "Create PDF from images / web / Markdown / text" (create/) -----------
+const CREATE = join(OUT, 'create');
+mkdirSync(join(CREATE, 'site'), { recursive: true });
+
+function writeCreate(name: string, content: Buffer | string): void {
+  const bytes = typeof content === 'string' ? Buffer.from(content, 'utf8') : content;
+  writeFileSync(join(CREATE, name), bytes);
+  console.info(`fixtures: create/${name} (${bytes.byteLength} bytes)`);
+}
+
+/** RGBA pixel buffer from a pixel function (alpha 255 unless the function returns 4 values). */
+function rgbaBuffer(
+  width: number,
+  height: number,
+  pixel: (x: number, y: number) => [number, number, number] | [number, number, number, number],
+): Buffer {
+  const out = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      const p = pixel(x, y);
+      const o = (y * width + x) * 4;
+      out[o] = p[0];
+      out[o + 1] = p[1];
+      out[o + 2] = p[2];
+      out[o + 3] = p.length === 4 ? p[3] : 255;
+    }
+  return out;
+}
+
+/** RGB (3 bytes per pixel) buffer, the TIFF/BMP strip layout. */
+function rgbBuffer(
+  width: number,
+  height: number,
+  pixel: (x: number, y: number) => [number, number, number],
+): Buffer {
+  const out = Buffer.alloc(width * height * 3);
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      const p = pixel(x, y);
+      const o = (y * width + x) * 3;
+      out[o] = p[0];
+      out[o + 1] = p[1];
+      out[o + 2] = p[2];
+    }
+  return out;
+}
+
+/** Baseline JPEG through jpeg-js; the JFIF APP0 is patched to carry a dpi density. */
+function makeJpeg(rgba: Buffer, width: number, height: number, dpi: number): Buffer {
+  const jpg = Buffer.from(encodeJpeg({ data: rgba, width, height }, 85).data);
+  // APP0: FF E0, length(2), "JFIF\0", version(2), units(1), Xdensity(2), Ydensity(2), thumb(2).
+  const app0 = jpg.indexOf(Buffer.from([0xff, 0xe0]), 2);
+  if (app0 < 0 || jpg.toString('latin1', app0 + 4, app0 + 9) !== 'JFIF\0')
+    throw new Error('jpeg-js did not write a JFIF APP0');
+  jpg[app0 + 11] = 1; // units: dots per inch
+  jpg.writeUInt16BE(dpi, app0 + 12);
+  jpg.writeUInt16BE(dpi, app0 + 14);
+  return jpg;
+}
+
+function photoLandscape(): void {
+  const w = 300;
+  const h = 200;
+  const rgba = rgbaBuffer(w, h, (x, y) => {
+    // Dark diagonal band over a smooth two-axis gradient.
+    if (Math.abs(x - y * 1.5 - 20) < 18) return [30, 30, 40];
+    return [Math.round((255 * x) / (w - 1)), Math.round((255 * y) / (h - 1)), 160];
+  });
+  writeCreate('photo-landscape.jpg', makeJpeg(rgba, w, h, 72));
+}
+
+/**
+ * EXIF APP1 (little-endian TIFF, one IFD): Orientation, XResolution, YResolution,
+ * ResolutionUnit. Rational values follow the IFD.
+ */
+function exifApp1(orientation: number, dpi: number): Buffer {
+  const entries: Array<[tag: number, type: number, value: number]> = [
+    [0x0112, 3, orientation], // Orientation SHORT
+    [0x011a, 5, 0], // XResolution RATIONAL (offset filled below)
+    [0x011b, 5, 0], // YResolution RATIONAL
+    [0x0128, 3, 2], // ResolutionUnit SHORT: inch
+  ];
+  const ifdSize = 2 + entries.length * 12 + 4;
+  const tiff = Buffer.alloc(8 + ifdSize + 16);
+  tiff.write('II', 0, 'latin1');
+  tiff.writeUInt16LE(42, 2);
+  tiff.writeUInt32LE(8, 4);
+  tiff.writeUInt16LE(entries.length, 8);
+  let rational = 8 + ifdSize;
+  entries.forEach(([tag, type, value], i) => {
+    const o = 10 + i * 12;
+    tiff.writeUInt16LE(tag, o);
+    tiff.writeUInt16LE(type, o + 2);
+    tiff.writeUInt32LE(1, o + 4);
+    if (type === 3) tiff.writeUInt16LE(value, o + 8);
+    else {
+      tiff.writeUInt32LE(rational, o + 8);
+      tiff.writeUInt32LE(dpi, rational);
+      tiff.writeUInt32LE(1, rational + 4);
+      rational += 8;
+    }
+  });
+  tiff.writeUInt32LE(0, 10 + entries.length * 12); // next IFD: none
+  const payload = Buffer.concat([Buffer.from('Exif\0\0', 'latin1'), tiff]);
+  const head = Buffer.alloc(4);
+  head.writeUInt16BE(0xffe1, 0);
+  head.writeUInt16BE(payload.length + 2, 2);
+  return Buffer.concat([head, payload]);
+}
+
+function photoExifRotated(): void {
+  const w = 200;
+  const h = 300;
+  // An arrow pointing to the top of the *stored* pixels; Orientation 6 displays it pointing right.
+  const rgba = rgbaBuffer(w, h, (x, y) => {
+    const shaft = x >= 88 && x < 112 && y >= 100 && y < 250;
+    const head = y >= 40 && y < 100 && Math.abs(x - 100) <= y - 40;
+    if (shaft || head) return [20, 40, 120];
+    return [230 - (y >> 3), 232, 240];
+  });
+  const jpg = makeJpeg(rgba, w, h, 150);
+  writeCreate(
+    'photo-exif-rotated.jpg',
+    Buffer.concat([jpg.subarray(0, 2), exifApp1(6, 150), jpg.subarray(2)]),
+  );
+}
+
+function chart300dpi(): void {
+  const w = 600;
+  const h = 450;
+  const bars: Array<[height: number, colour: [number, number, number]]> = [
+    [120, [31, 119, 180]],
+    [260, [255, 127, 14]],
+    [180, [44, 160, 44]],
+    [320, [214, 39, 40]],
+    [90, [148, 103, 189]],
+    [230, [140, 86, 75]],
+    [300, [227, 119, 194]],
+    [150, [127, 127, 127]],
+  ];
+  const png = makePng(
+    w,
+    h,
+    (x, y) => {
+      if ((x >= 58 && x <= 60 && y <= 400) || (y >= 398 && y <= 400 && x >= 58)) return [0, 0, 0];
+      if (x > 60 && y < 398) {
+        const i = Math.floor((x - 80) / 62);
+        const bar = x >= 80 && (x - 80) % 62 < 44 ? bars[i] : undefined;
+        if (bar && y >= 398 - bar[0]) return bar[1];
+        if (x % 50 === 0 || y % 50 === 0) return [220, 220, 220];
+      }
+      return [255, 255, 255];
+    },
+    false,
+    { dpi: 300 },
+  );
+  writeCreate('chart-300dpi.png', Buffer.from(png));
+}
+
+function logoAlpha(): void {
+  const png = makePngRgba(128, 128, (x, y) => {
+    const d = Math.hypot(x + 0.5 - 64, y + 0.5 - 64);
+    const a = d <= 52 ? 255 : d >= 58 ? 0 : Math.round((255 * (58 - d)) / 6);
+    if (d < 28) return [250, 250, 250, a];
+    return [30 + (x >> 2), 90, 200 - (y >> 2), a];
+  });
+  writeCreate('logo-alpha.png', Buffer.from(png));
+}
+
+function scanGray(): void {
+  const w = 200;
+  const h = 280;
+  // Rows of "words" 6 px tall every 14 px, word lengths from a labelled LCG.
+  const rows: Array<{ y: number; words: Array<[number, number]> }> = [];
+  let seed = 11;
+  const rnd = (): number => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  for (let y = 30; y < h - 30; y += 14) {
+    const words: Array<[number, number]> = [];
+    let x = 20 + (rows.length % 5 === 0 ? 24 : 0);
+    while (x < w - 30) {
+      const len = 8 + Math.floor(rnd() * 24);
+      words.push([x, Math.min(x + len, w - 20)]);
+      x += len + 5;
+    }
+    rows.push({ y, words });
+  }
+  const png = makePng(
+    w,
+    h,
+    (x, y) => {
+      for (const row of rows)
+        if (y >= row.y && y < row.y + 6)
+          for (const [x0, x1] of row.words) if (x >= x0 && x < x1) return 20;
+      return (x * 7 + y * 13) % 89 === 0 ? 215 : 245;
+    },
+    true,
+    { dpi: 200 },
+  );
+  writeCreate('scan-gray.png', Buffer.from(png));
+}
+
+interface TiffPage {
+  width: number;
+  height: number;
+  /** Packed RGB scanlines (3 bytes per pixel). */
+  rgb: Buffer;
+  /** 1 = none, 8 = Adobe deflate (zlib stream). */
+  compression: 1 | 8;
+}
+
+/**
+ * Little-endian multi-page TIFF writer: RGB, 8 bits per sample, one strip per page.
+ * Layout per page: IFD, BitsPerSample values, XResolution, YResolution, strip data.
+ */
+function makeTiff(pages: TiffPage[], dpi: number): Buffer {
+  const header = Buffer.alloc(8);
+  header.write('II', 0, 'latin1');
+  header.writeUInt16LE(42, 2);
+  header.writeUInt32LE(8, 4);
+  const parts: Buffer[] = [header];
+  let pos = 8;
+  pages.forEach((page, index) => {
+    const strip = page.compression === 8 ? deflateSync(page.rgb, { level: 9 }) : page.rgb;
+    const entries: Array<[tag: number, type: number, count: number, value: number]> = [
+      [256, 4, 1, page.width], // ImageWidth
+      [257, 4, 1, page.height], // ImageLength
+      [258, 3, 3, 0], // BitsPerSample → offset
+      [259, 3, 1, page.compression], // Compression
+      [262, 3, 1, 2], // PhotometricInterpretation: RGB
+      [273, 4, 1, 0], // StripOffsets → strip
+      [277, 3, 1, 3], // SamplesPerPixel
+      [278, 4, 1, page.height], // RowsPerStrip
+      [279, 4, 1, strip.length], // StripByteCounts
+      [282, 5, 1, 0], // XResolution → rational
+      [283, 5, 1, 0], // YResolution → rational
+      [284, 3, 1, 1], // PlanarConfiguration: chunky
+      [296, 3, 1, 2], // ResolutionUnit: inch
+    ];
+    const ifdSize = 2 + entries.length * 12 + 4;
+    const bpsOffset = pos + ifdSize;
+    const xresOffset = bpsOffset + 8;
+    const yresOffset = xresOffset + 8;
+    const stripOffset = yresOffset + 8;
+    const block = Buffer.alloc(ifdSize + 24);
+    block.writeUInt16LE(entries.length, 0);
+    entries.forEach(([tag, type, count, value], i) => {
+      const o = 2 + i * 12;
+      block.writeUInt16LE(tag, o);
+      block.writeUInt16LE(type, o + 2);
+      block.writeUInt32LE(count, o + 4);
+      if (tag === 258) block.writeUInt32LE(bpsOffset, o + 8);
+      else if (tag === 273) block.writeUInt32LE(stripOffset, o + 8);
+      else if (tag === 282) block.writeUInt32LE(xresOffset, o + 8);
+      else if (tag === 283) block.writeUInt32LE(yresOffset, o + 8);
+      else if (type === 3) block.writeUInt16LE(value, o + 8);
+      else block.writeUInt32LE(value, o + 8);
+    });
+    const padded = stripOffset + strip.length + (strip.length % 2); // word-align the next IFD
+    block.writeUInt32LE(index < pages.length - 1 ? padded : 0, 2 + entries.length * 12);
+    block.writeUInt16LE(8, ifdSize);
+    block.writeUInt16LE(8, ifdSize + 2);
+    block.writeUInt16LE(8, ifdSize + 4);
+    block.writeUInt32LE(dpi, ifdSize + 8);
+    block.writeUInt32LE(1, ifdSize + 12);
+    block.writeUInt32LE(dpi, ifdSize + 16);
+    block.writeUInt32LE(1, ifdSize + 20);
+    parts.push(block, strip);
+    if (strip.length % 2) parts.push(Buffer.alloc(1));
+    pos = padded;
+  });
+  return Buffer.concat(parts);
+}
+
+function pages3Tif(): void {
+  const sizes: Array<[number, number, [number, number, number]]> = [
+    [120, 80, [200, 60, 60]],
+    [80, 120, [60, 160, 80]],
+    [100, 100, [60, 90, 200]],
+  ];
+  const pages = sizes.map(([width, height, colour], i): TiffPage => {
+    // A dark bar along the top holding (page number) white squares.
+    const rgb = rgbBuffer(width, height, (x, y) => {
+      if (y < 12) {
+        const k = Math.floor((x - 4) / 12);
+        return x >= 4 && k <= i && (x - 4) % 12 < 8 && y >= 2 && y < 10
+          ? [255, 255, 255]
+          : [0, 0, 0];
+      }
+      return colour;
+    });
+    return { width, height, rgb, compression: 1 };
+  });
+  writeCreate('pages-3.tif', makeTiff(pages, 96));
+}
+
+function deflateTif(): void {
+  const rgb = rgbBuffer(64, 64, (x, y) => [x * 4, y * 4, ((x ^ y) * 4) & 255]);
+  writeCreate('deflate.tif', makeTiff([{ width: 64, height: 64, rgb, compression: 8 }], 96));
+}
+
+/** 24-bit bottom-up BMP with a 54-byte header; rows padded to 4 bytes, BGR order. */
+function tinyBmp(): void {
+  const w = 32;
+  const h = 24;
+  const stride = Math.ceil((w * 3) / 4) * 4;
+  const pixels = Buffer.alloc(stride * h);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const o = (h - 1 - y) * stride + x * 3; // bottom-up: last image row first
+      const onDiagonal = Math.abs(x - y * (w / h)) < 2;
+      pixels[o] = onDiagonal ? 0 : 200; // B
+      pixels[o + 1] = onDiagonal ? 0 : Math.round((255 * y) / (h - 1)); // G
+      pixels[o + 2] = onDiagonal ? 0 : Math.round((255 * x) / (w - 1)); // R
+    }
+  const header = Buffer.alloc(54);
+  header.write('BM', 0, 'latin1');
+  header.writeUInt32LE(54 + pixels.length, 2);
+  header.writeUInt32LE(54, 10); // bfOffBits
+  header.writeUInt32LE(40, 14); // biSize
+  header.writeInt32LE(w, 18);
+  header.writeInt32LE(h, 22); // positive: bottom-up
+  header.writeUInt16LE(1, 26); // planes
+  header.writeUInt16LE(24, 28); // bits per pixel
+  header.writeUInt32LE(0, 30); // BI_RGB
+  header.writeUInt32LE(pixels.length, 34);
+  header.writeInt32LE(2835, 38); // 72 dpi in px/m
+  header.writeInt32LE(2835, 42);
+  writeCreate('tiny.bmp', Buffer.concat([header, pixels]));
+}
+
+function notAnImage(): void {
+  const text = 'this is not a png. '.repeat(4).slice(0, 63) + '\n';
+  writeCreate('not-an-image.png', Buffer.from(text, 'ascii'));
+}
+
+function sitePage(title: string, body: string): string {
+  return (
+    '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n' +
+    `<title>Fixture site — ${title}</title>\n` +
+    '<style>\n' +
+    '  body { font-family: Georgia, serif; margin: 2em; max-width: 40em; }\n' +
+    '  .banner { background: #1e5aa8; color: #ffffff; padding: 1em; }\n' +
+    '  nav a { margin-right: 1em; }\n' +
+    '  @media print {\n' +
+    '    .banner { background: #dddddd; color: #000000; }\n' +
+    '    .no-print { display: none; }\n' +
+    '  }\n' +
+    '</style>\n</head>\n<body>\n' +
+    body +
+    '</body>\n</html>\n'
+  );
+}
+
+function site(): void {
+  writeCreate(
+    'site/index.html',
+    sitePage(
+      'Home',
+      '<h1 id="top">Fixture site</h1>\n' +
+        '<div class="banner">A banner with a background colour.</div>\n' +
+        '<p>This is the home page of a tiny static site used to test "Create PDF from web page". ' +
+        'It links to two internal pages, one external page and an in-page anchor.</p>\n' +
+        '<p class="no-print">This paragraph is hidden by the print stylesheet.</p>\n' +
+        '<img src="../logo-alpha.png" alt="logo" width="64" height="64">\n' +
+        '<nav>\n' +
+        '  <a href="about.html">About</a>\n' +
+        '  <a href="contact.html#team">Contact team</a>\n' +
+        '  <a href="https://example.com/outside">Outside</a>\n' +
+        '  <a href="#top">Top</a>\n' +
+        '</nav>\n',
+    ),
+  );
+  writeCreate(
+    'site/about.html',
+    sitePage(
+      'About',
+      '<h1>About</h1>\n' +
+        '<p>The about page is one hop from the home page; the deep page is two.</p>\n' +
+        '<nav>\n' +
+        '  <a href="index.html">Home</a>\n' +
+        '  <a href="contact.html">Contact</a>\n' +
+        '  <a href="deep.html">Deep</a>\n' +
+        '</nav>\n',
+    ),
+  );
+  let contact = '<h1>Contact</h1>\n<h2 id="team">The team</h2>\n';
+  for (let i = 1; i <= 60; i++)
+    contact +=
+      `<p>Paragraph ${i} of 60. The contact page is deliberately long so that it prints ` +
+      'to more than one A4 page; each paragraph repeats the same two sentences.</p>\n';
+  contact +=
+    '<nav>\n  <a href="index.html">Home</a>\n  <a href="mailto:test@example.com">Email us</a>\n</nav>\n';
+  writeCreate('site/contact.html', sitePage('Contact', contact));
+  writeCreate(
+    'site/deep.html',
+    sitePage(
+      'Deep',
+      '<h1>Deep</h1>\n<p>Only reachable from the about page (depth 2 from home).</p>\n' +
+        '<nav>\n  <a href="index.html">Home</a>\n</nav>\n',
+    ),
+  );
+}
+
+function notesMd(): void {
+  const lines = [
+    '# Heading 1',
+    '',
+    'A paragraph with **bold**, *italic*, `inline code` and a [link](https://example.com/notes).',
+    '',
+    '## Heading 2',
+    '',
+    '1. First ordered item',
+    '2. Second ordered item',
+    '3. Third ordered item',
+    '',
+    '- An unordered item',
+    '- Another unordered item',
+    '  - A nested item',
+    '',
+    '> A blockquote spanning',
+    '> two lines.',
+    '',
+    '### Heading 3',
+    '',
+    '```ts',
+    'export function add(a: number, b: number): number {',
+    '  return a + b;',
+    '}',
+    '```',
+    '',
+    '| Name  | Quantity | Price |',
+    '| :---- | :------: | ----: |',
+    '| Apple |    3     |  0.50 |',
+    '| Pear  |   12     |  0.75 |',
+    '| Plum  |    7     |  1.25 |',
+    '',
+    '---',
+    '',
+    '![logo](logo-alpha.png)',
+    '',
+    '- [x] Done task',
+    '- [ ] Open task',
+    '',
+  ];
+  writeCreate('notes.md', lines.join('\n'));
+}
+
+function longTxt(): void {
+  const pangrams = [
+    'The quick brown fox jumps over the lazy dog.',
+    'Pack my box with five dozen liquor jugs.',
+    'Sphinx of black quartz, judge my vow.',
+    'How vexingly quick daft zebras jump!',
+  ];
+  const token = 'abcdefghijklmnopqrstuvwxyz0123456789'.repeat(4).slice(0, 120);
+  const lines: string[] = [];
+  for (let i = 1; i <= 250; i++) {
+    const n = String(i).padStart(3, '0');
+    const p = pangrams[(i - 1) % pangrams.length] ?? '';
+    if (i % 50 === 13) lines.push('');
+    else if (i % 10 === 0)
+      lines.push(
+        `Line ${n}: unbreakable token follows ${token} then ordinary words resume: ${p} ${p} ${p}`,
+      );
+    else if (i % 37 === 0) lines.push(`Line ${n}:\tindented with a tab\t${p}`);
+    else lines.push(`Line ${n}: ${p}`);
+  }
+  writeCreate('long.txt', `${lines.join('\n')}\n`);
+}
+
+function unicodeTxt(): void {
+  const lines = [
+    'ASCII only: a plain line of text.',
+    'Accents: café, naïve, résumé, Zoë.',
+    'Curly quotes: “double” and ‘single’.',
+    'Dashes: an em dash — and an en dash – in one line.',
+    'Currency: €12.50, £8, ¥1000, $3.',
+    'Symbols: © 2026 ynotPDF fixtures ® ™ … • § ¶',
+    'Ligatures and specials: Œ œ Æ æ ß',
+    'Spanish and German: ¿Qué? ¡Hola! Straße Ärger Übung',
+    'CJK and emoji: 漢字 日本語 🙂',
+    'Fractions and degrees: ½ ¼ ¾ 90° ±5 × ÷',
+    'Nordic: Ørsted Åland Æsir smørrebrød',
+    'Last line — the end.',
+  ];
+  writeCreate('unicode.txt', `${lines.join('\n')}\n`);
+}
+
+function createFixtures(): void {
+  photoLandscape();
+  photoExifRotated();
+  chart300dpi();
+  logoAlpha();
+  scanGray();
+  pages3Tif();
+  deflateTif();
+  tinyBmp();
+  notAnImage();
+  site();
+  notesMd();
+  longTxt();
+  unicodeTxt();
+}
+
 const blankBytes = await blank();
 await multipage();
 const textBytes = await text();
@@ -1323,4 +1890,5 @@ await cjkRtl();
 damaged(blankBytes, textBytes);
 await hugePageCount();
 await scanned();
+createFixtures();
 console.info('fixtures: done');

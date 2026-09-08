@@ -2,5 +2,10 @@
 * text=auto eol=lf
 *.pdf binary
 *.png binary
+*.jpg binary
+*.jpeg binary
+*.tif binary
+*.tiff binary
+*.bmp binary
 *.ico binary
 *.icns binary

@@ -12,6 +12,7 @@ import { registerIpcHandlers } from './ipc';
 import { buildMenu } from './menu';
 import { RecentFiles } from './recent';
 import { Settings, THEME_KEY } from './settings';
+import { WebPdfPrinter } from './webpdf/WebPdfPrinter';
 import { broadcast, createMainWindow, getMainWindow, sendTo } from './window';
 import { readFileForRenderer } from './files';
 
@@ -99,6 +100,7 @@ const closeBroker = new CloseBroker();
 const watchers = new FileWatchers((path) => {
   broadcast('file:changedOnDisk', { path });
 });
+const webpdf = new WebPdfPrinter();
 let recovery: RecoveryStore | null = null;
 
 /**
@@ -123,6 +125,7 @@ app.on('before-quit', (event) => {
 });
 
 app.on('will-quit', () => {
+  webpdf.dispose();
   void watchers.closeAll();
 });
 
@@ -176,6 +179,7 @@ if (gotLock) {
       watchers,
       recovery,
       closeBroker,
+      webpdf,
     });
     pendingOpens.push(...pdfPathsFromArgv(process.argv));
     await boot();

@@ -11,6 +11,9 @@
     "src/main/**/*",
     "src/preload/**/*",
     "src/shared/**/*",
+    // M91: the engine half is compiled by `tsconfig.web.json`, but a unit test imports it from
+    // here, so its ambient declarations (utif) have to be visible to this project too.
+    "src/engine/**/*.d.ts",
     "scripts/**/*",
     "test/e2e/**/*",
     "test/unit/**/*"

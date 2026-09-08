@@ -224,6 +224,16 @@ export class UndoStack {
     this.notify();
   }
 
+  /**
+   * Makes the document dirty until the next `markSaved()`, whatever the journal holds — for a
+   * document that was created rather than opened, which has no file to be clean against
+   * (M91, ADR 0011). Undoing back to the start does not make it clean again.
+   */
+  markUnsaved(): void {
+    this.savedIndex = -1;
+    this.notify();
+  }
+
   /** Drops all history, including any open transaction. The saved marker resets to "clean". */
   clear(): void {
     this.undoList = [];

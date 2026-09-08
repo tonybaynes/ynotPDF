@@ -189,7 +189,94 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **A converter is a pure function over bytes, and the registry is data.** `src/engine/create/`
+  exports `Converter { id, label, extensions, mimes, accepts(input), convert(inputs, options, ctx) }`
+  and a `ConverterRegistry` that routes a file by extension or MIME type. Nothing under
+  `src/engine/create/` imports from `src/renderer/` or touches Node, so M40 (insert from file),
+  M41 (combine), M120 (batch) and M121 (CLI) call the same functions the dialogs call. Everything
+  a converter cannot do for itself is an **adapter** on `ctx.env`: a `RasterDecoder` (for BMP,
+  GIF, WebP and anything else the platform can decode) and an `HtmlPrinter` (Chromium's print to
+  PDF, which only main has). A converter that needs an adapter the host did not install throws
+  `ConvertUnsupported` with a reason in words — it never silently produces an empty page.
+- **Images are embedded, not re-encoded, wherever the PDF allows it.** JPEG bytes go straight
+  into a `DCTDecode` XObject (pdf-lib `embedJpg`); PNG is handed to pdf-lib's own PNG decoder,
+  which produces `FlateDecode` plus an `SMask` for alpha. Only formats PDF has no filter for are
+  decoded to RGBA first — TIFF by utif (MIT, pure JS, one page per IFD), BMP/GIF/WebP by the
+  host's `RasterDecoder` (`createImageBitmap` in the renderer and its Worker, `nativeImage` in
+  main), and HEIC only where the OS decoder can (macOS) — and then written as a raw
+  `FlateDecode` XObject with its own SMask. Size and DPI come from our own header parsers (PNG
+  `pHYs`, JFIF density, EXIF `XResolution`), and **EXIF orientation is applied by transforming
+  the drawing, not by setting `/Rotate`**, so a phone photo lands upright on a page whose
+  orientation matches what the reader sees. Images with no DPI are assumed to be 96 dpi (what a
+  browser assumes), a setting.
+- **Page geometry is one function.** `layoutImage(image, options)` takes the displayed image size
+  in points and returns the page size plus the image rectangle for the three modes — *image
+  size* (page = image at its DPI plus margins), *fixed page* (a preset, fitted inside the
+  margins, never enlarged unless asked) and *fill* — with orientation *auto*, *portrait* or
+  *landscape*. It is pure, so the dialog's preview and the converter cannot disagree.
+- **Web pages are printed by Chromium and stitched by us.** `src/main/webpdf/WebPdfPrinter.ts`
+  owns one hidden, sandboxed `BrowserWindow` per job: load the URL (or a temporary file for
+  HTML we generated), emulate the requested media type through the DevTools protocol, wait for
+  `load` plus `document.fonts.ready` under the job's timeout, collect `document.links`, then
+  `webContents.printToPDF` with the page size, margins, header/footer, background and scale the
+  reader chose. The **crawl** (`engine/create/web/crawl.ts`) is pure breadth-first search over
+  a `render(url)` function — same-site rule, depth limit, fragment stripping, de-duplication,
+  progress and cancellation are all unit-tested against a fake printer. The **assembly**
+  (`engine/create/web/assemble.ts`) merges the per-page PDFs with pdf-lib, adds one bookmark per
+  crawled page, and **rewrites every URI link that points at a crawled page into a `GoTo` to its
+  first page**, so a link between two crawled pages works inside the PDF while links to pages
+  outside the crawl stay as URLs. Main returns bytes and link lists only; it never decides what
+  the document looks like.
+- **Markdown becomes HTML in the renderer, then takes the HTML path.** `marked` (MIT) renders
+  GitHub-flavoured Markdown to HTML; the stylesheet is a data file,
+  `resources/create/markdown.css`, that declares its palette as `--doc-*` custom properties at
+  the top and uses only those below, so the look of a converted document is changed in one place
+  without touching code. Relative images resolve through a `<base href>` on the source file's
+  folder, which is why generated HTML is printed from a temporary file rather than a `data:` URL
+  (a `data:` origin may not load `file:` images; a `file:` page may).
+- **Plain text is set with the standard fonts and paginated by us.** Courier or Helvetica from
+  the base 14, so the converter needs no font file and the output is byte-deterministic; a
+  character WinAnsi cannot encode becomes `?` and is counted in the warnings. Wrapping is greedy
+  on measured widths (long words are broken), tabs expand to a setting, and the header carries
+  the file name and page number in the top margin. Embedding a Unicode font waits for M51,
+  which brings fontkit.
+- **A created document is a Document with no path that is dirty from birth.** The bytes are
+  opened through `DocumentService.open(bytes, { title })` exactly as a file would be, so M11
+  gives it a viewport and M21 adopts it, then `UndoStack.markUnsaved()` (new, additive, ADR 0011)
+  makes it dirty until the first save. Without that a fresh document is "clean", `Ctrl+S` does
+  nothing and closing it asks nothing — the reader would lose the document they just made.
+  Creation itself is not a `Command`: there is no document to undo it against, and the recipe
+  (which files, which options) is not something a journal can replay once the clipboard has
+  changed. M91 changes no existing document, so it adds no document commands; the converters
+  return bytes, and M40 is where those bytes become pages of an open document, as commands.
+- **Titles come from the source.** An image document is named after its first image, a web
+  document after the page's `<title>`, a text or Markdown document after the file, a blank or
+  clipboard document "Untitled 1", "Untitled 2"… per session; the same string goes into the
+  PDF's `/Title` so it survives a save and pre-fills Save As.
+- **Dialogs are the options, with a preview when one is cheap.** One opaque dialog per source
+  kind, built on the shell's `Dialogs` and `field()`/`formGrid()` helpers, every control
+  keyboard-reachable, defaults from the `create.*` settings and the last-used options. The image
+  dialog shows thumbnails (object URLs of the picked bytes) and the computed page for the first
+  image; the blank dialog draws the page shape; the text dialog shows the first lines; the web
+  dialog has no preview because loading the page *is* the work. Every headless path exists as a
+  hidden `create.convert` command so e2e tests and later modules can run a conversion with
+  explicit options and no dialog.
+- **Conversion runs off the main thread when it is CPU work.** Image and text conversion run in
+  a module Worker (`create.worker.ts`, the same shape as M21's writer Worker: request, progress,
+  done, failed, cancel), which is also where `createImageBitmap` decodes the formats pdf-lib does
+  not. HTML, Markdown and web conversion stay on the renderer thread because their heavy half is
+  in main's hidden window and their IPC cannot be reached from a Worker; the final stitch of a
+  crawl is sent to the Worker. The progress dialog appears after 400 ms, as M21's does.
+- **Drag-and-drop and Open route through the registry.** The shell's drop handler (one shared
+  edit) still opens PDFs one tab each; any other files are handed, as a group, to
+  `create.fromDropped`, which asks the registry what they are: images become one document, and
+  each text, Markdown or HTML file becomes its own. A file nothing accepts is named in a toast
+  rather than dropped on the floor. The OS file association stays PDF-only.
+- **IPC additions are five, all additive (ADR 0011):** `file:openFilesDialog` (multi-select with
+  filters), `webpdf:render`, `webpdf:cancel`, `clipboard:read` and `image:decode`.
+- **Presets are data.** `resources/page-sizes.json` (ISO A/B, North American, envelopes) with
+  sizes in millimetres, consumed by `engine/create/pageSizes.ts`; M130's preferences and every
+  later dialog that needs a page size read the same file.
 
 ## Build log (fill in at merge)
 
