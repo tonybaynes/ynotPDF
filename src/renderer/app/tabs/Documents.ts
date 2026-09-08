@@ -45,6 +45,7 @@ export class Documents {
   private defaultHook: BeforeCloseHook | null = null;
   private readonly attachments = new Map<string, unknown>();
   private readonly closeListeners = new Set<(tab: DocumentTab) => void>();
+  private readonly attachListeners = new Set<(tab: DocumentTab, value: unknown) => void>();
 
   get state(): DocumentsState {
     return this.store.get();
@@ -145,10 +146,18 @@ export class Documents {
     const tab = this.get(id);
     if (!tab) return false;
     if (!options.force) {
-      const hooks = this.hooks.length ? this.hooks : this.defaultHook ? [this.defaultHook] : [];
-      for (const hook of hooks) {
+      for (const hook of this.hooks) {
         if ((await hook(tab)) === 'cancel') return false;
       }
+      /*
+       * The default hook is a backstop, not a replacement (M21). A module hook that has nothing
+       * to say about this tab — M21's, when the tab has no `Document` behind it — must not
+       * silently disarm the shell's own "unsaved changes" question. It is asked with the tab as
+       * it is *now*, because a hook that got the reader's agreement to lose the changes clears
+       * the dirty flag, and this must not then ask about them a second time.
+       */
+      const current = this.get(id) ?? tab;
+      if (this.defaultHook && (await this.defaultHook(current)) === 'cancel') return false;
     }
     this.store.set((s) => {
       const idx = s.tabs.findIndex((t) => t.id === id);
@@ -206,6 +215,24 @@ export class Documents {
   /** Attaches module state (a `Document`, a viewport) to a tab. */
   attach<T>(id: string, value: T): void {
     this.attachments.set(id, value);
+    const tab = this.get(id);
+    if (!tab) return;
+    for (const l of Array.from(this.attachListeners)) l(tab, value);
+  }
+
+  /**
+   * Fires after module state is attached to a tab (M21).
+   *
+   * Opening a tab and attaching its `Document` are two steps, and the store notification happens
+   * on the first — so a module that watches the store alone sees a tab whose document is not
+   * there yet and never hears about it again. M21 needs the second step to start watching the
+   * file and work out whether it can be saved to; this is that signal.
+   */
+  onAttached(listener: (tab: DocumentTab, value: unknown) => void): Unsubscribe {
+    this.attachListeners.add(listener);
+    return () => {
+      this.attachListeners.delete(listener);
+    };
   }
 
   attachment<T>(id: string): T | undefined {

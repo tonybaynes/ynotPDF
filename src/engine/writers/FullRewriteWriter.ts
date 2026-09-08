@@ -1,0 +1,1217 @@
+/**
+ * `FullRewriteWriter` — the pdf-lib writer (M21, ADR 0010).
+ *
+ * Takes the document as the engine holds it and applies what the engine could not: page order
+ * and presence, page labels, the three boxes PDFium has no setter for, the information
+ * dictionary and XMP, the outline, named destinations, layer visibility, annotation entries that
+ * had to be *removed* rather than changed, cleared field values, and appearance streams.
+ *
+ * Everything it does not plan, it does not touch. Objects it has never heard of survive because
+ * pdf-lib re-serialises the whole object graph rather than rebuilding it, and the trailer keeps
+ * the file's `/ID` and the header its version — so a save with an empty plan is a
+ * re-serialisation and a round-trip comparison of the two files reports nothing.
+ *
+ * Encrypted documents are refused (`WriteUnsupported('encrypted')`): pdf-lib does not decrypt
+ * strings, so a rewrite would emit plaintext under a trailer that still claims encryption. The
+ * caller decides what to offer instead; M70 will re-encrypt here.
+ */
+
+import {
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFHexString,
+  PDFName,
+  PDFNull,
+  PDFNumber,
+  PDFPageLeaf,
+  PDFRef,
+  PDFString,
+  ParseSpeeds,
+  type PDFContext,
+  type PDFObject,
+} from 'pdf-lib';
+import type { PdfPoint, PdfRect } from '@shared/pdf';
+import {
+  WriteCancelled,
+  WriteUnsupported,
+  WRITE_PHASES,
+  type PlannedAnnotation,
+  type PlannedDestination,
+  type PlannedLayer,
+  type PlannedOutlineItem,
+  type PlannedPage,
+  type WritePhase,
+  type WritePlan,
+  type WriteProgressCallback,
+  type WriteRequest,
+  type WriteResult,
+  type Writer,
+} from '../Writer';
+import { defaultAppearanceService, type AppearanceService } from '../appearance';
+import type { AppearanceStream, StandardFontName } from '../appearance/types';
+import { yieldMacrotask } from '../yield';
+
+const INHERITABLE = ['Resources', 'MediaBox', 'CropBox', 'Rotate'] as const;
+
+export interface FullRewriteWriterOptions {
+  /** Generators for `/AP`. Defaults to the service M21 ships. */
+  readonly appearances?: AppearanceService;
+}
+
+export class FullRewriteWriter implements Writer {
+  readonly id = 'full-rewrite';
+  private readonly appearances: AppearanceService;
+
+  constructor(options: FullRewriteWriterOptions = {}) {
+    this.appearances = options.appearances ?? defaultAppearanceService;
+  }
+
+  async write(request: WriteRequest): Promise<WriteResult> {
+    const { bytes, plan, options = {}, progress, signal } = request;
+    const state = new WriteState(progress, signal);
+
+    state.phase('parse', 0);
+    const doc = await load(bytes);
+    const ctx = doc.context;
+    state.phase('parse', 1);
+    await state.checkpoint();
+
+    const basePages = collectPageRefs(doc);
+    if (basePages.refs.length === 0) {
+      throw new WriteUnsupported('corrupt', 'The document has no pages');
+    }
+    if (plan.pages.length === 0) {
+      throw new WriteUnsupported('corrupt', 'The plan has no pages');
+    }
+
+    // ---- pages --------------------------------------------------------------------------------
+    state.phase('pages', 0);
+    const finalPages = resolvePages(plan, basePages.refs, state);
+    if (!plan.pagesUnchanged) {
+      // A page tree with no kids is not a PDF. If nothing in the plan resolved, the safe answer
+      // is to refuse rather than to write a file that no reader can open.
+      if (!finalPages.refs.some((r) => r !== undefined)) {
+        throw new WriteUnsupported('corrupt', 'None of the planned pages is in the document');
+      }
+      reorderPages(doc, finalPages.refs, basePages);
+      state.applied('pages');
+    }
+    applyBoxes(ctx, plan.pages, finalPages.refs, state);
+    state.phase('pages', 1);
+    await state.checkpoint();
+
+    // ---- page labels --------------------------------------------------------------------------
+    if (plan.labels) {
+      state.phase('labels', 0);
+      writePageLabels(doc, plan.pages);
+      state.applied('labels');
+      state.phase('labels', 1);
+      await state.checkpoint();
+    }
+
+    // ---- metadata -----------------------------------------------------------------------------
+    // A repaired file can reach us with no information dictionary at all (PDFium rebuilds the
+    // xref, reads `/Info` and then serialises without one), so the plan carries what the model
+    // read as a fallback. On a healthy file there is an `/Info` and this does nothing.
+    const fallback = ctx.lookupMaybe(ctx.trailerInfo.Info, PDFDict) ? null : plan.metadataFallback;
+    const metadata = plan.metadata ?? fallback;
+    if (metadata) {
+      state.phase('metadata', 0);
+      writeMetadata(doc, metadata, options.producer);
+      state.applied('metadata');
+      state.phase('metadata', 1);
+      await state.checkpoint();
+    }
+
+    // Destinations are written before the outline so bookmarks can share the same page refs.
+    const pageRefAt = (index: number): PDFRef | undefined => finalPages.refs[index];
+
+    // ---- outline ------------------------------------------------------------------------------
+    if (plan.outline) {
+      state.phase('outline', 0);
+      writeOutline(doc, plan.outline, pageRefAt, state);
+      state.applied('outline');
+      state.phase('outline', 1);
+      await state.checkpoint();
+    }
+
+    // ---- named destinations -------------------------------------------------------------------
+    if (plan.namedDestinations) {
+      state.phase('destinations', 0);
+      writeNamedDestinations(doc, plan.namedDestinations, pageRefAt, state);
+      state.applied('destinations');
+      state.phase('destinations', 1);
+      await state.checkpoint();
+    }
+
+    // ---- layers -------------------------------------------------------------------------------
+    if (plan.layers) {
+      state.phase('layers', 0);
+      writeLayers(doc, plan.layers, state);
+      state.applied('layers');
+      state.phase('layers', 1);
+      await state.checkpoint();
+    }
+
+    // ---- annotations and their appearances ----------------------------------------------------
+    const withAnnotations = plan.pages
+      .map((p, i) => ({ page: p, ref: finalPages.refs[i] }))
+      .filter((entry) => (entry.page.annotations?.length ?? 0) > 0);
+    if (withAnnotations.length > 0) {
+      state.phase('annotations', 0);
+      let done = 0;
+      for (const { page, ref } of withAnnotations) {
+        if (ref) {
+          this.writeAnnotations(ctx, ref, page.annotations ?? [], state);
+        }
+        done++;
+        state.phase('annotations', done / withAnnotations.length);
+        await state.checkpoint();
+      }
+      state.applied('annotations');
+    }
+
+    // ---- fields -------------------------------------------------------------------------------
+    if (plan.fields && plan.fields.length > 0) {
+      state.phase('fields', 0);
+      writeFieldValues(doc, plan.fields, state);
+      state.applied('fields');
+      state.phase('fields', 1);
+      await state.checkpoint();
+    }
+
+    // ---- serialise ----------------------------------------------------------------------------
+    state.phase('serialise', 0);
+    state.throwIfCancelled();
+    const out = await doc.save({
+      useObjectStreams: options.objectStreams ?? true,
+      addDefaultPage: false,
+      updateFieldAppearances: false,
+    });
+    state.phase('serialise', 1);
+
+    return {
+      bytes: out,
+      applied: state.appliedPhases,
+      appearances: state.appearanceCount,
+      warnings: state.warnings,
+    };
+  }
+
+  /** Writes the planned entries and appearance streams onto one page's annotations. */
+  private writeAnnotations(
+    ctx: PDFContext,
+    pageRef: PDFRef,
+    planned: ReadonlyArray<PlannedAnnotation>,
+    state: WriteState,
+  ): void {
+    const leaf = ctx.lookupMaybe(pageRef, PDFDict);
+    const annots = leaf ? ctx.lookupMaybe(leaf.get(PDFName.of('Annots')), PDFArray) : undefined;
+    if (!annots) {
+      state.warn(
+        `A page's annotations could not be found, so ${planned.length} were left as they were`,
+      );
+      return;
+    }
+    for (const entry of planned) {
+      const dict = annotationAt(ctx, annots, entry);
+      if (!dict) {
+        state.warn(
+          `A ${entry.subtype} annotation moved in the file and was left as it was, to avoid writing to the wrong one`,
+        );
+        continue;
+      }
+      if (entry.properties) applyAnnotationProperties(ctx, dict, entry);
+      if (entry.appearance) {
+        const has = dict.get(PDFName.of('AP')) !== undefined;
+        if (!has || entry.appearance.replace) {
+          const stream = this.appearances.generate(entry.appearance.input);
+          if (stream) {
+            attachAppearance(ctx, dict, stream);
+            state.countAppearance();
+          }
+        }
+      }
+    }
+  }
+}
+
+// ---- progress, cancellation and warnings -----------------------------------------------------
+
+/** Tracks progress across phases, watches the abort signal and collects warnings. */
+class WriteState {
+  readonly warnings: string[] = [];
+  private readonly applyied = new Set<WritePhase>();
+  private readonly progress: WriteProgressCallback | undefined;
+  private readonly signal: AbortSignal | undefined;
+  private appearances = 0;
+
+  constructor(progress: WriteProgressCallback | undefined, signal: AbortSignal | undefined) {
+    this.progress = progress;
+    this.signal = signal;
+  }
+
+  /** Reports `fraction` of one phase as a fraction of the whole write. */
+  phase(name: WritePhase, fraction: number): void {
+    if (!this.progress) return;
+    const index = WRITE_PHASES.indexOf(name);
+    const clamped = Math.max(0, Math.min(1, fraction));
+    this.progress((index + clamped) / WRITE_PHASES.length, name);
+  }
+
+  applied(name: WritePhase): void {
+    this.applyied.add(name);
+  }
+
+  get appliedPhases(): WritePhase[] {
+    return WRITE_PHASES.filter((p) => this.applyied.has(p));
+  }
+
+  countAppearance(): void {
+    this.appearances++;
+  }
+
+  get appearanceCount(): number {
+    return this.appearances;
+  }
+
+  warn(message: string): void {
+    if (!this.warnings.includes(message)) this.warnings.push(message);
+  }
+
+  throwIfCancelled(): void {
+    if (this.signal?.aborted) throw new WriteCancelled();
+  }
+
+  /** Yields to the event loop between phases so a cancel is seen and a worker stays responsive. */
+  async checkpoint(): Promise<void> {
+    this.throwIfCancelled();
+    await yieldMacrotask();
+    this.throwIfCancelled();
+  }
+}
+
+// ---- loading ---------------------------------------------------------------------------------
+
+async function load(bytes: Uint8Array): Promise<PDFDocument> {
+  try {
+    return await PDFDocument.load(bytes, {
+      // Not `ignoreEncryption`: an encrypted document must fail here rather than be rewritten
+      // into a file whose strings are plaintext under a trailer that still claims encryption.
+      ignoreEncryption: false,
+      updateMetadata: false,
+      throwOnInvalidObject: false,
+      parseSpeed: ParseSpeeds.Fastest,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/encrypt/i.test(message)) {
+      throw new WriteUnsupported('encrypted', 'The document is password-protected');
+    }
+    throw new WriteUnsupported('corrupt', `The document could not be re-read: ${message}`);
+  }
+}
+
+interface BasePages {
+  readonly refs: ReadonlyArray<PDFRef>;
+  /** Page-tree nodes between the root and the leaves; dropped when the tree is flattened. */
+  readonly intermediates: ReadonlyArray<PDFRef>;
+}
+
+function collectPageRefs(doc: PDFDocument): BasePages {
+  const refs: PDFRef[] = [];
+  const intermediates: PDFRef[] = [];
+  const root = doc.catalog.Pages();
+  root.traverse((node, ref) => {
+    if (node instanceof PDFPageLeaf) refs.push(ref);
+    else if (node !== root) intermediates.push(ref);
+  });
+  return { refs, intermediates };
+}
+
+// ---- pages -----------------------------------------------------------------------------------
+
+interface ResolvedPages {
+  readonly refs: ReadonlyArray<PDFRef | undefined>;
+}
+
+/** Maps each planned page to its base ref, warning about anything that does not resolve. */
+function resolvePages(
+  plan: WritePlan,
+  base: ReadonlyArray<PDFRef>,
+  state: WriteState,
+): ResolvedPages {
+  const seen = new Set<string>();
+  const refs = plan.pages.map((p) => {
+    const ref = base[p.source];
+    if (!ref) {
+      state.warn(`A page of the plan is not in the file and was left out`);
+      return undefined;
+    }
+    const key = ref.toString();
+    if (seen.has(key)) {
+      state.warn('A page appears twice in the plan; the copy was left out');
+      return undefined;
+    }
+    seen.add(key);
+    return ref;
+  });
+  return { refs };
+}
+
+/**
+ * Flattens the page tree to the planned order. Inheritable attributes are pushed down onto each
+ * leaf first, because a page that inherited its `/MediaBox` from a node we are about to drop
+ * would otherwise lose it.
+ */
+function reorderPages(
+  doc: PDFDocument,
+  refs: ReadonlyArray<PDFRef | undefined>,
+  base: BasePages,
+): void {
+  const ctx = doc.context;
+  const kept = refs.filter((r): r is PDFRef => r !== undefined);
+  for (const ref of kept) materialiseInherited(ctx, ref);
+
+  const rootRef = doc.catalog.get(PDFName.of('Pages'));
+  const root = doc.catalog.Pages();
+  root.set(PDFName.of('Kids'), ctx.obj([...kept]));
+  root.set(PDFName.of('Count'), PDFNumber.of(kept.length));
+  if (rootRef instanceof PDFRef) {
+    for (const ref of kept) {
+      const leaf = ctx.lookupMaybe(ref, PDFDict);
+      leaf?.set(PDFName.of('Parent'), rootRef);
+    }
+  }
+  // The tree is flat now; the nodes that used to sit in the middle refer to nothing, and neither
+  // does a page the plan left out — dropping both keeps a deleted page's bytes out of the file.
+  const keptKeys = new Set(kept.map((r) => r.toString()));
+  const dropped = base.refs.filter((r) => !keptKeys.has(r.toString()));
+  // Anything still pointing at a page we are about to remove has to let go of it first, or the
+  // file ends up with a bookmark whose destination is an object that is not there any more.
+  pruneDeadPageReferences(doc, new Set(dropped.map((r) => r.toString())));
+  for (const ref of base.intermediates) ctx.delete(ref);
+  for (const ref of dropped) ctx.delete(ref);
+}
+
+/**
+ * Removes every reference to a deleted page: the outline's `/Dest`, name-tree and catalogue
+ * destinations, `/OpenAction`, and link annotations on the pages that remain.
+ *
+ * A bookmark whose destination has gone stays in the tree and simply does nothing — which is
+ * what Foxit does, and is better than silently deleting a heading the reader put there.
+ */
+function pruneDeadPageReferences(doc: PDFDocument, dead: ReadonlySet<string>): void {
+  if (dead.size === 0) return;
+  const ctx = doc.context;
+  const seen = new Set<string>();
+
+  /** True when this destination (array, or a dict with `/D`) lands on a page that has gone. */
+  const isDead = (value: PDFObject | undefined): boolean => {
+    const array =
+      value instanceof PDFArray
+        ? value
+        : ctx.lookupMaybe(value, PDFDict)?.lookupMaybe(PDFName.of('D'), PDFArray);
+    const target = array?.get(0);
+    return target instanceof PDFRef && dead.has(target.toString());
+  };
+
+  const clean = (dict: PDFDict): void => {
+    if (isDead(dict.get(PDFName.of('Dest')))) dict.delete(PDFName.of('Dest'));
+    const action = dict.lookupMaybe(PDFName.of('A'), PDFDict);
+    if (action && isDead(action.get(PDFName.of('D')))) dict.delete(PDFName.of('A'));
+  };
+
+  /** Walks the outline's linked lists. */
+  const walkOutline = (start: PDFObject | undefined): void => {
+    let ref = start;
+    while (ref instanceof PDFRef) {
+      const key = ref.toString();
+      if (seen.has(key)) return;
+      seen.add(key);
+      const dict = ctx.lookupMaybe(ref, PDFDict);
+      if (!dict) return;
+      clean(dict);
+      walkOutline(dict.get(PDFName.of('First')));
+      ref = dict.get(PDFName.of('Next'));
+    }
+  };
+  const outlines = doc.catalog.lookupMaybe(PDFName.of('Outlines'), PDFDict);
+  if (outlines) walkOutline(outlines.get(PDFName.of('First')));
+
+  // Name-tree destinations, at any depth of the tree.
+  const walkNameTree = (node: PDFDict | undefined): void => {
+    if (!node) return;
+    const names = node.lookupMaybe(PDFName.of('Names'), PDFArray);
+    if (names) {
+      const survivors: PDFObject[] = [];
+      for (let i = 0; i + 1 < names.size(); i += 2) {
+        const name = names.get(i);
+        const value = names.get(i + 1);
+        if (!isDead(value)) survivors.push(name, value);
+      }
+      node.set(PDFName.of('Names'), ctx.obj(survivors));
+    }
+    const kids = node.lookupMaybe(PDFName.of('Kids'), PDFArray);
+    if (!kids) return;
+    for (let i = 0; i < kids.size(); i++) walkNameTree(ctx.lookupMaybe(kids.get(i), PDFDict));
+  };
+  walkNameTree(
+    doc.catalog
+      .lookupMaybe(PDFName.of('Names'), PDFDict)
+      ?.lookupMaybe(PDFName.of('Dests'), PDFDict),
+  );
+
+  // Pre-1.2 catalogue `/Dests` dictionary.
+  const legacy = doc.catalog.lookupMaybe(PDFName.of('Dests'), PDFDict);
+  if (legacy) {
+    for (const key of legacy.keys()) if (isDead(legacy.get(key))) legacy.delete(key);
+  }
+
+  if (isDead(doc.catalog.get(PDFName.of('OpenAction')))) {
+    doc.catalog.delete(PDFName.of('OpenAction'));
+  }
+  const openAction = doc.catalog.lookupMaybe(PDFName.of('OpenAction'), PDFDict);
+  if (openAction && isDead(openAction.get(PDFName.of('D')))) {
+    doc.catalog.delete(PDFName.of('OpenAction'));
+  }
+
+  // Links on the pages that remain.
+  const root = doc.catalog.Pages();
+  root.traverse((node) => {
+    if (!(node instanceof PDFPageLeaf)) return;
+    const annots = ctx.lookupMaybe(node.get(PDFName.of('Annots')), PDFArray);
+    if (!annots) return;
+    for (let i = 0; i < annots.size(); i++) {
+      const dict = ctx.lookupMaybe(annots.get(i), PDFDict);
+      if (dict) clean(dict);
+    }
+  });
+}
+
+/** Copies `/Resources`, `/MediaBox`, `/CropBox` and `/Rotate` from ancestors onto the leaf. */
+function materialiseInherited(ctx: PDFContext, ref: PDFRef): void {
+  const leaf = ctx.lookupMaybe(ref, PDFDict);
+  if (!(leaf instanceof PDFPageLeaf)) return;
+  for (const name of INHERITABLE) {
+    const key = PDFName.of(name);
+    if (leaf.get(key) !== undefined) continue;
+    const inherited = leaf.getInheritableAttribute(key);
+    if (inherited !== undefined) leaf.set(key, inherited);
+  }
+}
+
+const BOX_KEYS = {
+  media: 'MediaBox',
+  crop: 'CropBox',
+  bleed: 'BleedBox',
+  trim: 'TrimBox',
+  art: 'ArtBox',
+} as const;
+
+function applyBoxes(
+  ctx: PDFContext,
+  pages: ReadonlyArray<PlannedPage>,
+  refs: ReadonlyArray<PDFRef | undefined>,
+  state: WriteState,
+): void {
+  pages.forEach((page, index) => {
+    if (!page.boxes) return;
+    const ref = refs[index];
+    const leaf = ref ? ctx.lookupMaybe(ref, PDFDict) : undefined;
+    if (!leaf) return;
+    for (const [key, name] of Object.entries(BOX_KEYS) as [keyof typeof BOX_KEYS, string][]) {
+      const box = page.boxes[key];
+      if (box === undefined) continue;
+      if (box === null) leaf.delete(PDFName.of(name));
+      else leaf.set(PDFName.of(name), rectArray(ctx, box));
+    }
+    state.applied('pages');
+  });
+}
+
+function rectArray(ctx: PDFContext, r: PdfRect): PDFArray {
+  return ctx.obj([r.x0, r.y0, r.x1, r.y1]);
+}
+
+// ---- page labels -----------------------------------------------------------------------------
+
+/** Trailing digits of a label, and everything before them. `"A-12"` → `{ prefix: "A-", n: 12 }`. */
+function splitLabel(label: string): { prefix: string; n: number } | null {
+  const m = /^(.*?)(\d+)$/.exec(label);
+  if (!m) return null;
+  const [, prefix = '', digits = ''] = m;
+  // A leading zero means the numbering is not `/S /D` — "007" must survive as itself.
+  if (digits.length > 1 && digits.startsWith('0')) return null;
+  return { prefix, n: Number(digits) };
+}
+
+/**
+ * Writes `/PageLabels`. Runs of decimal labels that count up by one — with or without a shared
+ * prefix — compress to a single `/S /D` range; anything else gets its own `/P` entry, which
+ * reproduces the string exactly whatever it is.
+ */
+export function pageLabelNums(labels: ReadonlyArray<string>): { index: number; entry: unknown }[] {
+  const out: { index: number; entry: unknown }[] = [];
+  let i = 0;
+  while (i < labels.length) {
+    const label = labels[i] ?? '';
+    const split = splitLabel(label);
+    if (!split) {
+      out.push({ index: i, entry: { P: label } });
+      i++;
+      continue;
+    }
+    let end = i + 1;
+    while (end < labels.length) {
+      const next = splitLabel(labels[end] ?? '');
+      if (next?.prefix !== split.prefix || next.n !== split.n + (end - i)) break;
+      end++;
+    }
+    out.push({
+      index: i,
+      entry:
+        split.prefix === '' ? { S: 'D', St: split.n } : { S: 'D', P: split.prefix, St: split.n },
+    });
+    i = end;
+  }
+  return out;
+}
+
+function writePageLabels(doc: PDFDocument, pages: ReadonlyArray<PlannedPage>): void {
+  const ctx = doc.context;
+  const labels = pages.map((p) => p.label ?? '');
+  const nums: PDFObject[] = [];
+  for (const { index, entry } of pageLabelNums(labels)) {
+    const e = entry as { S?: string; P?: string; St?: number };
+    const dict = ctx.obj({});
+    if (e.S !== undefined) dict.set(PDFName.of('S'), PDFName.of(e.S));
+    if (e.P !== undefined) dict.set(PDFName.of('P'), PDFHexString.fromText(e.P));
+    if (e.St !== undefined && e.St !== 1) dict.set(PDFName.of('St'), PDFNumber.of(e.St));
+    nums.push(PDFNumber.of(index), dict);
+  }
+  const tree = ctx.obj({});
+  tree.set(PDFName.of('Nums'), ctx.obj(nums));
+  doc.catalog.set(PDFName.of('PageLabels'), ctx.register(tree));
+}
+
+// ---- metadata --------------------------------------------------------------------------------
+
+/** ISO 8601 → `D:YYYYMMDDHHmmSS+HH'mm'`. Returns null when the input is not a date. Exported for the tests. */
+export function isoToPdfDate(iso: string): string | null {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const p = (n: number, width = 2): string => String(Math.abs(n)).padStart(width, '0');
+  const base =
+    `D:${p(date.getUTCFullYear(), 4)}${p(date.getUTCMonth() + 1)}${p(date.getUTCDate())}` +
+    `${p(date.getUTCHours())}${p(date.getUTCMinutes())}${p(date.getUTCSeconds())}`;
+  return `${base}Z00'00'`;
+}
+
+const INFO_KEYS = {
+  title: 'Title',
+  author: 'Author',
+  subject: 'Subject',
+  keywords: 'Keywords',
+  creator: 'Creator',
+  producer: 'Producer',
+} as const;
+
+function writeMetadata(
+  doc: PDFDocument,
+  metadata: NonNullable<WritePlan['metadata']>,
+  producer: string | undefined,
+): void {
+  const ctx = doc.context;
+  let info = ctx.lookupMaybe(ctx.trailerInfo.Info, PDFDict);
+  if (!info) {
+    info = ctx.obj({});
+    ctx.trailerInfo.Info = ctx.register(info);
+  }
+  for (const [key, name] of Object.entries(INFO_KEYS) as [keyof typeof INFO_KEYS, string][]) {
+    const value = metadata[key];
+    if (value === undefined) continue;
+    if (value === null) info.delete(PDFName.of(name));
+    else info.set(PDFName.of(name), PDFHexString.fromText(value));
+  }
+  for (const [key, name] of [
+    ['created', 'CreationDate'],
+    ['modified', 'ModDate'],
+  ] as const) {
+    const value = metadata[key];
+    if (value === undefined) continue;
+    if (value === null) {
+      info.delete(PDFName.of(name));
+      continue;
+    }
+    const pdfDate = isoToPdfDate(value);
+    if (pdfDate) info.set(PDFName.of(name), PDFString.of(pdfDate));
+  }
+  if (producer !== undefined && metadata.producer === undefined) {
+    info.set(PDFName.of('Producer'), PDFHexString.fromText(producer));
+  }
+
+  if (metadata.xmp !== undefined) {
+    const key = PDFName.of('Metadata');
+    if (metadata.xmp === null) {
+      doc.catalog.delete(key);
+    } else {
+      // XMP must be readable without decoding the file, so it is never compressed.
+      const stream = ctx.stream(metadata.xmp, { Type: 'Metadata', Subtype: 'XML' });
+      doc.catalog.set(key, ctx.register(stream));
+    }
+  }
+}
+
+// ---- destinations ----------------------------------------------------------------------------
+
+type PageRefAt = (index: number) => PDFRef | undefined;
+
+/** `[pageRef /Fit …]` — the destination array a `/Dest` or a name tree entry holds. */
+function destinationArray(
+  ctx: PDFContext,
+  dest: PlannedDestination,
+  pageRefAt: PageRefAt,
+): PDFArray | null {
+  const page = pageRefAt(dest.page);
+  if (!page) return null;
+  const items: PDFObject[] = [page, PDFName.of(fitName(dest.fit))];
+  // A missing coordinate is the `null` keyword — "leave this one as the reader found it".
+  const push = (value: number | null | undefined): void => {
+    items.push(typeof value === 'number' ? PDFNumber.of(value) : PDFNull);
+  };
+  switch (dest.fit) {
+    case 'xyz':
+      push(dest.left);
+      push(dest.top);
+      push(dest.zoom);
+      break;
+    case 'fitH':
+    case 'fitBH':
+      push(dest.top);
+      break;
+    case 'fitV':
+    case 'fitBV':
+      push(dest.left);
+      break;
+    case 'fitR': {
+      const r = dest.rect;
+      if (!r) return null;
+      items.push(PDFNumber.of(r.x0), PDFNumber.of(r.y0), PDFNumber.of(r.x1), PDFNumber.of(r.y1));
+      break;
+    }
+    default:
+      break;
+  }
+  return ctx.obj(items);
+}
+
+function fitName(fit: PlannedDestination['fit']): string {
+  switch (fit) {
+    case 'xyz':
+      return 'XYZ';
+    case 'fit':
+      return 'Fit';
+    case 'fitH':
+      return 'FitH';
+    case 'fitV':
+      return 'FitV';
+    case 'fitR':
+      return 'FitR';
+    case 'fitB':
+      return 'FitB';
+    case 'fitBH':
+      return 'FitBH';
+    case 'fitBV':
+      return 'FitBV';
+    default:
+      return 'Fit';
+  }
+}
+
+function writeNamedDestinations(
+  doc: PDFDocument,
+  destinations: ReadonlyArray<{ name: string; dest: PlannedDestination }>,
+  pageRefAt: PageRefAt,
+  state: WriteState,
+): void {
+  const ctx = doc.context;
+  // A name tree's Names array must be sorted by name, byte by byte, or a reader binary-searching
+  // it will silently miss entries.
+  const sorted = [...destinations].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const names: PDFObject[] = [];
+  for (const { name, dest } of sorted) {
+    const array = destinationArray(ctx, dest, pageRefAt);
+    if (!array) {
+      state.warn(`The destination "${name}" pointed at a page that is no longer there`);
+      continue;
+    }
+    const value = ctx.obj({});
+    value.set(PDFName.of('D'), array);
+    names.push(PDFString.of(name), value);
+  }
+  const namesKey = PDFName.of('Names');
+  const destsKey = PDFName.of('Dests');
+  if (names.length === 0) {
+    const root = doc.catalog.lookupMaybe(namesKey, PDFDict);
+    root?.delete(destsKey);
+    doc.catalog.delete(destsKey);
+    return;
+  }
+  const leaf = ctx.obj({});
+  leaf.set(namesKey, ctx.obj(names));
+  let root = doc.catalog.lookupMaybe(namesKey, PDFDict);
+  if (!root) {
+    root = ctx.obj({});
+    doc.catalog.set(namesKey, ctx.register(root));
+  }
+  root.set(destsKey, ctx.register(leaf));
+  // A pre-1.2 `/Dests` dictionary in the catalogue would shadow half of this; the name tree we
+  // just wrote holds everything it held.
+  doc.catalog.delete(destsKey);
+}
+
+// ---- outline ---------------------------------------------------------------------------------
+
+/** `/F` flags: bit 1 italic, bit 2 bold (PDF 12.3.3). */
+function outlineFlags(item: PlannedOutlineItem): number {
+  return (item.italic ? 1 : 0) | (item.bold ? 2 : 0);
+}
+
+function writeOutline(
+  doc: PDFDocument,
+  items: ReadonlyArray<PlannedOutlineItem>,
+  pageRefAt: PageRefAt,
+  state: WriteState,
+): void {
+  const ctx = doc.context;
+  const key = PDFName.of('Outlines');
+  if (items.length === 0) {
+    doc.catalog.delete(key);
+    return;
+  }
+
+  const rootDict = ctx.obj({});
+  rootDict.set(PDFName.of('Type'), PDFName.of('Outlines'));
+  const rootRef = ctx.register(rootDict);
+
+  const refs = items.map(() => ctx.nextRef());
+  const dicts = items.map(() => ctx.obj({}));
+  const childrenOf = new Map<number, number[]>();
+  const roots: number[] = [];
+  items.forEach((item, i) => {
+    if (item.parent === null || item.parent < 0 || item.parent >= items.length) roots.push(i);
+    else childrenOf.set(item.parent, [...(childrenOf.get(item.parent) ?? []), i]);
+  });
+
+  /** Visible descendants of `i`: children, plus theirs when the child is open. */
+  const visibleCount = (i: number): number => {
+    const kids = childrenOf.get(i) ?? [];
+    let n = kids.length;
+    for (const kid of kids) if (items[kid]?.open) n += visibleCount(kid);
+    return n;
+  };
+
+  items.forEach((item, i) => {
+    const dict = dicts[i];
+    const ref = refs[i];
+    if (!dict || !ref) return;
+    dict.set(PDFName.of('Title'), PDFHexString.fromText(item.title));
+    const parentRef = item.parent === null ? rootRef : refs[item.parent];
+    dict.set(PDFName.of('Parent'), parentRef ?? rootRef);
+
+    if (item.dest) {
+      const array = destinationArray(ctx, item.dest, pageRefAt);
+      if (array) dict.set(PDFName.of('Dest'), array);
+      else state.warn(`The bookmark "${item.title}" pointed at a page that is no longer there`);
+    } else if (item.uri !== null) {
+      const action = ctx.obj({});
+      action.set(PDFName.of('S'), PDFName.of('URI'));
+      action.set(PDFName.of('URI'), PDFString.of(item.uri));
+      dict.set(PDFName.of('A'), action);
+    }
+
+    const flags = outlineFlags(item);
+    if (flags !== 0) dict.set(PDFName.of('F'), PDFNumber.of(flags));
+    if (item.color !== null) {
+      dict.set(
+        PDFName.of('C'),
+        ctx.obj([
+          ((item.color >> 16) & 0xff) / 255,
+          ((item.color >> 8) & 0xff) / 255,
+          (item.color & 0xff) / 255,
+        ]),
+      );
+    }
+
+    const kids = childrenOf.get(i) ?? [];
+    if (kids.length > 0) {
+      const firstKid = kids[0];
+      const lastKid = kids[kids.length - 1];
+      const first = firstKid === undefined ? undefined : refs[firstKid];
+      const last = lastKid === undefined ? undefined : refs[lastKid];
+      if (first) dict.set(PDFName.of('First'), first);
+      if (last) dict.set(PDFName.of('Last'), last);
+      // Positive when open (and it counts the visible descendants), negative when closed.
+      const count = visibleCount(i);
+      dict.set(PDFName.of('Count'), PDFNumber.of(item.open ? count : -kids.length));
+    }
+    ctx.assign(ref, dict);
+  });
+
+  // Siblings are a doubly linked list.
+  const link = (siblings: ReadonlyArray<number>): void => {
+    siblings.forEach((index, at) => {
+      const dict = dicts[index];
+      if (!dict) return;
+      const prevIndex = siblings[at - 1];
+      const nextIndex = siblings[at + 1];
+      const prev = prevIndex === undefined ? undefined : refs[prevIndex];
+      const next = nextIndex === undefined ? undefined : refs[nextIndex];
+      if (prev) dict.set(PDFName.of('Prev'), prev);
+      if (next) dict.set(PDFName.of('Next'), next);
+    });
+  };
+  link(roots);
+  for (const kids of childrenOf.values()) link(kids);
+
+  const firstRoot = roots[0];
+  const lastRoot = roots[roots.length - 1];
+  const first = firstRoot === undefined ? undefined : refs[firstRoot];
+  const last = lastRoot === undefined ? undefined : refs[lastRoot];
+  if (first) rootDict.set(PDFName.of('First'), first);
+  if (last) rootDict.set(PDFName.of('Last'), last);
+  let total = roots.length;
+  for (const root of roots) if (items[root]?.open) total += visibleCount(root);
+  rootDict.set(PDFName.of('Count'), PDFNumber.of(total));
+  doc.catalog.set(key, rootRef);
+}
+
+// ---- layers ----------------------------------------------------------------------------------
+
+/**
+ * Sets `/OCProperties /D /OFF` (and `/ON`) from the plan. Groups are found by name, falling back
+ * to the position of the group in the same `/Order`-then-`/OCGs` walk the engine reported.
+ */
+function writeLayers(
+  doc: PDFDocument,
+  layers: ReadonlyArray<PlannedLayer>,
+  state: WriteState,
+): void {
+  const ctx = doc.context;
+  const ocProps = doc.catalog.lookupMaybe(PDFName.of('OCProperties'), PDFDict);
+  if (!ocProps) {
+    state.warn('The file has no layers, so layer visibility could not be saved');
+    return;
+  }
+  const order = walkOcgOrder(ctx, ocProps);
+  const byName = new Map<string, PDFRef[]>();
+  for (const entry of order) {
+    byName.set(entry.name, [...(byName.get(entry.name) ?? []), entry.ref]);
+  }
+
+  const off: PDFRef[] = [];
+  const on: PDFRef[] = [];
+  for (const layer of layers) {
+    const matches = byName.get(layer.name) ?? [];
+    const ref = matches.length === 1 ? matches[0] : order[layer.index]?.ref;
+    if (!ref) {
+      state.warn(`The layer "${layer.name}" could not be found, so its visibility was not saved`);
+      continue;
+    }
+    (layer.visible ? on : off).push(ref);
+  }
+
+  let d = ocProps.lookupMaybe(PDFName.of('D'), PDFDict);
+  if (!d) {
+    d = ctx.obj({});
+    ocProps.set(PDFName.of('D'), ctx.register(d));
+  }
+  if (off.length > 0) d.set(PDFName.of('OFF'), ctx.obj(off));
+  else d.delete(PDFName.of('OFF'));
+  if (on.length > 0) d.set(PDFName.of('ON'), ctx.obj(on));
+  else d.delete(PDFName.of('ON'));
+}
+
+interface OcgEntry {
+  readonly ref: PDFRef;
+  readonly name: string;
+}
+
+/** The same traversal `rawdoc.ts` uses to number layers: `/D /Order` first, then `/OCGs`. */
+function walkOcgOrder(ctx: PDFContext, ocProps: PDFDict): OcgEntry[] {
+  const seen = new Set<string>();
+  const out: OcgEntry[] = [];
+  const add = (ref: PDFRef): void => {
+    const key = ref.toString();
+    if (seen.has(key)) return;
+    const dict = ctx.lookupMaybe(ref, PDFDict);
+    if (!dict || dict.lookupMaybe(PDFName.of('Type'), PDFName)?.decodeText() !== 'OCG') return;
+    seen.add(key);
+    const raw = dict.lookup(PDFName.of('Name'));
+    const name =
+      raw instanceof PDFString || raw instanceof PDFHexString
+        ? raw.decodeText()
+        : `Layer ${out.length + 1}`;
+    out.push({ ref, name });
+  };
+  const walk = (array: PDFArray): void => {
+    for (const item of array.asArray()) {
+      if (item instanceof PDFRef) add(item);
+      else if (item instanceof PDFArray) walk(item);
+    }
+  };
+  const d = ocProps.lookupMaybe(PDFName.of('D'), PDFDict);
+  const orderArray = d?.lookupMaybe(PDFName.of('Order'), PDFArray);
+  if (orderArray) walk(orderArray);
+  const ocgs = ocProps.lookupMaybe(PDFName.of('OCGs'), PDFArray);
+  if (ocgs) walk(ocgs);
+  return out;
+}
+
+// ---- annotations -----------------------------------------------------------------------------
+
+const RECT_TOLERANCE = 0.5;
+
+/**
+ * The annotation dictionary a planned entry names. The index is checked against the subtype and
+ * rectangle before anything is written; when they disagree the array is searched for a single
+ * unambiguous match, and if that fails nothing is written at all — a wrong write is worse than
+ * a missing one.
+ */
+function annotationAt(
+  ctx: PDFContext,
+  annots: PDFArray,
+  entry: PlannedAnnotation,
+): PDFDict | undefined {
+  const at = (index: number): PDFDict | undefined => {
+    if (index < 0 || index >= annots.size()) return undefined;
+    return ctx.lookupMaybe(annots.get(index), PDFDict);
+  };
+  const matches = (dict: PDFDict | undefined): boolean => {
+    if (!dict) return false;
+    const subtype = dict.lookupMaybe(PDFName.of('Subtype'), PDFName)?.decodeText();
+    if (subtype !== entry.subtype) return false;
+    const rect = dict.lookupMaybe(PDFName.of('Rect'), PDFArray);
+    if (!rect || rect.size() < 4) return false;
+    const values = [0, 1, 2, 3].map((i) => {
+      const n = ctx.lookupMaybe(rect.get(i), PDFNumber);
+      return n ? n.asNumber() : Number.NaN;
+    });
+    const [a = Number.NaN, b = Number.NaN, c = Number.NaN, d = Number.NaN] = values;
+    const x0 = Math.min(a, c);
+    const y0 = Math.min(b, d);
+    const x1 = Math.max(a, c);
+    const y1 = Math.max(b, d);
+    return (
+      Math.abs(x0 - entry.rect.x0) <= RECT_TOLERANCE &&
+      Math.abs(y0 - entry.rect.y0) <= RECT_TOLERANCE &&
+      Math.abs(x1 - entry.rect.x1) <= RECT_TOLERANCE &&
+      Math.abs(y1 - entry.rect.y1) <= RECT_TOLERANCE
+    );
+  };
+
+  const direct = at(entry.index);
+  if (matches(direct)) return direct;
+  let found: PDFDict | undefined;
+  for (let i = 0; i < annots.size(); i++) {
+    const candidate = at(i);
+    if (!matches(candidate)) continue;
+    if (found) return undefined; // ambiguous
+    found = candidate;
+  }
+  return found;
+}
+
+function applyAnnotationProperties(ctx: PDFContext, dict: PDFDict, entry: PlannedAnnotation): void {
+  const props = entry.properties;
+  if (!props) return;
+  const setText = (name: string, value: string | null | undefined): void => {
+    if (value === undefined) return;
+    if (value === null) dict.delete(PDFName.of(name));
+    else dict.set(PDFName.of(name), PDFHexString.fromText(value));
+  };
+  setText('Contents', props.contents);
+  setText('T', props.author);
+  setText('Subj', props.subject);
+  setText('NM', props.name);
+  setText('State', props.state);
+
+  const setColor = (name: string, value: number | null | undefined): void => {
+    if (value === undefined) return;
+    if (value === null) dict.delete(PDFName.of(name));
+    else {
+      dict.set(
+        PDFName.of(name),
+        ctx.obj([((value >> 16) & 0xff) / 255, ((value >> 8) & 0xff) / 255, (value & 0xff) / 255]),
+      );
+    }
+  };
+  setColor('C', props.color);
+  setColor('IC', props.interiorColor);
+
+  if (props.opacity !== undefined) {
+    if (props.opacity === null) dict.delete(PDFName.of('CA'));
+    else dict.set(PDFName.of('CA'), PDFNumber.of(props.opacity));
+  }
+  if (props.borderWidth !== undefined) {
+    if (props.borderWidth === null) {
+      dict.delete(PDFName.of('BS'));
+    } else {
+      const bs = dict.lookupMaybe(PDFName.of('BS'), PDFDict) ?? ctx.obj({});
+      bs.set(PDFName.of('Type'), PDFName.of('Border'));
+      bs.set(PDFName.of('W'), PDFNumber.of(props.borderWidth));
+      dict.set(PDFName.of('BS'), bs);
+    }
+  }
+  if (props.quadPoints !== undefined) {
+    if (props.quadPoints === null) dict.delete(PDFName.of('QuadPoints'));
+    else dict.set(PDFName.of('QuadPoints'), ctx.obj([...props.quadPoints]));
+  }
+  if (props.paths !== undefined) {
+    if (props.paths === null) dict.delete(PDFName.of('InkList'));
+    else {
+      dict.set(
+        PDFName.of('InkList'),
+        ctx.obj(props.paths.map((path) => ctx.obj(flattenPoints(path)))),
+      );
+    }
+  }
+  if (props.vertices !== undefined) {
+    const name = entry.subtype === 'Line' ? 'L' : 'Vertices';
+    if (props.vertices === null) dict.delete(PDFName.of(name));
+    else dict.set(PDFName.of(name), ctx.obj(flattenPoints(props.vertices)));
+  }
+}
+
+function flattenPoints(points: ReadonlyArray<PdfPoint>): number[] {
+  const out: number[] = [];
+  for (const p of points) out.push(p.x, p.y);
+  return out;
+}
+
+/** Writes a generated stream as the annotation's `/AP /N`. */
+function attachAppearance(ctx: PDFContext, dict: PDFDict, stream: AppearanceStream): void {
+  const resources = ctx.obj({});
+  resources.set(PDFName.of('ProcSet'), ctx.obj([PDFName.of('PDF'), PDFName.of('Text')]));
+  const gsNames = Object.entries(stream.resources.extGState);
+  if (gsNames.length > 0) {
+    const gs = ctx.obj({});
+    for (const [name, spec] of gsNames) {
+      const state = ctx.obj({});
+      state.set(PDFName.of('Type'), PDFName.of('ExtGState'));
+      if (spec.fillAlpha !== undefined) state.set(PDFName.of('ca'), PDFNumber.of(spec.fillAlpha));
+      if (spec.strokeAlpha !== undefined) {
+        state.set(PDFName.of('CA'), PDFNumber.of(spec.strokeAlpha));
+      }
+      if (spec.blendMode !== undefined) state.set(PDFName.of('BM'), PDFName.of(spec.blendMode));
+      gs.set(PDFName.of(name), state);
+    }
+    resources.set(PDFName.of('ExtGState'), gs);
+  }
+  const fontNames = Object.entries(stream.resources.fonts);
+  if (fontNames.length > 0) {
+    const fonts = ctx.obj({});
+    for (const [name, font] of fontNames) {
+      fonts.set(PDFName.of(name), ctx.register(standardFontDict(ctx, font)));
+    }
+    resources.set(PDFName.of('Font'), fonts);
+  }
+
+  const bbox = stream.bbox;
+  const form = ctx.flateStream(stream.content, {
+    Type: 'XObject',
+    Subtype: 'Form',
+    FormType: 1,
+  });
+  form.dict.set(PDFName.of('BBox'), ctx.obj([bbox.x0, bbox.y0, bbox.x1, bbox.y1]));
+  form.dict.set(PDFName.of('Matrix'), ctx.obj([...(stream.matrix ?? [1, 0, 0, 1, 0, 0])]));
+  form.dict.set(PDFName.of('Resources'), resources);
+
+  const ap = ctx.obj({});
+  ap.set(PDFName.of('N'), ctx.register(form));
+  dict.set(PDFName.of('AP'), ap);
+  // An `/AS` naming a state that our single `/N` stream does not have would hide the appearance.
+  dict.delete(PDFName.of('AS'));
+}
+
+function standardFontDict(ctx: PDFContext, font: StandardFontName): PDFDict {
+  const dict = ctx.obj({});
+  dict.set(PDFName.of('Type'), PDFName.of('Font'));
+  dict.set(PDFName.of('Subtype'), PDFName.of('Type1'));
+  dict.set(PDFName.of('BaseFont'), PDFName.of(font));
+  // Symbol and ZapfDingbats carry their own built-in encoding and must not be re-encoded.
+  if (font !== 'Symbol' && font !== 'ZapfDingbats') {
+    dict.set(PDFName.of('Encoding'), PDFName.of('WinAnsiEncoding'));
+  }
+  return dict;
+}
+
+// ---- form fields -----------------------------------------------------------------------------
+
+/**
+ * Writes `/V` on the named fields. Clearing a value drops the widgets' `/AP` and sets
+ * `/NeedAppearances`, because a stale appearance stream would go on showing the text that is no
+ * longer there.
+ */
+function writeFieldValues(
+  doc: PDFDocument,
+  fields: ReadonlyArray<{ name: string; value: string | null }>,
+  state: WriteState,
+): void {
+  const ctx = doc.context;
+  const acroForm = doc.catalog.lookupMaybe(PDFName.of('AcroForm'), PDFDict);
+  if (!acroForm) {
+    state.warn('The file has no form, so field values could not be saved');
+    return;
+  }
+  const byName = new Map<string, PDFDict>();
+  const walk = (array: PDFArray | undefined, prefix: string): void => {
+    if (!array) return;
+    for (let i = 0; i < array.size(); i++) {
+      const dict = ctx.lookupMaybe(array.get(i), PDFDict);
+      if (!dict) continue;
+      const raw = dict.lookup(PDFName.of('T'));
+      const partial =
+        raw instanceof PDFString || raw instanceof PDFHexString ? raw.decodeText() : '';
+      const name = partial === '' ? prefix : prefix === '' ? partial : `${prefix}.${partial}`;
+      if (partial !== '' && !byName.has(name)) byName.set(name, dict);
+      walk(dict.lookupMaybe(PDFName.of('Kids'), PDFArray), name);
+    }
+  };
+  walk(acroForm.lookupMaybe(PDFName.of('Fields'), PDFArray), '');
+
+  let cleared = false;
+  for (const field of fields) {
+    const dict = byName.get(field.name);
+    if (!dict) {
+      state.warn(`The field "${field.name}" is not in the file, so its value was not saved`);
+      continue;
+    }
+    if (field.value === null) {
+      dict.delete(PDFName.of('V'));
+      cleared = true;
+      dropWidgetAppearances(ctx, dict);
+    } else {
+      dict.set(PDFName.of('V'), PDFHexString.fromText(field.value));
+    }
+  }
+  if (cleared) acroForm.set(PDFName.of('NeedAppearances'), ctx.obj(true));
+}
+
+function dropWidgetAppearances(ctx: PDFContext, field: PDFDict): void {
+  const drop = (dict: PDFDict): void => {
+    const subtype = dict.lookupMaybe(PDFName.of('Subtype'), PDFName)?.decodeText();
+    if (subtype === 'Widget' || dict.get(PDFName.of('Rect')) !== undefined) {
+      dict.delete(PDFName.of('AP'));
+    }
+    const kids = dict.lookupMaybe(PDFName.of('Kids'), PDFArray);
+    if (!kids) return;
+    for (let i = 0; i < kids.size(); i++) {
+      const kid = ctx.lookupMaybe(kids.get(i), PDFDict);
+      if (kid) drop(kid);
+    }
+  };
+  drop(field);
+}

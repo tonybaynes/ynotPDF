@@ -75,6 +75,12 @@ jobs:
       - name: Build (electron-vite)
         run: npm run build
 
+      # M21's acceptance test loads a saved PDF in a plain Chromium, to prove the file is right
+      # for every viewer rather than only for ours. Electron brings its own binary; this one has
+      # to be fetched.
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps chromium
+
       - name: End-to-end (Playwright, Linux under xvfb)
         if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" npx playwright test

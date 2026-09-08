@@ -5,6 +5,9 @@
  */
 
 import { app, BrowserWindow, nativeTheme } from 'electron';
+import { CloseBroker } from './fs/lifecycle';
+import { RecoveryStore } from './fs/recovery';
+import { FileWatchers } from './fs/watcher';
 import { registerIpcHandlers } from './ipc';
 import { buildMenu } from './menu';
 import { RecentFiles } from './recent';
@@ -45,9 +48,39 @@ async function openPathInRenderer(path: string): Promise<void> {
   await openPathIn(win, path);
 }
 
+/**
+ * Window options every window shares: remembered bounds, and the M21 close hook that lets the
+ * renderer offer Save / Don't save / Cancel before the window goes.
+ */
+function windowOptions(parent?: BrowserWindow | null): Parameters<typeof createMainWindow>[0] {
+  return {
+    e2e: E2E,
+    settings,
+    ...(parent === undefined ? {} : { parent }),
+    beforeClose: (win) => {
+      if (!closeBroker.shouldHold(win.id)) return true;
+      void closeBroker
+        .askWindow(win.id, () => {
+          sendTo(win, 'window:closeRequested', { reason: 'window' });
+        })
+        .then((allowed) => {
+          // The renderer answers through `window:confirmClose`, which closes the window itself.
+          // This is the other way out: the broker gave up waiting, and the window must still go —
+          // a renderer that has stopped answering may not leave a window that cannot be closed.
+          if (allowed && !win.isDestroyed()) win.close();
+        });
+      return false;
+    },
+    onClosed: (windowId) => {
+      closeBroker.forget(windowId);
+      watchers.release(windowId);
+    },
+  };
+}
+
 /** Opens another window; `path` (if any) is loaded once its renderer is up (tab drag-out). */
 function openWindow(path: string | undefined, from: BrowserWindow | null): void {
-  const win = createMainWindow({ e2e: E2E, settings, parent: from });
+  const win = createMainWindow(windowOptions(from));
   if (path !== undefined) {
     win.webContents.once('did-finish-load', () => {
       void openPathIn(win, path);
@@ -62,6 +95,36 @@ if (!gotLock) {
 
 const recent = new RecentFiles();
 const settings = new Settings();
+const closeBroker = new CloseBroker();
+const watchers = new FileWatchers((path) => {
+  broadcast('file:changedOnDisk', { path });
+});
+let recovery: RecoveryStore | null = null;
+
+/**
+ * Quit is held back the same way a window close is (M21), and only while a window has reported
+ * unsaved work — a clean app quits at once, and so does one whose renderer has stopped answering
+ * (the broker gives up after five seconds).
+ */
+app.on('before-quit', (event) => {
+  if (closeBroker.quitApproved || !closeBroker.anyUnsaved) return;
+  const win = getMainWindow();
+  if (!win) return;
+  event.preventDefault();
+  void closeBroker
+    .askQuit(() => {
+      sendTo(win, 'app:quitRequested', {});
+    })
+    .then((allowed) => {
+      // As above: the renderer normally answers through `app:confirmQuit`, and this is what
+      // happens when it does not answer at all. Quitting must never depend on it.
+      if (allowed) app.quit();
+    });
+});
+
+app.on('will-quit', () => {
+  void watchers.closeAll();
+});
 
 app.on('second-instance', (_event, argv) => {
   const win = getMainWindow();
@@ -87,7 +150,7 @@ app.on('activate', () => {
 });
 
 async function boot(): Promise<void> {
-  const win = createMainWindow({ e2e: E2E, settings });
+  const win = createMainWindow(windowOptions());
   buildMenu(recent);
   win.webContents.on('did-finish-load', () => {
     rendererReady = true;
@@ -103,12 +166,16 @@ if (gotLock) {
     // OS setting. Read the saved theme here so the window opens in the right chrome; the
     // renderer confirms it through `theme:setNative` once ThemeManager has applied the theme.
     nativeTheme.themeSource = settings.get(THEME_KEY) === 'daylight' ? 'light' : 'dark';
+    recovery = new RecoveryStore(app.getPath('userData'));
     registerIpcHandlers(recent, settings, {
       onOpenPath: openPathInRenderer,
       rebuildMenu: () => {
         buildMenu(recent);
       },
       openWindow,
+      watchers,
+      recovery,
+      closeBroker,
     });
     pendingOpens.push(...pdfPathsFromArgv(process.argv));
     await boot();

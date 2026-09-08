@@ -10,13 +10,15 @@ Shortcuts are _editor_-scoped by default: they do nothing while the caret is in 
 modal dialog is open, so typing "z" into the page number does not switch tools. The few that stay
 live everywhere are marked **global**.
 
-Started by M11 (viewer); each later module adds its own rows.
+Started by M11 (viewer); each later module adds its own rows. M21 added Save and Save As.
 
 ## Files and windows
 
 | Keys                               | Command                | What it does                       |
 | ---------------------------------- | ---------------------- | ---------------------------------- |
 | `Mod+O`                            | `file.open`            | Open a PDF                         |
+| `Mod+S`                            | `file.save`            | Save (Save As when read-only)      |
+| `Mod+Shift+S`                      | `file.saveAs`          | Save As…                           |
 | `Mod+W`                            | `file.close`           | Close the current document         |
 | `Mod+Shift+W`                      | `app.tabs.closeOthers` | Close every other tab              |
 | `Mod+Shift+N`                      | `app.window.new`       | New window                         |

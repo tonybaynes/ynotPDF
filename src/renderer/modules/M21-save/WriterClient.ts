@@ -1,0 +1,159 @@
+/**
+ * `WriterClient` — the renderer's end of the writer Worker (M21).
+ *
+ * `write()` returns a handle with the promise and a `cancel()`, because a save has to be
+ * cancellable while it is running rather than only before it starts. Cancelling rejects with
+ * `WriteCancelled`; the caller has not written anything to disk at that point, so nothing has
+ * been lost.
+ *
+ * When there is no `Worker` — a unit test in Node — the same writer runs in-process, so the
+ * behaviour under test is the behaviour that ships.
+ */
+
+import { FullRewriteWriter } from '@engine/writers/FullRewriteWriter';
+import {
+  WriteCancelled,
+  WriteUnsupported,
+  type WriteOptions,
+  type WritePhase,
+  type WritePlan,
+  type WriteResult,
+} from '@engine/Writer';
+import type { WriterFromWorker, WriterToWorker } from './writerProtocol';
+
+/** Minimal worker surface we rely on, so a test can pass a fake. */
+export interface WriterWorkerLike {
+  postMessage(message: WriterToWorker, transfer?: Transferable[]): void;
+  addEventListener(type: 'message', listener: (ev: MessageEvent) => void): void;
+  addEventListener(type: 'error', listener: (ev: ErrorEvent) => void): void;
+  terminate(): void;
+}
+
+export interface WriteHandle {
+  readonly promise: Promise<WriteResult>;
+  cancel(): void;
+}
+
+export interface WriteJob {
+  readonly bytes: Uint8Array;
+  readonly plan: WritePlan;
+  readonly options?: WriteOptions;
+  readonly onProgress?: (fraction: number, phase: WritePhase) => void;
+}
+
+interface Pending {
+  resolve(result: WriteResult): void;
+  reject(error: Error): void;
+  onProgress: ((fraction: number, phase: WritePhase) => void) | undefined;
+}
+
+export class WriterClient {
+  private readonly worker: WriterWorkerLike | null;
+  private readonly pending = new Map<number, Pending>();
+  private nextId = 1;
+
+  /** Spawns the module worker built from `writer.worker.ts`, or runs in-process without one. */
+  static spawn(): WriterClient {
+    if (typeof Worker === 'undefined') return new WriterClient(null);
+    const worker = new Worker(new URL('./writer.worker.ts', import.meta.url), {
+      type: 'module',
+      name: 'ynot-writer',
+    });
+    return new WriterClient(worker);
+  }
+
+  constructor(worker: WriterWorkerLike | null) {
+    this.worker = worker;
+    if (!worker) return;
+    worker.addEventListener('message', (ev: MessageEvent) => {
+      this.dispatch(ev.data as WriterFromWorker);
+    });
+    worker.addEventListener('error', (ev: ErrorEvent) => {
+      const error = new Error(`The writer stopped: ${ev.message}`);
+      for (const p of this.pending.values()) p.reject(error);
+      this.pending.clear();
+    });
+  }
+
+  /** True when writing happens off the main thread. */
+  get offThread(): boolean {
+    return this.worker !== null;
+  }
+
+  write(job: WriteJob): WriteHandle {
+    return this.worker ? this.writeInWorker(this.worker, job) : writeInProcess(job);
+  }
+
+  private writeInWorker(worker: WriterWorkerLike, job: WriteJob): WriteHandle {
+    const id = this.nextId++;
+    const promise = new Promise<WriteResult>((resolve, reject) => {
+      this.pending.set(id, { resolve, reject, onProgress: job.onProgress });
+    });
+    // The buffer is transferred, so the caller's copy is detached — always hand over a copy of
+    // bytes you still need. `SaveService` does.
+    worker.postMessage(
+      { kind: 'write', id, bytes: job.bytes, plan: job.plan, options: job.options ?? {} },
+      [job.bytes.buffer as ArrayBuffer],
+    );
+    return {
+      promise,
+      cancel: () => {
+        if (this.pending.has(id)) worker.postMessage({ kind: 'cancel', id });
+      },
+    };
+  }
+
+  private dispatch(message: WriterFromWorker): void {
+    if (message.kind === 'ready') return;
+    const pending = this.pending.get(message.id);
+    if (!pending) return;
+    if (message.kind === 'progress') {
+      pending.onProgress?.(message.fraction, message.phase);
+      return;
+    }
+    this.pending.delete(message.id);
+    if (message.kind === 'done') {
+      pending.resolve({
+        bytes: message.bytes,
+        applied: message.applied,
+        appearances: message.appearances,
+        warnings: message.warnings,
+      });
+      return;
+    }
+    pending.reject(reviveError(message.reason, message.message));
+  }
+
+  dispose(): void {
+    for (const p of this.pending.values()) p.reject(new WriteCancelled());
+    this.pending.clear();
+    this.worker?.terminate();
+  }
+}
+
+/** Rebuilds the typed error from the string that crossed `postMessage`. */
+function reviveError(reason: string, message: string): Error {
+  if (reason === 'cancelled') return new WriteCancelled();
+  if (reason === 'encrypted' || reason === 'corrupt') {
+    return new WriteUnsupported(reason, message);
+  }
+  return new Error(message);
+}
+
+/** The no-Worker path: the same writer, on this thread, still cancellable between phases. */
+function writeInProcess(job: WriteJob): WriteHandle {
+  const controller = new AbortController();
+  const promise = new FullRewriteWriter().write({
+    bytes: job.bytes,
+    plan: job.plan,
+    ...(job.options === undefined ? {} : { options: job.options }),
+    signal: controller.signal,
+    ...(job.onProgress === undefined ? {} : { progress: job.onProgress }),
+  });
+  return {
+    promise,
+    cancel: () => {
+      controller.abort();
+    },
+  };
+}

@@ -22,6 +22,14 @@ export interface WindowOptions {
   readonly settings?: Settings;
   /** Cascade from this window (a detached tab opens beside its source). */
   readonly parent?: BrowserWindow | null;
+  /**
+   * Asked before the window closes (M21). Returning `false` holds the close back while the
+   * renderer offers Save / Don't save / Cancel; it closes the window itself when the reader
+   * agrees. Absent means the window always closes.
+   */
+  readonly beforeClose?: (win: BrowserWindow) => boolean;
+  /** The window has gone, so whoever was tracking it can let go (M21). */
+  readonly onClosed?: (windowId: number) => void;
 }
 
 /** The focused app window, else the first one still open, else `null`. */
@@ -72,8 +80,20 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
   win.once('ready-to-show', () => {
     win.show();
   });
+  // Unsaved work: the renderer is the only place that knows about it and the only place that can
+  // ask, so the close waits for its answer (M21). `beforeClose` says `true` when there is nothing
+  // to ask about, which is every window until a document is edited.
+  if (options.beforeClose) {
+    const beforeClose = options.beforeClose;
+    win.on('close', (event) => {
+      if (win.isDestroyed()) return;
+      if (beforeClose(win)) return;
+      event.preventDefault();
+    });
+  }
   win.on('closed', () => {
     windows.delete(win);
+    options.onClosed?.(win.id);
   });
   win.on('focus', () => {
     sendTo(win, 'window:focusChanged', { focused: true });

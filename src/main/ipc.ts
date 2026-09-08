@@ -10,6 +10,10 @@ import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electro
 import type { IpcHandlers, IpcInvokeChannel } from '../shared/ipc';
 import { hostArch, targetArch } from './arch';
 import { readFileForRenderer, writeBytes } from './files';
+import { probeFile, writeAtomic } from './fs/atomic';
+import type { CloseBroker } from './fs/lifecycle';
+import type { RecoveryStore } from './fs/recovery';
+import type { FileWatchers } from './fs/watcher';
 import type { RecentFiles } from './recent';
 import type { Settings } from './settings';
 import { allWindows, broadcast, getMainWindow } from './window';
@@ -19,11 +23,37 @@ export interface IpcDeps {
   rebuildMenu(): void;
   /** Opens another app window, optionally loading `path` into it once ready (M02). */
   openWindow(path: string | undefined, from: BrowserWindow | null): void;
+  /** Watches open documents for changes made outside the app (M21). */
+  watchers: FileWatchers;
+  /** Where autosave records live (M21). */
+  recovery: RecoveryStore;
+  /** Holds a close or a quit back while the renderer asks about unsaved work (M21). */
+  closeBroker: CloseBroker;
 }
 
 function windowOf(event: { readonly sender: unknown }): BrowserWindow | null {
   const win = BrowserWindow.fromWebContents(event.sender as Electron.WebContents);
   return win && !win.isDestroyed() ? win : getMainWindow();
+}
+
+/** The native Save dialog, filtered to PDFs. `null` when the reader cancelled. */
+async function saveDialog(
+  win: BrowserWindow | null,
+  options: { defaultPath?: string; title?: string; buttonLabel?: string },
+): Promise<string | null> {
+  const dialogOptions: Electron.SaveDialogOptions = {
+    title: options.title ?? 'Save PDF',
+    ...(options.defaultPath !== undefined ? { defaultPath: options.defaultPath } : {}),
+    ...(options.buttonLabel !== undefined ? { buttonLabel: options.buttonLabel } : {}),
+    filters: [
+      { name: 'PDF documents', extensions: ['pdf'] },
+      { name: 'All files', extensions: ['*'] },
+    ],
+  };
+  const result = win
+    ? await dialog.showSaveDialog(win, dialogOptions)
+    : await dialog.showSaveDialog(dialogOptions);
+  return result.canceled || !result.filePath ? null : result.filePath;
 }
 
 export function registerIpcHandlers(recent: RecentFiles, settings: Settings, deps: IpcDeps): void {
@@ -59,18 +89,39 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       return file;
     },
     'file:write': (_e, path, bytes) => writeBytes(path, bytes),
-    'file:saveDialog': async (e, defaultPath) => {
-      const win = windowOf(e);
-      const options: Electron.SaveDialogOptions = {
-        title: 'Save PDF',
-        ...(defaultPath !== undefined ? { defaultPath } : {}),
-        filters: [{ name: 'PDF documents', extensions: ['pdf'] }],
-      };
-      const result = win
-        ? await dialog.showSaveDialog(win, options)
-        : await dialog.showSaveDialog(options);
-      return result.canceled || !result.filePath ? null : result.filePath;
+    'file:saveDialog': (e, defaultPath) =>
+      saveDialog(windowOf(e), defaultPath === undefined ? {} : { defaultPath }),
+    'file:saveAsDialog': (e, options) => saveDialog(windowOf(e), options ?? {}),
+    'file:writeAtomic': async (_e, path, bytes, options) => {
+      // Our own write must not come back as "someone changed your file"; the mute is set before
+      // the bytes land and expires by itself, and is lifted early when the write fails.
+      deps.watchers.suspend(path);
+      try {
+        const written = await writeAtomic(path, bytes, {
+          backup: options?.backup ?? false,
+        });
+        const after = await probeFile(path);
+        return { ...written, modifiedAt: after.modifiedAt };
+      } catch (error) {
+        deps.watchers.resume(path);
+        throw error;
+      }
     },
+    'file:probe': (_e, path) => probeFile(path),
+    'file:watch': (e, path, watching) => {
+      const win = windowOf(e);
+      if (!win) return;
+      if (watching) deps.watchers.watch(path, win.id);
+      else deps.watchers.unwatch(path, win.id);
+    },
+    'file:suspendWatch': (_e, path, ms) => {
+      deps.watchers.suspend(path, ms);
+    },
+    'recovery:list': () => deps.recovery.list(),
+    'recovery:save': (_e, id, payload) => deps.recovery.save(id, payload),
+    'recovery:read': (_e, id) => deps.recovery.read(id),
+    'recovery:discard': (_e, id) => deps.recovery.discard(id),
+    'recovery:clear': () => deps.recovery.clear(),
     'recent:list': () => recent.list(),
     'recent:add': (_e, path) => {
       const list = recent.add(path);
@@ -149,6 +200,20 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       return win.isFullScreen();
     },
     'window:count': () => allWindows().length,
+    'window:setUnsaved': (e, unsaved) => {
+      const win = windowOf(e);
+      if (win) deps.closeBroker.setUnsaved(win.id, unsaved);
+    },
+    'window:confirmClose': (e, close) => {
+      const win = windowOf(e);
+      if (!win) return;
+      deps.closeBroker.answerWindow(win.id, close);
+      if (close) win.close();
+    },
+    'app:confirmQuit': (_e, quit) => {
+      deps.closeBroker.answerQuit(quit);
+      if (quit) app.quit();
+    },
     'shell:openExternal': async (_e, url) => {
       if (!/^https?:\/\//.test(url)) throw new Error('Only http(s) URLs may be opened');
       await shell.openExternal(url);

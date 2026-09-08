@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Documents } from '@app/tabs/Documents';
+import { Documents, type DocumentTab } from '@app/tabs/Documents';
 
 describe('Documents (tabs)', () => {
   it('opens, activates and de-duplicates by path', () => {
@@ -54,20 +54,40 @@ describe('Documents (tabs)', () => {
     expect(await d.close('nope')).toBe(false);
   });
 
-  it('uses the default hook only when no module registered one, and force skips hooks', async () => {
+  it('asks the default hook after the module hooks, and force skips both (M21)', async () => {
     const d = new Documents();
-    const def = vi.fn(() => 'cancel' as const);
+    // Shaped like the shell's own default hook: it only objects to a tab that is still dirty.
+    const def = vi.fn((tab: DocumentTab) => (tab.dirty ? ('cancel' as const) : ('close' as const)));
     d.setDefaultCloseHook(def);
     const a = d.open({ title: 'A', dirty: true });
     expect(await d.close(a.id)).toBe(false);
     expect(def).toHaveBeenCalledTimes(1);
+
+    // A module hook that says "close" does not disarm the shell's own question: the default is
+    // a backstop, so a dirty tab the module had nothing to say about is still protected.
     const off = d.onBeforeClose(() => 'close');
+    expect(await d.close(a.id)).toBe(false);
+    expect(def).toHaveBeenCalledTimes(2);
+
+    // A module hook that cancels stops there; the default is never reached.
+    const offCancel = d.onBeforeClose(() => 'cancel');
+    expect(await d.close(a.id)).toBe(false);
+    expect(def).toHaveBeenCalledTimes(2);
+    offCancel();
+
+    // The default sees the tab as it is now, so a hook that cleared the flag ends the questions.
+    const offClear = d.onBeforeClose((tab) => {
+      d.setDirty(tab.id, false);
+      return 'close';
+    });
     expect(await d.close(a.id)).toBe(true);
-    expect(def).toHaveBeenCalledTimes(1);
+    expect(def).toHaveBeenCalledTimes(3);
+    offClear();
     off();
+
     const b = d.open({ title: 'B', dirty: true });
     expect(await d.close(b.id, { force: true })).toBe(true);
-    expect(def).toHaveBeenCalledTimes(1);
+    expect(def).toHaveBeenCalledTimes(3);
   });
 
   it('closes others / all and stops at the first cancel', async () => {

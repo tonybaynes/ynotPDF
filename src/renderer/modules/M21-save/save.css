@@ -1,0 +1,72 @@
+/* M21 — the save status item and the recovery dialog. Tokens only; nothing transparent. */
+
+.status-save {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-2);
+  white-space: nowrap;
+}
+
+.status-save[hidden] {
+  display: none;
+}
+
+.status-save-icon {
+  display: inline-flex;
+  color: var(--icon);
+}
+
+/*
+ * Status is a word plus an icon, never a colour on its own. The colour is a second, redundant
+ * cue on top of both, and the pair chosen (info blue, warning yellow) separates on the
+ * blue–yellow axis and on lightness rather than on red–green (PLAN §3.2).
+ */
+.status-save[data-state='Unsaved changes'] .status-save-icon {
+  color: var(--warning);
+}
+
+.status-save[data-state='Read-only'] .status-save-icon,
+.status-save[data-state='Saving…'] .status-save-icon {
+  color: var(--info);
+}
+
+.status-save[data-state='Saved'] .status-save-icon {
+  color: var(--success);
+}
+
+.save-recovery-list {
+  list-style: none;
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.save-recovery-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
+.save-recovery-title {
+  font-weight: var(--fw-heading);
+}
+
+/*
+ * The detail line is secondary information, not faint text: `--fg-muted` is held to the same
+ * 4.5:1 floor as body text by M01's contrast tests, and there is no low-contrast text anywhere
+ * in this app (PLAN §3.2).
+ */
+.save-recovery-detail {
+  color: var(--fg-muted);
+  font-size: var(--fs-2);
+  overflow-wrap: anywhere;
+}
