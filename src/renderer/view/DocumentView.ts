@@ -15,6 +15,7 @@
 import type { PageSize, Rotation } from '@shared/pdf';
 import type { ToolSpec } from '@shared/module';
 import type { DocHandle } from '@engine/PdfEngine';
+import { PageGeometry } from '@engine/geometry';
 import { PageView } from './PageView';
 import {
   layoutPages,
@@ -26,7 +27,7 @@ import {
   type LayoutTable,
 } from './layout';
 import { bucketKey, bucketZoom, clampFactor, fitZoom, zoomAboutPoint, type FitMode } from './zoom';
-import { orderByDistance, TILE_SIZE, type TileCoord } from './tiles';
+import { orderByDistance, tilesForRect, TILE_SIZE, type TileCoord } from './tiles';
 import type { RenderFlags, TileRenderer, TileRequest } from './TileRenderer';
 
 /** Gap between pages and padding around the content, CSS px. */
@@ -620,7 +621,7 @@ export class DocumentView {
       const distanceToViewport = Math.max(0, rect.y - (top + height), top - (rect.y + rect.height));
       for (const coord of orderByDistance(view.visibleTiles(), focus)) {
         requests.push(
-          this.tileRequest(view, page, coord, bucket, bucketId, distanceToViewport, focus),
+          this.tileRequest(view.geometry, page, coord, bucket, bucketId, distanceToViewport, focus),
         );
       }
       void this.ensurePlaceholder(view, page);
@@ -632,7 +633,7 @@ export class DocumentView {
   }
 
   private tileRequest(
-    view: PageView,
+    geometry: PageGeometry,
     page: number,
     coord: TileCoord,
     bucket: number,
@@ -647,7 +648,7 @@ export class DocumentView {
       doc: this.doc,
       docKey: this.docKey,
       page,
-      geometry: view.geometry,
+      geometry,
       coord,
       zoom: bucket,
       bucket: bucketId,
@@ -662,10 +663,18 @@ export class DocumentView {
   private repaintFromCache(view: PageView, bucketId: number): void {
     for (const coord of view.visibleTiles()) {
       const id = this.renderer.idOf(
-        this.tileRequest(view, view.index, coord, bucketZoom(this.zoomFactor), bucketId, 0, {
-          x: 0,
-          y: 0,
-        }),
+        this.tileRequest(
+          view.geometry,
+          view.index,
+          coord,
+          bucketZoom(this.zoomFactor),
+          bucketId,
+          0,
+          {
+            x: 0,
+            y: 0,
+          },
+        ),
       );
       const bitmap = this.renderer.peek(id);
       if (bitmap) view.paintTile(coord, bitmap, id);
@@ -704,20 +713,23 @@ export class DocumentView {
         const size = this.sizes[page];
         const rect = rectOfPage(this.table, page);
         if (!size || !rect) continue;
-        const probe = new PageView({
-          index: page,
-          size,
-          scale: this.zoomFactor,
-          rotation: this.viewRotation,
-          dpr: this.dpr,
-        });
-        probe.setVisible({ x: 0, y: 0, width: rect.width, height: Math.min(rect.height, 1200) });
-        for (const coord of probe.visibleTiles()) {
+        // Worked out from the geometry alone: a neighbour that is not on screen has no DOM, and
+        // building one just to ask which tiles it would need is a page's worth of elements for
+        // a calculation that is three lines of arithmetic.
+        const geometry = new PageGeometry(size, this.viewRotation);
+        const height = Math.min(rect.height, this.scroller.clientHeight);
+        for (const coord of tilesForRect(
+          { x: 0, y: 0, width: rect.width, height },
+          rect.width,
+          rect.height,
+        )) {
           requests.push(
-            this.tileRequest(probe, page, coord, bucket, bucketId, 1e6, { x: 0, y: 0 }),
+            this.tileRequest(geometry, page, coord, bucket, bucketId, 1e6, {
+              x: 0,
+              y: 0,
+            }),
           );
         }
-        probe.dispose();
       }
       if (requests.length) this.renderer.prefetch(requests);
     });
