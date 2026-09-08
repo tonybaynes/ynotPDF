@@ -320,6 +320,14 @@ tests with the coverage gates, 157 Playwright tests.
 - **Docs.** ADR 0011, `docs/shortcuts.md` rows for selection, copy, find, search and print,
   READMEs for the module and the view layer.
 
+**The manual check the brief asks for, recorded.** "Copied RTF opens in WordPad/TextEdit and
+plain text matches" was done objectively rather than by eye: the RTF for the whole of
+`text.pdf` page 1 was loaded into a `System.Windows.Forms.RichTextBox` — the same RichEdit
+control WordPad is built on — from PowerShell on Windows 11. It parsed, its text is character for
+character the plain-text copy, and the formatting survived: the heading came back as **Arial
+24 pt** and the body as **Times New Roman 11 pt**, which are exactly the substitutions a Windows
+RTF reader makes for Helvetica and Times-Roman.
+
 **Bugs the tests found, all real:**
 
 - Case-insensitive search folded the _text_ and not the _query_, so it found nothing at all: the
