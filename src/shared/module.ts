@@ -141,6 +141,11 @@ export type RibbonItemSpec =
       readonly label?: string;
       readonly icon?: string;
       readonly title?: string;
+      /**
+       * Label recomputed on every state refresh (M20, ADR 0008), for a button whose text depends
+       * on the document — "Undo Rotate page". Absent means the command's own label is used.
+       */
+      readonly dynamicLabel?: (ctx: ServiceContext) => string;
     }
   | {
       /** Main action plus an arrow that opens `menu`. */
@@ -165,6 +170,8 @@ export type RibbonItemSpec =
       readonly command: string;
       readonly pressed: (ctx: ServiceContext) => boolean;
       readonly size?: RibbonItemSize;
+      /** See the button variant (M20, ADR 0008). */
+      readonly dynamicLabel?: (ctx: ServiceContext) => string;
     }
   | {
       /** Grid popup of options; choosing one runs `command` with `{ value }`. */

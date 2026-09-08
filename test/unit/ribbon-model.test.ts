@@ -155,7 +155,12 @@ describe('ribbon model', () => {
     if (!g1) throw new Error('no g1');
     const toggle = g1.items.find((i) => i.kind === 'toggle');
     if (!toggle) throw new Error('no toggle');
-    expect(itemState(toggle, r)).toEqual({ enabled: true, pressed: true, value: null });
+    expect(itemState(toggle, r)).toEqual({
+      enabled: true,
+      pressed: true,
+      value: null,
+      label: null,
+    });
     const before = groupSignature(g1, r);
     enabled = false;
     const after = groupSignature(g1, r);

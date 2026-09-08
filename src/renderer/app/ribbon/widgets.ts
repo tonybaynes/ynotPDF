@@ -77,6 +77,24 @@ function runCommand(
 
 // ---- button / toggle ---------------------------------------------------------------------------
 
+/**
+ * Applies a `dynamicLabel` result (M20, ADR 0008) to the visible text and the tooltip. The label
+ * span is the button's content, so the accessible name follows it: a screen reader announces the
+ * same "Undo Rotate page" a sighted user reads.
+ */
+function applyLabel(
+  button: HTMLButtonElement,
+  item: RibbonItemModel,
+  services: ShellServices,
+  label: string | null,
+): void {
+  const span = button.querySelector('.rb-label');
+  const text = label ?? item.label;
+  if (span && span.textContent !== text) span.textContent = text;
+  const title = commandTitle(services, item.command, text);
+  if (button.title !== title) button.title = title;
+}
+
 function renderButton(item: RibbonItemModel, services: ShellServices): Widget {
   const b = baseButton(item, services);
   b.addEventListener('click', () => {
@@ -87,6 +105,7 @@ function renderButton(item: RibbonItemModel, services: ShellServices): Widget {
     focusTarget: b,
     update: (s) => {
       b.disabled = !s.enabled;
+      if (s.label !== null) applyLabel(b, item, services, s.label);
     },
   };
 }
@@ -103,6 +122,7 @@ function renderToggle(item: RibbonItemModel, services: ShellServices): Widget {
     focusTarget: b,
     update: (s) => {
       b.disabled = !s.enabled;
+      if (s.label !== null) applyLabel(b, item, services, s.label);
       const on = s.pressed === true;
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
       state.textContent = on ? ' (on)' : ' (off)';
