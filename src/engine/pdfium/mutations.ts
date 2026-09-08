@@ -186,3 +186,75 @@ export function assertRotation(rotation: number): asserts rotation is Rotation {
     );
   }
 }
+
+// ---- optional content (layers) — M12, ADR 0011 -------------------------------------------------
+
+/**
+ * Applies optional-content visibility to one **loaded** page by activating or deactivating the
+ * objects that carry an `/OC` marked-content mark naming a hidden group.
+ *
+ * PDFium exposes no OCG API at all, so this is the whole mechanism: an inactive object is not
+ * drawn. `FPDFPage_GenerateContent` is never called, so the page's content stream — and any
+ * later save — is untouched, which is what makes a layer toggle exactly reversible.
+ *
+ * The activity flag lives on the loaded page rather than in the document, so the caller
+ * re-applies this every time a page is loaded (see `PdfiumEngine.loadPage`).
+ *
+ * Returns the number of objects whose activity it changed.
+ */
+export function applyLayerVisibility(
+  ffi: Ffi,
+  page: number,
+  hiddenGroupNames: ReadonlySet<string>,
+): number {
+  if (!ffi.has('FPDFPageObj_SetIsActive')) return 0;
+  let changed = 0;
+  ffi.scope((s) => {
+    const nameKey = s.utf8('Name');
+    const out = s.alloc(4);
+    /** The `/OC` group name of one object, or null when it is not in a group. */
+    const groupOf = (obj: number): string | null => {
+      const marks = ffi.call('FPDFPageObj_CountMarks', obj);
+      for (let i = 0; i < marks; i++) {
+        const mark = ffi.call('FPDFPageObj_GetMark', obj, i);
+        if (mark === 0) continue;
+        const markName = ffi.utf16Call((buf, len) => {
+          ffi.call('FPDFPageObjMark_GetName', mark, buf, len, out);
+          return ffi.u32(out);
+        });
+        if (markName !== 'OC') continue;
+        const group = ffi.utf16Call((buf, len) => {
+          ffi.call('FPDFPageObjMark_GetParamStringValue', mark, nameKey, buf, len, out);
+          return ffi.u32(out);
+        });
+        if (group) return group;
+      }
+      return null;
+    };
+    // One level into form XObjects: a layer is very often a single form object, but a file that
+    // marks the objects inside one instead is just as legal.
+    const visit = (obj: number, inheritedHidden: boolean, depth: number): void => {
+      const group = groupOf(obj);
+      const hidden = inheritedHidden || (group !== null && hiddenGroupNames.has(group));
+      if (group !== null || inheritedHidden) {
+        if (ffi.call('FPDFPageObj_SetIsActive', obj, hidden ? 0 : 1) !== 0) changed++;
+      }
+      if (depth < 2 && ffi.call('FPDFPageObj_GetType', obj) === PAGEOBJ_FORM) {
+        const kids = ffi.call('FPDFFormObj_CountObjects', obj);
+        for (let i = 0; i < kids; i++) {
+          const kid = ffi.call('FPDFFormObj_GetObject', obj, i);
+          if (kid !== 0) visit(kid, hidden, depth + 1);
+        }
+      }
+    };
+    const n = ffi.call('FPDFPage_CountObjects', page);
+    for (let i = 0; i < n; i++) {
+      const obj = ffi.call('FPDFPage_GetObject', page, i);
+      if (obj !== 0) visit(obj, false, 0);
+    }
+  });
+  return changed;
+}
+
+/** `FPDF_PAGEOBJ_FORM`; duplicated here so this file does not depend on the constants table. */
+const PAGEOBJ_FORM = 5;

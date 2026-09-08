@@ -19,6 +19,16 @@ export interface OpenedFile {
   readonly bytes: Uint8Array;
 }
 
+/** Options for the general "pick some files" dialog (M12, ADR 0011). */
+export interface OpenFilesOptions {
+  readonly title?: string;
+  readonly buttonLabel?: string;
+  /** Allow more than one file (default true). */
+  readonly multiple?: boolean;
+  /** Native filters; the default is a single "All files" entry. */
+  readonly filters?: ReadonlyArray<{ readonly name: string; readonly extensions: string[] }>;
+}
+
 /** Recent-files entry persisted by main (`electron-store`). */
 export interface RecentFile {
   readonly path: string;
@@ -120,6 +130,11 @@ export interface AppInfo {
 export interface IpcInvokeMap {
   /** Shows the native open dialog filtered to PDFs. `null` when cancelled. */
   'file:openDialog': { args: []; result: OpenedFile | null };
+  /**
+   * Shows the native open dialog for files of any type, optionally multi-select (M12,
+   * ADR 0011) — what "attach a file to this PDF" needs. Empty when cancelled.
+   */
+  'file:openFilesDialog': { args: [options?: OpenFilesOptions]; result: OpenedFile[] };
   /** Reads a file by absolute path (recent files, file association). */
   'file:read': { args: [path: string]; result: OpenedFile };
   /** Writes bytes to an absolute path (used by Save in M21). */
@@ -199,6 +214,12 @@ export interface IpcInvokeMap {
   /** The same answer for a quit that main asked about (M21). */
   'app:confirmQuit': { args: [quit: boolean]; result: void };
   'shell:openExternal': { args: [url: string]; result: void };
+  /**
+   * Writes bytes to a temporary file and opens it in the OS default application (M12,
+   * ADR 0011) — how an embedded attachment is opened, since the renderer has no filesystem.
+   * Returns the temporary path. Everything written this way is deleted when the app quits.
+   */
+  'shell:openTempFile': { args: [name: string, bytes: Uint8Array]; result: string };
   'shell:showItemInFolder': { args: [path: string]; result: void };
   'devtools:toggle': { args: []; result: void };
 }
@@ -246,6 +267,7 @@ export interface YnotBridge {
 /** Full list of invoke channels, used by the preload script to whitelist and by tests. */
 export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'file:openDialog',
+  'file:openFilesDialog',
   'file:read',
   'file:write',
   'file:saveDialog',
@@ -281,6 +303,7 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'window:confirmClose',
   'app:confirmQuit',
   'shell:openExternal',
+  'shell:openTempFile',
   'shell:showItemInFolder',
   'devtools:toggle',
 ];

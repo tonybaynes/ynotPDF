@@ -19,10 +19,13 @@ import {
   NotImplementedError,
   type Annotation,
   type Attachment,
+  type AttachmentPatch,
   type DocHandle,
   type FormField,
   type Layer,
   type Metadata,
+  type NewAttachment,
+  type PdfCollection,
   type NamedDestination,
   type NewAnnotation,
   type OpenOptions,
@@ -49,6 +52,8 @@ export interface FakeSupport {
   setFieldValue: boolean;
   setMetadata: boolean;
   setLayerVisible: boolean;
+  /** Add / update / delete of embedded files (M12, ADR 0011). */
+  attachments: boolean;
 }
 
 export const FULL_SUPPORT: FakeSupport = {
@@ -62,13 +67,14 @@ export const FULL_SUPPORT: FakeSupport = {
   setFieldValue: true,
   setMetadata: true,
   setLayerVisible: true,
+  attachments: true,
 };
 
 /** What the real PDFium adapter can do, so a test can reproduce its exact fallback behaviour. */
 export const PDFIUM_SUPPORT: FakeSupport = {
   ...FULL_SUPPORT,
   setMetadata: false,
-  setLayerVisible: false,
+  // Layer visibility and embedded-file editing are both real in the PDFium adapter (ADR 0011).
 };
 
 export const NO_SUPPORT: FakeSupport = {
@@ -82,6 +88,7 @@ export const NO_SUPPORT: FakeSupport = {
   setFieldValue: false,
   setMetadata: false,
   setLayerVisible: false,
+  attachments: false,
 };
 
 interface FakePage {
@@ -104,6 +111,7 @@ export interface FakeDocumentSpec {
   readonly outline?: ReadonlyArray<OutlineItem>;
   readonly layers?: ReadonlyArray<Layer>;
   readonly attachments?: ReadonlyArray<Attachment>;
+  readonly collection?: PdfCollection | null;
   readonly namedDestinations?: ReadonlyArray<NamedDestination>;
   readonly signatures?: ReadonlyArray<SignatureSummary>;
   readonly metadata?: Partial<Metadata>;
@@ -116,6 +124,8 @@ interface FakeDoc {
   outline: OutlineItem[];
   layers: Layer[];
   attachments: Attachment[];
+  attachmentBytes: Map<string, Uint8Array>;
+  collection: PdfCollection | null;
   namedDestinations: NamedDestination[];
   signatures: SignatureSummary[];
   metadata: Metadata;
@@ -169,6 +179,8 @@ export class FakeEngine implements PdfEngine {
       outline: [...(spec.outline ?? [])],
       layers: [...(spec.layers ?? [])],
       attachments: [...(spec.attachments ?? [])],
+      attachmentBytes: new Map(),
+      collection: spec.collection ?? null,
       namedDestinations: [...(spec.namedDestinations ?? [])],
       signatures: [...(spec.signatures ?? [])],
       metadata: {
@@ -282,8 +294,12 @@ export class FakeEngine implements PdfEngine {
     return Promise.resolve(this.doc(doc).attachments);
   }
 
-  attachmentData(): Promise<Uint8Array> {
-    return Promise.resolve(new Uint8Array(0));
+  attachmentData(doc: DocHandle, attachmentId: string): Promise<Uint8Array> {
+    return Promise.resolve(this.doc(doc).attachmentBytes.get(attachmentId) ?? new Uint8Array(0));
+  }
+
+  collection(doc: DocHandle): Promise<PdfCollection | null> {
+    return Promise.resolve(this.doc(doc).collection);
   }
 
   signatures(doc: DocHandle): Promise<ReadonlyArray<SignatureSummary>> {
@@ -493,6 +509,59 @@ export class FakeEngine implements PdfEngine {
     this.note('setLayerVisible');
     const d = this.doc(doc);
     d.layers = d.layers.map((l) => (l.id === layerId ? { ...l, visible } : l));
+    return Promise.resolve();
+  }
+
+  addAttachment(doc: DocHandle, file: NewAttachment): Promise<Attachment> {
+    this.need('attachments', 'addAttachment');
+    this.note('addAttachment');
+    const d = this.doc(doc);
+    const attachment: Attachment = {
+      id: `att.${String(d.attachments.length)}`,
+      name: file.name,
+      size: file.bytes.length,
+      ...(file.description === undefined ? {} : { description: file.description }),
+      ...(file.mimeType === undefined ? {} : { mimeType: file.mimeType }),
+      ...(file.modified === undefined ? {} : { modified: file.modified }),
+    };
+    d.attachments = [...d.attachments, attachment];
+    d.attachmentBytes.set(attachment.id, file.bytes);
+    return Promise.resolve(attachment);
+  }
+
+  updateAttachment(
+    doc: DocHandle,
+    attachmentId: string,
+    patch: AttachmentPatch,
+  ): Promise<Attachment> {
+    this.need('attachments', 'updateAttachment');
+    this.note('updateAttachment');
+    const d = this.doc(doc);
+    const found = d.attachments.find((a) => a.id === attachmentId);
+    if (!found) throw new EngineError('invalid-argument', `no attachment ${attachmentId}`);
+    const next: Attachment = {
+      ...found,
+      ...(patch.name === undefined ? {} : { name: patch.name }),
+      ...(patch.description === undefined ? {} : { description: patch.description }),
+      ...(patch.mimeType === undefined ? {} : { mimeType: patch.mimeType }),
+      ...(patch.modified === undefined ? {} : { modified: patch.modified }),
+      ...(patch.bytes === undefined ? {} : { size: patch.bytes.length }),
+    };
+    d.attachments = d.attachments.map((a) => (a.id === attachmentId ? next : a));
+    if (patch.bytes) d.attachmentBytes.set(attachmentId, patch.bytes);
+    return Promise.resolve(next);
+  }
+
+  deleteAttachment(doc: DocHandle, attachmentId: string): Promise<void> {
+    this.need('attachments', 'deleteAttachment');
+    this.note('deleteAttachment');
+    const d = this.doc(doc);
+    const at = d.attachments.findIndex((a) => a.id === attachmentId);
+    if (at < 0) throw new EngineError('invalid-argument', `no attachment ${attachmentId}`);
+    d.attachments = d.attachments.filter((a) => a.id !== attachmentId);
+    d.attachmentBytes.delete(attachmentId);
+    // Ids are positional, exactly as in PDFium: everything after the hole moves down one.
+    d.attachments = d.attachments.map((a, i) => ({ ...a, id: `att.${String(i)}` }));
     return Promise.resolve();
   }
 

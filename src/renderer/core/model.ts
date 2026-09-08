@@ -551,6 +551,14 @@ export type WriteIntent =
   | 'metadata'
   | 'layers'
   | 'outline'
+  /** Named destinations were edited; the writer rebuilds `/Names /Dests` (M12, ADR 0011). */
+  | 'destinations'
+  /**
+   * Embedded files were edited (M12, ADR 0011). The engine took the bytes and the name; the
+   * description and the MIME type it could only write into `/Params`, so the writer moves them
+   * to the file specification where a reader looks for them.
+   */
+  | 'attachments'
   | 'annotations'
   | 'fields'
   | 'custom';

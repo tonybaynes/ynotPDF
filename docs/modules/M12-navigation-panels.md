@@ -256,7 +256,80 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **One service, five panels.** `NavigationService` (service `"navigation"`) owns what the
+  panels share: the settings, the thumbnail renderer, the per-tab panel memory and the
+  portfolio handling. Each panel is a small mount function that reads the active
+  `Document` and the service, so a panel can be opened, closed and reopened without losing
+  anything.
+- **Pages is the default panel through `ui.leftPaneOnOpen`.** A single setting with four
+  values (`pages` · `bookmarks` · `last-used` · `closed`) decides what the left pane shows
+  when a document opens. It is applied on every open, so a `/PageMode /UseOutlines` file
+  never overrides the user's choice — the model carries `view.pageMode`, and this module
+  deliberately ignores it. Right-clicking the pane tab strip offers "Open this panel by
+  default"; the same key is declared in the settings schema for M130's View page.
+- **Thumbnail size is a ladder, the column count is derived.** Sizes are 80 · 120 · 160 ·
+  220 · 300 px wide (`ui.thumbnailSize`, persisted). `+` / `−` and Ctrl+wheel step the
+  ladder and *also* set the pane width to exactly one column at the new size, which is what
+  makes "the user never drags the splitter after zooming" true. Dragging the splitter is
+  left alone: the grid divides the width it is given by the column pitch, so 2, 3 … columns
+  appear on their own and drop back to one. Nothing about columns is ever stored.
+- **The thumbnail grid is virtualised on rows, not on pages.** Row height is fixed for a
+  given size (thumb + label + gap), so the first and last visible rows are arithmetic, and
+  only those rows have DOM. A 500-page document therefore costs the same as a 5-page one.
+- **Thumbnails render through their own low-priority renderer**, not M11's `TileRenderer`:
+  the tile cache is keyed by zoom bucket and would evict page tiles to hold thumbnails.
+  `ThumbnailRenderer` keeps one engine request in flight, holds back while the viewer's
+  renderer has work outstanding (`stats().queued + inFlight > 0`), and cancels a request
+  whose row has scrolled away — so a thumbnail never delays the page the reader is looking
+  at. Its cache is an LRU of decoded bitmaps bounded by count, keyed by
+  (tab, page id, size, render revision).
+- **Bookmark edits are `Command`s on the model's outline array.** The engine has no outline
+  writer, so every edit records the `outline` write intent and M21's writer rebuilds
+  `/Outlines` on save (its planner already does this). The tree operations — insert, move,
+  nest, un-nest, reorder, delete-with-descendants — are pure functions over the flat
+  `ModelOutlineItem[]` in `bookmarks/tree.ts`, unit-tested; the commands are the only thing
+  that touches the document.
+- **Named destinations become editable, so they need a write intent of their own.**
+  `destinations` is added to `WriteIntent`; M21's planner already knows how to write
+  `/Names /Dests` and simply had nothing to fill it from ("read-only until M12 edits them").
+- **Layer visibility is a real render change.** `PdfEngine.setLayerVisible` existed but no
+  adapter implemented it. PDFium has no OCG API, so the adapter walks every page's objects,
+  matches each object's `/OC` marked-content name to the group, and calls
+  `FPDFPageObj_SetIsActive` — render-time only, `FPDFPage_GenerateContent` is never called,
+  so the file on disk is untouched and undo is exact. The command also records the `layers`
+  intent so a save writes `/OCProperties /D /OFF`. Toggling drops the tab's cached tiles and
+  repaints.
+- **View state vs document change, for layers.** Toggling a layer in the panel is a
+  `Command` (Foxit's is undoable too and it is what the save writes). Import/export of a
+  visibility set is a view state — a JSON file of name → boolean — applied without a command
+  unless "Apply as default" is ticked, which runs the same commands in one undo entry.
+- **Attachments are engine-backed.** PDFium can add, delete and re-describe embedded files
+  (`FPDFDoc_AddAttachment`, `FPDFDoc_DeleteAttachment`, `FPDFAttachment_SetFile`,
+  `FPDFAttachment_SetStringValue`), so the attachment commands mutate the engine and undo
+  exactly, with no write intent. Attachment ids are positional (`att.<n>`), so the id table
+  is repaired by index arithmetic after every add and delete — the same trick M20 needed for
+  annotations.
+- **A portfolio is a document whose catalogue has `/Collection`.** New engine read
+  `collection(doc)` returns the schema (field key, label, kind, order, visibility) and the
+  view mode; `attachments()` gains the per-file collection values from each file
+  specification's `/CI` plus `/CreationDate`. The Attachments panel renders those as columns
+  when the document is a portfolio, opens the pane on itself, and shows the cover sheet as
+  the page — which needs no special case, because a portfolio's cover *is* its page 1.
+  Double-click on an embedded PDF opens it in a new tab through `DocumentService.open` with
+  no path, so it is unsaved-until-Save-As; anything else goes to the OS through a new IPC
+  channel that writes a temp file and calls `shell.openPath`. M42 extends this; nothing here
+  forks.
+- **Destinations navigate through one function.** `destinationScroll()` (pure) turns a
+  `ModelDestination` plus the page rect and zoom into a scroll offset and an optional zoom,
+  so bookmarks, the destinations panel and (later) links all land in the same place. `XYZ`
+  with a null zoom keeps the current zoom, as the spec says.
+- **Every panel is keyboard-first.** Each is a `role="tree"` or `role="listbox"` with roving
+  tabindex, Home/End/arrows/Enter, and a context menu on the menu key. Selection state that
+  M40 needs (multi-select of thumbnails with Ctrl/Shift) lives in the shell's `Selection`
+  service under the `pages` kind, so M40 reads it without knowing about this module.
+- **No colour-only signals.** A hidden layer says "Hidden" beside its checkbox, the current
+  page's thumbnail carries the word "Current page" in its tooltip and an `aria-current`, and
+  a portfolio row's type is a word, never an icon alone.
 
 ## Build log (fill in at merge)
 

@@ -9,7 +9,7 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron';
 import type { IpcHandlers, IpcInvokeChannel } from '../shared/ipc';
 import { hostArch, targetArch } from './arch';
-import { readFileForRenderer, writeBytes } from './files';
+import { readFileForRenderer, writeBytes, writeTempFile } from './files';
 import { probeFile, writeAtomic } from './fs/atomic';
 import type { CloseBroker } from './fs/lifecycle';
 import type { RecoveryStore } from './fs/recovery';
@@ -213,6 +213,28 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     'app:confirmQuit': (_e, quit) => {
       deps.closeBroker.answerQuit(quit);
       if (quit) app.quit();
+    },
+    'file:openFilesDialog': async (e, options) => {
+      const win = windowOf(e);
+      const properties: Electron.OpenDialogOptions['properties'] =
+        options?.multiple === false ? ['openFile'] : ['openFile', 'multiSelections'];
+      const dialogOptions: Electron.OpenDialogOptions = {
+        title: options?.title ?? 'Choose files',
+        properties,
+        filters: [...(options?.filters ?? [{ name: 'All files', extensions: ['*'] }])],
+        ...(options?.buttonLabel !== undefined ? { buttonLabel: options.buttonLabel } : {}),
+      };
+      const result = win
+        ? await dialog.showOpenDialog(win, dialogOptions)
+        : await dialog.showOpenDialog(dialogOptions);
+      if (result.canceled) return [];
+      return await Promise.all(result.filePaths.map((p) => readFileForRenderer(p)));
+    },
+    'shell:openTempFile': async (_e, name, bytes) => {
+      const path = await writeTempFile(name, bytes);
+      const error = await shell.openPath(path);
+      if (error) throw new Error(error);
+      return path;
     },
     'shell:openExternal': async (_e, url) => {
       if (!/^https?:\/\//.test(url)) throw new Error('Only http(s) URLs may be opened');

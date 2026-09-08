@@ -857,6 +857,8 @@ function phaseWords(phase: string): string {
       return 'Writing destinations';
     case 'layers':
       return 'Writing layers';
+    case 'attachments':
+      return 'Writing attachments';
     case 'annotations':
       return 'Drawing annotations';
     case 'fields':

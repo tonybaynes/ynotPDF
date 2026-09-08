@@ -26,6 +26,7 @@ import {
   PDFNumber,
   PDFPageLeaf,
   PDFRef,
+  PDFStream,
   PDFString,
   ParseSpeeds,
   type PDFContext,
@@ -37,6 +38,7 @@ import {
   WriteUnsupported,
   WRITE_PHASES,
   type PlannedAnnotation,
+  type PlannedAttachment,
   type PlannedDestination,
   type PlannedLayer,
   type PlannedOutlineItem,
@@ -151,6 +153,15 @@ export class FullRewriteWriter implements Writer {
       writeLayers(doc, plan.layers, state);
       state.applied('layers');
       state.phase('layers', 1);
+      await state.checkpoint();
+    }
+
+    // ---- embedded files -----------------------------------------------------------------------
+    if (plan.attachments) {
+      state.phase('attachments', 0);
+      writeAttachments(doc, plan.attachments, state);
+      state.applied('attachments');
+      state.phase('attachments', 1);
       await state.checkpoint();
     }
 
@@ -932,6 +943,82 @@ function writeLayers(
   else d.delete(PDFName.of('OFF'));
   if (on.length > 0) d.set(PDFName.of('ON'), ctx.obj(on));
   else d.delete(PDFName.of('ON'));
+}
+
+/**
+ * Puts embedded-file metadata where a reader will find it (M12, ADR 0011).
+ *
+ * PDFium can embed a file but writes its description and MIME type into the embedded stream's
+ * `/Params` dictionary, where nothing looks for them: PDF 7.11.3 puts the description on the
+ * *file specification* as `/Desc` and the type on the stream as a `/Subtype` name. This walks
+ * the `/EmbeddedFiles` name tree, matches each planned attachment by name, and moves them.
+ */
+function writeAttachments(
+  doc: PDFDocument,
+  attachments: ReadonlyArray<PlannedAttachment>,
+  state: WriteState,
+): void {
+  const ctx = doc.context;
+  const specs = new Map<string, PDFDict>();
+  const collect = (node: PDFDict | undefined, depth: number): void => {
+    if (!node || depth > 32) return;
+    const kids = node.lookupMaybe(PDFName.of('Kids'), PDFArray);
+    if (kids) {
+      for (const kid of kids.asArray()) collect(ctx.lookupMaybe(kid, PDFDict), depth + 1);
+      return;
+    }
+    const names = node.lookupMaybe(PDFName.of('Names'), PDFArray)?.asArray() ?? [];
+    for (let i = 1; i < names.length; i += 2) {
+      const key = names[i - 1];
+      const spec = ctx.lookupMaybe(names[i], PDFDict);
+      const name =
+        key instanceof PDFString || key instanceof PDFHexString ? key.decodeText() : undefined;
+      if (name !== undefined && spec) specs.set(name, spec);
+    }
+  };
+  const root = doc.catalog.lookupMaybe(PDFName.of('Names'), PDFDict);
+  collect(root?.lookupMaybe(PDFName.of('EmbeddedFiles'), PDFDict), 0);
+
+  const descKey = PDFName.of('Desc');
+  const subtypeKey = PDFName.of('Subtype');
+  for (const planned of attachments) {
+    // The name tree may hold the name as written or with pdf-lib's own text encoding; a spec
+    // whose `/F` matches is the same file either way.
+    const spec =
+      specs.get(planned.name) ??
+      [...specs.values()].find(
+        (d) =>
+          textValue(d.lookup(PDFName.of('UF'))) === planned.name ||
+          textValue(d.lookup(PDFName.of('F'))) === planned.name,
+      );
+    if (!spec) {
+      state.warn(
+        `The attachment "${planned.name}" could not be found, so its description was not saved`,
+      );
+      continue;
+    }
+    if (planned.description === null) spec.delete(descKey);
+    else spec.set(descKey, PDFString.of(planned.description));
+
+    const ef = spec.lookupMaybe(PDFName.of('EF'), PDFDict);
+    const streamRef = ef?.get(PDFName.of('F')) ?? ef?.get(PDFName.of('UF'));
+    const stream = streamRef ? ctx.lookupMaybe(streamRef, PDFStream) : undefined;
+    const params = stream?.dict.lookupMaybe(PDFName.of('Params'), PDFDict);
+    // Whatever the description used to be, it lives on the specification now.
+    params?.delete(descKey);
+    if (stream) {
+      if (planned.mimeType === null) stream.dict.delete(subtypeKey);
+      // A MIME type is a name, and `/` has to be escaped inside one (PDF 7.3.5).
+      else stream.dict.set(subtypeKey, PDFName.of(planned.mimeType));
+      params?.delete(subtypeKey);
+    }
+  }
+}
+
+/** A text string entry, whichever of the two string forms the file used. */
+function textValue(value: unknown): string | undefined {
+  if (value instanceof PDFString || value instanceof PDFHexString) return value.decodeText();
+  return undefined;
 }
 
 interface OcgEntry {
