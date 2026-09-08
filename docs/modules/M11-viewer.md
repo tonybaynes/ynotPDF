@@ -404,3 +404,33 @@ when M11 is present), `vitest.config.ts` (coverage include and gates), `PLAN.md`
   M02's `app.tabs.detach` is the mechanism when someone wants that.
 - **Text selection** is a stub, as the brief says - the tool, the cursor and the (empty) text
   layer are here; M13 fills them.
+
+### Follow-up, 2026-09-08 — the macOS runner and one race (`fix/M11-scroll-test-and-invalidate`)
+
+Done after M12 merged, on its own branch, because both halves are M11's: its acceptance test and
+its service.
+
+- **The scroll acceptance test was failing on GitHub's macOS runner about one time in two**, and
+  most of that was the test's own calibration. The absolute 55 fps bar switched on at idle 55.0
+  exactly — a cliff where that runner lives (at idle 55.2 it demanded 99.6 % of idle, at 54.9 only
+  90 %). It now applies from idle 60, where a machine has the headroom to make it a fair ask. The
+  best-of-three loop retried only on the *ratio* bar, so a go that passed the ratio and missed the
+  absolute figure was never retried; it retries on either. Idle is the median of three one-second
+  samples instead of one, because a shared runner has quiet seconds and busy seconds and a single
+  quiet one inflated the baseline the scroll was measured against.
+- **`ViewerService.publish()` asked the shell to re-evaluate every module's predicates on every
+  page change.** During a fast scroll that is nearly every frame, and it grew with each module that
+  landed until, with M12's forty-odd commands on top, it was a measurable share of a frame on a
+  runner with no headroom. It is coalesced to once per animation frame.
+- **`Viewer.announce()`, additive.** `pane.setScroll()` moves the viewport without publishing —
+  the viewer's own callers emit afterwards themselves — so anything *outside* the viewer that
+  positions it that way (M12's destinations did) left the store saying where the viewport was
+  until the browser's asynchronous scroll event caught up. In that gap a command setting the page
+  the store already held was a no-op and the viewport never moved: the flaky bookmark test on
+  macOS, and, under load, a 9-in-10 failure locally. `announce()` is the missing call; M12's
+  `goToDestination` and M11's own `dev.viewerScroll` make it.
+
+Verified locally: the bookmark test 10/10 with no retries (from 1/10), the full Playwright suite
+212/212 with no flakes, 2 144 unit tests. Shared files touched: `test/e2e/viewer.spec.ts`,
+`src/renderer/modules/M11-viewer/{ViewerService,Viewer,manifest}.ts`, and the one call in
+`src/renderer/modules/M12-navigation-panels/NavigationService.ts`.

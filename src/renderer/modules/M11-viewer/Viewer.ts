@@ -474,6 +474,19 @@ export class Viewer {
     }
   }
 
+  /**
+   * Publishes the viewport's state now.
+   *
+   * `pane.setScroll()` moves the viewport without publishing — the viewer's own callers emit
+   * afterwards themselves — so anything outside the viewer that positions it that way leaves
+   * the store saying where the viewport *was* until the browser's asynchronous scroll event
+   * catches up. In that gap a command that sets the same page the store already holds is a
+   * no-op, and the viewport never moves. M12's destinations hit exactly that.
+   */
+  announce(): void {
+    this.emit();
+  }
+
   private emit(): void {
     this.onStateChange(this.pane.state);
   }

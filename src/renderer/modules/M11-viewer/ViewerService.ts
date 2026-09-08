@@ -73,6 +73,8 @@ export class ViewerService {
   private readingBar: HTMLElement | null = null;
   private pushingState = false;
   private applying = false;
+  private invalidatePending = false;
+  private disposed = false;
   /** `setTimeout` handles: `number` in the DOM, `Timeout` under Node's types. */
   private readonly rememberTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /**
@@ -398,7 +400,29 @@ export class ViewerService {
     } finally {
       this.pushingState = false;
     }
-    this.shell.invalidate();
+    this.scheduleInvalidate();
+  }
+
+  /**
+   * Asks the shell to re-evaluate its `when()` and `pressed()` predicates — once per animation
+   * frame, however many times the view changed in it.
+   *
+   * A fast scroll announces a new current page on nearly every frame, and each `invalidate()`
+   * walks every command and ribbon control of every module. That grew with each module that
+   * landed until, with M12's forty-odd commands on top, it was a measurable share of a frame on a
+   * runner with no headroom. Nothing the shell shows needs to be fresher than the next paint.
+   */
+  private scheduleInvalidate(): void {
+    if (this.invalidatePending) return;
+    if (typeof requestAnimationFrame !== 'function') {
+      this.shell.invalidate();
+      return;
+    }
+    this.invalidatePending = true;
+    requestAnimationFrame(() => {
+      this.invalidatePending = false;
+      if (!this.disposed) this.shell.invalidate();
+    });
   }
 
   /**
@@ -573,6 +597,7 @@ export class ViewerService {
   }
 
   dispose(): void {
+    this.disposed = true;
     for (const timer of this.rememberTimers.values()) clearTimeout(timer);
     this.rememberTimers.clear();
     for (const d of this.disposers.splice(0)) d();
