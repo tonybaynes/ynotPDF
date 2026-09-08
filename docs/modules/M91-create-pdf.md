@@ -280,4 +280,148 @@ is colourblind: black and red read as the same colour):**
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-08 on `mod/M91-create-pdf` (worktree `../ynotPDF-M91`).**
+
+### What shipped
+
+- **The converter registry** (`src/engine/create/`) — `Converter { id, label, extensions, mimes,
+  multi, accepts, defaults, convert }` over a `ConvertContext` whose `env` carries the adapters a
+  converter cannot be: a `RasterDecoder` and an `HtmlPrinter`. Nothing under `src/engine/create/`
+  imports from the renderer, main or Node, so File → Create, drag-and-drop, M40's insert, M41's
+  combine, M120's batch and M121's CLI all call the same functions. `ConverterRegistry.group()`
+  is the routing every caller shares: images batch into one document, every other file becomes
+  its own, and a file nothing accepts comes back named rather than dropped.
+- **Images** — JPEG straight into a `DCTDecode` XObject and PNG through pdf-lib's own decoder
+  (`FlateDecode` plus an `SMask`); TIFF decoded page by page with utif, thumbnails skipped;
+  BMP, GIF, WebP and AVIF through Chromium's `createImageBitmap` in the Worker, HEIC through
+  main's `nativeImage` where the OS has a codec. Size and DPI come from our own header parsers
+  (PNG `pHYs`, JFIF density, EXIF `XResolution` in either byte order), and **EXIF orientation is
+  applied to the drawing, not to `/Rotate`**, so a phone photo lands upright on a page whose
+  orientation matches. `layoutImage` is the one geometry function the converter and the dialog's
+  preview both call: image-sized or fixed page, fit, fill (clipped) or actual size, orientation
+  automatic from the aspect.
+- **Web pages** — `WebPdfPrinter` (`src/main/webpdf/`) owns one hidden, sandboxed
+  `BrowserWindow` per job: media emulation through the DevTools protocol, a wait for load plus
+  `document.fonts.ready` under the job's timeout, the links collected, then `printToPDF` with the
+  page size, margins, header/footer, background and scale the reader chose. The crawl is a pure
+  breadth-first search over a `render(url)` function — same-site rule, depth 1–10, fragments
+  stripped, redirects recorded as aliases, a page cap, progress and cancellation — and the
+  assembly merges the printed PDFs, adds one bookmark per page and **rewrites every link that
+  points at a crawled page into a `GoTo`**, leaving links off the site as URLs.
+- **HTML and Markdown** — the same printer; a `.html` file is printed from its own `file:` URL so
+  its relative images resolve, and Markdown is rendered by `marked` into a document carrying a
+  `<base href>` and the stylesheet from `resources/create/markdown.css`.
+- **Plain text** — Courier, Helvetica or Times from the base 14, greedy wrapping on measured
+  widths with long words broken by character, tabs expanded, a header with the file name and
+  "Page n of m". A character WinAnsi cannot encode becomes `?` and is counted in the warnings.
+- **Blank documents and the clipboard** — a size, an orientation and a count; the clipboard's
+  image or its text, named "Untitled 1", "Untitled 2"… per session.
+- **The module** (`src/renderer/modules/M91-create-pdf/`) — seven commands with palette entries
+  (Blank is `Ctrl+N`), a Create PDF group on the Convert ribbon tab, five `creators` that fill
+  the File → New page and the empty state, a context menu when nothing is open, and the
+  `create.*` settings every dialog starts from. One opaque dialog per source kind, built on the
+  shell's `Dialogs`, with a page-shape preview for blank and images, thumbnails of the pictures
+  and a first-lines preview for text. CPU work runs in the module's own Worker
+  (`create.worker.ts`); the printer's work runs on the renderer thread, where its IPC lives. The
+  progress dialog appears after 400 ms and its Cancel is real.
+- **Page-size presets** are `resources/page-sizes.json` (ISO A/B, North American, envelopes),
+  read by `src/shared/pageSizes.ts` — the file M130 and every later page-size dialog will use.
+
+### Decisions worth knowing about
+
+- **A created document is dirty from birth.** `UndoStack.isDirty` compares the journal against
+  the last save, so a document with no journal is clean — and a document that was never a file
+  would then have `Ctrl+S` do nothing and close without a question, losing what the reader just
+  made. `UndoStack.markUnsaved()` (additive, ADR 0011) is the fix; M21 then treats it exactly as
+  it treats an edited file with no path.
+- **Creation is not a `Command`.** There is no document for an undo to revert to, and a journal
+  entry naming the sources could not be replayed honestly once the clipboard has changed or the
+  files have moved. The bytes are the truth; M40 is where converted bytes become pages of an
+  open document, as commands.
+- **Converters are pure and the environment is an argument**, which is what lets the image and
+  text paths run in a Worker, the web path run where its IPC is, and a future CLI run both with
+  no adapters and get a worded error rather than a blank page.
+- **A conversion that needs a decoder the Worker has not got is retried on the window**, where
+  `nativeImage` can be reached. The reader sees one conversion, not two.
+- **Main returns bytes and data, never decisions.** `printToPDF` gives a PDF and a list of links;
+  what the document looks like — the bookmarks, the rewritten links, the title — is decided in
+  the pure assembly, where it can be tested.
+
+### Bugs found while building, and what they were
+
+- **utif could not find its inflate in a bundle.** It looks for `require("pako")` or `self.pako`,
+  and an ES module has neither — so a deflate-compressed TIFF decoded to garbage in the renderer
+  while passing in Node. `installPako.ts` puts pako where utif looks, before utif is imported.
+- **A TIFF was decoded through a view of the wrong buffer.** utif reads every offset from the
+  start of the buffer it is handed, so a `Uint8Array` that is a window onto a larger buffer put
+  every strip offset out by the window's start. The decoder copies into a buffer of its own.
+- **`dev.pageText` put a space between every letter.** PDFium reports one text run per glyph for
+  a page Chromium printed, so joining the runs with a space turned "Heading" into "H e a d i n g"
+  and every assertion about rendered text failed for the wrong reason. The runs already carry
+  their own spaces; they are joined with nothing.
+- **A malformed `/Annots` entry crashed the link rewriter.** pdf-lib's `lookupMaybe` throws
+  rather than returning `undefined` when the entry is not a dictionary at all. A link that cannot
+  be read is now a link left alone.
+- **The style rule reads `rgb(` in a `.ts` file as a UI colour literal**, which pdf-lib's colour
+  helper would have tripped. The image code emits numeric components instead, as M21's appearance
+  generators already do.
+- **`tsconfig.node.json` could not see the engine's ambient declarations**, so a unit test that
+  imported the TIFF decoder failed on utif's missing types while the web project was happy. The
+  node project now includes `src/engine/**/*.d.ts`.
+
+### Shared files touched (PLAN.md §12.3)
+
+- `src/shared/create.ts` — new: the option and result types the dialogs, the converters and main
+  all share.
+- `src/shared/pageSizes.ts`, `resources/page-sizes.json` — new: the presets, as data.
+- `src/shared/ipc.ts` — additive: `file:openFilesDialog`, `webpdf:render`, `webpdf:cancel`,
+  `clipboard:read`, `image:decode`, with their payload types (ADR 0011).
+- `src/main/{index,ipc,menu}.ts` — additive: the five handlers, the printer on `IpcDeps`, its
+  disposal on quit, and a New submenu in the File menu.
+- `src/renderer/core/UndoStack.ts` — additive: `markUnsaved()`.
+- `src/renderer/app/shell.ts` — one behaviour change: a drop of files that are not PDFs is handed
+  to `create.fromDropped` when that command exists; PDFs behave exactly as before and, without
+  M91, so do the rest.
+- `src/renderer/main.ts`, `src/renderer/index.html` — registers the M91 manifest and its CSS.
+- `tsconfig.node.json` — the engine's `.d.ts` files, so a unit test can import the engine half.
+- `vitest.config.ts` — coverage gates for the converters; the DOM and shell half excluded as M11's
+  and M21's are, and proved by Playwright.
+- `package.json` — `marked` 16 (MIT), `utif` 3 (MIT), `pako` 1 (MIT/Zlib) as dependencies;
+  `jpeg-js` 0.4 (BSD-3) and `@types/pako` as dev dependencies for the fixtures.
+- `scripts/make-fixtures.ts`, `test/fixtures/README.md`, `.gitattributes`, `.prettierignore` — the
+  new `test/fixtures/create/` corpus, generated deterministically like every other fixture.
+
+### Tests
+
+1 792 unit tests and 150 e2e tests, green on Windows locally. The three acceptance tests:
+
+- **Five mixed images → one PDF with the right page sizes and rotations** — a JPEG, an EXIF-rotated
+  JPEG, a 300 dpi PNG, an alpha PNG and a greyscale scan, opened in the real engine afterwards:
+  the landscape ones get landscape pages, the rotated one is landscape because it *displays*
+  landscape, and no page carries a `/Rotate`. The three-page TIFF becomes three pages, each its
+  own size at its own DPI.
+- **A local HTML site, depth 2 → bookmarks and working internal links** — in the running app: one
+  bookmark per crawled page pointing at the page it names, the links between crawled pages
+  resolved to destinations inside the document, the link to another site still a URL, and the
+  page that is three hops away absent.
+- **Markdown → headings and a table; text → paginated with a header** — the Markdown's headings,
+  ordered list, table and code block all present in the rendered text; `long.txt` over several
+  pages, each carrying its file name and "Page n of m".
+
+Plus: the dialogs are opaque and keyboard-driven, Cancel creates nothing, an address that cannot
+be loaded is refused in words, a created document arrives unsaved with its title in the file, and
+a dropped file nothing accepts is named to the reader.
+
+### Deferred, and why
+
+- **Office formats are M93's**, which registers its converters in this registry — the brief's
+  own division.
+- **The scanner and a virtual printer stay parked**, as the brief says.
+- **HEIC depends on the operating system.** Chromium does not decode it; macOS's `nativeImage`
+  does, and Windows and Linux say so in a sentence rather than producing a blank page.
+- **A Unicode font is not embedded for plain text.** The base 14 keep the converter
+  dependency-free and byte-deterministic; a character outside WinAnsi becomes `?` and is counted.
+  Embedding waits for M51, which brings fontkit.
+- **The crawl is breadth-first and single-threaded**, one page at a time. Printing is the slow
+  part and Chromium is doing it either way; parallel windows would race for the same resources
+  for no clear gain, and the progress dialog would stop meaning anything.
