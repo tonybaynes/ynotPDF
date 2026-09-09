@@ -167,7 +167,9 @@ function placeholders(portfolio: Portfolio, options: CoverOptions): Record<strin
   return {
     title: options.title,
     subtitle: options.subtitle ?? '',
-    date: new Intl.DateTimeFormat('en-GB', { dateStyle: 'long' }).format(options.date ?? new Date()),
+    date: new Intl.DateTimeFormat('en-GB', { dateStyle: 'long' }).format(
+      options.date ?? new Date(),
+    ),
     count: describePortfolio(portfolio),
     size: total === null ? 'size unknown' : formatBytes(total),
   };
@@ -246,7 +248,9 @@ function cellText(
   if (value === null) return '';
   if (kind === 'size' || kind === 'compressedSize') return formatBytes(Number(value));
   if (kind === 'created' || kind === 'modified' || kind === 'date') {
-    return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date(Number(value)));
+    return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(
+      new Date(Number(value)),
+    );
   }
   return String(value);
 }

@@ -223,6 +223,10 @@
     "render": ["e000000000000000"],
     "text": "PDF/A-1b structural sample (XMP + OutputIntent)."
   },
+  "portfolio.pdf": {
+    "render": ["80f0000000000000"],
+    "text": "Portfolio cover sheet This document is a PDF Portfolio containing five files."
+  },
   "rotated.pdf": {
     "render": ["0010301010100080", "0101006c6c000000", "0600101010301003"],
     "text": "/Rotate 0"

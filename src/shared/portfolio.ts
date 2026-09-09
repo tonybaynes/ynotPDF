@@ -415,6 +415,14 @@ function isFile(f: PortfolioFile | undefined): f is PortfolioFile {
   return f !== undefined;
 }
 
+/** A copy of a file's column values without one key. */
+export function withoutField(
+  fields: Readonly<Record<string, string>>,
+  key: string,
+): Readonly<Record<string, string>> {
+  return Object.fromEntries(Object.entries(fields).filter(([k]) => k !== key));
+}
+
 /** The order column's value for a file, as the `/CI` entry the writer stores. */
 export function orderFields(
   file: PortfolioFile,

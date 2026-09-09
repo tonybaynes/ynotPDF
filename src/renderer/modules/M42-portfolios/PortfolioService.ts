@@ -36,6 +36,7 @@ import {
   uniqueName,
   withFile,
   withFilesAdded,
+  withoutField,
   withoutFile,
   type ColumnKind,
   type Portfolio,
@@ -44,7 +45,10 @@ import {
   type PortfolioView,
 } from '@shared/portfolio';
 import { DOCUMENT_SERVICE, type DocumentService } from '@modules/M20-document-model/manifest';
-import { NAVIGATION_SERVICE, type NavigationService } from '@modules/M12-navigation-panels/NavigationService';
+import {
+  NAVIGATION_SERVICE,
+  type NavigationService,
+} from '@modules/M12-navigation-panels/NavigationService';
 import { VIEWER_SERVICE, type ViewerService } from '@modules/M11-viewer/manifest';
 import {
   CoverSheetCommand,
@@ -154,7 +158,10 @@ export class PortfolioService {
       if (document === watched) return;
       stopDocument?.();
       watched = document;
-      stopDocument = document?.store.subscribe(() => { listener(); }) ?? null;
+      stopDocument =
+        document?.store.subscribe(() => {
+          listener();
+        }) ?? null;
     };
     const stopTabs = this.shell.documents.subscribe(() => {
       rebind();
@@ -285,13 +292,18 @@ export class PortfolioService {
     const service = this.registry.service<DocumentService>(DOCUMENT_SERVICE);
     const opened = await service.open(cover, { path: null, name: `${title}.pdf`, title });
     if (this.registry.hasService(VIEWER_SERVICE)) {
-      await this.registry.service<ViewerService>(VIEWER_SERVICE).attach(opened.tab, opened.document);
+      await this.registry
+        .service<ViewerService>(VIEWER_SERVICE)
+        .attach(opened.tab, opened.document);
     }
     this.read.add(opened.tab.id);
     // The document *becomes* a portfolio here, which is a change to it: an undoable one, so the
     // reader can back out of "New portfolio" the way they can back out of anything else.
     await opened.document.apply(
-      new PortfolioEditCommand(opened.document, 'New portfolio', { ...portfolio, generatedCover: true }),
+      new PortfolioEditCommand(opened.document, 'New portfolio', {
+        ...portfolio,
+        generatedCover: true,
+      }),
     );
     this.changed();
     return opened.document;
@@ -513,7 +525,9 @@ export class PortfolioService {
       `Describe ${file.name}`,
       (current) => {
         const target = current.files.find((f) => f.id === fileId);
-        return target ? withFile(current, { ...target, description: description || null }) : current;
+        return target
+          ? withFile(current, { ...target, description: description || null })
+          : current;
       },
       { mergeKey: `describe:${fileId}` },
     );
@@ -527,9 +541,8 @@ export class PortfolioService {
       (current) => {
         const target = current.files.find((f) => f.id === fileId);
         if (!target) return current;
-        const fields = { ...target.fields };
-        if (value === '') delete fields[key];
-        else fields[key] = value;
+        const fields =
+          value === '' ? withoutField(target.fields, key) : { ...target.fields, [key]: value };
         return withFile(current, { ...target, fields });
       },
       { mergeKey: `field:${fileId}:${key}` },
@@ -661,12 +674,9 @@ export class PortfolioService {
     return await this.edit(`Remove column ${column.label}`, (current) => ({
       ...current,
       schema: current.schema.filter((c) => c.key !== key),
-      files: current.files.map((f) => {
-        if (!(key in f.fields)) return f;
-        const fields = { ...f.fields };
-        delete fields[key];
-        return { ...f, fields };
-      }),
+      files: current.files.map((f) =>
+        key in f.fields ? { ...f, fields: withoutField(f.fields, key) } : f,
+      ),
       sort: current.sort?.key === key ? { key: current.orderKey, ascending: true } : current.sort,
     }));
   }
@@ -726,10 +736,12 @@ export class PortfolioService {
   async bytesOf(file: PortfolioFile): Promise<Uint8Array | null> {
     const document = this.document;
     if (!document) return null;
-    if (file.source.kind === 'added') return document.blobs.get(blobKey(file.id)) ?? null;
+    const source = file.source;
+    if (source.kind === 'added') return document.blobs.get(blobKey(file.id)) ?? null;
     const attachments = await document.engine.attachments(document.handle);
-    const match = attachments.find((a) => a.treeKey === file.source.treeKey)
-      ?? attachments.find((a) => a.name === file.name);
+    const match =
+      attachments.find((a) => a.treeKey === source.treeKey) ??
+      attachments.find((a) => a.name === file.name);
     if (!match) return null;
     return await document.engine.attachmentData(document.handle, match.id);
   }
@@ -805,9 +817,7 @@ export class PortfolioService {
     }
     if (isPdfFile(file.name, file.mimeType, bytes)) {
       const nav = this.navigation;
-      const opened = nav
-        ? await nav.openBytesInTab(file.name, bytes)
-        : false;
+      const opened = nav ? await nav.openBytesInTab(file.name, bytes) : false;
       if (opened) {
         const tab = this.shell.documents.active;
         if (tab) this.openedFrom.set(tab.id, { documentId: document.id, fileId });
@@ -995,11 +1005,7 @@ const MIME_TYPES: Readonly<Record<string, string>> = {
  * because real files lie about it — the operator's own Foxit-made portfolio declares
  * `text/plain` on three embedded PDFs (M12).
  */
-export function isPdfFile(
-  name: string,
-  mimeType: string | null,
-  bytes?: Uint8Array,
-): boolean {
+export function isPdfFile(name: string, mimeType: string | null, bytes?: Uint8Array): boolean {
   if (name.toLowerCase().endsWith('.pdf')) return true;
   if (bytes && bytes.length >= 5) {
     if (String.fromCharCode(...bytes.subarray(0, 5)) === '%PDF-') return true;
