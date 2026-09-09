@@ -57,6 +57,18 @@ function setCursor(service: DrawingService | null, cursor: string | null): void 
   }
 }
 
+/**
+ * Gives the page area the keyboard focus a gesture would otherwise have taken from it.
+ *
+ * A tool that consumes a press has `preventDefault` called on it by the page view, and a
+ * prevented pointerdown never moves the focus — so the scroller, which is where M11 listens for
+ * a tool's keys, would not hear the Enter that finishes a polygon or the Escape that abandons it.
+ */
+function focusPage(service: DrawingService | null): void {
+  const viewer = service?.annotationService.activeViewer();
+  viewer?.pane.scroller.focus({ preventScroll: true });
+}
+
 /** The page view of the active viewer for a page, when it is mounted. */
 function pageViewOf(service: DrawingService | null, page: number): PageView | null {
   const viewer = service?.annotationService.activeViewer();
@@ -198,6 +210,7 @@ function dragTool(
     },
     onPointerDown: (e) => {
       if (e.buttons !== 1) return undefined;
+      focusPage(lookup());
       const from = snapped(lookup(), e);
       drag = { page: e.page, from, to: from };
       (e.original.target as Element | null)?.setPointerCapture?.(e.original.pointerId);
@@ -317,6 +330,7 @@ function cornersTool(
     },
     onPointerDown: (e) => {
       if (e.buttons !== 1) return undefined;
+      focusPage(lookup());
       const now = performance.now();
       const point = constrained(e);
       if (state && state.page !== e.page) finish();
@@ -417,6 +431,7 @@ function pencilTool(lookup: ServiceLookup): ToolSpec {
     },
     onPointerDown: (e) => {
       if (e.buttons !== 1) return undefined;
+      focusPage(lookup());
       if (groupTimer) clearTimeout(groupTimer);
       groupTimer = null;
       const pen = e.original.pointerType === 'pen';
@@ -484,6 +499,7 @@ function eraserTool(lookup: ServiceLookup): ToolSpec {
     },
     onPointerDown: (e) => {
       if (e.buttons !== 1) return undefined;
+      focusPage(lookup());
       const at = { x: e.x, y: e.y };
       rubbing = { page: e.page, last: at };
       paintCursor(e.page, at);
@@ -542,6 +558,7 @@ function stampTool(lookup: ServiceLookup): ToolSpec {
     },
     onPointerDown: (e) => {
       if (e.buttons !== 1) return undefined;
+      focusPage(lookup());
       const from = snapped(lookup(), e);
       drag = { page: e.page, from, to: from };
       (e.original.target as Element | null)?.setPointerCapture?.(e.original.pointerId);
@@ -600,6 +617,7 @@ function attachFileTool(lookup: ServiceLookup): ToolSpec {
     },
     onPointerDown: (e) => {
       if (e.buttons !== 1) return undefined;
+      focusPage(lookup());
       const service = lookup();
       if (!service) return undefined;
       void service.attachFile(e.page, snapped(service, e));

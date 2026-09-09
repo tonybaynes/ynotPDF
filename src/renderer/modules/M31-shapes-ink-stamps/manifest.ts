@@ -572,7 +572,7 @@ export default defineModule({
               paths: 'paths' in a ? a.paths.map((p) => p.length) : [],
               rotate: stampRotationOf(a.extra),
               extra: a.extra,
-              drawnByOverlay: drawnByOverlay(a, new Set([String(a.id)])),
+              drawnByOverlay: drawnByOverlay(a, new Set()),
               appearance: stream
                 ? {
                     content: stream.content,

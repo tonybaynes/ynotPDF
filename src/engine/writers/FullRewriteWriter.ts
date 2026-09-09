@@ -1459,24 +1459,34 @@ function takeEmbeddedFile(doc: PDFDocument, name: string): PDFRef | PDFDict | nu
         if (found === null) return false;
         const survivors = items.filter((_v, index) => index !== i - 1 && index !== i);
         node.set(PDFName.of('Names'), ctx.obj(survivors));
-        // The same tidy-up `writeAttachments` does for a tree entry (M12, ADR 0011): PDFium
-        // wrote the description and the type into `/Params`, where nothing reads them.
-        const spec = ctx.lookupMaybe(found, PDFDict);
-        const ef = spec?.lookupMaybe(PDFName.of('EF'), PDFDict);
+        /*
+         * The same tidy-up `writeAttachments` does for a tree entry (M12, ADR 0011): PDFium wrote
+         * the description and the type into `/Params`, and a reader looks for them on the
+         * specification and the stream. They are *copied* rather than moved, because PDFium's own
+         * attachment API reads an annotation's file through `/Params` — so this app, reopening
+         * the file, would otherwise lose the description it had just written.
+         */
+        const specValue: unknown = ctx.lookup(found);
+        const spec = specValue instanceof PDFDict ? specValue : undefined;
+        const ef = spec ? dictAt(ctx, spec, 'EF') : undefined;
         const streamRef = ef?.get(PDFName.of('F')) ?? ef?.get(PDFName.of('UF'));
-        const stream = streamRef ? ctx.lookupMaybe(streamRef, PDFStream) : undefined;
-        const params = stream?.dict.lookupMaybe(PDFName.of('Params'), PDFDict);
+        const streamValue: unknown = streamRef ? ctx.lookup(streamRef) : undefined;
+        const stream = streamValue instanceof PDFStream ? streamValue : undefined;
+        const params = stream ? dictAt(ctx, stream.dict, 'Params') : undefined;
         if (spec && params) {
           const desc = params.get(PDFName.of('Desc'));
-          if (desc && spec.get(PDFName.of('Desc')) === undefined)
+          if (desc && spec.get(PDFName.of('Desc')) === undefined) {
             spec.set(PDFName.of('Desc'), desc);
-          params.delete(PDFName.of('Desc'));
-          const subtype = params.lookup(PDFName.of('Subtype'));
-          const mime = textValue(subtype);
-          if (stream && mime !== undefined && mime !== '') {
+          }
+          const mime = textValue(params.lookup(PDFName.of('Subtype')));
+          if (
+            stream &&
+            mime !== undefined &&
+            mime !== '' &&
+            stream.dict.get(PDFName.of('Subtype')) === undefined
+          ) {
             stream.dict.set(PDFName.of('Subtype'), PDFName.of(mime));
           }
-          params.delete(PDFName.of('Subtype'));
         }
         return true;
       }

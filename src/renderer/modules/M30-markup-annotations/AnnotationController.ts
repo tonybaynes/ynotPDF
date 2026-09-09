@@ -259,6 +259,15 @@ export class AnnotationController {
 
   private onKeyDown(e: KeyboardEvent): void {
     if (isTypingTarget(e.target)) return;
+    /*
+     * A creation tool from another module owns the keyboard as it owns the pointer (M31): the
+     * Enter that finishes a polygon and the Escape that abandons one go to the tool, through the
+     * viewer's own key routing, not to the selection this controller would otherwise open or
+     * clear — the stroke the pencil just drew is selected, and Enter must not open its popup.
+     * M30's own creation tools take no keys, so they are left to the rules below.
+     */
+    const active = this.activeTool();
+    if (active !== null && this.service.isCreationTool(active)) return;
     const selected = this.service.selection.length > 0;
     const mod = e.ctrlKey || e.metaKey;
 

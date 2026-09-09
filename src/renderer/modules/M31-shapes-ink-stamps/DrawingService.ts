@@ -499,11 +499,14 @@ export class DrawingService {
 
   /** Ends the current pencil group: the next stroke starts a new annotation. */
   endInkGroup(): void {
-    if (this.inkGroup) {
-      this.annotations.select([this.inkGroup.id]);
-      this.annotations.completeCreation();
-    }
+    const group = this.inkGroup;
+    // Cleared *before* anything else runs: finishing the group can put the pencil away, which
+    // deactivates the pencil tool, which ends the group — and with the group still set that
+    // would go round for ever.
     this.inkGroup = null;
+    if (!group) return;
+    this.annotations.select([group.id]);
+    this.annotations.completeCreation();
   }
 
   /**
