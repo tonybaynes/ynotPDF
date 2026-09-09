@@ -81,6 +81,10 @@ Foxit's installer/updater/help/about equivalents.
     (snippets, algorithms, icon sets such as Lucide, Electron and Chromium
     themselves, Node.js). CI fails if a dependency lacks licence
     metadata, so the list cannot silently go stale;
+  - extends the licence gate to `resources/binaries.json` and
+    `resources/credits.json`: every entry must carry a permissive licence
+    id from the same allow-list `scripts/check-licenses.ts` uses, or the
+    build fails naming it (the app is sold commercially);
   - groups by role (PDF engine, UI, fonts, OCR, build tools used only at
     build time listed separately but still credited) and is searchable;
   - also ships as `THIRD-PARTY-NOTICES.txt` beside the executable, and

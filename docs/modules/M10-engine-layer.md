@@ -114,7 +114,13 @@ must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
 vendored, adapted or copied (code, icons, fonts, data) goes in
-`resources/credits.json`. Permissive licences only._
+`resources/credits.json`. Permissive licences only (MIT, BSD, ISC,
+Apache-2.0, 0BSD, OFL for fonts; MPL-2.0 only for an external program the
+user installs, never bundled). **Never bundle or link, however tempting:
+Ghostscript, MuPDF, iText (AGPL); Poppler/pdftotext/pdftoppm, pdf2htmlEX,
+GPL-only Hunspell dictionaries (GPL).** Dual-licensed packages are used
+under their permissive option and credited as such (`node-forge` = BSD).
+The app is sold commercially; a copyleft component would block that._
 
 `@hyzyla/pdfium` (WASM); optionally `koffi` + `pdfium-binaries`; Liberation
 and DejaVu fonts.

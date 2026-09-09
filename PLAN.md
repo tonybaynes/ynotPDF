@@ -462,6 +462,14 @@ D:\Projects\ynotPDF\
 
 ---
 
+### Licensing — the app is sold commercially
+
+Permissive licences only (MIT, BSD, ISC, Apache-2.0, 0BSD; OFL for fonts). CI gates npm
+(`scripts/check-licenses.ts`) and, from M131, binaries and credits too. **Never bundle or link:
+Ghostscript, MuPDF, iText (AGPL); Poppler, pdf2htmlEX, GPL-only Hunspell dictionaries (GPL).**
+MPL-2.0 programs (LibreOffice) may only be *called* when the user has installed them. Every
+component is credited on the generated Help → Open-source software page.
+
 ## 9. Conventions
 
 - TypeScript `strict`; no `any` without a comment. ESLint + Prettier on
