@@ -5,6 +5,7 @@
  * `FPDF_REMOVE_SECURITY`), because pdf-lib does not decrypt strings.
  */
 
+import type { PDFObject } from 'pdf-lib';
 import {
   PDFArray,
   PDFDict,
@@ -19,7 +20,16 @@ import {
   decodePDFRawStream,
 } from 'pdf-lib';
 import { parseTreeKey } from '@shared/portfolio';
-import type { CollectionField, CollectionFolder, Layer, PdfCollection } from '../PdfEngine';
+import { DEFAULT_INITIAL_VIEW } from '../PdfEngine';
+import type {
+  CollectionField,
+  CollectionFolder,
+  Destination,
+  FontUsage,
+  InitialView,
+  Layer,
+  PdfCollection,
+} from '../PdfEngine';
 
 /**
  * The parts of one annotation dictionary PDFium's API cannot give back: `/C`, `/IC` (0xRRGGBB)
@@ -73,6 +83,23 @@ export interface RawInfo {
   }>;
   /** The catalogue's `/Collection`: the file is a PDF Portfolio (ADR 0011). */
   readonly collection: PdfCollection | null;
+  /**
+   * Fonts named by the page resources, deduplicated by font object and in first-use order
+   * (M72, ADR 0017). PDFium reports the font of a *drawn glyph*; these are the dictionaries.
+   */
+  readonly fonts: ReadonlyArray<FontUsage>;
+  /** How the file asks to be opened (M72, ADR 0017). */
+  readonly initialView: InitialView;
+  /**
+   * The information-dictionary and catalogue entries `FPDF_GetMetaText` cannot reach
+   * (M72, ADR 0017): custom Info keys, `/Trapped`, `/Lang` and `/URI /Base`.
+   */
+  readonly documentInfo: {
+    readonly custom?: Readonly<Record<string, string>>;
+    readonly trapped?: 'True' | 'False' | 'Unknown';
+    readonly lang?: string;
+    readonly baseUrl?: string;
+  };
 }
 
 /** Converts a PDF colour array (gray / RGB / CMYK components 0..1) to 0xRRGGBB. */
@@ -123,6 +150,9 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
     annotationColors: () => [],
     embeddedFiles: [],
     collection: null,
+    fonts: [],
+    initialView: DEFAULT_INITIAL_VIEW,
+    documentInfo: {},
   };
   let doc: PDFDocument;
   try {
@@ -181,18 +211,24 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
     if (ocgsArr) for (const item of ocgsArr.asArray()) if (item instanceof PDFRef) add(item, 0);
   }
 
-  // ---- XMP -----------------------------------------------------------------------------------
-  let xmp = scanXmp(bytes);
-  if (xmp === undefined) {
-    try {
-      const meta = catalog.lookup(PDFName.of('Metadata'));
-      if (meta instanceof PDFRawStream) {
-        xmp = new TextDecoder('utf-8').decode(decodePDFRawStream(meta).decode());
-      }
-    } catch {
-      xmp = undefined;
+  /*
+   * ---- XMP ----
+   *
+   * The catalogue's `/Metadata` first, and the byte scan only as a fallback. Scanning is faster
+   * and PDF/A guarantees it finds something, but "something" is the wrong promise: a file that
+   * has been rewritten can carry an older packet as an unreferenced object, and a scan would
+   * report that one. What the document's metadata *is* is what the catalogue points at.
+   */
+  let xmp: string | undefined;
+  try {
+    const meta = catalog.lookup(PDFName.of('Metadata'));
+    if (meta instanceof PDFRawStream) {
+      xmp = new TextDecoder('utf-8').decode(decodePDFRawStream(meta).decode());
     }
+  } catch {
+    xmp = undefined;
   }
+  xmp ??= scanXmp(bytes);
 
   const colorCache = new Map<number, ReadonlyArray<AnnotColors>>();
   const annotationColors = (page: number): ReadonlyArray<AnnotColors> => {
@@ -355,6 +391,9 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
     annotationColors,
     embeddedFiles,
     collection: readCollection(ctx, catalog),
+    fonts: readFonts(doc),
+    initialView: readInitialView(doc),
+    documentInfo: readDocumentInfo(doc),
   };
 }
 
@@ -534,4 +573,358 @@ function isTrue(dict: PDFDict, key: string): boolean {
 /** Helper for `exactOptionalPropertyTypes`: include a key only when defined. */
 function optional<K extends string, V>(key: K, value: V | undefined): Partial<Record<K, V>> {
   return value === undefined ? {} : ({ [key]: value } as Record<K, V>);
+}
+
+// ---- fonts (M72, ADR 0017) -------------------------------------------------------------------
+
+/** `/Subtype` values that name a font; anything else is reported as `Unknown`. */
+const FONT_TYPES = new Set<FontUsage['type']>([
+  'Type1',
+  'MMType1',
+  'TrueType',
+  'Type3',
+  'Type0',
+  'CIDFontType0',
+  'CIDFontType2',
+]);
+
+/** ISO 32000-1 §9.6.4: a subset's `/BaseFont` is six uppercase letters, a plus, then the name. */
+const SUBSET_PREFIX = /^[A-Z]{6}\+/;
+
+/**
+ * Every font the page resources name, in the order the pages name them (M72, ADR 0017).
+ *
+ * Resources nest: a page's `/XObject` form has its own `/Resources`, and so does a Type3 font's
+ * glyph procedure, so the walk follows both to a depth limit. A font *object* seen twice — the
+ * same reference from two pages, or an inherited resource dictionary — is one row; two different
+ * objects with the same `/BaseFont` are two, because they are two fonts in the file whatever they
+ * are called.
+ */
+function readFonts(doc: PDFDocument): ReadonlyArray<FontUsage> {
+  const ctx = doc.context;
+  const out: FontUsage[] = [];
+  const seenFont = new Set<string>();
+  const seenResources = new Set<string>();
+
+  const walk = (resources: PDFDict | undefined, page: number, depth: number): void => {
+    if (!resources || depth > 8) return;
+    const fonts = resources.lookupMaybe(PDFName.of('Font'), PDFDict);
+    if (fonts) {
+      for (const [, value] of fonts.entries()) {
+        const dict = ctx.lookupMaybe(value, PDFDict);
+        if (!dict) continue;
+        const key =
+          value instanceof PDFRef ? value.toString() : `inline:${String(page)}:${dict.toString()}`;
+        if (seenFont.has(key)) continue;
+        seenFont.add(key);
+        out.push(describeFont(ctx, dict, page));
+        // A Type3 font draws its glyphs with content streams of its own, which may name fonts.
+        walk(dict.lookupMaybe(PDFName.of('Resources'), PDFDict), page, depth + 1);
+      }
+    }
+    const xobjects = resources.lookupMaybe(PDFName.of('XObject'), PDFDict);
+    if (!xobjects) return;
+    for (const [, value] of xobjects.entries()) {
+      const stream = ctx.lookup(value);
+      const dict = stream instanceof PDFRawStream ? stream.dict : undefined;
+      if (!dict) continue;
+      const key = value instanceof PDFRef ? value.toString() : dict.toString();
+      if (seenResources.has(key)) continue;
+      seenResources.add(key);
+      walk(dict.lookupMaybe(PDFName.of('Resources'), PDFDict), page, depth + 1);
+    }
+  };
+
+  try {
+    doc.getPages().forEach((page, index) => {
+      walk(page.node.Resources(), index, 0);
+    });
+  } catch {
+    // A malformed page tree gives whatever was read before it broke, which beats reporting none.
+  }
+  return out;
+}
+
+function describeFont(ctx: PDFDocument['context'], dict: PDFDict, page: number): FontUsage {
+  const subtype = dict.lookupMaybe(PDFName.of('Subtype'), PDFName)?.decodeText() ?? '';
+  const type = FONT_TYPES.has(subtype as FontUsage['type'])
+    ? (subtype as FontUsage['type'])
+    : 'Unknown';
+  // `/BaseFont` names every font but a Type 3, which carries `/Name` instead — as a name in
+  // some files and as a string in others, so both forms are read.
+  const named = dict.lookup(PDFName.of('Name'));
+  const name =
+    dict.lookupMaybe(PDFName.of('BaseFont'), PDFName)?.decodeText() ??
+    nameOf(named) ??
+    textOf(named) ??
+    'Unnamed';
+
+  // A Type0 font's embedding and descriptor live on its descendant, not on itself.
+  let descriptorOwner: PDFDict | undefined = dict;
+  let descendantType: 'CIDFontType0' | 'CIDFontType2' | undefined;
+  if (type === 'Type0') {
+    const descendants = dict.lookupMaybe(PDFName.of('DescendantFonts'), PDFArray);
+    const first = descendants ? ctx.lookupMaybe(descendants.get(0), PDFDict) : undefined;
+    if (first) {
+      descriptorOwner = first;
+      const sub = first.lookupMaybe(PDFName.of('Subtype'), PDFName)?.decodeText();
+      if (sub === 'CIDFontType0' || sub === 'CIDFontType2') descendantType = sub;
+    }
+  }
+  const descriptor = descriptorOwner?.lookupMaybe(PDFName.of('FontDescriptor'), PDFDict);
+  const embedded =
+    descriptor !== undefined &&
+    ['FontFile', 'FontFile2', 'FontFile3'].some((k) => descriptor.get(PDFName.of(k)) !== undefined);
+
+  let encoding: string | undefined;
+  const enc = ctx.lookup(dict.get(PDFName.of('Encoding')));
+  if (enc instanceof PDFName) encoding = enc.decodeText();
+  else if (enc instanceof PDFRawStream) encoding = 'Embedded CMap';
+  else if (enc instanceof PDFDict) {
+    encoding = enc.lookupMaybe(PDFName.of('BaseEncoding'), PDFName)?.decodeText() ?? 'Custom';
+  }
+
+  return {
+    name,
+    type,
+    ...optional('descendantType', descendantType),
+    // A Type3 font has no descriptor and no font file: its glyphs *are* the content streams it
+    // carries, so it is embedded by construction.
+    embedded: embedded || type === 'Type3',
+    subset: SUBSET_PREFIX.test(name),
+    ...optional('encoding', encoding),
+    toUnicode: dict.get(PDFName.of('ToUnicode')) !== undefined,
+    firstPage: page,
+  };
+}
+
+// ---- initial view and the rest of the information dictionary (M72, ADR 0017) -----------------
+
+const PAGE_MODES: Readonly<Record<string, InitialView['pageMode']>> = {
+  UseNone: 'none',
+  UseOutlines: 'outlines',
+  UseThumbs: 'thumbnails',
+  FullScreen: 'fullscreen',
+  UseAttachments: 'attachments',
+  UseOC: 'ocg',
+};
+
+const PAGE_LAYOUTS: Readonly<Record<string, InitialView['pageLayout']>> = {
+  SinglePage: 'single',
+  OneColumn: 'one-column',
+  TwoColumnLeft: 'two-column-left',
+  TwoColumnRight: 'two-column-right',
+  TwoPageLeft: 'two-page-left',
+  TwoPageRight: 'two-page-right',
+};
+
+/** `/PageMode`, `/PageLayout`, `/OpenAction` and `/ViewerPreferences`. Never throws. */
+function readInitialView(doc: PDFDocument): InitialView {
+  try {
+    const catalog = doc.catalog;
+    const prefs = catalog.lookupMaybe(PDFName.of('ViewerPreferences'), PDFDict);
+    const flag = (key: string): boolean => (prefs ? isTrue(prefs, key) : false);
+    const scaling = prefs?.lookupMaybe(PDFName.of('PrintScaling'), PDFName)?.decodeText();
+    const direction = prefs?.lookupMaybe(PDFName.of('Direction'), PDFName)?.decodeText();
+    return {
+      pageMode:
+        PAGE_MODES[catalog.lookupMaybe(PDFName.of('PageMode'), PDFName)?.decodeText() ?? ''] ??
+        'none',
+      pageLayout:
+        PAGE_LAYOUTS[catalog.lookupMaybe(PDFName.of('PageLayout'), PDFName)?.decodeText() ?? ''] ??
+        'default',
+      ...optional('openAction', readOpenAction(doc)),
+      hideToolbar: flag('HideToolbar'),
+      hideMenubar: flag('HideMenubar'),
+      hideWindowUi: flag('HideWindowUI'),
+      fitWindow: flag('FitWindow'),
+      centreWindow: flag('CenterWindow'),
+      displayDocTitle: flag('DisplayDocTitle'),
+      printScaling: scaling === 'None' ? 'none' : 'app-default',
+      direction: direction === 'R2L' ? 'r2l' : 'l2r',
+    };
+  } catch {
+    return DEFAULT_INITIAL_VIEW;
+  }
+}
+
+/**
+ * `/OpenAction` as a destination.
+ *
+ * It may be the destination array itself, a `/GoTo` action holding one, or a name that has to be
+ * looked up in `/Dests`. Anything else — a JavaScript action, a `/Named` action — is not a place
+ * in the document, so there is nothing to report and the entry is left out.
+ */
+function readOpenAction(doc: PDFDocument): Destination | undefined {
+  const ctx = doc.context;
+  const value = ctx.lookup(doc.catalog.get(PDFName.of('OpenAction')));
+  let dest: unknown = value;
+  if (value instanceof PDFDict) {
+    const action = value.lookupMaybe(PDFName.of('S'), PDFName)?.decodeText();
+    if (action !== 'GoTo') return undefined;
+    dest = ctx.lookup(value.get(PDFName.of('D')));
+  }
+  if (dest instanceof PDFString || dest instanceof PDFHexString || dest instanceof PDFName) {
+    dest = lookupNamedDestination(doc, textOf(dest) ?? nameOf(dest) ?? '');
+  }
+  return dest instanceof PDFArray ? destinationFromArray(doc, dest) : undefined;
+}
+
+/** Finds a named destination in `/Names /Dests` or the older `/Dests` dictionary. */
+function lookupNamedDestination(doc: PDFDocument, name: string): PDFArray | undefined {
+  if (!name) return undefined;
+  const ctx = doc.context;
+  const asArray = (value: PDFObject | undefined): PDFArray | undefined => {
+    const resolved: unknown = ctx.lookup(value);
+    // A destination may be wrapped in `<< /D [...] >>`.
+    if (resolved instanceof PDFDict) {
+      const inner: unknown = ctx.lookup(resolved.get(PDFName.of('D')));
+      return inner instanceof PDFArray ? inner : undefined;
+    }
+    return resolved instanceof PDFArray ? resolved : undefined;
+  };
+  const legacy = doc.catalog.lookupMaybe(PDFName.of('Dests'), PDFDict);
+  if (legacy) {
+    const hit = legacy.get(PDFName.of(name));
+    if (hit !== undefined) return asArray(hit);
+  }
+  const root = doc.catalog
+    .lookupMaybe(PDFName.of('Names'), PDFDict)
+    ?.lookupMaybe(PDFName.of('Dests'), PDFDict);
+  const walk = (node: PDFDict | undefined, depth: number): PDFArray | undefined => {
+    if (!node || depth > 32) return undefined;
+    const names = node.lookupMaybe(PDFName.of('Names'), PDFArray)?.asArray() ?? [];
+    for (let i = 1; i < names.length; i += 2) {
+      if (textOf(names[i - 1]) === name) return asArray(names[i]);
+    }
+    const kids = node.lookupMaybe(PDFName.of('Kids'), PDFArray);
+    if (!kids) return undefined;
+    for (const kid of kids.asArray()) {
+      const hit = walk(ctx.lookupMaybe(kid, PDFDict), depth + 1);
+      if (hit) return hit;
+    }
+    return undefined;
+  };
+  return walk(root, 0);
+}
+
+/** `[page /XYZ left top zoom]` to a {@link Destination}. A null entry means "leave as it was". */
+function destinationFromArray(doc: PDFDocument, array: PDFArray): Destination | undefined {
+  const items = array.asArray();
+  const target = items[0];
+  let page = -1;
+  if (target instanceof PDFNumber) page = target.asNumber();
+  else if (target instanceof PDFRef) {
+    page = doc.getPages().findIndex((p) => p.ref.toString() === target.toString());
+  }
+  if (page < 0) return undefined;
+  const fit = nameOf(items[1]) ?? 'XYZ';
+  const n = (index: number): number | undefined => {
+    const value = items[index];
+    return value instanceof PDFNumber ? value.asNumber() : undefined;
+  };
+  switch (fit) {
+    case 'Fit':
+      return { page, fit: 'fit' };
+    case 'FitB':
+      return { page, fit: 'fitB' };
+    case 'FitH':
+      return { page, fit: 'fitH', ...optional('top', n(2)) };
+    case 'FitBH':
+      return { page, fit: 'fitBH', ...optional('top', n(2)) };
+    case 'FitV':
+      return { page, fit: 'fitV', ...optional('left', n(2)) };
+    case 'FitBV':
+      return { page, fit: 'fitBV', ...optional('left', n(2)) };
+    case 'FitR': {
+      const [x0, y0, x1, y1] = [n(2), n(3), n(4), n(5)];
+      if (x0 === undefined || y0 === undefined || x1 === undefined || y1 === undefined) {
+        return { page, fit: 'fitR' };
+      }
+      return {
+        page,
+        fit: 'fitR',
+        rect: {
+          x0: Math.min(x0, x1),
+          y0: Math.min(y0, y1),
+          x1: Math.max(x0, x1),
+          y1: Math.max(y0, y1),
+        },
+      };
+    }
+    default: {
+      const zoom = n(4);
+      return {
+        page,
+        fit: 'xyz',
+        ...optional('left', n(2)),
+        ...optional('top', n(3)),
+        // A zoom of 0 is the PDF way of saying "keep the current one", same as null.
+        ...optional('zoom', zoom === 0 ? undefined : zoom),
+      };
+    }
+  }
+}
+
+/** Information-dictionary keys read elsewhere; everything else is a custom property. */
+const STANDARD_INFO_KEYS = new Set([
+  'Title',
+  'Author',
+  'Subject',
+  'Keywords',
+  'Creator',
+  'Producer',
+  'CreationDate',
+  'ModDate',
+  'Trapped',
+]);
+
+/** Custom Info entries, `/Trapped`, `/Lang` and the base URL (M72, ADR 0017). Never throws. */
+function readDocumentInfo(doc: PDFDocument): RawInfo['documentInfo'] {
+  const ctx = doc.context;
+  const custom: Record<string, string> = {};
+  let trapped: 'True' | 'False' | 'Unknown' | undefined;
+  try {
+    const info = ctx.lookupMaybe(ctx.trailerInfo.Info, PDFDict);
+    if (info) {
+      for (const [key, value] of info.entries()) {
+        const name = key.decodeText();
+        const resolved = ctx.lookup(value);
+        if (name === 'Trapped') {
+          const word = nameOf(resolved) ?? textOf(resolved);
+          if (word === 'True' || word === 'False' || word === 'Unknown') trapped = word;
+          continue;
+        }
+        if (STANDARD_INFO_KEYS.has(name)) continue;
+        const text =
+          textOf(resolved) ??
+          (resolved instanceof PDFNumber
+            ? String(resolved.asNumber())
+            : resolved instanceof PDFName
+              ? resolved.decodeText()
+              : undefined);
+        if (text !== undefined) custom[name] = text;
+      }
+    }
+  } catch {
+    // A damaged Info dictionary reports nothing rather than failing the whole read.
+  }
+  let lang: string | undefined;
+  let baseUrl: string | undefined;
+  try {
+    lang = textOf(doc.catalog.lookup(PDFName.of('Lang')));
+    const uri = doc.catalog.lookupMaybe(PDFName.of('URI'), PDFDict);
+    baseUrl = uri ? textOf(uri.lookup(PDFName.of('Base'))) : undefined;
+  } catch {
+    lang = undefined;
+  }
+  return {
+    ...optional(
+      'custom',
+      Object.keys(custom).length > 0 ? (custom as Readonly<Record<string, string>>) : undefined,
+    ),
+    ...optional('trapped', trapped),
+    ...optional('lang', lang),
+    ...optional('baseUrl', baseUrl),
+  };
 }

@@ -18,6 +18,7 @@
 
 import {
   PDFArray,
+  PDFBool,
   PDFDict,
   PDFDocument,
   PDFHexString,
@@ -43,6 +44,7 @@ import {
   type PlannedLayer,
   type PlannedOutlineItem,
   type PlannedPage,
+  type PlannedView,
   type PlannedXObject,
   type WritePhase,
   type WritePlan,
@@ -143,6 +145,15 @@ export class FullRewriteWriter implements Writer {
 
     // Destinations are written before the outline so bookmarks can share the same page refs.
     const pageRefAt = (index: number): PDFRef | undefined => finalPages.refs[index];
+
+    // ---- initial view (M72, ADR 0017) ---------------------------------------------------------
+    if (plan.view) {
+      state.phase('view', 0);
+      writeView(doc, plan.view, pageRefAt);
+      state.applied('view');
+      state.phase('view', 1);
+      await state.checkpoint();
+    }
 
     // ---- outline ------------------------------------------------------------------------------
     if (plan.outline) {
@@ -756,6 +767,14 @@ const INFO_KEYS = {
   producer: 'Producer',
 } as const;
 
+/** Keys the standard section writes; a custom property may not overwrite one (M72, ADR 0017). */
+const STANDARD_INFO_KEYS: ReadonlySet<string> = new Set([
+  ...Object.values(INFO_KEYS),
+  'CreationDate',
+  'ModDate',
+  'Trapped',
+]);
+
 function writeMetadata(
   doc: PDFDocument,
   metadata: NonNullable<WritePlan['metadata']>,
@@ -790,14 +809,172 @@ function writeMetadata(
     info.set(PDFName.of('Producer'), PDFHexString.fromText(producer));
   }
 
+  // Custom entries (M72, ADR 0017): the plan carries the complete set, so a key that is not in
+  // it has been deleted — but only if its value is text the reader could have seen. An entry
+  // holding an array or a dictionary was never shown and so cannot have been asked for.
+  if (metadata.custom) {
+    for (const [key, value] of info.entries()) {
+      const name = key.decodeText();
+      if (STANDARD_INFO_KEYS.has(name) || name in metadata.custom) continue;
+      const current = ctx.lookup(value);
+      const readable =
+        current instanceof PDFString ||
+        current instanceof PDFHexString ||
+        current instanceof PDFName ||
+        current instanceof PDFNumber;
+      if (readable) info.delete(key);
+    }
+    for (const [key, value] of Object.entries(metadata.custom)) {
+      if (STANDARD_INFO_KEYS.has(key)) continue;
+      const name = PDFName.of(key);
+      if (value === null) info.delete(name);
+      else info.set(name, PDFHexString.fromText(value));
+    }
+  }
+  if (metadata.trapped !== undefined) {
+    const name = PDFName.of('Trapped');
+    // `/Trapped` is a name, not a string: `/True`, `/False` or `/Unknown` (ISO 32000-1 14.11.6).
+    if (metadata.trapped === null) info.delete(name);
+    else info.set(name, PDFName.of(metadata.trapped));
+  }
+
   if (metadata.xmp !== undefined) {
     const key = PDFName.of('Metadata');
+    const existing = doc.catalog.get(key);
     if (metadata.xmp === null) {
       doc.catalog.delete(key);
+      // The stream itself goes too. A packet left behind as an unreferenced object is still
+      // findable by anything that scans the bytes for `<?xpacket` — which is how XMP is meant to
+      // be findable — so a title the reader deleted would come back the moment anyone looked.
+      if (existing instanceof PDFRef) ctx.delete(existing);
     } else {
       // XMP must be readable without decoding the file, so it is never compressed.
       const stream = ctx.stream(metadata.xmp, { Type: 'Metadata', Subtype: 'XML' });
-      doc.catalog.set(key, ctx.register(stream));
+      // Written over the object the file already used, for the same reason: two packets in one
+      // file is one packet too many, whichever of them a reader happens to find first.
+      if (existing instanceof PDFRef) ctx.assign(existing, stream);
+      else doc.catalog.set(key, ctx.register(stream));
+    }
+  }
+}
+
+// ---- initial view (M72, ADR 0017) --------------------------------------------------------------
+
+const PAGE_MODE_NAMES: Readonly<Record<NonNullable<PlannedView['pageMode']>, string>> = {
+  none: 'UseNone',
+  outlines: 'UseOutlines',
+  thumbnails: 'UseThumbs',
+  fullscreen: 'FullScreen',
+  attachments: 'UseAttachments',
+  ocg: 'UseOC',
+};
+
+const PAGE_LAYOUT_NAMES: Readonly<Record<NonNullable<PlannedView['pageLayout']>, string | null>> = {
+  // "default" is the absence of the entry, not a value: a viewer then uses the reader's own
+  // preference, which is what a document that does not care should let it do.
+  default: null,
+  single: 'SinglePage',
+  'one-column': 'OneColumn',
+  'two-column-left': 'TwoColumnLeft',
+  'two-column-right': 'TwoColumnRight',
+  'two-page-left': 'TwoPageLeft',
+  'two-page-right': 'TwoPageRight',
+};
+
+/** The `/ViewerPreferences` booleans, by their key in the plan. */
+const VIEWER_FLAGS = {
+  hideToolbar: 'HideToolbar',
+  hideMenubar: 'HideMenubar',
+  hideWindowUi: 'HideWindowUI',
+  fitWindow: 'FitWindow',
+  centreWindow: 'CenterWindow',
+  displayDocTitle: 'DisplayDocTitle',
+} as const;
+
+/**
+ * `/PageMode`, `/PageLayout`, `/OpenAction`, `/ViewerPreferences`, `/Lang` and `/URI /Base`
+ * (M72, ADR 0017).
+ *
+ * A false flag is *removed* rather than written as `false`, because those two mean the same
+ * thing to a reader and the shorter one leaves a file that never had a `/ViewerPreferences`
+ * dictionary without one.
+ */
+function writeView(doc: PDFDocument, view: PlannedView, pageRefAt: PageRefAt): void {
+  const ctx = doc.context;
+  const catalog = doc.catalog;
+
+  if (view.pageMode !== undefined) {
+    catalog.set(PDFName.of('PageMode'), PDFName.of(PAGE_MODE_NAMES[view.pageMode]));
+  }
+  if (view.pageLayout !== undefined) {
+    const name = PAGE_LAYOUT_NAMES[view.pageLayout];
+    if (name === null) catalog.delete(PDFName.of('PageLayout'));
+    else catalog.set(PDFName.of('PageLayout'), PDFName.of(name));
+  }
+
+  if (view.openAction !== undefined) {
+    const key = PDFName.of('OpenAction');
+    const array = view.openAction ? destinationArray(ctx, view.openAction, pageRefAt) : null;
+    // A destination whose page is not in the finished document would open the file at nothing;
+    // removing the entry is the honest outcome, and every viewer then opens at page one.
+    if (!array) catalog.delete(key);
+    else {
+      // Written as a GoTo action rather than a bare array: both are legal, and the action form
+      // is what a `/Names /JavaScript` or an additional action can sit beside later.
+      const action = ctx.obj({});
+      action.set(PDFName.of('S'), PDFName.of('GoTo'));
+      action.set(PDFName.of('D'), array);
+      catalog.set(key, ctx.register(action));
+    }
+  }
+
+  const wantsPrefs =
+    Object.keys(VIEWER_FLAGS).some((k) => view[k as keyof PlannedView] !== undefined) ||
+    view.printScaling !== undefined ||
+    view.direction !== undefined;
+  if (wantsPrefs) {
+    let prefs = catalog.lookupMaybe(PDFName.of('ViewerPreferences'), PDFDict);
+    if (!prefs) {
+      prefs = ctx.obj({});
+      catalog.set(PDFName.of('ViewerPreferences'), ctx.register(prefs));
+    }
+    for (const [key, name] of Object.entries(VIEWER_FLAGS)) {
+      const value = view[key as keyof typeof VIEWER_FLAGS];
+      if (value === undefined) continue;
+      if (value) prefs.set(PDFName.of(name), PDFBool.True);
+      else prefs.delete(PDFName.of(name));
+    }
+    if (view.printScaling !== undefined) {
+      const key = PDFName.of('PrintScaling');
+      if (view.printScaling === 'none') prefs.set(key, PDFName.of('None'));
+      else prefs.delete(key);
+    }
+    if (view.direction !== undefined) {
+      const key = PDFName.of('Direction');
+      if (view.direction === 'r2l') prefs.set(key, PDFName.of('R2L'));
+      else prefs.delete(key);
+    }
+  }
+
+  if (view.lang !== undefined) {
+    const key = PDFName.of('Lang');
+    if (view.lang === null || view.lang === '') catalog.delete(key);
+    else catalog.set(key, PDFHexString.fromText(view.lang));
+  }
+  if (view.baseUrl !== undefined) {
+    const key = PDFName.of('URI');
+    if (view.baseUrl === null || view.baseUrl === '') {
+      const uri = catalog.lookupMaybe(key, PDFDict);
+      uri?.delete(PDFName.of('Base'));
+      // `/URI` exists only to hold `/Base`; an empty dictionary is noise.
+      if (uri?.entries().length === 0) catalog.delete(key);
+    } else {
+      let uri = catalog.lookupMaybe(key, PDFDict);
+      if (!uri) {
+        uri = ctx.obj({});
+        catalog.set(key, ctx.register(uri));
+      }
+      uri.set(PDFName.of('Base'), PDFString.of(view.baseUrl));
     }
   }
 }

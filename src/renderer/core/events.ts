@@ -61,6 +61,8 @@ export type DocumentEvent =
   | { readonly type: 'attachments:changed' }
   | { readonly type: 'layer:changed'; readonly layerId: ModelId }
   | { readonly type: 'metadata:changed' }
+  /** The initial view or a document-level property changed (M72, ADR 0017). */
+  | { readonly type: 'view:changed' }
   | { readonly type: 'custom:changed'; readonly namespace: string }
   | { readonly type: 'writeIntent:added'; readonly intent: WriteIntent }
   | { readonly type: 'document:revision'; readonly revision: number };

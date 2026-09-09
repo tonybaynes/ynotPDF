@@ -239,7 +239,74 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **The Info dictionary and XMP are one edit, never two.** Foxit, Acrobat and the XMP
+  specification all treat them as two views of the same facts, and a file where they disagree is
+  a file whose title depends on which reader opened it. So one command
+  (`SetPropertiesCommand`) writes the model's metadata *and* re-derives the XMP packet from it,
+  and the dialog has no way to set one without the other. The raw-XMP view on the Advanced tab is
+  read-only for the same reason — a free-text XMP editor is the Parked half of this brief.
+- **XMP is patched, never regenerated.** `src/engine/xmp/` parses the existing packet with
+  fast-xml-parser (MIT) in `preserveOrder` mode, replaces only the properties we own, and writes
+  the rest back byte-for-byte in its original order — so a PDF/A `pdfaid:part`, an
+  `xmpMM:DocumentID`, an Illustrator packet or a rights-management block survives a title change.
+  A file with no packet gets a minimal one containing only what we know.
+- **Custom properties live in `pdfx:`** (`http://ns.adobe.com/pdfx/1.3/`), which is where the XMP
+  specification puts Info-dictionary keys that have no standard XMP property, and where Acrobat,
+  Foxit and Ghostscript-produced files all look for them. Inventing a `ynot:` namespace would
+  make our custom properties invisible to every other tool. Provenance: XMP Specification Part 2
+  and ISO 32000-1 §14.3.3; nothing was taken from a Foxit product.
+- **The engine gains two reads and nothing else.** `fonts()` and `initialView()`, both additive,
+  both implemented in the pdf-lib raw-document reader M10 already uses for layers and XMP —
+  PDFium exposes neither. `Metadata` gains four optional fields (`custom`, `trapped`, `lang`,
+  `baseUrl`). ADR 0017.
+- **Fonts are read from the font dictionaries, not from PDFium.** A font's name, type, embedding
+  and encoding are all in `/Font` resource dictionaries, and reading them is exact; PDFium's text
+  API can only tell us about fonts that actually drew a glyph. Subsetting is the six-uppercase
+  prefix ISO 32000-1 §9.6.4 defines, not a guess. Resources are walked page by page including
+  nested form XObjects, and the same font object seen twice is one row.
+- **Initial view is model state, not a module's private bag.** M20 already declared
+  `ViewSettings` ("How the file asks to be opened") and left it at defaults because nothing read
+  it. M72 fills it: the engine reads `/PageMode`, `/PageLayout`, `/OpenAction` and
+  `/ViewerPreferences` on open, `Document` carries them, `SetInitialViewCommand` changes them,
+  and M21's writer writes them back. That is one home for the setting rather than one per module.
+- **M72 applies the initial view itself, from the model.** The brief says M11 applies it on open;
+  doing that inside M11 would mean editing another module's folder, so M72 subscribes to
+  `Documents.onAttached` — the signal M21 already uses — and applies the layout, the magnification
+  and the opening page through M11's `ViewerService` when the viewer for a tab appears. A setting
+  (`properties.applyInitialView`, on) turns it off for a reader who would rather keep their own
+  view.
+- **The one thing it does not apply is `/PageMode`, and that is the operator's own rule.** M12
+  records it three times: the left pane opens on whatever `ui.leftPaneOnOpen` says, and
+  "bookmarks-on-open never overrides it, even for documents whose `/PageMode` is `/UseOutlines`".
+  This brief's acceptance test asks for the opposite ("Bookmarks panel" applied on open), and
+  where two briefs disagree the operator's stated requirement wins. So the page mode is read,
+  shown in the dialog, written back to the file exactly as set, and reported in words — "the
+  document asks to open with the bookmarks panel; which panel opens is your own setting" — and
+  the pane is left alone. The acceptance test checks the other two thirds (fit page, page 3) and
+  that the panel request survived the save.
+- **The window options are honoured as far as an app with tabs honestly can.** Hide toolbar, hide
+  menu bar and hide window UI are stored, shown and written back exactly as the file asks, and
+  applied to the ribbon and the panes; "fit window", "centre window" and "display document title"
+  are stored and written but not obeyed, because a tabbed multi-document window cannot resize
+  itself around one of its documents without throwing the others' layout away. The dialog says so
+  in words rather than pretending.
+- **Security and signatures are shown, not edited.** The Security tab mounts M70's own
+  `securityPropertiesPanel` — the element that module already exports for exactly this — with a
+  button that runs `protect.security`; the signature list is read from the model with a button
+  that opens the Signatures panel. When M70 is not in the build the tab says what the file itself
+  reports and nothing more.
+- **The plan gains one section, and it is sparse like the rest.** `WritePlan.view` carries page
+  mode, layout, open action, viewer preferences, `/Lang` and the base URL, and is non-null only
+  when the document carries the new `view` write intent; `PlannedMetadata` gains `custom` and
+  `trapped`. A document nobody has retitled still plans nothing at all. ADR 0017.
+- **Dates are shown in the reader's locale and stored in UTC.** Created and modified are
+  `Intl.DateTimeFormat` in en-GB by default (PLAN §9); what goes into `/CreationDate` and
+  `xmp:CreateDate` is ISO 8601. Modified is set by the save, not by the dialog, so a reader who
+  opens Properties and presses Cancel changes nothing.
+- **Nothing in the dialog is colour-coded.** Every status is a word: "Embedded", "Embedded
+  subset", "Not embedded"; "Yes"/"No" for tagged and fast web view; "Protected"/"Not protected".
+  The tab strip is a real ARIA tablist with arrow-key movement, the tab panels are reachable by
+  Tab, and the whole dialog is opaque like every other.
 
 ## Build log (fill in at merge)
 
