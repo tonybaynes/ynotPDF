@@ -39,3 +39,6 @@ tests may open them only behind `existsSync` skips. Never commit or quote their 
 **Foxit is the feature reference, nothing more.** Never copy Foxit's icons, artwork, wording,
 help text or documentation — icons are Lucide or our own. Generic conventions shared across Adobe/Foxit/Tungsten
 (magnifier, hand, highlighter, stamp, padlock) are fine to use; Foxit's specific artwork is not; help is written from scratch. The logo in `resources/brand/` is provisional.
+Never open, read, extract or decompile files from an installed Foxit/Adobe/Tungsten product —
+learn their behaviour as a user only. Design decisions in each brief record where behaviour
+came from (public docs, ISO 32000, our own choice): that is the provenance record.

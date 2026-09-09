@@ -305,4 +305,7 @@ THINGS ONLY TONY CAN DO
 [✔] Approve the four theme palettes (M01 gallery page)   - approved 2026-09-07
 [✔] Provide real PDFs for hands-on testing - 3 boarding passes in testixtures\local\ (git-ignored, 2026-09-08); add more there any time
 [ ] Windows code-signing certificate + Apple Developer account (M131)
+[ ] Before launch: trademark search + registration for "ynotPDF" and the logo
+[ ] Before launch: own EULA + privacy policy from a lawyer (M131 first-run shows them)
+[ ] Before launch: marketing copy - no competitor logos, only verifiable comparisons
 [ ] Decide: is LibreOffice acceptable for Office conversion? (M93)

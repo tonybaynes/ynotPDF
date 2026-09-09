@@ -127,7 +127,14 @@ others (magnifier = zoom, hand = pan, highlighter, stamp, padlock, pen for
 sign) are generic — use them freely; what must not be copied is Foxit's
 *specific artwork*: its exact shapes, colours, pixel layouts. Icons come
 from Lucide or are drawn by us — similar in idea or better, never traced
-or pixel-copied. Help and
+or pixel-copied. **Never open, read, extract or decompile anything from an
+installed Foxit, Adobe or Tungsten product** (e.g. `C:\Program Files\Foxit
+Software\…`) — not icons, strings, templates, fonts, help, stamps or
+JavaScript; their EULAs forbid it and it would leave a copying trail. Learn
+their behaviour only as a user would, from the running app and public
+documentation. Record in your Design decisions where a feature's
+behaviour came from (public docs, the PDF spec ISO 32000, our own choice)
+— this file is the provenance record. Help and
 documentation are written from scratch for ynotPDF. *(Operator rule,
 2026-09-09.)* Four colour themes
 and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;
