@@ -465,7 +465,8 @@ D:\Projects\ynotPDF\
 ### Foxit is the feature reference only
 
 Never copy Foxit's icons, artwork, wording, help text or documentation. Icons: Lucide or our
-own (similar or better, never exact). Help: written from scratch (M131). Logo: provisional.
+own; generic conventions shared across Adobe/Foxit/Tungsten (magnifier, hand, highlighter,
+stamp, padlock) are fine, Foxit's specific artwork is not. Help: written from scratch (M131). Logo: provisional.
 
 ### Licensing — the app is sold commercially
 

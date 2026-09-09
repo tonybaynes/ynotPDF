@@ -130,8 +130,12 @@ forge (BSD), pkcs11js (MIT, later).
 **ynotPDF** is a cross-platform (Windows / macOS / Linux) desktop PDF editor
 targeting the feature set of **Foxit PDF Editor 14** — *feature set only*:
 **never copy Foxit's icons, artwork, wording, help text or documentation.**
-Icons come from Lucide or are drawn by us; they may be similar in idea (a
-magnifier for zoom) or better, never traced or pixel-copied. Help and
+Industry-standard icon conventions shared by Adobe, Foxit, Tungsten and
+others (magnifier = zoom, hand = pan, highlighter, stamp, padlock, pen for
+sign) are generic — use them freely; what must not be copied is Foxit's
+*specific artwork*: its exact shapes, colours, pixel layouts. Icons come
+from Lucide or are drawn by us — similar in idea or better, never traced
+or pixel-copied. Help and
 documentation are written from scratch for ynotPDF. *(Operator rule,
 2026-09-09.)* Four colour themes
 and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;

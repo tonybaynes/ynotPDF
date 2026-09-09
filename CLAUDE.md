@@ -37,5 +37,5 @@ tests may open them only behind `existsSync` skips. Never commit or quote their 
 — all defined by M00. Replies to the operator: short, plain — eyesight.
 
 **Foxit is the feature reference, nothing more.** Never copy Foxit's icons, artwork, wording,
-help text or documentation — icons are Lucide or our own (similar in idea is fine, exact copies
-are not); help is written from scratch. The logo in `resources/brand/` is provisional.
+help text or documentation — icons are Lucide or our own. Generic conventions shared across Adobe/Foxit/Tungsten
+(magnifier, hand, highlighter, stamp, padlock) are fine to use; Foxit's specific artwork is not; help is written from scratch. The logo in `resources/brand/` is provisional.
