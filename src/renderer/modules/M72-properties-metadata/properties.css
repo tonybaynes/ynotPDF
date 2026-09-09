@@ -63,6 +63,12 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
+  align-items: stretch;
+}
+
+/* A button in a panel is as wide as its own words, not as wide as the dialog. */
+.properties-panel > .btn {
+  align-self: flex-start;
 }
 
 /* ---- headings and prose ----------------------------------------------------------------------- */
@@ -105,6 +111,12 @@
   margin: 0;
   color: var(--fg);
   overflow-wrap: anywhere;
+  /*
+   * The About dialog styles every `dialog dd` as monospace (M00). These are sentences — a file
+   * name, a date, a page size — not code, so they read in the interface font like everything
+   * else in this window.
+   */
+  font-family: var(--font-ui);
 }
 
 .properties-word {

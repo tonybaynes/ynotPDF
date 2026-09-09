@@ -50,11 +50,6 @@ export function embeddingIcon(font: FontUsage): string {
   return font.subset ? 'file-minus' : 'circle-check';
 }
 
-/** The name without its subset prefix, for a reader who wants to know what the font *is*. */
-export function baseName(font: FontUsage): string {
-  return font.subset ? font.name.slice(7) : font.name;
-}
-
 /**
  * What the Fonts tab says when a font is not embedded.
  *

@@ -15,12 +15,12 @@
  */
 
 import { field, formGrid, type Dialogs } from '@app/dialog/Dialogs';
-import { button, el, srOnly } from '@app/dom';
+import { button, el } from '@app/dom';
 import { icon } from '@app/icons';
 import { makeRoving } from '@app/focus';
 import type { FontUsage } from '@engine/PdfEngine';
 import type { ModelId } from '@core/Ids';
-import { baseName, embeddingIcon, embeddingLabel, embeddingNote, fontTypeLabel } from './fonts';
+import { embeddingIcon, embeddingLabel, embeddingNote, fontTypeLabel } from './fonts';
 import {
   customNameProblem,
   type CustomProperty,
@@ -518,9 +518,10 @@ function fontsTab(fonts: ReadonlyArray<FontUsage> | 'unavailable'): HTMLElement 
   );
   const body = el('tbody');
   for (const font of fonts) {
+    // The name exactly as the file writes it, subset prefix and all: two rows that both said
+    // "DejaVuSans" would be two rows a reader could not tell apart.
     const name = el('td');
-    name.append(el('span.properties-font-name', null, baseName(font)));
-    if (font.subset) name.append(srOnly(' (subset)'));
+    name.append(el('span.properties-font-name', null, font.name));
     body.append(
       el(
         'tr',
