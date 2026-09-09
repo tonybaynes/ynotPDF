@@ -124,8 +124,12 @@ Industry-standard icon conventions shared by Adobe, Foxit, Tungsten and
 others (magnifier = zoom, hand = pan, highlighter, stamp, padlock, pen for
 sign) are generic — use them freely; what must not be copied is Foxit's
 *specific artwork*: its exact shapes, colours, pixel layouts. Icons come
-from Lucide or are drawn by us — similar in idea or better, never traced
-or pixel-copied. **Never open, read, extract or decompile anything from an
+from **Lucide (ISC) first**; when it lacks one, **Tabler Icons (MIT)** or
+**Phosphor (MIT)** — same stroke style — then Fluent UI System Icons (MIT),
+Material Symbols / Remix Icon (Apache-2.0); otherwise draw our own in the
+Lucide stroke style. Not Font Awesome, Flaticon/Freepik, Noun Project or
+Icons8. Every set used is entered in `resources/credits.json`. Similar in
+idea or better, never traced or pixel-copied. **Never open, read, extract or decompile anything from an
 installed Foxit, Adobe or Tungsten product** (e.g. `C:\Program Files\Foxit
 Software\…`) — not icons, strings, templates, fonts, help, stamps or
 JavaScript; their EULAs forbid it and it would leave a copying trail. Learn
