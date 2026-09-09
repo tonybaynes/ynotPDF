@@ -67,7 +67,8 @@ interface PortfolioFolder {
 }
 
 interface Portfolio {
-  readonly view: 'details' | 'tile' | 'hidden';
+  readonly view: 'details' | 'tile' | 'hidden'; // a new one is 'tile', laid out as Foxit lays
+  // out its own: the writer adds `/Split` (list down the left) when a tile portfolio has none
   readonly schema: ReadonlyArray<PortfolioColumn>;
   readonly sort: { readonly key: string; readonly ascending: boolean } | null;
   readonly initialFile: string | null; // the file's name; on disk `/D` is its name-tree key
