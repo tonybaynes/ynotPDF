@@ -27,13 +27,18 @@ import type {
   PageObject,
   Permissions,
 } from '@engine/PdfEngine';
-import type { PageSize, PdfPoint, PdfRect, Rotation } from '@shared/pdf';
+import type { PageBoxName, PageSize, PdfPoint, PdfRect, Rotation } from '@shared/pdf';
 import type { ModelId } from './Ids';
 
 // ---- pages -------------------------------------------------------------------------------------
 
-/** The page boxes a document may define (PDF 14.11.2). CropBox and MediaBox always exist. */
-export type PageBoxName = 'media' | 'crop' | 'bleed' | 'trim' | 'art';
+/**
+ * The page boxes a document may define (PDF 14.11.2). CropBox and MediaBox always exist.
+ *
+ * Declared in `@shared/pdf` since M41 (ADR 0017), because the engine names the same five and
+ * must not import from `@core`. Re-exported here, where the model's own callers expect it.
+ */
+export type { PageBoxName } from '@shared/pdf';
 
 /**
  * One page as the model sees it. The *order* of `DocumentState.pages` is the document's page

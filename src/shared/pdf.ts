@@ -50,6 +50,16 @@ export type PdfColor =
       readonly k: number;
     };
 
+/** The page boxes a document may define (PDF 14.11.2). CropBox and MediaBox always exist. */
+export type PageBoxName = 'media' | 'crop' | 'bleed' | 'trim' | 'art';
+
+/**
+ * Every box a page defines, straight from the file: `null` where the page does not carry one
+ * (ADR 0017). Not the same question as `pageBox(page, name)` in the model, which applies the
+ * spec's fallbacks — this says what is actually there.
+ */
+export type PageBoxes = Readonly<Record<PageBoxName, PdfRect | null>>;
+
 /** Size and rotation of one page. `width`/`height` are the displayed (rotated) size in points. */
 export interface PageSize {
   readonly width: number;

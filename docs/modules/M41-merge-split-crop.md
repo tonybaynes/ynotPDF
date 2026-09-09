@@ -278,7 +278,96 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+**Where the work happens.** Combine, split, crop-for-batch, flatten and deskew are
+pure functions over bytes in `src/engine/ops/`, built on pdf-lib. Nothing in
+there knows about a `Document`, a tab or a dialog, so M120's batch runner and
+M121's CLI get the same code the dialogs use. The renderer talks to them
+through `OpsClient`, which runs them in this module's own Worker
+(`ops.worker.ts`) — the same shape M21 uses for the writer and M91 for the
+converters — and falls back to running them in-process when there is no
+`Worker` (unit tests in Node), so what the tests exercise is what ships.
+
+**Why pdf-lib and not PDFium for the ops.** ADR 0010 already settled that
+writing is pdf-lib's job. Combine has to graft one outline per source file,
+split has to weigh a document repeatedly, and flatten has to lift an
+appearance stream into a page's resources: all three are object-graph surgery
+that PDFium's public API does not offer. PDFium stays the engine for
+rendering and for reading, which is what the detection halves of crop and
+deskew use.
+
+**Crop is boxes only.** `SetPageBoxCommand` (M20) already writes CropBox
+through the engine and the other four through the write plan, so the crop tool
+mints one of those per page and gets undo for nothing. The only gap was
+*reading* Trim/Bleed/Art — the model records them as `null` because
+`PdfEngine.pageSize` never returned them — so this module adds one additive
+engine method, `pageBoxes(doc, page)` (ADR 0018). Nothing re-encodes; a
+cropped page is the same content in a smaller window.
+
+**"Remove white margins"** renders the page at 100 dpi, walks the rows and
+columns inwards while they stay within a tolerance of the page's own
+background colour, and offers the result as a rectangle the reader can still
+adjust. The scan itself (`inkBounds`) is a pure function over RGBA, so it is
+unit-tested without a PDF.
+
+**Deskew detection** is the projection-profile variance method (Postl): render
+the page grayscale at ~110 dpi, downsample so the long edge is ~700 px,
+binarise against Otsu's threshold, keep the coordinates of the dark pixels
+only, and for each candidate angle bucket `y·cosθ + x·sinθ` into 1-px rows and
+score the profile by the sum of squared bucket counts. Coarse pass ±15° at
+0.5°, then a fine pass ±0.6° at 0.02° around the winner. Working from the dark
+*coordinates* rather than the image is what makes 100 pages in well under 20 s
+possible: a text page is ~5 % ink, so each angle costs tens of thousands of
+adds rather than half a million. Confidence is the peak's height over the
+profile's own spread, reported in words ("clear" / "uncertain" / "not enough
+content") — never a bare number and never a colour. Source: the method is
+textbook (H. S. Baird 1987, W. Postl 1986); no product was consulted.
+
+**Deskew and flatten replace their pages rather than mutate them.** Both change
+page *content*, and PDFium can neither wrap a content stream nor un-flatten a
+page, so an in-place engine mutation would not be undoable. Instead each runs
+its pure op over the sliced-out pages and puts the result back:
+`slicePages` → op → `ImportPagesCommand` at the same index →
+`DeletePagesCommand` on the originals → `RepointDestinationsCommand`, all in
+one `doc.batch`, so Edit ▸ Undo shows one entry and restores the pages exactly
+as they were, annotations included. The cost is that a deskewed page is a new
+model page with a new id; bookmarks and named destinations survive because
+`RepointDestinationsCommand` aims them at the replacement.
+
+**Deskew apply** wraps the page's existing content in
+`q  cosθ sinθ −sinθ cosθ tx ty  cm … Q` by adding two small streams around the
+`/Contents` array — the existing streams are neither decoded nor re-encoded, so
+image XObjects come through byte-identical — and paints a page-sized rectangle
+in the page's own background colour underneath, which is what fills the corner
+wedges. Annotation `/Rect` and `/QuadPoints` (links included) are rotated with
+the same matrix, `/Rect` as the bounding box of its rotated corners. "Trim
+edges" shrinks the CropBox by the wedge width; off by default.
+
+**Split by size** cannot be solved analytically — shared resources mean two
+pages together are smaller than the two apart — so it bisects: take pages
+greedily, serialise, and if the result is over budget drop pages and try
+again, remembering the ratio so the second guess is close. A single page that
+is over budget on its own goes out on its own with a warning rather than
+failing, which is the only honest answer.
+
+**Flatten** copies each annotation's `/AP /N` form XObject into the page's
+resources and appends `q <matrix> cm /Fmn Do Q`, using PDF 12.5.5's algorithm
+to map the appearance's `/BBox` through its `/Matrix` onto the annotation's
+`/Rect`, then drops the annotation. Widgets are flattened the same way and
+`/AcroForm` goes with them, so a flattened form has no fields and renders
+identically. Hidden and NoView annotations are dropped rather than drawn.
+When M61 lands it will regenerate widget appearances first; the hook is
+`FlattenOptions.appearances`.
+
+**Combine** writes its own `/Outlines` tree (`ops/outline.ts`) rather than
+reusing the writer's, which is welded to the write plan. One bookmark per
+source file, named from the file, with that file's own outline nested under it
+when "keep existing bookmarks" is on.
+
+**Units and ratios.** The crop dialog's numeric margins use the viewer's
+current unit (M11's `units.ts`), so the ruler and the dialog never disagree.
+
+**No new dependencies.** pdf-lib, PDFium and the shell are all this module
+needs.
 
 ## Build log (fill in at merge)
 

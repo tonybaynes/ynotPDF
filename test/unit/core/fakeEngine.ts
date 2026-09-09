@@ -38,7 +38,7 @@ import {
   type TextRun,
   type Link,
 } from '@engine/PdfEngine';
-import type { PageIndex, PageSize, PdfRect, Rotation } from '@shared/pdf';
+import type { PageBoxes, PageIndex, PageSize, PdfRect, Rotation } from '@shared/pdf';
 
 /** Which mutations the fake claims to support. Anything false raises `NotImplementedError`. */
 export interface FakeSupport {
@@ -272,6 +272,18 @@ export class FakeEngine implements PdfEngine {
       rotation: p.rotation,
       cropBox: p.cropBox,
       mediaBox: p.mediaBox,
+    });
+  }
+
+  /** The fake carries only the two boxes a page must have; the other three are never set. */
+  pageBoxes(doc: DocHandle, page: PageIndex): Promise<PageBoxes> {
+    const p = this.page(doc, page);
+    return Promise.resolve({
+      media: p.mediaBox,
+      crop: p.cropBox,
+      bleed: null,
+      trim: null,
+      art: null,
     });
   }
 

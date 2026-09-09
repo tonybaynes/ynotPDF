@@ -13,7 +13,15 @@
  * - Handles (`DocHandle`) are opaque integers valid until `close()`.
  */
 
-import type { PageIndex, PageSize, PdfMatrix, PdfPoint, PdfRect, Rotation } from '@shared/pdf';
+import type {
+  PageBoxes,
+  PageIndex,
+  PageSize,
+  PdfMatrix,
+  PdfPoint,
+  PdfRect,
+  Rotation,
+} from '@shared/pdf';
 
 /** Opaque handle for an open document inside the engine. */
 export type DocHandle = number & { readonly __brand: 'DocHandle' };
@@ -498,6 +506,14 @@ export interface PdfEngine {
   pageCount(doc: DocHandle): Promise<number>;
   /** Displayed page size (rotation applied) plus the raw boxes. */
   pageSize(doc: DocHandle, page: PageIndex): Promise<PageSize>;
+  /**
+   * Every box the page actually defines, with `null` where it defines none (M41, ADR 0017).
+   *
+   * Different from {@link pageSize}, which answers "how big is this page" and therefore applies
+   * the spec's fallbacks. This answers "what does the file say", which is what a dialog offering
+   * TrimBox as a choice has to know before it shows a number.
+   */
+  pageBoxes(doc: DocHandle, page: PageIndex): Promise<PageBoxes>;
   /** Page labels (`/PageLabels`), one entry per page; defaults to `"1"`, `"2"`, ... */
   pageLabels(doc: DocHandle): Promise<ReadonlyArray<string>>;
   metadata(doc: DocHandle): Promise<Metadata>;
@@ -656,6 +672,9 @@ export class NotImplementedEngine implements PdfEngine {
   pageSize(..._args: unknown[]): Promise<PageSize> {
     return Promise.reject(new NotImplementedError('pageSize'));
   }
+  pageBoxes(..._args: unknown[]): Promise<PageBoxes> {
+    return Promise.reject(new NotImplementedError('pageBoxes'));
+  }
   pageLabels(..._args: unknown[]): Promise<ReadonlyArray<string>> {
     return Promise.reject(new NotImplementedError('pageLabels'));
   }
@@ -765,6 +784,7 @@ export const ENGINE_METHODS = [
   'close',
   'pageCount',
   'pageSize',
+  'pageBoxes',
   'pageLabels',
   'metadata',
   'permissions',
