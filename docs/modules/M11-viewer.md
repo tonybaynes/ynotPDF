@@ -161,7 +161,13 @@ from **Lucide (ISC) first**; when it lacks one, **Tabler Icons (MIT)** or
 **Phosphor (MIT)** — same stroke style — then Fluent UI System Icons (MIT),
 Material Symbols / Remix Icon (Apache-2.0); otherwise draw our own in the
 Lucide stroke style. Not Font Awesome, Flaticon/Freepik, Noun Project or
-Icons8. Every set used is entered in `resources/credits.json`. Similar in
+Icons8. **Clipart / illustrations** (stamps, cover sheets, help, first
+run): Openclipart and Public Domain Vectors (CC0), Wikimedia Commons (only
+files marked CC0 / public domain / CC BY), unDraw and Pixabay (own free
+commercial licences). Never CC BY-SA, BY-NC or BY-ND; never Freepik,
+Flaticon, Vecteezy, Clker or image-search results. CC0 preferred, CC BY
+acceptable. Every set and every clipart item used is entered in
+`resources/credits.json` with source URL, author and licence. Similar in
 idea or better, never traced or pixel-copied. **Never open, read, extract or decompile anything from an
 installed Foxit, Adobe or Tungsten product** (e.g. `C:\Program Files\Foxit
 Software\…`) — not icons, strings, templates, fonts, help, stamps or

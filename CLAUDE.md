@@ -38,7 +38,9 @@ tests may open them only behind `existsSync` skips. Never commit or quote their 
 
 **Foxit is the feature reference, nothing more.** Never copy Foxit's icons, artwork, wording,
 help text or documentation — icons are Lucide first, then Tabler/Phosphor (MIT), Fluent, Material/Remix (Apache-2.0), or our
-own in the Lucide stroke style — every set used goes in `resources/credits.json`. Generic conventions shared across Adobe/Foxit/Tungsten
+own in the Lucide stroke style — every set used goes in `resources/credits.json`.
+Clipart: Openclipart / Public Domain Vectors (CC0), Wikimedia Commons (CC0/PD/CC BY only), unDraw,
+Pixabay. Never BY-SA / NC / ND, never Freepik/Flaticon/Vecteezy. Each item goes in credits.json. Generic conventions shared across Adobe/Foxit/Tungsten
 (magnifier, hand, highlighter, stamp, padlock) are fine to use; Foxit's specific artwork is not; help is written from scratch. The logo in `resources/brand/` is provisional.
 Never open, read, extract or decompile files from an installed Foxit/Adobe/Tungsten product —
 learn their behaviour as a user only. Design decisions in each brief record where behaviour
