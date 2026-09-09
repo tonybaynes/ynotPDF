@@ -10,7 +10,12 @@
  */
 
 import type { PdfPoint, PdfRect } from '@shared/pdf';
-import type { AppearanceResources, ExtGStateSpec, StandardFontName } from './types';
+import {
+  metricFont,
+  type AppearanceFont,
+  type AppearanceResources,
+  type ExtGStateSpec,
+} from './types';
 
 /** Kappa: the circle-to-Bézier constant, `4/3 * (sqrt(2) - 1)`. */
 const KAPPA = 0.5522847498307936;
@@ -59,7 +64,7 @@ export function rgbComponents(color: number): [number, number, number] {
 export class ContentBuilder {
   private readonly ops: string[] = [];
   private readonly gsStates = new Map<string, ExtGStateSpec>();
-  private readonly fontNames = new Map<string, StandardFontName>();
+  private readonly fontNames = new Map<string, AppearanceFont>();
   private gsSeq = 0;
   private painted = false;
 
@@ -199,10 +204,7 @@ export class ContentBuilder {
   }
 
   /** One line of text at a baseline point, in a standard font. */
-  text(
-    value: string,
-    options: { font: StandardFontName; size: number; x: number; y: number },
-  ): this {
+  text(value: string, options: { font: AppearanceFont; size: number; x: number; y: number }): this {
     const name = this.fontName(options.font);
     this.painted = true;
     this.push('BT');
@@ -212,31 +214,41 @@ export class ContentBuilder {
     return this.push('ET');
   }
 
-  /** Several lines, top-down from `y`, each `leading` apart. */
-  textLines(
-    lines: ReadonlyArray<string>,
-    options: { font: StandardFontName; size: number; x: number; y: number; leading: number },
+  /*
+   * `textLines` — several lines sharing one text matrix and a leading — was here until M30
+   * replaced it with `textLinesAt`, which places every line itself. Alignment and a rotated text
+   * box both need per-line placement, so the leading-based form had no caller left and two ways
+   * to draw the same thing is one too many.
+   */
+
+  /** Registers a font resource and returns the name the stream refers to it by. */
+  fontName(font: AppearanceFont): string {
+    const key = fontKey(font);
+    for (const [name, f] of this.fontNames) if (fontKey(f) === key) return name;
+    const name = `F${this.fontNames.size + 1}`;
+    this.fontNames.set(name, font);
+    return name;
+  }
+
+  /**
+   * Draws `lines` with per-line horizontal placement, which is what alignment and a rotated text
+   * box need: each line gets its own `Tm` rather than sharing one text matrix and a leading.
+   */
+  textLinesAt(
+    lines: ReadonlyArray<{ readonly text: string; readonly x: number; readonly y: number }>,
+    options: { font: AppearanceFont; size: number },
   ): this {
-    if (lines.length === 0) return this;
+    const drawable = lines.filter((l) => l.text !== '');
+    if (drawable.length === 0) return this;
     const name = this.fontName(options.font);
     this.painted = true;
     this.push('BT');
     this.push(`/${name} ${num(options.size)} Tf`);
-    this.push(`${num(options.leading)} TL`);
-    this.push(`1 0 0 1 ${num(options.x)} ${num(options.y)} Tm`);
-    lines.forEach((line, i) => {
-      if (i > 0) this.push('T*');
-      this.push(`${pdfString(line)} Tj`);
-    });
+    for (const line of drawable) {
+      this.push(`1 0 0 1 ${num(line.x)} ${num(line.y)} Tm`);
+      this.push(`${pdfString(line.text)} Tj`);
+    }
     return this.push('ET');
-  }
-
-  /** Registers a font resource and returns the name the stream refers to it by. */
-  fontName(font: StandardFontName): string {
-    for (const [name, f] of this.fontNames) if (f === font) return name;
-    const name = `F${this.fontNames.size + 1}`;
-    this.fontNames.set(name, font);
-    return name;
   }
 
   /**
@@ -258,4 +270,9 @@ export class ContentBuilder {
   build(): string {
     return this.ops.join('\n');
   }
+}
+
+/** Identity of a font resource, so two requests for the same face share one name. */
+function fontKey(font: AppearanceFont): string {
+  return typeof font === 'string' ? font : `${font.baseFont}|${metricFont(font)}`;
 }

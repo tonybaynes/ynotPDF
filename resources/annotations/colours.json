@@ -1,0 +1,46 @@
+{
+  "$comment": "Annotation colour presets (M30). These are PDF *content* colours written into the file, not theme tokens — an annotation must keep its colour when the reader changes theme. Every preset carries its name, because the operator is colourblind and a swatch alone says nothing; the sets are chosen so no two entries differ on red-vs-green alone. Values are RRGGBB.",
+  "version": 1,
+  "highlight": [
+    { "name": "Yellow", "value": "FFE14D" },
+    { "name": "Sky", "value": "9BD7FF" },
+    { "name": "Mint", "value": "9FE8C8" },
+    { "name": "Pink", "value": "FFB3D1" },
+    { "name": "Lilac", "value": "D2B8FF" },
+    { "name": "Sand", "value": "F0D7A8" },
+    { "name": "Grey", "value": "D0D0D8" },
+    { "name": "Lime", "value": "DCEE8A" }
+  ],
+  "ink": [
+    { "name": "Black", "value": "000000" },
+    { "name": "Blue", "value": "0B5CD6" },
+    { "name": "Teal", "value": "007A87" },
+    { "name": "Magenta", "value": "C2185B" },
+    { "name": "Orange", "value": "B35900" },
+    { "name": "Purple", "value": "5B2D91" },
+    { "name": "Slate", "value": "465063" },
+    { "name": "White", "value": "FFFFFF" }
+  ],
+  "fill": [
+    { "name": "None", "value": null },
+    { "name": "White", "value": "FFFFFF" },
+    { "name": "Cream", "value": "FFF6DC" },
+    { "name": "Pale sky", "value": "DCEBFF" },
+    { "name": "Pale mint", "value": "DCF4E8" },
+    { "name": "Pale pink", "value": "FFE1EE" },
+    { "name": "Pale grey", "value": "ECECF2" },
+    { "name": "Black", "value": "000000" }
+  ],
+  "defaults": {
+    "highlight": "FFE14D",
+    "underline": "0B5CD6",
+    "squiggly": "C2185B",
+    "strikeout": "C2185B",
+    "replace": "C2185B",
+    "insert": "0B5CD6",
+    "note": "FFD400",
+    "typewriter": "000000",
+    "textbox": "000000",
+    "callout": "0B5CD6"
+  }
+}

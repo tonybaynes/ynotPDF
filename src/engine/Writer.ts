@@ -25,6 +25,7 @@
 import type { PageIndex, PdfPoint, PdfRect } from '@shared/pdf';
 import type { AnnotationSubtype, Destination, ProgressCallback } from './PdfEngine';
 import type { AppearanceInput } from './appearance/types';
+import type { DictValue } from './appearance/dict';
 
 /** One page of the finished document. */
 export interface PlannedPage {
@@ -60,6 +61,15 @@ export interface PlannedAnnotation {
   readonly subtype: AnnotationSubtype;
   readonly rect: PdfRect;
   /**
+   * Add this annotation to the page rather than change one that is already there (M30, ADR 0013).
+   *
+   * PDFium creates only ten of the annotation subtypes; FreeText, Caret, Line, Polygon and
+   * PolyLine are refused, so an app that offers a typewriter or an insertion mark has to write
+   * them itself. `index` is ignored for an insert and `properties` carries the whole annotation,
+   * not just the entries that had to be removed.
+   */
+  readonly insert?: boolean;
+  /**
    * Dictionary entries to write. Present-and-null **removes** the entry, which is the one thing
    * `PdfEngine.updateAnnotation` cannot express — a patch says what a value becomes, never "and
    * empty that one" — so clearing a note's text or an ink list arrives here.
@@ -71,6 +81,11 @@ export interface PlannedAnnotation {
 
 /** Annotation dictionary entries, in model terms. `null` removes the entry. */
 export interface PlannedAnnotationProperties {
+  /** `/F`, the flag bit field. */
+  readonly flags?: number;
+  /** `/CreationDate` and `/M`, ISO 8601. */
+  readonly created?: string | null;
+  readonly modified?: string | null;
   readonly contents?: string | null;
   readonly author?: string | null;
   readonly subject?: string | null;
@@ -89,6 +104,13 @@ export interface PlannedAnnotationProperties {
   readonly paths?: ReadonlyArray<ReadonlyArray<PdfPoint>> | null;
   /** `/Vertices`, or `/L` for a Line. */
   readonly vertices?: ReadonlyArray<PdfPoint> | null;
+  /**
+   * Dictionary entries by PDF key, for the ones PDFium's annotation API has no setter for
+   * (M30, ADR 0013): `/CL`, `/Q`, `/Rotate`, `/RD` and friends. `null` removes the entry. The
+   * mapping from model keys to these is `engine/appearance/dict.ts`, which is also what decides
+   * which keys the engine wrote itself and so never appear here.
+   */
+  readonly entries?: Readonly<Record<string, DictValue | null>>;
 }
 
 /**

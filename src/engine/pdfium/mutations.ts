@@ -16,6 +16,7 @@
 
 import type { NewAnnotation } from '../PdfEngine';
 import { EngineError } from '../PdfEngine';
+import { engineWritableKeys } from '../appearance/dict';
 import type { PdfRect, Rotation } from '@shared/pdf';
 import { ANNOT_COLORTYPE, ANNOT_FLAG, ANNOT_SUBTYPES } from './constants';
 import type { Ffi } from './ffi';
@@ -94,6 +95,13 @@ export function dropAppearance(ffi: Ffi, annot: number): void {
  */
 export function writeAnnotation(ffi: Ffi, annot: number, patch: Partial<NewAnnotation>): void {
   ffi.scope((s) => {
+    /*
+     * The appearance goes first, not last. `FPDFAnnot_SetColor` refuses outright while the
+     * annotation has an `/AP` — and PDFium builds one itself for most markup subtypes as the page
+     * loads — so writing the colour before dropping the stream writes nothing at all. Dropping it
+     * first is also what the edit means: the old appearance is stale the moment anything changes.
+     */
+    dropAppearance(ffi, annot);
     if (patch.rect) setAnnotRect(ffi, annot, patch.rect);
     if (patch.flags) ffi.call('FPDFAnnot_SetFlags', annot, packFlags(patch.flags));
 
@@ -126,7 +134,39 @@ export function writeAnnotation(ffi: Ffi, annot: number, patch: Partial<NewAnnot
       writeQuadPoints(ffi, annot, patch.quadPoints);
     }
     if (patch.paths && patch.paths.length > 0) writeInk(ffi, annot, patch.paths);
-    dropAppearance(ffi, annot);
+
+    /*
+     * The `extra` keys PDFium can write (M30, ADR 0013): `/Name` for a note's icon, `/DA` and
+     * `/DS` for a free text's style, `/RC`, `/IT` and `/LE`. `FPDFAnnot_SetStringValue` is the
+     * only generic setter PDFium offers, so numbers and arrays — `/CL`, `/Q`, `/Rotate`, `/RD` —
+     * reach the file through M21's write plan instead, and `dict.ts` is what decides which is
+     * which. Writing them here as well keeps the engine's own bytes faithful, so a page re-read
+     * after an edit says what the model says.
+     */
+    const extra = patch.extra;
+    if (extra) {
+      for (const [modelKey, pdfKey] of engineWritableKeys()) {
+        const value = extra[modelKey];
+        if (typeof value !== 'string' || value === '') continue;
+        ffi.call('FPDFAnnot_SetStringValue', annot, s.utf8(pdfKey), s.utf16(value));
+      }
+    }
+  });
+}
+
+/**
+ * Sets an annotation's normal appearance stream from content-stream text (M30, ADR 0013).
+ *
+ * PDFium builds the `/AP` itself for the subtypes it understands, and for a `Text` annotation
+ * that is one fixed yellow square whatever `/Name` says. `FPDFAnnot_SetAP` replaces it with ours.
+ * The stream it writes carries `/BBox` = `/Rect`, an identity `/Matrix` and no `/Resources`, so
+ * only appearances that need no font or graphics-state resource may go through here — every note
+ * icon, because they are pure vector. Anything with text keeps to the overlay until it is saved,
+ * where the writer can attach real resources.
+ */
+export function setAppearanceStream(ffi: Ffi, annot: number, content: string): void {
+  ffi.scope((s) => {
+    ffi.call('FPDFAnnot_SetAP', annot, APPEARANCE_MODE.NORMAL, s.utf16(content));
   });
 }
 

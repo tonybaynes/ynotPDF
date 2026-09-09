@@ -111,7 +111,7 @@ WAVE 3
       needs: M11
       prompt: Read D:\Projects\ynotPDF\docs\modules\M13-select-find-print.md and carry out the "Your task" section in full.
 
-[ ] M30  Annotations — text markup, notes, typewriter, text box, callout
+[✔] M30  Annotations — text markup, notes, typewriter, text box, callout
       model:  Opus
       needs: M21 M11 M13
       prompt: Read D:\Projects\ynotPDF\docs\modules\M30-markup-annotations.md and carry out the "Your task" section in full.

@@ -1,0 +1,17 @@
+{
+  "$comment": "Font families the free-text tools offer (M30). The `base` list is the standard 14 under the names a reader knows them by: those need no embedding and render the same everywhere. `suggested` names families the picker shows above the system list when the machine has them — chosen because PDFium's substitution table (resources/fonts/substitutions.json) already knows what to draw them with. Nothing here is embedded; see docs/adr/0013.",
+  "version": 1,
+  "base": ["Helvetica", "Times New Roman", "Courier New", "Symbol", "ZapfDingbats"],
+  "suggested": [
+    "Arial",
+    "Calibri",
+    "Cambria",
+    "Consolas",
+    "Georgia",
+    "Segoe UI",
+    "Tahoma",
+    "Trebuchet MS",
+    "Verdana"
+  ],
+  "sizes": [6, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72]
+}

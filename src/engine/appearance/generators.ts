@@ -15,13 +15,7 @@
 
 import type { PdfPoint, PdfRect } from '@shared/pdf';
 import { ContentBuilder } from './content';
-import { textWidth, wrapText } from './metrics';
-import type {
-  AppearanceGenerator,
-  AppearanceInput,
-  AppearanceStream,
-  StandardFontName,
-} from './types';
+import type { AppearanceGenerator, AppearanceInput, AppearanceStream } from './types';
 
 /** PDF's own default when `/BS /W` is absent. */
 const DEFAULT_BORDER = 1;
@@ -98,12 +92,6 @@ export function quadRects(quadPoints: ReadonlyArray<number>): PdfRect[] {
     });
   }
   return rects;
-}
-
-/** Quads if the annotation has them, else the whole rect — a markup annotation always draws. */
-function markupRects(input: AppearanceInput): PdfRect[] {
-  const quads = quadRects(input.quadPoints);
-  return quads.length > 0 ? quads : [input.rect];
 }
 
 // ---- shapes ------------------------------------------------------------------------------------
@@ -218,160 +206,13 @@ export const inkAppearance: AppearanceGenerator = (input) => {
   return finish(input, b);
 };
 
-// ---- text markup -------------------------------------------------------------------------------
-
-/** `/Highlight`: the quads filled in Multiply so the text underneath still reads. */
-export const highlightAppearance: AppearanceGenerator = (input) => {
-  const b = new ContentBuilder();
-  b.save();
-  applyOpacity(b, input, 'Multiply');
-  b.fillColor(input.color ?? 0xffff00);
-  for (const r of markupRects(input)) b.rect(r);
-  b.fill();
-  b.restore();
-  return finish(input, b);
-};
-
-/** `/Underline`: a rule along the bottom sixteenth of each quad. */
-export const underlineAppearance: AppearanceGenerator = (input) =>
-  ruleAppearance(input, (r) => r.y0 + (r.y1 - r.y0) / 16);
-
-/** `/StrikeOut`: the same rule through the middle. */
-export const strikeOutAppearance: AppearanceGenerator = (input) =>
-  ruleAppearance(input, (r) => (r.y0 + r.y1) / 2);
-
-function ruleAppearance(
-  input: AppearanceInput,
-  atY: (rect: PdfRect) => number,
-): AppearanceStream | null {
-  const rects = markupRects(input);
-  if (rects.length === 0) return null;
-  const b = new ContentBuilder();
-  b.save();
-  applyOpacity(b, input);
-  b.strokeColor(strokeColor(input)).lineCap(0);
-  for (const r of rects) {
-    const height = r.y1 - r.y0;
-    b.lineWidth(Math.max(0.5, height / 14));
-    const y = atY(r);
-    b.moveTo(r.x0, y).lineTo(r.x1, y).stroke();
-  }
-  b.restore();
-  return finish(input, b);
-}
-
-/** `/Squiggly`: a zigzag along the bottom of each quad, one wave per 1.5× its amplitude. */
-export const squigglyAppearance: AppearanceGenerator = (input) => {
-  const rects = markupRects(input);
-  if (rects.length === 0) return null;
-  const b = new ContentBuilder();
-  b.save();
-  applyOpacity(b, input);
-  b.strokeColor(strokeColor(input)).lineCap(1).lineJoin(1);
-  for (const r of rects) {
-    const height = r.y1 - r.y0;
-    const amplitude = Math.max(1, height / 8);
-    b.lineWidth(Math.max(0.5, amplitude / 3));
-    const base = r.y0 + amplitude;
-    const step = amplitude * 1.5;
-    b.moveTo(r.x0, base);
-    let up = true;
-    for (let x = r.x0 + step; x < r.x1; x += step) {
-      b.lineTo(x, up ? base + amplitude : base);
-      up = !up;
-    }
-    b.stroke();
-  }
-  b.restore();
-  return finish(input, b);
-};
-
-// ---- free text ---------------------------------------------------------------------------------
-
-const FREE_TEXT_PADDING = 2;
-const DEFAULT_FONT_SIZE = 12;
-
-/**
- * `/FreeText`: the box (filled with `/IC`, bordered with `/C`) and the note's text wrapped
- * inside it. PDFium generates nothing for this subtype, so without it a typewriter note is
- * invisible everywhere but here.
+/*
+ * Text markup, free text and the caret moved to `markup.ts`, `freetext.ts` and `note.ts` when
+ * M30 built the tools that create them (ADR 0013). The versions here drew each `/QuadPoints`
+ * group as the axis-aligned rectangle containing it, which is wrong for anything but horizontal
+ * text, and laid free text out left-aligned in a standard face. `createAppearanceService()`
+ * registers the newer ones; nothing registers these.
  */
-export const freeTextAppearance: AppearanceGenerator = (input) => {
-  const b = new ContentBuilder();
-  const width = strokeWidth(input);
-  const inset = width / 2;
-  const box: PdfRect = {
-    x0: input.rect.x0 + inset,
-    y0: input.rect.y0 + inset,
-    x1: input.rect.x1 - inset,
-    y1: input.rect.y1 - inset,
-  };
-  b.save();
-  applyOpacity(b, input);
-  if (box.x1 > box.x0 && box.y1 > box.y0 && (input.interiorColor !== null || width > 0)) {
-    if (input.interiorColor !== null) b.fillColor(input.interiorColor);
-    const stroked = input.color !== null && width > 0;
-    if (stroked) b.strokeColor(strokeColor(input)).lineWidth(width);
-    b.rect(box);
-    paint(b, stroked, input.interiorColor !== null);
-  }
-
-  const text = input.contents ?? '';
-  if (text !== '') {
-    const font = freeTextFont(input);
-    const size = freeTextSize(input);
-    const inner = box.x1 - box.x0 - 2 * FREE_TEXT_PADDING;
-    const lines = wrapText(text, font, size, Math.max(inner, size));
-    const leading = size * 1.2;
-    // Clip to the box: a note whose text outgrew it should be cut off, not spill onto the page.
-    b.save();
-    b.rect(box).push('W').push('n');
-    b.fillColor(textColor(input));
-    b.textLines(lines, {
-      font,
-      size,
-      x: box.x0 + FREE_TEXT_PADDING,
-      y: box.y1 - FREE_TEXT_PADDING - size,
-      leading,
-    });
-    b.restore();
-  }
-  b.restore();
-  return finish(input, b);
-};
-
-function freeTextFont(input: AppearanceInput): StandardFontName {
-  const named = input.extra['font'];
-  const known: ReadonlyArray<StandardFontName> = [
-    'Helvetica',
-    'Helvetica-Bold',
-    'Helvetica-Oblique',
-    'Helvetica-BoldOblique',
-    'Times-Roman',
-    'Times-Bold',
-    'Times-Italic',
-    'Times-BoldItalic',
-    'Courier',
-    'Courier-Bold',
-    'Courier-Oblique',
-    'Courier-BoldOblique',
-  ];
-  return typeof named === 'string' && known.includes(named as StandardFontName)
-    ? (named as StandardFontName)
-    : 'Helvetica';
-}
-
-function freeTextSize(input: AppearanceInput): number {
-  const size = input.extra['fontSize'];
-  if (typeof size === 'number' && size > 0) return size;
-  return DEFAULT_FONT_SIZE;
-}
-
-/** `/DA` sets the text colour separately from `/C`, which is the box. Default black. */
-function textColor(input: AppearanceInput): number {
-  const value = input.extra['textColor'];
-  return typeof value === 'number' ? value : DEFAULT_COLOR;
-}
 
 // ---- small marks -------------------------------------------------------------------------------
 
@@ -406,22 +247,6 @@ export const fileAttachmentAppearance: AppearanceGenerator = (input) => {
   return finish(input, b);
 };
 
-/** `/Caret`: the insertion mark, a filled triangle in the lower half of the rect. */
-export const caretAppearance: AppearanceGenerator = (input) => {
-  const { x0, y0, x1, y1 } = input.rect;
-  if (x1 <= x0 || y1 <= y0) return null;
-  const b = new ContentBuilder();
-  b.save();
-  applyOpacity(b, input);
-  b.fillColor(strokeColor(input));
-  b.moveTo(x0, y0);
-  b.lineTo(x1, y0);
-  b.lineTo((x0 + x1) / 2, y1);
-  b.closePath().fill();
-  b.restore();
-  return finish(input, b);
-};
-
 // ---- helpers -----------------------------------------------------------------------------------
 
 function paint(builder: ContentBuilder, stroked: boolean, filled: boolean): void {
@@ -437,6 +262,3 @@ function diagonal(rect: PdfRect): PdfPoint[] {
     { x: rect.x1, y: rect.y1 },
   ];
 }
-
-/** Exported for the tests: the width a `/FreeText` line takes at a size. */
-export { textWidth };

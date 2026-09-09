@@ -26,16 +26,17 @@ sure of anyway.
 
 ## DOM
 
-| File              | What                                                                             |
-| ----------------- | -------------------------------------------------------------------------------- |
-| `Layers.ts`       | The six overlay layers per page: raster · text · annot · widget · object · tool. |
-| `PageView.ts`     | One page: the layer stack, the windowed tile canvas, the tool pointer bridge.    |
-| `DocumentView.ts` | The scrolling viewport: virtualised pages, painting, priorities, prefetch.       |
-| `TileRenderer.ts` | The only thing that asks the engine for pixels. Owns the cache and the queue.    |
-| `Overlays.ts`     | Rulers, grid and guides drawn over the pages.                                    |
-| `Loupe.ts`        | The magnifier window.                                                            |
-| `PerfHud.ts`      | Frames, tiles and cache, for developer builds and the acceptance test.           |
-| `viewer.css`      | All of the above, in theme tokens only.                                          |
+| File                 | What                                                                                                              |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `Layers.ts`          | The six overlay layers per page: raster · text · annot · widget · object · tool.                                  |
+| `PageView.ts`        | One page: the layer stack, the windowed tile canvas, the tool pointer bridge.                                     |
+| `DocumentView.ts`    | The scrolling viewport: virtualised pages, painting, priorities, prefetch.                                        |
+| `TileRenderer.ts`    | The only thing that asks the engine for pixels. Owns the cache and the queue.                                     |
+| `AnnotationLayer.ts` | The annotation overlay: what the raster does not draw, plus selection handles, hit testing and the marquee (M30). |
+| `Overlays.ts`        | Rulers, grid and guides drawn over the pages.                                                                     |
+| `Loupe.ts`           | The magnifier window.                                                                                             |
+| `PerfHud.ts`         | Frames, tiles and cache, for developer builds and the acceptance test.                                            |
+| `viewer.css`         | All of the above, in theme tokens only.                                                                           |
 
 ## Rules worth keeping
 
@@ -46,4 +47,9 @@ sure of anyway.
 - **The page canvas is a window on the page, not the page.** At 6400 % a full-page canvas would
   be gigabytes; `PageView` keeps one covering what is visible and moves it.
 - **No colour literals.** Layers and overlays take their colours from theme tokens; the page's
-  own paper is `--page-paper`, which M01 swaps under Night Mode.
+  own paper is `--page-paper`, which M01 swaps under Night Mode. The one exception is an
+  annotation's own colour, which is **document content**: `AnnotationLayer` sets it as an inline
+  style from the value in the file, and it must not change when the theme does.
+- **The annotation overlay draws only what the raster cannot.** PDFium builds an appearance stream
+  for most markup subtypes as it loads a page; free text and carets it does not. Drawing both
+  shows an annotation twice, drawing neither loses it — see `modules/M30-*/shapes.ts`.

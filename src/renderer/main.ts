@@ -21,6 +21,7 @@ import engineManifest from '@modules/M10-engine-layer/manifest';
 import viewerManifest from '@modules/M11-viewer/manifest';
 import navigationManifest from '@modules/M12-navigation-panels/manifest';
 import selectFindManifest from '@modules/M13-select-find-print/manifest';
+import annotationManifest from '@modules/M30-markup-annotations/manifest';
 import documentManifest from '@modules/M20-document-model/manifest';
 import saveManifest from '@modules/M21-save/manifest';
 import securityManifest from '@modules/M70-encryption/manifest';
@@ -66,6 +67,7 @@ registry.register(viewerManifest);
 registry.register(navigationManifest);
 registry.register(saveManifest);
 registry.register(selectFindManifest);
+registry.register(annotationManifest);
 registry.register(securityManifest);
 registry.register(createManifest);
 

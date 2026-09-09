@@ -532,6 +532,16 @@ export interface PdfEngine {
     patch: Partial<Omit<Annotation, 'id' | 'page'>>,
   ): Promise<Annotation>;
   deleteAnnotation(doc: DocHandle, id: string): Promise<void>;
+  /**
+   * Replaces an annotation's normal appearance stream with `content`, or removes it when
+   * `content` is null so the backend draws its own again (M30, ADR 0013).
+   *
+   * The stream is written with `/BBox` = `/Rect`, an identity `/Matrix` and **no `/Resources`**,
+   * which is all PDFium's API allows — so only an appearance that needs no font and no graphics
+   * state may go through here. Note icons qualify, because they are pure vector; free text does
+   * not, and is drawn by the annotation overlay until a save can attach real resources.
+   */
+  setAnnotationAppearance(doc: DocHandle, id: string, content: string | null): Promise<void>;
 
   /** Embeds a file in the `/EmbeddedFiles` name tree (ADR 0011). */
   addAttachment(doc: DocHandle, file: NewAttachment): Promise<Attachment>;
@@ -679,6 +689,9 @@ export class NotImplementedEngine implements PdfEngine {
   deleteAnnotation(..._args: unknown[]): Promise<void> {
     return Promise.reject(new NotImplementedError('deleteAnnotation'));
   }
+  setAnnotationAppearance(..._args: unknown[]): Promise<void> {
+    return Promise.reject(new NotImplementedError('setAnnotationAppearance'));
+  }
   addAttachment(..._args: unknown[]): Promise<Attachment> {
     return Promise.reject(new NotImplementedError('addAttachment'));
   }
@@ -734,6 +747,7 @@ export const ENGINE_METHODS = [
   'addAnnotation',
   'updateAnnotation',
   'deleteAnnotation',
+  'setAnnotationAppearance',
   'addAttachment',
   'updateAttachment',
   'deleteAttachment',

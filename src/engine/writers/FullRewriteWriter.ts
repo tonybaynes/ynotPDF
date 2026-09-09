@@ -51,7 +51,8 @@ import {
   type Writer,
 } from '../Writer';
 import { defaultAppearanceService, type AppearanceService } from '../appearance';
-import type { AppearanceStream, StandardFontName } from '../appearance/types';
+import { isNonEmbeddedFont, type AppearanceFont, type AppearanceStream } from '../appearance/types';
+import type { DictValue } from '../appearance/dict';
 import { yieldMacrotask } from '../yield';
 
 const INHERITABLE = ['Resources', 'MediaBox', 'CropBox', 'Rotate'] as const;
@@ -218,7 +219,18 @@ export class FullRewriteWriter implements Writer {
     state: WriteState,
   ): void {
     const leaf = ctx.lookupMaybe(pageRef, PDFDict);
-    const annots = leaf ? ctx.lookupMaybe(leaf.get(PDFName.of('Annots')), PDFArray) : undefined;
+    if (!leaf) {
+      state.warn(
+        `A page could not be found, so ${planned.length} annotations were left as they were`,
+      );
+      return;
+    }
+    let annots = ctx.lookupMaybe(leaf.get(PDFName.of('Annots')), PDFArray);
+    // A page with no annotations at all still needs an array once something is added to it.
+    if (!annots && planned.some((entry) => entry.insert)) {
+      annots = ctx.obj([]);
+      leaf.set(PDFName.of('Annots'), annots);
+    }
     if (!annots) {
       state.warn(
         `A page's annotations could not be found, so ${planned.length} were left as they were`,
@@ -226,7 +238,9 @@ export class FullRewriteWriter implements Writer {
       return;
     }
     for (const entry of planned) {
-      const dict = annotationAt(ctx, annots, entry);
+      const dict = entry.insert
+        ? newAnnotation(ctx, annots, entry)
+        : annotationAt(ctx, annots, entry);
       if (!dict) {
         state.warn(
           `A ${entry.subtype} annotation moved in the file and was left as it was, to avoid writing to the wrong one`,
@@ -1111,6 +1125,22 @@ function annotationAt(
   return found;
 }
 
+/**
+ * A fresh annotation dictionary, appended to the page's `/Annots` (M30, ADR 0013).
+ *
+ * Only `/Type`, `/Subtype` and `/Rect` are set here; everything else comes from the entry's
+ * properties, entries and appearance, exactly as it does for one that already existed.
+ */
+function newAnnotation(ctx: PDFContext, annots: PDFArray, entry: PlannedAnnotation): PDFDict {
+  const dict = ctx.obj({});
+  dict.set(PDFName.of('Type'), PDFName.of('Annot'));
+  dict.set(PDFName.of('Subtype'), PDFName.of(entry.subtype));
+  const r = entry.rect;
+  dict.set(PDFName.of('Rect'), ctx.obj([r.x0, r.y0, r.x1, r.y1]));
+  annots.push(ctx.register(dict));
+  return dict;
+}
+
 function applyAnnotationProperties(ctx: PDFContext, dict: PDFDict, entry: PlannedAnnotation): void {
   const props = entry.properties;
   if (!props) return;
@@ -1137,6 +1167,16 @@ function applyAnnotationProperties(ctx: PDFContext, dict: PDFDict, entry: Planne
   };
   setColor('C', props.color);
   setColor('IC', props.interiorColor);
+
+  if (props.flags !== undefined) dict.set(PDFName.of('F'), PDFNumber.of(props.flags));
+  for (const [key, value] of [
+    ['CreationDate', props.created],
+    ['M', props.modified],
+  ] as const) {
+    if (value === undefined) continue;
+    if (value === null) dict.delete(PDFName.of(key));
+    else dict.set(PDFName.of(key), PDFString.of(isoToPdfDate(value) ?? value));
+  }
 
   if (props.opacity !== undefined) {
     if (props.opacity === null) dict.delete(PDFName.of('CA'));
@@ -1170,6 +1210,30 @@ function applyAnnotationProperties(ctx: PDFContext, dict: PDFDict, entry: Planne
     if (props.vertices === null) dict.delete(PDFName.of(name));
     else dict.set(PDFName.of(name), ctx.obj(flattenPoints(props.vertices)));
   }
+  for (const [key, value] of Object.entries(props.entries ?? {})) {
+    if (value === null) {
+      dict.delete(PDFName.of(key));
+      continue;
+    }
+    dict.set(PDFName.of(key), dictValue(ctx, value));
+  }
+}
+
+/** One planned dictionary entry as a pdf-lib object (M30, ADR 0013). */
+function dictValue(
+  ctx: PDFContext,
+  value: DictValue,
+): PDFArray | PDFHexString | PDFName | PDFNumber {
+  switch (value.kind) {
+    case 'string':
+      return PDFHexString.fromText(value.value);
+    case 'name':
+      return PDFName.of(value.value);
+    case 'number':
+      return PDFNumber.of(value.value);
+    case 'numbers':
+      return ctx.obj([...value.value]);
+  }
 }
 
 function flattenPoints(points: ReadonlyArray<PdfPoint>): number[] {
@@ -1201,7 +1265,7 @@ function attachAppearance(ctx: PDFContext, dict: PDFDict, stream: AppearanceStre
   if (fontNames.length > 0) {
     const fonts = ctx.obj({});
     for (const [name, font] of fontNames) {
-      fonts.set(PDFName.of(name), ctx.register(standardFontDict(ctx, font)));
+      fonts.set(PDFName.of(name), ctx.register(fontDict(ctx, font)));
     }
     resources.set(PDFName.of('Font'), fonts);
   }
@@ -1223,9 +1287,22 @@ function attachAppearance(ctx: PDFContext, dict: PDFDict, stream: AppearanceStre
   dict.delete(PDFName.of('AS'));
 }
 
-function standardFontDict(ctx: PDFContext, font: StandardFontName): PDFDict {
+/**
+ * A font resource for an appearance stream: one of the standard 14 as a Type1, or a family the
+ * reader chose from the system list as a non-embedded TrueType (M30, ADR 0013). Nothing is
+ * embedded — there is no subsetter here before M51 — so a viewer resolves the name through its
+ * own substitution table, which for PDFium (ours and Chrome's) is the bundled Liberation/DejaVu
+ * set.
+ */
+function fontDict(ctx: PDFContext, font: AppearanceFont): PDFDict {
   const dict = ctx.obj({});
   dict.set(PDFName.of('Type'), PDFName.of('Font'));
+  if (isNonEmbeddedFont(font)) {
+    dict.set(PDFName.of('Subtype'), PDFName.of('TrueType'));
+    dict.set(PDFName.of('BaseFont'), PDFName.of(pdfNameOf(font.baseFont)));
+    dict.set(PDFName.of('Encoding'), PDFName.of('WinAnsiEncoding'));
+    return dict;
+  }
   dict.set(PDFName.of('Subtype'), PDFName.of('Type1'));
   dict.set(PDFName.of('BaseFont'), PDFName.of(font));
   // Symbol and ZapfDingbats carry their own built-in encoding and must not be re-encoded.
@@ -1233,6 +1310,12 @@ function standardFontDict(ctx: PDFContext, font: StandardFontName): PDFDict {
     dict.set(PDFName.of('Encoding'), PDFName.of('WinAnsiEncoding'));
   }
   return dict;
+}
+
+/** A family name as a PDF name: no delimiters, no whitespace, never empty. */
+function pdfNameOf(family: string): string {
+  const cleaned = family.replace(/[^A-Za-z0-9+.-]/g, '');
+  return cleaned === '' ? 'Helvetica' : cleaned;
 }
 
 // ---- form fields -----------------------------------------------------------------------------

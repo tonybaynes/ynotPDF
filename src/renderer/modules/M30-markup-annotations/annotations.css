@@ -1,0 +1,261 @@
+/*
+ * M30 — annotations: the overlay's chrome, the popup note, the inline editor and the properties
+ * panel.
+ *
+ * Two rules run through all of it. **Colours come from theme tokens** — except the annotation's
+ * own colour, which is document content and is set as an inline style by the code that knows it.
+ * And **nothing is translucent**: no `rgba()` under 1, no `opacity`, no `backdrop-filter`
+ * (CLAUDE.md). A highlight stays readable through `mix-blend-mode: multiply`, which is opaque
+ * paint that darkens the paper and leaves the ink — the same trick M13's selection uses.
+ */
+
+/* ---- the SVG overlay ---------------------------------------------------------------------- */
+
+.viewer-content .page .layer-annot .annot {
+  pointer-events: none;
+}
+
+.viewer-content .page .layer-annot .annot-multiply {
+  mix-blend-mode: multiply;
+}
+
+[data-night-mode='on'] .viewer-content .page .layer-annot .annot-multiply {
+  /* Under Night Mode the paper is dark, so a highlight has to lighten rather than darken. */
+  mix-blend-mode: screen;
+}
+
+.viewer-content .page .layer-annot .annot-selected {
+  fill: none;
+  stroke: var(--focus);
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
+}
+
+.viewer-content .page .layer-annot .annot-handle {
+  fill: var(--bg-panel);
+  stroke: var(--focus);
+  stroke-width: 2;
+}
+
+.viewer-content .page .layer-annot .annot-handle-tip,
+.viewer-content .page .layer-annot .annot-handle-knee {
+  fill: var(--accent);
+  stroke: var(--fg-on-accent);
+}
+
+.viewer-content .page .layer-annot .annot-marquee {
+  fill: none;
+  stroke: var(--focus);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+/* The preview box a free-text drag draws, distinct from M13's snapshot marquee. */
+.viewer-content .annot-draft {
+  border-style: dashed;
+}
+
+/* ---- the inline editor -------------------------------------------------------------------- */
+
+.viewer-content .page .annot-editor {
+  position: absolute;
+  z-index: 6;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  background: var(--bg-input);
+  border: 2px solid var(--focus);
+  outline: none;
+  cursor: text;
+}
+
+.viewer-content .page .annot-editor:focus-visible {
+  outline: 2px solid var(--focus-contrast);
+  outline-offset: -4px;
+}
+
+/* ---- the popup note ----------------------------------------------------------------------- */
+
+.annot-popup {
+  position: absolute;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-modal);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+.annot-popup-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.annot-popup-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.annot-popup-author {
+  font-weight: var(--fw-heading);
+}
+
+.annot-popup-date {
+  color: var(--fg-muted);
+  font-size: 0.85em;
+}
+
+.annot-popup-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.annot-popup-colour {
+  min-width: 8ch;
+  background: var(--bg-input);
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+.annot-popup-body {
+  min-height: 6em;
+  max-height: 40vh;
+  padding: 6px;
+  overflow: auto;
+  background: var(--bg-input);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.annot-popup-body:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.annot-popup-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* ---- the properties panel ----------------------------------------------------------------- */
+
+.annot-props {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px;
+}
+
+.annot-props-empty,
+.annot-props-when,
+.annot-field-note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 0.9em;
+}
+
+.annot-props-what {
+  margin: 0;
+  font-weight: var(--fw-heading);
+}
+
+.annot-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.annot-field-label {
+  margin: 0;
+  font-weight: var(--fw-heading);
+}
+
+.annot-swatches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+/*
+ * A swatch says its colour *and* its name. The border is the theme's, not the colour's, so a
+ * swatch of the page's own white is still visible against the panel.
+ */
+.annot-swatch {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 6px;
+  overflow: hidden;
+  color: var(--fg);
+  text-align: left;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.annot-swatch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annot-swatch-chip {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+}
+
+/* "None" is a chip with a line through it, so it reads as absence rather than as a colour. */
+.annot-swatch-chip-none {
+  background: linear-gradient(
+    to bottom right,
+    var(--bg-input) 44%,
+    var(--border-strong) 44%,
+    var(--border-strong) 56%,
+    var(--bg-input) 56%
+  );
+}
+
+.annot-swatch[aria-pressed='true'] {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+
+.annot-swatch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.annot-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.annot-check .field {
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.annot-actions {
+  flex-direction: row;
+}
+
+.annot-colour-input {
+  font-family: var(--font-mono, monospace);
+}

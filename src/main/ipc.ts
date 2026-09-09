@@ -21,6 +21,7 @@ import type { PrintJobs } from './print';
 import type { FolderSearches } from './search';
 import { hostArch, targetArch } from './arch';
 import { readFileForRenderer, writeBytes, writeTempFile } from './files';
+import { systemFontFamilies } from './fonts';
 import { probeFile, writeAtomic } from './fs/atomic';
 import type { CloseBroker } from './fs/lifecycle';
 import type { RecoveryStore } from './fs/recovery';
@@ -253,6 +254,9 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     'settings:set': (_e, key, value) => {
       settings.set(key, value);
     },
+    // Read from the OS font directories once per process (M30, ADR 0013); an unreadable machine
+    // simply reports nothing and the free-text picker offers the base families alone.
+    'fonts:list': () => systemFontFamilies(),
     // Keeps the OS chrome (title bar, menus, native dialogs) in step with the active theme.
     'theme:setNative': (_e, scheme) => {
       nativeTheme.themeSource = scheme;
