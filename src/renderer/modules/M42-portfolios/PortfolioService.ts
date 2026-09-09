@@ -892,11 +892,14 @@ export class PortfolioService {
       ),
     };
     await source.document.apply(new ReplaceFileCommand(source.document, file.id, next, bytes));
-    this.shell.documents.setDirty(
-      this.shell.documents.tabs.find((t) => t.title === file.name)?.id ?? '',
-      false,
-    );
-    this.shell.toasts.show({ kind: 'success', text: `${file.name} saved back into the portfolio` });
+    // The portfolio is now the one with unsaved changes, and it says so. This tab keeps its own
+    // dirty flag: M20 drives that from the document's own journal, and the file still has no
+    // path of its own — closing it should still ask, because the copy on this tab is not saved
+    // anywhere until the portfolio is.
+    this.shell.toasts.show({
+      kind: 'success',
+      text: `${file.name} saved back into the portfolio. Save the portfolio to keep it.`,
+    });
     this.changed();
     return true;
   }
