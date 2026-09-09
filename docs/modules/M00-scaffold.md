@@ -112,6 +112,13 @@ Everything under `PLAN.md` §7 that is not a module folder.
 
 ## Libraries
 
+_Credit rule (operator): every open-source component this module adds
+must be creditable by M131's generated acknowledgements page — npm
+packages need only a licence in their metadata; binaries/WASM go in
+`resources/binaries.json` with `license`, `homepage`, `copyright`; anything
+vendored, adapted or copied (code, icons, fonts, data) goes in
+`resources/credits.json`. Permissive licences only._
+
 electron, electron-vite, electron-builder, electron-store, typescript,
 vitest, @playwright/test, eslint + typescript-eslint, prettier, husky,
 lint-staged, license-checker, pdf-lib (fixtures only).
