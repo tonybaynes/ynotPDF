@@ -209,6 +209,23 @@ before the writer ever runs and needs no plan section of its own.
   main — the names come from inside a PDF, and a file specification is free to say
   `../../.bashrc`.
 
+### 8. `Document` gains a `blobs` side table
+
+The custom bag is JSON: it goes into `Document.snapshot()` and into the recovery record, so a
+megabyte of file content cannot live there. A portfolio's newly added files need their bytes
+carried from the command that added them to the write plan, and nowhere else.
+
+```ts
+class Document {
+  /** Bytes a module must carry from a command to the writer, keyed as the module chooses. */
+  readonly blobs = new Map<string, Uint8Array>();
+}
+```
+
+Not part of the model state: nothing subscribes to it, `snapshot()` does not see it, and undo
+does not empty it — a redo needs the bytes back. M31's stamps and M40's imported pages have the
+same problem and can use the same table.
+
 ## Consequences
 
 - A portfolio save is byte-exact for every file it did not change, which is the requirement
