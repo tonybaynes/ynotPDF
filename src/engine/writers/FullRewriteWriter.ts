@@ -43,6 +43,7 @@ import {
   type PlannedLayer,
   type PlannedOutlineItem,
   type PlannedPage,
+  type PlannedXObject,
   type WritePhase,
   type WritePlan,
   type WriteProgressCallback,
@@ -51,7 +52,13 @@ import {
   type Writer,
 } from '../Writer';
 import { defaultAppearanceService, type AppearanceService } from '../appearance';
-import { isNonEmbeddedFont, type AppearanceFont, type AppearanceStream } from '../appearance/types';
+import { num } from '../appearance/content';
+import {
+  isNonEmbeddedFont,
+  type AppearanceFont,
+  type AppearanceResources,
+  type AppearanceStream,
+} from '../appearance/types';
 import type { DictValue } from '../appearance/dict';
 import { yieldMacrotask } from '../yield';
 
@@ -79,6 +86,11 @@ export class FullRewriteWriter implements Writer {
     const ctx = doc.context;
     state.phase('parse', 1);
     await state.checkpoint();
+
+    // Shared XObjects are embedded once each (M31, ADR 0015). Images and PDF pages need
+    // pdf-lib's own embedders, which are async, so every key a planned appearance names is
+    // embedded up front, before the annotations are written.
+    const xobjects = await embedXObjects(doc, plan, state, this.appearances);
 
     const basePages = collectPageRefs(doc);
     if (basePages.refs.length === 0) {
@@ -175,7 +187,7 @@ export class FullRewriteWriter implements Writer {
       let done = 0;
       for (const { page, ref } of withAnnotations) {
         if (ref) {
-          this.writeAnnotations(ctx, ref, page.annotations ?? [], state);
+          this.writeAnnotations(doc, ref, page.annotations ?? [], state, xobjects);
         }
         done++;
         state.phase('annotations', done / withAnnotations.length);
@@ -213,11 +225,13 @@ export class FullRewriteWriter implements Writer {
 
   /** Writes the planned entries and appearance streams onto one page's annotations. */
   private writeAnnotations(
-    ctx: PDFContext,
+    doc: PDFDocument,
     pageRef: PDFRef,
     planned: ReadonlyArray<PlannedAnnotation>,
     state: WriteState,
+    xobjects: EmbeddedXObjects,
   ): void {
+    const ctx = doc.context;
     const leaf = ctx.lookupMaybe(pageRef, PDFDict);
     if (!leaf) {
       state.warn(
@@ -247,19 +261,128 @@ export class FullRewriteWriter implements Writer {
         );
         continue;
       }
-      if (entry.properties) applyAnnotationProperties(ctx, dict, entry);
+      if (entry.properties) applyAnnotationProperties(doc, dict, entry, state);
       if (entry.appearance) {
         const has = dict.get(PDFName.of('AP')) !== undefined;
         if (!has || entry.appearance.replace) {
           const stream = this.appearances.generate(entry.appearance.input);
-          if (stream) {
-            attachAppearance(ctx, dict, stream);
+          if (stream && xobjectsResolve(stream, xobjects, state)) {
+            attachAppearance(ctx, dict, stream, xobjects);
             state.countAppearance();
           }
         }
       }
     }
   }
+}
+
+// ---- shared XObjects (M31, ADR 0015) -------------------------------------------------------------
+
+/** Key → the embedded object, plus its natural box for a form the appearance refers to. */
+type EmbeddedXObjects = ReadonlyMap<string, PDFRef>;
+
+/**
+ * Embeds every planned XObject once, keyed. A form is a stream of our own content; an image
+ * goes through pdf-lib's PNG/JPEG embedders; a PDF page through `embedPdf`, which copies the
+ * page's resources with it. A key whose bytes will not decode is reported and skipped — the
+ * annotations naming it keep whatever appearance they had rather than getting a broken one.
+ */
+async function embedXObjects(
+  doc: PDFDocument,
+  plan: WritePlan,
+  state: WriteState,
+  appearances: AppearanceService,
+): Promise<EmbeddedXObjects> {
+  const out = new Map<string, PDFRef>();
+  const sources = plan.xobjects ?? null;
+  if (!sources) return out;
+  // Only the keys a stream will name are worth embedding; the rest may be stale sources the
+  // model still carries for undo. Generating is pure and cheap, so the streams are simply built
+  // once here to see what they ask for, and again when they are written.
+  const named = new Set<string>();
+  for (const page of plan.pages) {
+    for (const a of page.annotations ?? []) {
+      if (!a.appearance) continue;
+      const stream = appearances.generate(a.appearance.input);
+      for (const key of Object.values(stream?.resources.xobjects ?? {})) named.add(key);
+    }
+  }
+  for (const [key, source] of Object.entries(sources)) {
+    if (!named.has(key)) continue;
+    try {
+      out.set(key, await embedOne(doc, source));
+    } catch (error) {
+      state.warn(
+        `A stamp's picture could not be embedded (${error instanceof Error ? error.message : String(error)})`,
+      );
+    }
+  }
+  return out;
+}
+
+async function embedOne(doc: PDFDocument, source: PlannedXObject): Promise<PDFRef> {
+  const ctx = doc.context;
+  switch (source.kind) {
+    case 'form': {
+      const stream = ctx.flateStream(source.content, {
+        Type: 'XObject',
+        Subtype: 'Form',
+        FormType: 1,
+      });
+      const b = source.bbox;
+      stream.dict.set(PDFName.of('BBox'), ctx.obj([b.x0, b.y0, b.x1, b.y1]));
+      stream.dict.set(PDFName.of('Matrix'), ctx.obj([1, 0, 0, 1, 0, 0]));
+      stream.dict.set(
+        PDFName.of('Resources'),
+        resourcesDict(ctx, source.resources ?? { extGState: {}, fonts: {} }, new Map()),
+      );
+      return ctx.register(stream);
+    }
+    case 'image': {
+      const image = await doc.embedPng(fromBase64(source.data));
+      /*
+       * An image XObject draws into the unit square; wrapping it in a form of the picture's own
+       * size lets every placement use the same "fit this box into the rect" matrix a catalogue
+       * stamp uses, and keeps the image itself embedded exactly once.
+       */
+      const form = ctx.flateStream(
+        `q ${num(source.width)} 0 0 ${num(source.height)} 0 0 cm /Im1 Do Q`,
+        { Type: 'XObject', Subtype: 'Form', FormType: 1 },
+      );
+      form.dict.set(PDFName.of('BBox'), ctx.obj([0, 0, source.width, source.height]));
+      form.dict.set(PDFName.of('Matrix'), ctx.obj([1, 0, 0, 1, 0, 0]));
+      const resources = ctx.obj({});
+      const images = ctx.obj({});
+      images.set(PDFName.of('Im1'), image.ref);
+      resources.set(PDFName.of('XObject'), images);
+      resources.set(PDFName.of('ProcSet'), ctx.obj([PDFName.of('PDF'), PDFName.of('ImageC')]));
+      form.dict.set(PDFName.of('Resources'), resources);
+      return ctx.register(form);
+    }
+  }
+}
+
+/** Whether every XObject a stream names was embedded; the missing ones are reported. */
+function xobjectsResolve(
+  stream: AppearanceStream,
+  embedded: EmbeddedXObjects,
+  state: WriteState,
+): boolean {
+  for (const key of Object.values(stream.resources.xobjects ?? {})) {
+    if (!embedded.has(key)) {
+      state.warn('A stamp was left as it was, because its picture is not in the document');
+      return false;
+    }
+  }
+  return true;
+}
+
+function fromBase64(data: string): Uint8Array {
+  const clean = data.includes(',') ? data.slice(data.indexOf(',') + 1) : data;
+  const bin = atob(clean);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
 // ---- progress, cancellation and warnings -----------------------------------------------------
@@ -1141,7 +1264,13 @@ function newAnnotation(ctx: PDFContext, annots: PDFArray, entry: PlannedAnnotati
   return dict;
 }
 
-function applyAnnotationProperties(ctx: PDFContext, dict: PDFDict, entry: PlannedAnnotation): void {
+function applyAnnotationProperties(
+  doc: PDFDocument,
+  dict: PDFDict,
+  entry: PlannedAnnotation,
+  state: WriteState,
+): void {
+  const ctx = doc.context;
   const props = entry.properties;
   if (!props) return;
   const setText = (name: string, value: string | null | undefined): void => {
@@ -1215,14 +1344,49 @@ function applyAnnotationProperties(ctx: PDFContext, dict: PDFDict, entry: Planne
       dict.delete(PDFName.of(key));
       continue;
     }
+    if (value.kind === 'dict') {
+      // Merged, not replaced: `/BS /W` from the border width above has to survive a `/BS /D`.
+      const existing = dict.lookupMaybe(PDFName.of(key), PDFDict) ?? ctx.obj({});
+      mergeDict(ctx, existing, value.value);
+      dict.set(PDFName.of(key), existing);
+      continue;
+    }
+    if (value.kind === 'embeddedFile') {
+      const spec = takeEmbeddedFile(doc, value.value);
+      if (spec) dict.set(PDFName.of(key), spec);
+      else state.warn(`The attached file "${value.value}" is not in the document`);
+      continue;
+    }
     dict.set(PDFName.of(key), dictValue(ctx, value));
   }
 }
 
-/** One planned dictionary entry as a pdf-lib object (M30, ADR 0013). */
+/** Writes each entry of a planned dictionary into `target`; `null` removes. */
+function mergeDict(
+  ctx: PDFContext,
+  target: PDFDict,
+  entries: Readonly<Record<string, DictValue | null>>,
+): void {
+  for (const [key, value] of Object.entries(entries)) {
+    if (value === null) {
+      target.delete(PDFName.of(key));
+      continue;
+    }
+    if (value.kind === 'dict') {
+      const nested = target.lookupMaybe(PDFName.of(key), PDFDict) ?? ctx.obj({});
+      mergeDict(ctx, nested, value.value);
+      target.set(PDFName.of(key), nested);
+      continue;
+    }
+    if (value.kind === 'embeddedFile') continue; // only meaningful at the top level (`/FS`)
+    target.set(PDFName.of(key), dictValue(ctx, value));
+  }
+}
+
+/** One planned dictionary entry as a pdf-lib object (M30, ADR 0013; M31 added the arrays of names). */
 function dictValue(
   ctx: PDFContext,
-  value: DictValue,
+  value: Exclude<DictValue, { kind: 'dict' } | { kind: 'embeddedFile' }>,
 ): PDFArray | PDFHexString | PDFName | PDFNumber {
   switch (value.kind) {
     case 'string':
@@ -1233,7 +1397,65 @@ function dictValue(
       return PDFNumber.of(value.value);
     case 'numbers':
       return ctx.obj([...value.value]);
+    case 'names':
+      return ctx.obj(value.value.map((n) => PDFName.of(n)));
   }
+}
+
+/**
+ * The file specification of an embedded file, taken **out of** the `/EmbeddedFiles` name tree
+ * (M31, ADR 0015).
+ *
+ * The engine embedded the file there because that is the only place PDFium can put one; a
+ * FileAttachment annotation wants it on its own `/FS` instead, and a file listed in both would
+ * appear twice in every attachments panel, ours included. So the entry is removed from the tree
+ * as its specification moves to the annotation. Matched by the tree's key, then by `/UF` or `/F`,
+ * for the same reason `writeAttachments` does.
+ */
+function takeEmbeddedFile(doc: PDFDocument, name: string): PDFRef | PDFDict | null {
+  const ctx = doc.context;
+  const root = doc.catalog.lookupMaybe(PDFName.of('Names'), PDFDict);
+  const tree = root?.lookupMaybe(PDFName.of('EmbeddedFiles'), PDFDict);
+  if (!tree) return null;
+  let found: PDFRef | PDFDict | null = null;
+  const visit = (node: PDFDict, depth: number): boolean => {
+    if (depth > 32) return false;
+    const kids = node.lookupMaybe(PDFName.of('Kids'), PDFArray);
+    if (kids) {
+      for (const kid of kids.asArray()) {
+        const child = ctx.lookupMaybe(kid, PDFDict);
+        if (child && visit(child, depth + 1)) return true;
+      }
+      return false;
+    }
+    const names = node.lookupMaybe(PDFName.of('Names'), PDFArray);
+    if (!names) return false;
+    const items = names.asArray();
+    const matches = (i: number, exact: boolean): boolean => {
+      const key = textValue(items[i - 1]);
+      const spec = ctx.lookupMaybe(items[i], PDFDict);
+      if (exact) return key === name;
+      return (
+        spec !== undefined &&
+        (textValue(spec.lookup(PDFName.of('UF'))) === name ||
+          textValue(spec.lookup(PDFName.of('F'))) === name)
+      );
+    };
+    for (const exact of [true, false]) {
+      for (let i = 1; i < items.length; i += 2) {
+        if (!matches(i, exact)) continue;
+        const value = items[i];
+        found = value instanceof PDFRef ? value : (ctx.lookupMaybe(value, PDFDict) ?? null);
+        if (found === null) return false;
+        const survivors = items.filter((_v, index) => index !== i - 1 && index !== i);
+        node.set(PDFName.of('Names'), ctx.obj(survivors));
+        return true;
+      }
+    }
+    return false;
+  };
+  visit(tree, 0);
+  return found;
 }
 
 function flattenPoints(points: ReadonlyArray<PdfPoint>): number[] {
@@ -1242,26 +1464,28 @@ function flattenPoints(points: ReadonlyArray<PdfPoint>): number[] {
   return out;
 }
 
-/** Writes a generated stream as the annotation's `/AP /N`. */
-function attachAppearance(ctx: PDFContext, dict: PDFDict, stream: AppearanceStream): void {
+/** The `/Resources` dictionary an appearance stream's content needs. */
+function resourcesDict(
+  ctx: PDFContext,
+  spec: AppearanceResources,
+  xobjects: EmbeddedXObjects,
+): PDFDict {
   const resources = ctx.obj({});
   resources.set(PDFName.of('ProcSet'), ctx.obj([PDFName.of('PDF'), PDFName.of('Text')]));
-  const gsNames = Object.entries(stream.resources.extGState);
+  const gsNames = Object.entries(spec.extGState);
   if (gsNames.length > 0) {
     const gs = ctx.obj({});
-    for (const [name, spec] of gsNames) {
+    for (const [name, g] of gsNames) {
       const state = ctx.obj({});
       state.set(PDFName.of('Type'), PDFName.of('ExtGState'));
-      if (spec.fillAlpha !== undefined) state.set(PDFName.of('ca'), PDFNumber.of(spec.fillAlpha));
-      if (spec.strokeAlpha !== undefined) {
-        state.set(PDFName.of('CA'), PDFNumber.of(spec.strokeAlpha));
-      }
-      if (spec.blendMode !== undefined) state.set(PDFName.of('BM'), PDFName.of(spec.blendMode));
+      if (g.fillAlpha !== undefined) state.set(PDFName.of('ca'), PDFNumber.of(g.fillAlpha));
+      if (g.strokeAlpha !== undefined) state.set(PDFName.of('CA'), PDFNumber.of(g.strokeAlpha));
+      if (g.blendMode !== undefined) state.set(PDFName.of('BM'), PDFName.of(g.blendMode));
       gs.set(PDFName.of(name), state);
     }
     resources.set(PDFName.of('ExtGState'), gs);
   }
-  const fontNames = Object.entries(stream.resources.fonts);
+  const fontNames = Object.entries(spec.fonts);
   if (fontNames.length > 0) {
     const fonts = ctx.obj({});
     for (const [name, font] of fontNames) {
@@ -1269,7 +1493,27 @@ function attachAppearance(ctx: PDFContext, dict: PDFDict, stream: AppearanceStre
     }
     resources.set(PDFName.of('Font'), fonts);
   }
+  const xobjectNames = Object.entries(spec.xobjects ?? {});
+  if (xobjectNames.length > 0) {
+    const forms = ctx.obj({});
+    for (const [name, key] of xobjectNames) {
+      const ref = xobjects.get(key);
+      // Every stream reaching here was checked by `xobjectsResolve`; the guard is for the types.
+      if (ref) forms.set(PDFName.of(name), ref);
+    }
+    resources.set(PDFName.of('XObject'), forms);
+  }
+  return resources;
+}
 
+/** Writes a generated stream as the annotation's `/AP /N`. */
+function attachAppearance(
+  ctx: PDFContext,
+  dict: PDFDict,
+  stream: AppearanceStream,
+  xobjects: EmbeddedXObjects,
+): void {
+  const resources = resourcesDict(ctx, stream.resources, xobjects);
   const bbox = stream.bbox;
   const form = ctx.flateStream(stream.content, {
     Type: 'XObject',

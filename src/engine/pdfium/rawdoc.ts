@@ -37,6 +37,12 @@ export interface AnnotColors {
   readonly align?: number;
   /** `/Rotate` — rotation of a free text's contents, anticlockwise degrees. */
   readonly rotate?: number;
+  /** `/LE` as a Line or PolyLine carries it: two names, start and end (M31). */
+  readonly lineEndings?: readonly [string, string];
+  /** `/BE /I` when `/BE /S` is `/C` — a cloudy border's intensity (M31). */
+  readonly cloudy?: number;
+  /** `/BS /D` — the dash pattern (M31). */
+  readonly dashArray?: ReadonlyArray<number>;
 }
 
 export interface RawInfo {
@@ -218,6 +224,26 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
           };
           const number = (key: string): number | undefined =>
             dict?.lookupMaybe(PDFName.of(key), PDFNumber)?.asNumber();
+          // A Line's `/LE` is two names; a callout's is one, which the string pass reads.
+          let lineEndings: readonly [string, string] | undefined;
+          const le = dict?.lookupMaybe(PDFName.of('LE'), PDFArray)?.asArray();
+          if (le && le.length === 2) {
+            const [a, b] = le;
+            if (a instanceof PDFName && b instanceof PDFName) {
+              lineEndings = [a.decodeText(), b.decodeText()];
+            }
+          }
+          let cloudy: number | undefined;
+          const be = dict?.lookupMaybe(PDFName.of('BE'), PDFDict);
+          if (be?.lookupMaybe(PDFName.of('S'), PDFName)?.decodeText() === 'C') {
+            cloudy = be.lookupMaybe(PDFName.of('I'), PDFNumber)?.asNumber() ?? 1;
+          }
+          let dashArray: ReadonlyArray<number> | undefined;
+          const d = bs?.lookupMaybe(PDFName.of('D'), PDFArray);
+          if (d) {
+            const nums = d.asArray().map((v) => (v instanceof PDFNumber ? v.asNumber() : Number.NaN));
+            if (nums.length > 0 && !nums.some((n) => Number.isNaN(n))) dashArray = nums;
+          }
           out.push({
             ...optional('color', read('C')),
             ...optional('interiorColor', read('IC')),
@@ -226,6 +252,9 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
             ...optional('padding', numbers('RD')),
             ...optional('align', number('Q')),
             ...optional('rotate', number('Rotate')),
+            ...optional('lineEndings', lineEndings),
+            ...optional('cloudy', cloudy),
+            ...optional('dashArray', dashArray),
           });
         }
       }

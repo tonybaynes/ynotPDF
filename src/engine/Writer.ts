@@ -24,7 +24,7 @@
 
 import type { PageIndex, PdfPoint, PdfRect } from '@shared/pdf';
 import type { AnnotationSubtype, Destination, ProgressCallback } from './PdfEngine';
-import type { AppearanceInput } from './appearance/types';
+import type { AppearanceInput, AppearanceResources } from './appearance/types';
 import type { DictValue } from './appearance/dict';
 
 /** One page of the finished document. */
@@ -180,6 +180,34 @@ export interface PlannedAttachment {
   readonly mimeType: string | null;
 }
 
+/**
+ * The source of a shared XObject an appearance stream may name by key (M31, ADR 0015).
+ *
+ * Bytes travel as base64 so the plan stays JSON: it is journalled, sent to the writer's Worker
+ * and replayed by a batch run, and none of those can carry a `Uint8Array` unchanged.
+ */
+export type PlannedXObject =
+  | {
+      /** A content stream drawn in its own box — a catalogue stamp. */
+      readonly kind: 'form';
+      readonly content: string;
+      readonly bbox: PdfRect;
+      readonly resources?: AppearanceResources;
+    }
+  | {
+      /**
+       * A picture as PNG bytes — a custom stamp. Every custom stamp is converted to PNG when it
+       * is imported, whatever it came from (an image file, the clipboard, a rendered PDF page),
+       * so there is one stored format and its alpha channel is the transparency.
+       */
+      readonly kind: 'image';
+      readonly format: 'png';
+      readonly data: string;
+      /** The picture's size in pixels, which is also its natural box in points. */
+      readonly width: number;
+      readonly height: number;
+    };
+
 /** A named destination for `/Names /Dests`. */
 export interface PlannedNamedDestination {
   readonly name: string;
@@ -227,6 +255,12 @@ export interface WritePlan {
   readonly fields: ReadonlyArray<PlannedField> | null;
   /** Embedded-file metadata to normalise (M12, ADR 0011). */
   readonly attachments: ReadonlyArray<PlannedAttachment> | null;
+  /**
+   * Shared XObjects by key, for appearance streams that name one in their
+   * `resources.xobjects` (M31, ADR 0015). Each key is embedded **once** per write, however many
+   * annotations refer to it; a key no stream names is not embedded at all.
+   */
+  readonly xobjects?: Readonly<Record<string, PlannedXObject>> | null;
 }
 
 /** An empty plan over `pageCount` pages: a straight re-serialisation. */

@@ -80,10 +80,26 @@ export interface ShapeText {
   readonly rotate?: number;
 }
 
-export type AnnotationShape = ShapePath | ShapeText;
+/**
+ * A picture the layer paints — a custom stamp's image while it is being placed or edited (M31).
+ * `href` is a `data:` URL the caller built; the layer never fetches anything.
+ */
+export interface ShapeImage {
+  readonly kind: 'image';
+  readonly href: string;
+  /** Where the picture's own box lands, in page space, before rotation. */
+  readonly rect: PdfRect;
+  /** Degrees anticlockwise about the rect's centre, in page space. */
+  readonly rotate?: number;
+}
 
-/** Which handles an annotation offers. */
-export type HandleSet = 'none' | 'move' | 'box' | 'callout';
+export type AnnotationShape = ShapePath | ShapeText | ShapeImage;
+
+/**
+ * Which handles an annotation offers. `vertices` (M31) gives one handle per point of
+ * `LayerAnnotation.vertices` — a polygon's corners — instead of the eight box handles.
+ */
+export type HandleSet = 'none' | 'move' | 'box' | 'callout' | 'vertices';
 
 /** One annotation as the layer sees it. */
 export interface LayerAnnotation {
@@ -100,6 +116,8 @@ export interface LayerAnnotation {
   readonly handles: HandleSet;
   /** A callout's leader line, for its two extra handles. */
   readonly callout?: ReadonlyArray<PdfPoint>;
+  /** A polygon's or polyline's points, for `handles: 'vertices'` (M31). */
+  readonly vertices?: ReadonlyArray<PdfPoint>;
   /** Hidden while its inline editor is open, so the two never draw the same text twice. */
   readonly hidden?: boolean;
 }
@@ -107,7 +125,15 @@ export interface LayerAnnotation {
 /** The eight box handles, plus the two a callout adds. */
 export const BOX_HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const;
 export type BoxHandle = (typeof BOX_HANDLES)[number];
-export type HandleId = BoxHandle | 'tip' | 'knee';
+/** A vertex handle is `v<index>` (M31). */
+export type VertexHandle = `v${number}`;
+export type HandleId = BoxHandle | 'tip' | 'knee' | VertexHandle;
+
+/** The index a vertex handle names, or null for any other handle. */
+export function vertexIndexOf(id: string): number | null {
+  const m = /^v(\d+)$/.exec(id);
+  return m ? Number(m[1]) : null;
+}
 
 /** A handle's centre in page space, and what dragging it changes. */
 export interface HandlePoint {
@@ -141,6 +167,11 @@ export function handlePoints(annotation: LayerAnnotation): HandlePoint[] {
     const [tip, knee] = annotation.callout;
     if (tip) out.push({ id: 'tip', point: tip });
     if (knee) out.push({ id: 'knee', point: knee });
+  }
+  if (annotation.handles === 'vertices' && annotation.vertices) {
+    annotation.vertices.forEach((point, i) => {
+      out.push({ id: `v${i}`, point });
+    });
   }
   return out;
 }
@@ -331,7 +362,9 @@ export class AnnotationLayer {
         group.append(
           shape.kind === 'path'
             ? pathElement(shape, toDevice, scale)
-            : textElement(shape, toDevice, scale),
+            : shape.kind === 'text'
+              ? textElement(shape, toDevice, scale)
+              : imageElement(shape, pageView),
         );
       }
       layer.append(group);
@@ -448,6 +481,32 @@ function textElement(
   return group;
 }
 
+/**
+ * A picture placed in page space (M31). The page's own rotation is a rigid map the transform
+ * already applies to the box's corners; the picture's turn is added on top, about the box's
+ * centre, with the sign flipped because device y grows downwards.
+ */
+function imageElement(shape: ShapeImage, pageView: PageView): SVGImageElement {
+  const el = document.createElementNS(SVG_NS, 'image');
+  const box = pageView.transform.rectToDevice(shape.rect);
+  const scale = pageView.transform.scale;
+  const width = (shape.rect.x1 - shape.rect.x0) * scale;
+  const height = (shape.rect.y1 - shape.rect.y0) * scale;
+  const cx = box.left + box.width / 2;
+  const cy = box.top + box.height / 2;
+  el.setAttribute('href', shape.href);
+  el.setAttribute('x', String(round(cx - width / 2)));
+  el.setAttribute('y', String(round(cy - height / 2)));
+  el.setAttribute('width', String(round(Math.max(1, width))));
+  el.setAttribute('height', String(round(Math.max(1, height))));
+  el.setAttribute('preserveAspectRatio', 'none');
+  const turn = (shape.rotate ?? 0) - pageView.transform.rotation;
+  if (turn % 360 !== 0) {
+    el.setAttribute('transform', `rotate(${round(-turn)} ${round(cx)} ${round(cy)})`);
+  }
+  return el;
+}
+
 function selectionElements(
   a: LayerAnnotation,
   toDevice: (p: PdfPoint) => { x: number; y: number },
@@ -499,7 +558,11 @@ function signature(
     (a) =>
       `${a.id}:${a.hidden ? 'h' : ''}${selected.has(a.id) ? 's' : ''}:${round(a.rect.x0)},${round(
         a.rect.y0,
-      )},${round(a.rect.x1)},${round(a.rect.y1)}:${a.shapes.length}:${shapeKey(a.shapes)}`,
+      )},${round(a.rect.x1)},${round(a.rect.y1)}:${a.shapes.length}:${shapeKey(a.shapes)}:${a.handles}${(
+        a.vertices ?? []
+      )
+        .map((v) => `${round(v.x)},${round(v.y)}`)
+        .join('/')}`,
   );
   const m = marquee
     ? `${round(marquee.rect.x0)},${round(marquee.rect.y0)},${round(marquee.rect.x1)},${round(marquee.rect.y1)}`
@@ -510,14 +573,18 @@ function signature(
 /** Enough of the shapes to notice a colour, a wording or a geometry change. */
 function shapeKey(shapes: ReadonlyArray<AnnotationShape>): string {
   return shapes
-    .map((s) =>
-      s.kind === 'text'
-        ? `t${s.size}/${s.color}/${s.family}/${s.rotate ?? 0}/${s.bold ? 'b' : ''}${s.italic ? 'i' : ''}/${s.lines
-            .map((l) => `${l.text}@${round(l.x)},${round(l.y)}`)
-            .join('~')}`
-        : `p${s.stroke ?? -1}/${s.fill ?? -1}/${round(s.width)}/${s.steps.length}/${s.steps
-            .map((st) => (st.op === 'Z' ? 'Z' : `${st.op}${round(st.x)},${round(st.y)}`))
-            .join('')}`,
-    )
+    .map((s) => {
+      if (s.kind === 'text') {
+        return `t${s.size}/${s.color}/${s.family}/${s.rotate ?? 0}/${s.bold ? 'b' : ''}${s.italic ? 'i' : ''}/${s.lines
+          .map((l) => `${l.text}@${round(l.x)},${round(l.y)}`)
+          .join('~')}`;
+      }
+      if (s.kind === 'image') {
+        return `i${s.href.length}/${round(s.rect.x0)},${round(s.rect.y0)},${round(s.rect.x1)},${round(s.rect.y1)}/${s.rotate ?? 0}`;
+      }
+      return `p${s.stroke ?? -1}/${s.fill ?? -1}/${round(s.width)}/${s.steps.length}/${s.steps
+        .map((st) => (st.op === 'Z' ? 'Z' : `${st.op}${round(st.x)},${round(st.y)}`))
+        .join('')}`;
+    })
     .join(';');
 }

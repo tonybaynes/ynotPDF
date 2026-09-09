@@ -214,7 +214,60 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **One overlay, one selection, one controller — M31 plugs into M30's.** A second `AnnotationLayer`
+  on the same page would fight the first for the SVG element, and a second controller would fight it
+  for the pointer. So `AnnotationService` gains one additive hook, `registerProvider()`: a provider
+  says which annotations it owns, what the overlay draws for them, how a move, a resize and a handle
+  drag patch their geometry, and what the properties panel shows. M30 keeps its families; M31 owns
+  `shape`, `ink`, `stamp` and `fileAttachment`, plus a `Highlight` whose `/IT` is `AreaHighlight`.
+- **Shapes PDFium can create get our appearance pushed into the live page; the rest are inserted by
+  the writer.** Square, Circle and Ink are among PDFium's ten, so the raster carries them — but its
+  own `/AP` knows nothing of clouds, dashes or Bézier-smoothed ink, so the same generator that will
+  write the file hands PDFium the stream through `setAnnotationAppearance` (ADR 0013), which works
+  because every shape is pure vector. Line, Polygon, PolyLine, Stamp and FileAttachment are drawn
+  by the overlay until a save bakes them (Stamp is creatable but PDFium never draws one).
+- **A stamp is a Form XObject embedded once per document.** `AppearanceResources.xobjects` names a
+  shared XObject by key; `WritePlan.xobjects` carries each key's source — a content stream for a
+  catalogue stamp, PNG/JPEG bytes for a custom image, a PDF page for a custom page — and
+  `FullRewriteWriter` embeds each key once per write and references it from every annotation's
+  `/AP` (`/Fm1 Do` under a rotation matrix). Sources live in `Document.custom['xobjects']`, written
+  by a `SetCustomCommand`, so they are undoable, journalled and in the recovery file (ADR 0015).
+- **The catalogue is data, the drawings are generated.** `resources/stamps/catalogue.json` describes
+  each standard stamp (text, colour, category, dynamic tokens); `engine/appearance/stamp.ts` draws
+  the rounded-box-and-bold-text Foxit style from it deterministically, and `scripts/make-stamps.ts`
+  renders the same drawings to `resources/stamps/<id>.pdf` so the vector files the brief asks for
+  exist and stay in step. Dynamic tokens (`{name}`, `{date}`, `{time}`, `{initials}`) resolve at
+  placement from M30's identity; the resolved text is baked into the appearance.
+- **A stamp's `/AP` survives a move.** `writeAnnotation` used to drop the appearance on every edit,
+  because `FPDFAnnot_SetColor` refuses beside one. A stamp's appearance *is* its content, so for a
+  Stamp or a FileAttachment a patch that carries only geometry, flags and strings keeps it: PDF
+  maps `/BBox` to `/Rect`, so a moved or resized stamp still renders. A custom stamp from a file
+  opened in this session can therefore be moved and resized, but not turned — its source is not in
+  the model. The panel says so.
+- **Ink stores raw points in `/InkList`; smoothing is derived, deterministic and never stored.** The
+  appearance is Catmull-Rom converted to cubic Béziers over exactly those points, so every viewer
+  without our `/AP` draws the same stroke as a polyline and ours draws it smooth. Pressure, when a
+  pen reports it, is kept per point in `extra.pressures` (not written to the file — PDF ink has no
+  width per point) and widens the stroke in the appearance. The eraser works on the raw points,
+  which is why they are the ones that are stored.
+- **The eraser splits into annotations, not paths.** In split mode the fragment before the erased
+  span stays in the original annotation and each later fragment becomes a new Ink annotation with
+  the same properties — one composite command. Stroke mode removes the whole path; an annotation
+  with no paths left is deleted.
+- **Arrows are Lines with `/LE`; clouds are Polygons with `/BE`; area highlight is a Highlight.**
+  Exactly as Acrobat and Foxit write them, so another editor reads ours back as the tool that made
+  them. `/LE` (two names) and `/BE` (a dictionary) are new kinds in `dict.ts`'s closed list; `/FS`
+  for a file attachment is a reference the writer resolves to the embedded file by name.
+- **A file attachment is embedded through the engine and moved into the annotation by the writer.**
+  `engine.addAttachment` puts the bytes in the `/EmbeddedFiles` name tree, which is what gives M12's
+  panel "open" and "save as" for free; the plan then names the file on the annotation, and the writer
+  sets `/FS` to that specification and removes the name-tree entry so it is listed once.
+- **Constrain and snap are the tools', not the model's.** Shift makes a rectangle square, an ellipse
+  round, a line horizontal/vertical/45°, and a polygon edge axis-aligned; `Viewer.snap()` (M11's
+  grid flag) is applied to every point a tool takes before it reaches a command.
+- **Vertex handles are a layer feature.** `LayerAnnotation.vertices` plus `HandleSet 'vertices'`
+  give a polygon or a polyline one handle per point (`v0…vN`); `ShapeImage` lets the layer draw a
+  custom stamp's picture. Both are additive to `AnnotationLayer`, which is in `view/` for this.
 
 ## Build log (fill in at merge)
 

@@ -90,10 +90,38 @@ export function dropAppearance(ffi: Ffi, annot: number): void {
 }
 
 /**
- * Writes the fields of `patch` onto an open annotation. Only keys present in `patch` are
- * touched, so `updateAnnotation` really is a patch and not a replace.
+ * The subtypes whose appearance stream *is* their content (M31, ADR 0015).
+ *
+ * A stamp's picture and an attachment's icon cannot be rebuilt from the dictionary, so an edit
+ * that only moves, resizes, flags or relabels one keeps its `/AP`: PDF maps the stream's `/BBox`
+ * to the new `/Rect`, and the picture follows. Anything visual in the patch — a colour, a
+ * border, geometry the stream drew — still drops it, as for every other subtype.
  */
-export function writeAnnotation(ffi: Ffi, annot: number, patch: Partial<NewAnnotation>): void {
+export const APPEARANCE_IS_CONTENT: ReadonlySet<string> = new Set(['Stamp', 'FileAttachment']);
+
+/** Whether a patch changes something the appearance stream drew. */
+export function patchIsVisual(patch: Partial<NewAnnotation>): boolean {
+  return (
+    patch.color !== undefined ||
+    patch.interiorColor !== undefined ||
+    patch.borderWidth !== undefined ||
+    patch.quadPoints !== undefined ||
+    patch.paths !== undefined ||
+    patch.opacity !== undefined
+  );
+}
+
+/**
+ * Writes the fields of `patch` onto an open annotation. Only keys present in `patch` are
+ * touched, so `updateAnnotation` really is a patch and not a replace. `keepAppearance` leaves
+ * the `/AP` in place (see {@link APPEARANCE_IS_CONTENT}).
+ */
+export function writeAnnotation(
+  ffi: Ffi,
+  annot: number,
+  patch: Partial<NewAnnotation>,
+  options: { readonly keepAppearance?: boolean } = {},
+): void {
   ffi.scope((s) => {
     /*
      * The appearance goes first, not last. `FPDFAnnot_SetColor` refuses outright while the
@@ -101,7 +129,7 @@ export function writeAnnotation(ffi: Ffi, annot: number, patch: Partial<NewAnnot
      * loads — so writing the colour before dropping the stream writes nothing at all. Dropping it
      * first is also what the edit means: the old appearance is stale the moment anything changes.
      */
-    dropAppearance(ffi, annot);
+    if (!options.keepAppearance) dropAppearance(ffi, annot);
     if (patch.rect) setAnnotRect(ffi, annot, patch.rect);
     if (patch.flags) ffi.call('FPDFAnnot_SetFlags', annot, packFlags(patch.flags));
 

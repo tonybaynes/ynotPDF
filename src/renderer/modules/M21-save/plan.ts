@@ -18,7 +18,11 @@ import { COMPOSITE_COMMAND_ID } from '@core/Command';
 import { COMMAND_ID } from '@core/commands';
 import type { ModelAnnotation, ModelDestination, ModelOutlineItem, ModelPage } from '@core/model';
 import { PDFIUM_GENERATES } from '@engine/appearance';
-import { appearanceInput, type AppearanceInput } from '@engine/appearance/types';
+import {
+  appearanceInput,
+  type AppearanceInput,
+  type AppearanceResources,
+} from '@engine/appearance/types';
 import { dictEntries } from '@engine/appearance/dict';
 import type {
   PlannedAnnotation,
@@ -32,6 +36,7 @@ import type {
   PlannedNamedDestination,
   PlannedOutlineItem,
   PlannedPage,
+  PlannedXObject,
   WritePlan,
 } from '@engine/Writer';
 
@@ -85,8 +90,73 @@ export function buildWritePlan(doc: Document): PlanResult {
     layers: intents.has('layers') ? plannedLayers(doc) : null,
     fields: intents.has('fields') ? plannedFields(doc, touched.fields) : null,
     attachments: intents.has('attachments') ? plannedAttachments(state) : null,
+    xobjects: plannedXObjects(doc),
   };
   return { plan, warnings };
+}
+
+/**
+ * Shared XObjects an appearance stream may name (M31, ADR 0015), from the document's
+ * `custom.xobjects` namespace — the one place a module puts a stamp's picture so it is
+ * undoable, journalled and recovered with everything else. Every entry is offered; the writer
+ * embeds only the keys a stream actually names, and each of those once.
+ */
+function plannedXObjects(doc: Document): Readonly<Record<string, PlannedXObject>> | null {
+  const bag = doc.custom(XOBJECTS_NAMESPACE);
+  const out: Record<string, PlannedXObject> = {};
+  for (const [key, value] of Object.entries(bag)) {
+    const x = asPlannedXObject(value);
+    if (x) out[key] = x;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/** The `Document.custom` namespace shared XObjects live in. */
+export const XOBJECTS_NAMESPACE = 'xobjects';
+
+/** A stored entry as a planned XObject, or null when it is not one. */
+export function asPlannedXObject(value: unknown): PlannedXObject | null {
+  if (!value || typeof value !== 'object') return null;
+  const r = value as Record<string, unknown>;
+  switch (r['kind']) {
+    case 'form': {
+      const bbox = r['bbox'];
+      if (typeof r['content'] !== 'string' || !isRect(bbox)) return null;
+      const resources = r['resources'];
+      return {
+        kind: 'form',
+        content: r['content'],
+        bbox,
+        ...(resources && typeof resources === 'object'
+          ? { resources: resources as AppearanceResources }
+          : {}),
+      };
+    }
+    case 'image':
+      if (
+        r['format'] !== 'png' ||
+        typeof r['data'] !== 'string' ||
+        typeof r['width'] !== 'number' ||
+        typeof r['height'] !== 'number'
+      ) {
+        return null;
+      }
+      return {
+        kind: 'image',
+        format: 'png',
+        data: r['data'],
+        width: r['width'],
+        height: r['height'],
+      };
+    default:
+      return null;
+  }
+}
+
+function isRect(value: unknown): value is PdfRectLike {
+  if (!value || typeof value !== 'object') return false;
+  const r = value as Record<string, unknown>;
+  return ['x0', 'y0', 'x1', 'y1'].every((k) => typeof r[k] === 'number');
 }
 
 // ---- pages ---------------------------------------------------------------------------------

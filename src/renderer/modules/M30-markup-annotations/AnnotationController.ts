@@ -13,9 +13,10 @@
 
 import { isTypingTarget } from '@app/shortcuts';
 import type { ShellServices } from '@app/services';
+import type { Document } from '@core/Document';
 import type { ModelId } from '@core/Ids';
 import type { PdfPoint } from '@shared/pdf';
-import type { BoxHandle, HandleId } from '@view/AnnotationLayer';
+import { vertexIndexOf, type BoxHandle, type HandleId } from '@view/AnnotationLayer';
 import type { DocumentView } from '@view/DocumentView';
 import type { AnnotationService } from './AnnotationService';
 import { CREATION_TOOL_IDS, SELECT_ANNOTATION_TOOL } from './tools';
@@ -25,6 +26,8 @@ type Drag =
   | { readonly kind: 'move'; from: PdfPoint; last: PdfPoint; moved: boolean }
   | { readonly kind: 'resize'; id: ModelId; handle: BoxHandle }
   | { readonly kind: 'callout'; id: ModelId; which: 'tip' | 'knee' }
+  /** A provider's own handle — a polygon's vertex (M31). */
+  | { readonly kind: 'handle'; id: ModelId; handle: string }
   | { readonly kind: 'marquee'; page: number; from: PdfPoint };
 
 export interface AnnotationControllerOptions {
@@ -110,7 +113,7 @@ export class AnnotationController {
      * a second highlight over the first one impossible. Foxit behaves the same way: comments are
      * picked up with the Hand or the Select Annotation tool, not with the text cursor.
      */
-    if (tool !== null && (CREATION_TOOL_IDS.has(tool) || DRAGGING_TOOL_IDS.has(tool))) return;
+    if (tool !== null && (this.isCreationTool(tool) || DRAGGING_TOOL_IDS.has(tool))) return;
     const layer = this.service.layer();
     const where = this.locate(e);
     if (!layer || !where) return;
@@ -140,10 +143,17 @@ export class AnnotationController {
     if (this.service.selection.length > 0) this.service.clearSelection();
   }
 
+  /** This module's creation tools, and every provider's. */
+  private isCreationTool(tool: string): boolean {
+    return CREATION_TOOL_IDS.has(tool) || this.service.isCreationTool(tool);
+  }
+
   private beginHandleDrag(handle: { id: HandleId; on: string }, e: PointerEvent): void {
     const id = handle.on as ModelId;
     if (handle.id === 'tip' || handle.id === 'knee') {
       this.drag = { kind: 'callout', id, which: handle.id };
+    } else if (vertexIndexOf(handle.id) !== null) {
+      this.drag = { kind: 'handle', id, handle: handle.id };
     } else {
       this.drag = { kind: 'resize', id, handle: handle.id };
     }
@@ -177,6 +187,9 @@ export class AnnotationController {
         return;
       case 'callout':
         void this.service.moveCalloutPoint(drag.id, drag.which, where.point);
+        return;
+      case 'handle':
+        void this.service.moveHandle(drag.id, drag.handle, where.point);
         return;
       case 'marquee': {
         const rect = {
@@ -225,8 +238,17 @@ export class AnnotationController {
     const annotation = this.service.activeDocument()?.annotation(id);
     if (!annotation) return;
     this.service.select([id]);
-    if (annotation.family === 'freeText') this.service.openEditor(id);
-    else this.service.openPopup(id);
+    this.open(id, annotation);
+  }
+
+  /** Double-click or Enter: the editor for free text, a provider's own action, else the popup. */
+  private open(id: ModelId, annotation: NonNullable<ReturnType<Document['annotation']>>): void {
+    if (annotation.family === 'freeText') {
+      this.service.openEditor(id);
+      return;
+    }
+    if (this.service.providerFor(annotation)?.open?.(annotation) === true) return;
+    this.service.openPopup(id);
   }
 
   // ---- keyboard ---------------------------------------------------------------------------------
@@ -248,7 +270,7 @@ export class AnnotationController {
      */
     if (e.key === 'Escape') {
       const tool = this.activeTool();
-      if (tool !== null && (CREATION_TOOL_IDS.has(tool) || tool === SELECT_ANNOTATION_TOOL)) {
+      if (tool !== null && (this.isCreationTool(tool) || tool === SELECT_ANNOTATION_TOOL)) {
         this.stop(e);
         this.shell.registry.service<{ activate(id: string): void }>('tools').activate('tool.hand');
       }
@@ -300,8 +322,7 @@ export class AnnotationController {
       const annotation = id ? this.service.activeDocument()?.annotation(id) : null;
       if (!id || !annotation) return;
       this.stop(e);
-      if (annotation.family === 'freeText') this.service.openEditor(id);
-      else this.service.openPopup(id);
+      this.open(id, annotation);
     }
   }
 

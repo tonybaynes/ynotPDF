@@ -69,10 +69,12 @@ import {
 } from './constants';
 import { Ffi, readMatrix, readRectF, type WasmModule } from './ffi';
 import {
+  APPEARANCE_IS_CONTENT,
   applyLayerVisibility,
   assertRotation,
   dropAppearance,
   isoToPdfDate,
+  patchIsVisual,
   readByteRange,
   setAppearanceStream,
   subtypeValue,
@@ -85,6 +87,17 @@ import { yieldMacrotask } from '../yield';
 
 /** Version string reported by `info()`; the wasm carries no runtime version API. */
 export const PDFIUM_BUILD = '@hyzyla/pdfium 2.1.13 (wasm)';
+
+/** Subtypes whose dictionary entries only the raw pass can read (M31): see `annotationsSync`. */
+const RAW_PASS_SUBTYPES: ReadonlySet<AnnotationSubtype> = new Set<AnnotationSubtype>([
+  'Line',
+  'Square',
+  'Circle',
+  'Polygon',
+  'PolyLine',
+  'Ink',
+  'Stamp',
+]);
 
 export interface PdfiumEngineOptions {
   /** Raw `pdfium.wasm` bytes (patched for callbacks internally). */
@@ -1419,6 +1432,10 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         if (c.padding) extra['padding'] = c.padding;
         if (c.align !== undefined) extra['align'] = c.align;
         if (c.rotate !== undefined) extra['rotate'] = c.rotate;
+        // The shape family's entries PDFium has no getter for (M31, ADR 0015).
+        if (c.lineEndings) extra['lineEndings'] = c.lineEndings;
+        if (c.cloudy !== undefined) extra['cloudy'] = c.cloudy;
+        if (c.dashArray) extra['dashArray'] = c.dashArray;
         out[index] = {
           ...a,
           ...optional('color', a.color ?? c.color),
@@ -1597,12 +1614,14 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
           const ic = annotColor(ANNOT_COLORTYPE.INTERIOR);
           // PDFium hides /C and /IC behind an appearance stream and ignores /BS /W: raw pass.
           // A free text or a caret goes through it whatever its colours say, because `/CL`,
-          // `/RD`, `/Q` and `/Rotate` have no PDFium getter at all (M30).
+          // `/RD`, `/Q` and `/Rotate` have no PDFium getter at all (M30) — and so do the shapes,
+          // the ink and the stamps, for `/LE`, `/BE`, `/BS /D` and `/Rotate` (M31).
           if (
             (hasAP && c === undefined && ic === undefined) ||
             borderWidth === undefined ||
             subtype === 'FreeText' ||
-            subtype === 'Caret'
+            subtype === 'Caret' ||
+            RAW_PASS_SUBTYPES.has(subtype)
           ) {
             missingColors.push(out.length);
           }
@@ -2033,7 +2052,10 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       const annot = this.ffi.call('FPDFPage_GetAnnot', p.page, index);
       if (annot === 0) throw new EngineError('invalid-argument', `no annotation ${id}`);
       try {
-        writeAnnotation(this.ffi, annot, patch);
+        // A stamp's or an attachment's appearance is its content: a move keeps it (M31).
+        const subtype = ANNOT_SUBTYPES[this.ffi.call('FPDFAnnot_GetSubtype', annot)] ?? 'Unknown';
+        const keepAppearance = APPEARANCE_IS_CONTENT.has(subtype) && !patchIsVisual(patch);
+        writeAnnotation(this.ffi, annot, patch, { keepAppearance });
       } finally {
         this.ffi.call('FPDFPage_CloseAnnot', annot);
       }
