@@ -283,7 +283,7 @@ help text comes from one. Icons are Lucide (ISC) throughout, recorded in `resour
   clipboard insert is the same code with the clipboard as its source. Foxit's From Scanner is
   out of scope: the app has no scanner support anywhere yet.
 - **Extract needs an empty document, so the engine gains one call.** `PdfEngine.createDocument()`
-  (ADR 0015, additive, `FPDF_CreateNewDocument`) returns a handle with no pages, and `importPages`
+  (ADR 0016, additive, `FPDF_CreateNewDocument`) returns a handle with no pages, and `importPages`
   copies into it. The alternative — creating a one-page blank through M91 and deleting the page
   afterwards — would put a stray media box and an extra `FPDFPage_Delete` between the reader and
   their file for no reason. M41 needs the same call for split and merge, which is why it is a
@@ -373,7 +373,7 @@ tests with the coverage gates, 251 Playwright tests.
 
 ### Decisions worth knowing about
 
-- **`PdfEngine.createDocument()` (ADR 0015)** is the module's one contract addition. Extract needs
+- **`PdfEngine.createDocument()` (ADR 0016)** is the module's one contract addition. Extract needs
   an empty document to import into, and the alternatives were a blank page created through M91 and
   then deleted, or a second page-copying implementation in pdf-lib — the thing ADR 0010 refused to
   do for the writer, for the same reason. M41 needs the same call for split and merge.
@@ -465,7 +465,7 @@ Nine more, all real, all fixed here and all with a test:
 ### Shared files touched (PLAN.md §12.3)
 
 - `src/engine/PdfEngine.ts` — additive: `createDocument()`, the name in `ENGINE_METHODS`, and the
-  method on `NotImplementedEngine` (ADR 0015).
+  method on `NotImplementedEngine` (ADR 0016).
 - `src/engine/pdfium/PdfiumEngine.ts` — the implementation (`FPDF_CreateNewDocument`).
 - `src/engine/pageLabels.ts` — **new**: the `/PageLabels` numbering, shared by M21's writer and
   M40's dialog. `src/engine/writers/FullRewriteWriter.ts` re-exports `pageLabelNums` from it and

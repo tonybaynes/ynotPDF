@@ -184,8 +184,10 @@ describe('the generators', () => {
       }),
     );
     expect(stream).not.toBeNull();
-    // Inset by half the stroke, so the 4pt border sits inside 0..100.
-    expect(stream?.content).toContain('2 2 96 46 re');
+    // Inset by half the stroke, so the 4pt border sits inside 0..100 (M31 draws the four sides
+    // as a path, so a cloudy border and a plain one come from the same list of corners).
+    expect(stream?.content).toContain('2 2 m');
+    expect(stream?.content).toContain('98 48 l');
     // Filled and stroked, in one operator.
     expect(stream?.content).toContain('B');
     expect(stream?.bbox.x0).toBeLessThan(0);

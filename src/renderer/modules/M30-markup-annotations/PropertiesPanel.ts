@@ -114,17 +114,34 @@ function build(
   const first = selected[0];
   if (!first) return out;
   const many = selected.length > 1;
+  const provider = service.providerFor(first);
   out.push(
     el(
       'p.annot-props-what',
       null,
       many
         ? `${selected.length} annotations selected`
-        : `${describe(first)} by ${first.author ?? 'an unnamed author'}`,
+        : `${provider?.describe?.(first) ?? describe(first)} by ${first.author ?? 'an unnamed author'}`,
     ),
   );
   if (!many && first.modified) {
     out.push(el('p.annot-props-when', null, `Last changed ${formatDate(first.modified)}`));
+  }
+
+  /*
+   * A provider's annotation gets the provider's sections (M31, ADR 0015): a rectangle's border
+   * and fill, a line's endings, a stamp's rotation. The shared tail — note, subject, lock and the
+   * tool setting — stays this panel's, so every family is edited in the same place.
+   */
+  if (provider?.panel) {
+    out.push(...provider.panel(first, refresh));
+    if (!many) {
+      out.push(contentsField(service, first));
+      out.push(subjectField(service, first));
+    }
+    out.push(lockField(service, first));
+    out.push(keepToolToggle(service, refresh));
+    return out;
   }
 
   const families = new Set(selected.map((a) => a.family));

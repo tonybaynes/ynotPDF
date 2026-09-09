@@ -17,6 +17,7 @@
 import type { PageIndex, PageSize, PdfMatrix, PdfPoint, PdfRect, Rotation } from '@shared/pdf';
 import { normalizeRect } from '@shared/pdf';
 import { PageGeometry } from '../geometry';
+import { appearanceInput, defaultAppearanceService } from '../appearance';
 import {
   EngineError,
   NotImplementedError,
@@ -69,10 +70,12 @@ import {
 } from './constants';
 import { Ffi, readMatrix, readRectF, type WasmModule } from './ffi';
 import {
+  APPEARANCE_IS_CONTENT,
   applyLayerVisibility,
   assertRotation,
   dropAppearance,
   isoToPdfDate,
+  patchIsVisual,
   readByteRange,
   setAppearanceStream,
   subtypeValue,
@@ -85,6 +88,24 @@ import { yieldMacrotask } from '../yield';
 
 /** Version string reported by `info()`; the wasm carries no runtime version API. */
 export const PDFIUM_BUILD = '@hyzyla/pdfium 2.1.13 (wasm)';
+
+/** Subtypes the adapter gives the app's own appearance as they are written (M31, ADR 0016). */
+const OWN_APPEARANCE_SUBTYPES: ReadonlySet<AnnotationSubtype> = new Set<AnnotationSubtype>([
+  'Square',
+  'Circle',
+  'Ink',
+]);
+
+/** Subtypes whose dictionary entries only the raw pass can read (M31): see `annotationsSync`. */
+const RAW_PASS_SUBTYPES: ReadonlySet<AnnotationSubtype> = new Set<AnnotationSubtype>([
+  'Line',
+  'Square',
+  'Circle',
+  'Polygon',
+  'PolyLine',
+  'Ink',
+  'Stamp',
+]);
 
 export interface PdfiumEngineOptions {
   /** Raw `pdfium.wasm` bytes (patched for callbacks internally). */
@@ -316,7 +337,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
   }
 
   /**
-   * A new, empty document (M40, ADR 0015). `importPages` fills it; it has no bytes of its own,
+   * A new, empty document (M40, ADR 0016). `importPages` fills it; it has no bytes of its own,
    * so `bytesPtr` is zero and `bytes` is empty — `closeDoc` frees a null pointer happily and
    * the raw catalogue pass re-serialises because `mutated` starts true.
    */
@@ -707,7 +728,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         ...optional('description', a.description ?? extra.description),
         ...optional('mimeType', a.mimeType ?? extra.mimeType),
         ...optional('collectionFields', extra.collectionFields),
-        // The name-tree key and the folder it names (M42, ADR 0015). PDFium reports the file
+        // The name-tree key and the folder it names (M42, ADR 0016). PDFium reports the file
         // specification's own `/UF`, which is the clean name; the key carries the `<n>` prefix
         // that says which portfolio folder the file is in, and is what the writer matches on.
         ...optional('treeKey', extra.treeKey),
@@ -1457,6 +1478,10 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         if (c.padding) extra['padding'] = c.padding;
         if (c.align !== undefined) extra['align'] = c.align;
         if (c.rotate !== undefined) extra['rotate'] = c.rotate;
+        // The shape family's entries PDFium has no getter for (M31, ADR 0016).
+        if (c.lineEndings) extra['lineEndings'] = c.lineEndings;
+        if (c.cloudy !== undefined) extra['cloudy'] = c.cloudy;
+        if (c.dashArray) extra['dashArray'] = c.dashArray;
         out[index] = {
           ...a,
           ...optional('color', a.color ?? c.color),
@@ -1635,12 +1660,14 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
           const ic = annotColor(ANNOT_COLORTYPE.INTERIOR);
           // PDFium hides /C and /IC behind an appearance stream and ignores /BS /W: raw pass.
           // A free text or a caret goes through it whatever its colours say, because `/CL`,
-          // `/RD`, `/Q` and `/Rotate` have no PDFium getter at all (M30).
+          // `/RD`, `/Q` and `/Rotate` have no PDFium getter at all (M30) — and so do the shapes,
+          // the ink and the stamps, for `/LE`, `/BE`, `/BS /D` and `/Rotate` (M31).
           if (
             (hasAP && c === undefined && ic === undefined) ||
             borderWidth === undefined ||
             subtype === 'FreeText' ||
-            subtype === 'Caret'
+            subtype === 'Caret' ||
+            RAW_PASS_SUBTYPES.has(subtype)
           ) {
             missingColors.push(out.length);
           }
@@ -2043,6 +2070,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       let at: number;
       try {
         writeAnnotation(this.ffi, annot, annotation);
+        this.installOwnAppearance(annot, annotation.subtype, annotation);
         at = this.ffi.call('FPDFPage_GetAnnotIndex', p.page, annot);
       } finally {
         this.ffi.call('FPDFPage_CloseAnnot', annot);
@@ -2071,7 +2099,13 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       const annot = this.ffi.call('FPDFPage_GetAnnot', p.page, index);
       if (annot === 0) throw new EngineError('invalid-argument', `no annotation ${id}`);
       try {
-        writeAnnotation(this.ffi, annot, patch);
+        // A stamp's or an attachment's appearance is its content: a move keeps it (M31).
+        const subtype = ANNOT_SUBTYPES[this.ffi.call('FPDFAnnot_GetSubtype', annot)] ?? 'Unknown';
+        const keepAppearance = APPEARANCE_IS_CONTENT.has(subtype) && !patchIsVisual(patch);
+        writeAnnotation(this.ffi, annot, patch, { keepAppearance });
+        if (subtype !== 'Unknown' && subtype !== 'RichMedia' && subtype !== 'XFAWidget') {
+          this.installOwnAppearance(annot, subtype, patch);
+        }
       } finally {
         this.ffi.call('FPDFPage_CloseAnnot', annot);
       }
@@ -2081,6 +2115,40 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
     const updated = (await this.annotations(doc, page))[index];
     if (!updated) throw new EngineError('internal', `annotation ${id} vanished after the update`);
     return updated;
+  }
+
+  /**
+   * Gives a Square, a Circle or an Ink the app's own appearance the moment it is written, before
+   * the page reloads (M31, ADR 0016).
+   *
+   * PDFium would otherwise build one itself as the page loads — and, for an Ink, *inflate* `/Rect`
+   * by half the border width while it is at it, once per regeneration. The model never learns of
+   * that, so after a few edits the engine's rect and the model's disagree and M21's writer, which
+   * checks the two before it writes, refuses to touch the annotation. Installing ours first means
+   * PDFium finds an `/AP` and generates nothing: the rect stays what the model said, and the live
+   * page shows the cloud, the dash and the smoothed stroke rather than PDFium's plainer drawing.
+   * Pure vector, so the resource-less stream `FPDFAnnot_SetAP` writes is enough (ADR 0013).
+   */
+  private installOwnAppearance(
+    annot: number,
+    subtype: AnnotationSubtype,
+    data: Partial<Omit<Annotation, 'id' | 'page'>>,
+  ): void {
+    if (!OWN_APPEARANCE_SUBTYPES.has(subtype) || !data.rect) return;
+    const stream = defaultAppearanceService.generate(
+      appearanceInput({
+        subtype,
+        rect: data.rect,
+        color: data.color ?? null,
+        interiorColor: data.interiorColor ?? null,
+        opacity: null,
+        borderWidth: data.borderWidth ?? null,
+        paths: data.paths ?? [],
+        vertices: [],
+        extra: data.extra ?? {},
+      }),
+    );
+    if (stream) setAppearanceStream(this.ffi, annot, stream.content);
   }
 
   /**

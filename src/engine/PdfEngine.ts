@@ -327,12 +327,12 @@ export interface Attachment {
    */
   readonly collectionFields?: Readonly<Record<string, string>>;
   /**
-   * The raw `/EmbeddedFiles` name-tree key, folder prefix included (M42, ADR 0015). The writer
+   * The raw `/EmbeddedFiles` name-tree key, folder prefix included (M42, ADR 0016). The writer
    * matches on it to reuse an embedded stream untouched, which is what keeps a signed PDF
    * inside a portfolio valid across a save. Absent for a FileAttachment annotation.
    */
   readonly treeKey?: string;
-  /** Portfolio folder this file sits in; 0 — or absent — is the root (M42, ADR 0015). */
+  /** Portfolio folder this file sits in; 0 — or absent — is the root (M42, ADR 0016). */
   readonly folderId?: number;
   /** Present when the attachment comes from a FileAttachment annotation. */
   readonly page?: PageIndex;
@@ -380,7 +380,7 @@ export interface CollectionField {
 }
 
 /**
- * One node of `/Collection /Folders` (PDF 2.0 / Acrobat 9, M42 ADR 0015). The tree is stored as
+ * One node of `/Collection /Folders` (PDF 2.0 / Acrobat 9, M42 ADR 0016). The tree is stored as
  * `/Child` and `/Next` links; this is the flattened form, and the root is the only node whose
  * `parentId` is null.
  */
@@ -409,13 +409,13 @@ export interface PdfCollection {
   /** Number of `/Folders` entries, so a viewer can say a portfolio has folders it ignores. */
   readonly folderCount: number;
   /**
-   * The whole `/Folders` tree, root first (M42, ADR 0015). Absent when the file has none, which
+   * The whole `/Folders` tree, root first (M42, ADR 0016). Absent when the file has none, which
    * is a portfolio whose files all sit at the top level.
    */
   readonly folders?: ReadonlyArray<CollectionFolder>;
-  /** `/Sort` — the schema key a viewer orders on, and which way (M42, ADR 0015). */
+  /** `/Sort` — the schema key a viewer orders on, and which way (M42, ADR 0016). */
   readonly sort?: { readonly key: string; readonly ascending: boolean };
-  /** `/Reorder` — the schema key a viewer writes when the reader drags a file (M42, ADR 0015). */
+  /** `/Reorder` — the schema key a viewer writes when the reader drags a file (M42, ADR 0016). */
   readonly reorderKey?: string;
 }
 
@@ -485,7 +485,7 @@ export interface PdfEngine {
    */
   open(bytes: Uint8Array, options?: OpenOptions): Promise<DocHandle>;
   /**
-   * A new, empty document with no pages (M40, ADR 0015). The caller owns the handle and must
+   * A new, empty document with no pages (M40, ADR 0016). The caller owns the handle and must
    * `close` it. `importPages` fills it; saving one that is still empty is a caller error,
    * because a PDF must have at least one page.
    */

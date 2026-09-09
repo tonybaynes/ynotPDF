@@ -1,0 +1,231 @@
+/*
+ * M31 — shapes, ink, stamps and file attachments: the tools' previews, the stamp palette, the
+ * custom-stamp dialog and the properties sections.
+ *
+ * The same two rules as M30: colours come from theme tokens, except a stamp's or a swatch's own
+ * colour, which is document content and is set inline by the code that knows it; and nothing is
+ * translucent (CLAUDE.md).
+ */
+
+/* ---- tool previews on the page --------------------------------------------------------------- */
+
+.viewer-content .page .layer-annot .draw-preview {
+  fill: none;
+  stroke: var(--focus);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+.viewer-content .page .layer-annot .draw-preview-fill {
+  fill: var(--selection);
+  stroke: var(--focus);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.viewer-content .page .layer-annot .draw-eraser {
+  fill: var(--bg-panel);
+  stroke: var(--focus);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.viewer-content .page .layer-annot .draw-vertex-dot {
+  fill: var(--accent);
+  stroke: var(--fg-on-accent);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+/* ---- the stamp palette ----------------------------------------------------------------------- */
+
+.stamp-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.stamp-panel-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px;
+}
+
+.stamp-group {
+  margin: 0 0 8px;
+}
+
+.stamp-group-title {
+  margin: 6px 0 4px;
+  font-size: 0.9em;
+  font-weight: var(--fw-heading);
+  color: var(--fg);
+}
+
+.stamp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+
+/*
+ * A stamp tile says its name *and* shows its picture, and the picture sits on the page's own
+ * white so a stamp reads the way it will on paper — a coloured border on a dark panel says
+ * nothing about how it looks on a document.
+ */
+.stamp-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  color: var(--fg);
+  text-align: left;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.stamp-tile[aria-pressed='true'] {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+
+.stamp-tile:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.stamp-tile-picture {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 56px;
+  overflow: hidden;
+  background: var(--page-paper);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.stamp-tile-picture svg,
+.stamp-tile-picture img {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.stamp-tile-name {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9em;
+}
+
+.stamp-tile-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stamp-star {
+  flex: 0 0 auto;
+  padding: 2px;
+  color: var(--icon);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.stamp-star[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.stamp-star:focus-visible {
+  outline: 2px solid var(--focus);
+}
+
+.stamp-panel-empty {
+  margin: 8px 0;
+  color: var(--fg-muted);
+  font-size: 0.9em;
+}
+
+/* ---- the custom-stamp dialog ----------------------------------------------------------------- */
+
+.stamp-dialog-preview {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 240px;
+  overflow: hidden;
+  background: var(--page-paper);
+  border: 1px solid var(--border-strong);
+}
+
+.stamp-dialog-preview canvas {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.stamp-dialog-crop {
+  position: absolute;
+  border: 2px dashed var(--focus);
+  pointer-events: none;
+}
+
+.stamp-dialog-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.stamp-dialog-note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 0.9em;
+}
+
+/* ---- the properties sections ----------------------------------------------------------------- */
+
+.draw-endings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.draw-range {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.draw-range input[type='range'] {
+  flex: 1 1 auto;
+}
+
+.draw-range output {
+  min-width: 4ch;
+  text-align: right;
+}
+
+.draw-stamp-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  background: var(--page-paper);
+  border: 1px solid var(--border);
+}
+
+.draw-stamp-thumb svg,
+.draw-stamp-thumb img {
+  max-width: 100%;
+  max-height: 100%;
+}

@@ -103,6 +103,13 @@ export interface ExtGStateSpec {
 export interface AppearanceResources {
   readonly extGState: Readonly<Record<string, ExtGStateSpec>>;
   readonly fonts: Readonly<Record<string, AppearanceFont>>;
+  /**
+   * Shared XObjects the content draws with `Do`, by the name used in the stream → the **key** of
+   * a `WritePlan.xobjects` entry (M31, ADR 0015). The writer embeds each key once per document
+   * and points every stream that names it at the same object — which is how ten placements of
+   * one stamp cost one picture.
+   */
+  readonly xobjects?: Readonly<Record<string, string>>;
 }
 
 /** A generated `/AP /N` form XObject, as data. */

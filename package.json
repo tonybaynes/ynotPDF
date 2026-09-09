@@ -26,6 +26,7 @@
     "test:watch": "vitest",
     "e2e": "npm run build && playwright test",
     "fixtures": "node scripts/make-fixtures.ts",
+    "stamps": "node --import ./scripts/lib/register-ts.mjs scripts/make-stamps.ts",
     "fetch-binaries": "node scripts/fetch-binaries.ts",
     "licenses": "node scripts/check-licenses.ts",
     "package": "npm run build && electron-builder --publish never",

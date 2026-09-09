@@ -7,7 +7,7 @@
  * **Insert from file** (a slice of the chosen file, so the journal records three pages rather
  * than the five hundred they came out of).
  *
- * It is engine work throughout: `createDocument` (ADR 0015) makes the target, `importPages`
+ * It is engine work throughout: `createDocument` (ADR 0016) makes the target, `importPages`
  * copies the pages with their resources and their annotations, and `save` serialises. There is
  * no second PDF implementation here and no pdf-lib — ADR 0010's reasoning applies just as much
  * to copying a page as it does to writing one.

@@ -156,14 +156,29 @@ export default defineConfig({
         'src/renderer/modules/M30-markup-annotations/tools.ts',
         'src/renderer/view/AnnotationLayer.ts',
         /*
-         * M40's DOM and shell half, for the same reason again. `OrganiseService` orchestrates the
-         * dialogs, the engine, the progress dialog and the tab strip; `dialogs.ts` *is* the Organize
-         * dialogs; `manifest.ts` is the contribution points; and `dnd.ts` is a pointer-drag
-         * controller that only exists once there is a grid to drag in. All four are proved by
-         * Playwright in `test/e2e/organise.spec.ts`, which is where a drag with an insertion marker
-         * belongs. Everything they are built out of — the range dialect, the numbering, the
-         * settings, the commands and the slicing — is pure and gated below, and so is the one pure
-         * function inside `dnd.ts` (`insertionIndexFor`), which has its own unit tests.
+         * M31's DOM and shell half, for the same reason: the tools, the properties sections, the
+         * stamp palette, the custom-stamp dialog (a canvas), the PNG import (a canvas) and the
+         * service that wires them together all need a document and a running viewer, and are
+         * proved by Playwright in `test/e2e/drawing.spec.ts`. Everything they are built out of —
+         * the geometry, the overlay's rules, the provider's patches, the settings, the commands
+         * and the whole of `engine/appearance/` — is pure and gated below.
+         */
+        'src/renderer/modules/M31-shapes-ink-stamps/DrawingService.ts',
+        'src/renderer/modules/M31-shapes-ink-stamps/manifest.ts',
+        'src/renderer/modules/M31-shapes-ink-stamps/panel.ts',
+        'src/renderer/modules/M31-shapes-ink-stamps/StampDialog.ts',
+        'src/renderer/modules/M31-shapes-ink-stamps/StampPanel.ts',
+        'src/renderer/modules/M31-shapes-ink-stamps/stampImport.ts',
+        'src/renderer/modules/M31-shapes-ink-stamps/tools.ts',
+        /*
+         * M40's DOM and shell half, for the same reason again. `OrganiseService` orchestrates
+         * the dialogs, the engine, the progress dialog and the tab strip; `dialogs.ts` *is* the
+         * Organize dialogs; `manifest.ts` is the contribution points; and `dnd.ts` is a pointer
+         * drag controller that only exists once there is a grid to drag in. All four are proved
+         * by Playwright in `test/e2e/organise.spec.ts`, which is where a drag with an insertion
+         * marker belongs. Everything they are built out of — the range dialect, the numbering,
+         * the settings, the commands and the slicing — is pure and gated below, and so is the
+         * one pure function inside `dnd.ts` (`insertionIndexFor`), which has its own tests.
          */
         'src/renderer/modules/M40-organise-pages/OrganiseService.ts',
         'src/renderer/modules/M40-organise-pages/dialogs.ts',
@@ -396,6 +411,36 @@ export default defineConfig({
         'src/engine/appearance/freetext.ts': { lines: 90, functions: 90, statements: 90 },
         'src/engine/appearance/markup.ts': { lines: 90, functions: 90, statements: 90 },
         'src/engine/appearance/note.ts': { lines: 90, functions: 90, statements: 90 },
+        // M31's pure half: the shapes, the ink and the stamps decide what the file draws, and the
+        // geometry and the overlay rules decide what the reader can grab.
+        'src/engine/appearance/shapes.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/engine/appearance/ink.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/engine/appearance/stamp.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/renderer/modules/M31-shapes-ink-stamps/geometry.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M31-shapes-ink-stamps/overlay.ts': {
+          lines: 85,
+          functions: 85,
+          statements: 85,
+        },
+        'src/renderer/modules/M31-shapes-ink-stamps/provider.ts': {
+          lines: 85,
+          functions: 85,
+          statements: 85,
+        },
+        'src/renderer/modules/M31-shapes-ink-stamps/settings.ts': {
+          lines: 85,
+          functions: 85,
+          statements: 85,
+        },
+        'src/renderer/modules/M31-shapes-ink-stamps/commands.ts': {
+          lines: 85,
+          functions: 85,
+          statements: 85,
+        },
         // M40. The range dialect decides which pages a destructive command acts on and the
         // numbering decides what the file says a page is called, so both are held high; the
         // commands are what undo has to reverse exactly.

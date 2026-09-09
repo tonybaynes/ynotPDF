@@ -51,7 +51,12 @@ import {
   type FreeTextStyle,
   type Quad,
 } from '@engine/appearance';
-import { AnnotationLayer, resizeRect, type BoxHandle } from '@view/AnnotationLayer';
+import {
+  AnnotationLayer,
+  resizeRect,
+  type BoxHandle,
+  type LayerAnnotation,
+} from '@view/AnnotationLayer';
 import type { Viewer } from '@modules/M11-viewer/Viewer';
 import { VIEWER_SERVICE, type ViewerService } from '@modules/M11-viewer/ViewerService';
 import { DOCUMENT_SERVICE, type DocumentService } from '@modules/M20-document-model/manifest';
@@ -86,6 +91,44 @@ import { decodeAnnotations, encodeAnnotations, type ClipboardAnnotation } from '
 export const ANNOTATION_SERVICE = 'annotations';
 export const PROPERTIES_PANEL_ID = 'props.annotation';
 
+/**
+ * How another module joins this service's overlay, selection and properties panel (M31,
+ * ADR 0015).
+ *
+ * There is one `AnnotationLayer` per page and one controller on the viewport; a second of either
+ * would fight the first for the same DOM and the same pointer. So a module that brings its own
+ * annotation families — M31's shapes, ink and stamps; M33's measurements — registers a provider
+ * instead: it says which annotations are its, what the overlay draws for them, how a move, a
+ * resize and a handle drag patch their geometry, and what the panel shows. Everything else — the
+ * selection, the marquee, the nudge, delete, copy and paste, undo — is shared.
+ */
+export interface AnnotationProvider {
+  readonly id: string;
+  /** Tool ids that create something and must own the pointer while active. */
+  readonly creationTools?: ReadonlySet<string>;
+  owns(a: ModelAnnotation): boolean;
+  /** What the overlay draws and lets the reader grab. */
+  toLayer(
+    a: ModelAnnotation,
+    page: number,
+    options: { readonly edited: ReadonlySet<string>; readonly hidden?: boolean },
+  ): LayerAnnotation;
+  /** A patch that moves the annotation by a page-space delta, geometry included. */
+  movePatch(a: ModelAnnotation, dx: number, dy: number): AnnotationPatch;
+  /** A patch that fits the annotation to `rect`, scaling its geometry; null to refuse. */
+  resizePatch(a: ModelAnnotation, rect: PdfRect): AnnotationPatch | null;
+  /** A patch for a handle of its own — a polygon's vertex — dragged to `to`. */
+  handlePatch?(a: ModelAnnotation, handle: string, to: PdfPoint): AnnotationPatch | null;
+  /** Runs after the annotation changed, e.g. to push its appearance into the live page. */
+  afterChange?(a: ModelAnnotation): Promise<void>;
+  /** The properties panel's sections for this annotation. */
+  panel?(a: ModelAnnotation, refresh: () => void): HTMLElement[];
+  /** A short description for the panel's heading ("Rectangle", "Approved stamp"). */
+  describe?(a: ModelAnnotation): string;
+  /** What a double-click or Enter does; `false` falls back to the popup note. */
+  open?(a: ModelAnnotation): boolean;
+}
+
 /** What a tool needs to know before it makes something. */
 export interface CreationContext {
   readonly document: Document;
@@ -115,6 +158,7 @@ export class AnnotationService {
   private readonly tabs = new Map<string, TabState>();
   private readonly disposers: Array<() => void> = [];
   private readonly listeners = new Set<AnnotationListener>();
+  private readonly providers: AnnotationProvider[] = [];
   private readonly toolDefaults = new Map<AnnotationToolId, ToolDefaults>();
   private settingsValue: AnnotationSettings = DEFAULT_ANNOTATION_SETTINGS;
   private identityValue: Identity = EMPTY_IDENTITY;
@@ -236,6 +280,73 @@ export class AnnotationService {
     this.identityValue = { ...identity, asked: true };
     await writeIdentity(this.storage, this.identityValue);
     this.notify();
+  }
+
+  // ---- providers (M31, ADR 0015) ----------------------------------------------------------------
+
+  /** Registers a provider for annotation families this module does not own. Returns a disposer. */
+  registerProvider(provider: AnnotationProvider): () => void {
+    this.providers.push(provider);
+    const tabId = this.activeTabId();
+    if (tabId) this.repaint(tabId);
+    return () => {
+      const at = this.providers.indexOf(provider);
+      if (at >= 0) this.providers.splice(at, 1);
+    };
+  }
+
+  /** The provider that owns an annotation, or null when it is one of this module's own. */
+  providerFor(a: ModelAnnotation): AnnotationProvider | null {
+    return this.providers.find((p) => p.owns(a)) ?? null;
+  }
+
+  /** Whether the overlay, the selection and the panel handle this annotation at all. */
+  owned(a: ModelAnnotation): boolean {
+    return this.providerFor(a) !== null || isOurs(a);
+  }
+
+  /** Whether a tool id is a creation tool of this module or of a provider. */
+  isCreationTool(id: string): boolean {
+    return this.providers.some((p) => p.creationTools?.has(id) ?? false);
+  }
+
+  /** Marks an annotation as touched this session, so the overlay draws it rather than the raster. */
+  markEdited(id: ModelId): void {
+    const tabId = this.activeTabId();
+    this.tabs.get(tabId ?? '')?.edited.add(id);
+  }
+
+  /**
+   * What a provider's tool calls once it has made something: back to the Hand tool unless the
+   * reader asked to keep the tool, then a repaint.
+   */
+  completeCreation(): void {
+    if (!this.settingsValue.keepToolSelected) {
+      this.registry.service<{ activate(id: string): void }>(SERVICE.tools).activate('tool.hand');
+    }
+    this.notify();
+  }
+
+  /** The fields every annotation this app makes carries, for a provider's own drafts. */
+  async commonFields(
+    subject: string,
+  ): Promise<
+    Pick<
+      ModelAnnotation,
+      'author' | 'created' | 'modified' | 'subject' | 'flags' | 'opacity' | 'contents'
+    >
+  > {
+    const identity = await this.requireIdentity();
+    const now = new Date().toISOString();
+    return {
+      author: identity.name === '' ? null : identity.name,
+      created: now,
+      modified: now,
+      subject,
+      flags: DEFAULT_ANNOTATION_FLAGS,
+      opacity: null,
+      contents: null,
+    };
   }
 
   // ---- wiring -----------------------------------------------------------------------------------
@@ -382,13 +493,13 @@ export class AnnotationService {
     const items = [];
     for (const [index, page] of document.state.pages.entries()) {
       for (const a of document.annotations(page.id)) {
-        if (!isOurs(a)) continue;
-        items.push(
-          toLayerAnnotation(a, index, {
-            edited: state.edited,
-            ...(this.editing === a.id ? { hidden: true } : {}),
-          }),
-        );
+        const options = {
+          edited: state.edited,
+          ...(this.editing === a.id ? { hidden: true } : {}),
+        };
+        const provider = this.providerFor(a);
+        if (provider) items.push(provider.toLayer(a, index, options));
+        else if (isOurs(a)) items.push(toLayerAnnotation(a, index, options));
       }
     }
     state.layer.set(items);
@@ -454,7 +565,7 @@ export class AnnotationService {
     this.select(
       found.document
         .annotations(page.id)
-        .filter(isOurs)
+        .filter((a) => this.owned(a))
         .map((a) => a.id),
     );
   }
@@ -752,9 +863,19 @@ export class AnnotationService {
     return this.lastTool;
   }
 
-  private markEdited(id: ModelId): void {
-    const tabId = this.activeTabId();
-    this.tabs.get(tabId ?? '')?.edited.add(id);
+  /**
+   * What follows any change to an annotation: a note gets its icon pushed into the engine; a
+   * provider's annotation gets whatever its provider does — M31 pushes a shape's appearance.
+   */
+  private async afterChange(id: ModelId): Promise<void> {
+    const document = this.activeDocument();
+    const a = document?.annotation(id);
+    if (!a) return;
+    if (a.family === 'note') {
+      await this.pushNoteAppearance(id);
+      return;
+    }
+    await this.providerFor(a)?.afterChange?.(a);
   }
 
   /**
@@ -809,7 +930,7 @@ export class AnnotationService {
     }
     for (const id of ids) {
       this.markEdited(id);
-      if (document.annotation(id)?.family === 'note') await this.pushNoteAppearance(id);
+      await this.afterChange(id);
     }
     this.notify();
   }
@@ -822,8 +943,17 @@ export class AnnotationService {
       new UpdateAnnotationCommand(document, id, { ...patch, modified: new Date().toISOString() }),
     );
     this.markEdited(id);
-    if (document.annotation(id)?.family === 'note') await this.pushNoteAppearance(id);
+    await this.afterChange(id);
     this.notify();
+  }
+
+  /** Drags one of a provider's own handles — a polygon's vertex — to a page point. */
+  async moveHandle(id: ModelId, handle: string, to: PdfPoint): Promise<void> {
+    const document = this.activeDocument();
+    const a = document?.annotation(id);
+    if (!document || !a || a.flags.locked) return;
+    const patch = this.providerFor(a)?.handlePatch?.(a, handle, to) ?? null;
+    if (patch) await this.patch(id, patch);
   }
 
   /**
@@ -841,15 +971,14 @@ export class AnnotationService {
       for (const id of ids) {
         const a = document.annotation(id);
         if (!a || a.flags.locked || a.flags.readOnly) continue;
-        await document.apply(new UpdateAnnotationCommand(document, id, movePatch(a, dx, dy)));
+        const patch = this.providerFor(a)?.movePatch(a, dx, dy) ?? movePatch(a, dx, dy);
+        await document.apply(new UpdateAnnotationCommand(document, id, patch));
         this.markEdited(id);
       }
     };
     if (ids.length === 1) await apply();
     else await document.batch(label, apply);
-    for (const id of ids) {
-      if (document.annotation(id)?.family === 'note') await this.pushNoteAppearance(id);
-    }
+    for (const id of ids) await this.afterChange(id);
     this.notify();
   }
 
@@ -860,6 +989,12 @@ export class AnnotationService {
     if (!document || !a || a.flags.locked) return;
     const rect = normalise(resizeRect(a.rect, handle, to));
     if (rect.x1 - rect.x0 < 4 || rect.y1 - rect.y0 < 4) return;
+    const provider = this.providerFor(a);
+    if (provider) {
+      const patch = provider.resizePatch(a, rect);
+      if (patch) await this.patch(id, patch);
+      return;
+    }
     await this.patch(id, { rect });
   }
 
@@ -955,7 +1090,7 @@ export class AnnotationService {
           } as never);
           await document.apply(new AddAnnotationCommand(document, draft));
           this.markEdited(draft.id);
-          if (draft.family === 'note') await this.pushNoteAppearance(draft.id);
+          await this.afterChange(draft.id);
           created.push(draft.id);
         }
       },
