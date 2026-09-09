@@ -20,7 +20,7 @@ import type { FileKind, IpcHandlers, IpcInvokeChannel, SaveDialogOptions } from 
 import type { PrintJobs } from './print';
 import type { FolderSearches } from './search';
 import { hostArch, targetArch } from './arch';
-import { readFileForRenderer, writeBytes, writeTempFile } from './files';
+import { readFileForRenderer, readFolder, writeBytes, writeInto, writeTempFile } from './files';
 import { systemFontFamilies } from './fonts';
 import { probeFile, writeAtomic } from './fs/atomic';
 import type { CloseBroker } from './fs/lifecycle';
@@ -167,6 +167,8 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       // Deliberately not added to Recent: a certificate is not a document the reader reopens.
       return Promise.all(result.filePaths.map((path) => readFileForRenderer(path)));
     },
+    'file:readFolder': (_e, path, options) => readFolder(path, options),
+    'file:writeInto': (_e, dir, relativePath, bytes) => writeInto(dir, relativePath, bytes),
     'file:writeAtomic': async (_e, path, bytes, options) => {
       // Our own write must not come back as "someone changed your file"; the mute is set before
       // the bytes land and expires by itself, and is lifted early when the write fails.

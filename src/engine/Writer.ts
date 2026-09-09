@@ -180,6 +180,85 @@ export interface PlannedAttachment {
   readonly mimeType: string | null;
 }
 
+/**
+ * A PDF Portfolio, as instructions for the writer (M42, ADR 0014).
+ *
+ * The whole `/Collection` dictionary and the whole `/EmbeddedFiles` name tree are rebuilt from
+ * this section, which is what lets one plan express a rename, a move between folders, a new
+ * column and a reorder at once. Nothing else in the file is touched.
+ *
+ * The guarantee that matters is in {@link PlannedPortfolioFile.source}: a file the reader did
+ * not replace says `keep`, and the writer then reuses the embedded stream object the base
+ * document already holds — same reference, same bytes, same `/Filter`, same `/Params`. A
+ * digitally signed PDF embedded in a portfolio therefore still verifies after a save, because
+ * nothing decoded it.
+ */
+export interface PlannedPortfolio {
+  /** `/View`. */
+  readonly view: 'details' | 'tile' | 'hidden';
+  /** `/Schema`, in `/O` order. */
+  readonly schema: ReadonlyArray<PlannedPortfolioColumn>;
+  /** `/Sort`. */
+  readonly sort: { readonly key: string; readonly ascending: boolean } | null;
+  /** `/Reorder` — the schema key a viewer writes when the reader drags a file. */
+  readonly reorderKey: string | null;
+  /** `/D` — the file a viewer opens first, by name. */
+  readonly initialFile: string | null;
+  /** `/Folders`, root first. Every file's `folderId` must name one of these. */
+  readonly folders: ReadonlyArray<PlannedPortfolioFolder>;
+  /** Every file in the finished portfolio, in the order the name tree should list them. */
+  readonly files: ReadonlyArray<PlannedPortfolioFile>;
+}
+
+export interface PlannedPortfolioColumn {
+  readonly key: string;
+  readonly label: string;
+  /** `/Subtype`: `F`, `Desc`, `CreationDate`, `ModDate`, `Size`, `CompressedSize`, `S`, `D`, `N`. */
+  readonly subtype: string;
+  readonly order: number;
+  readonly visible: boolean;
+}
+
+export interface PlannedPortfolioFolder {
+  readonly id: number;
+  readonly name: string;
+  /** `null` for the root, which must be the first entry. */
+  readonly parentId: number | null;
+  readonly description: string | null;
+  /** ISO 8601. */
+  readonly created: string | null;
+  readonly modified: string | null;
+}
+
+/**
+ * Where the writer gets a file's bytes.
+ *
+ * `keep` names an embedded stream the base document already has, by its `/EmbeddedFiles` key
+ * as the file was opened. `bytes` is a file this session brought in, and is the only source
+ * that makes the writer create a stream.
+ */
+export type PlannedFileSource =
+  | { readonly kind: 'keep'; readonly treeKey: string }
+  | {
+      readonly kind: 'bytes';
+      readonly bytes: Uint8Array;
+      /** ISO 8601, for `/Params`. */
+      readonly created: string | null;
+      readonly modified: string | null;
+    };
+
+export interface PlannedPortfolioFile {
+  /** The file name, with no folder prefix; the key is built from this and `folderId`. */
+  readonly name: string;
+  readonly folderId: number;
+  readonly description: string | null;
+  /** Written as the embedded stream's `/Subtype` name. */
+  readonly mimeType: string | null;
+  /** Custom schema values, written to the file specification's `/CI`. */
+  readonly fields: Readonly<Record<string, string>>;
+  readonly source: PlannedFileSource;
+}
+
 /** A named destination for `/Names /Dests`. */
 export interface PlannedNamedDestination {
   readonly name: string;
@@ -227,6 +306,12 @@ export interface WritePlan {
   readonly fields: ReadonlyArray<PlannedField> | null;
   /** Embedded-file metadata to normalise (M12, ADR 0011). */
   readonly attachments: ReadonlyArray<PlannedAttachment> | null;
+  /**
+   * The whole PDF Portfolio structure (M42, ADR 0014). Non-null only when the document is a
+   * portfolio this session edited; the writer then rebuilds `/Collection` and
+   * `/Names /EmbeddedFiles` from it and leaves everything else alone.
+   */
+  readonly portfolio: PlannedPortfolio | null;
 }
 
 /** An empty plan over `pageCount` pages: a straight re-serialisation. */
@@ -242,6 +327,7 @@ export function emptyWritePlan(pageCount: number): WritePlan {
     layers: null,
     fields: null,
     attachments: null,
+    portfolio: null,
   };
 }
 
@@ -256,6 +342,7 @@ export function planIsEmpty(plan: WritePlan): boolean {
     plan.layers === null &&
     plan.fields === null &&
     plan.attachments === null &&
+    plan.portfolio === null &&
     plan.pages.every((p) => p.boxes === undefined && (p.annotations?.length ?? 0) === 0)
   );
 }
@@ -280,6 +367,7 @@ export const WRITE_PHASES = [
   'destinations',
   'layers',
   'attachments',
+  'portfolio',
   'annotations',
   'fields',
   'serialise',

@@ -3,7 +3,7 @@
 The Organize tab: insert, delete, extract, replace, rotate, move, duplicate, reverse, swap, copy
 into another document, and page numbering — plus dragging thumbnails to reorder. Spec:
 [`docs/modules/M40-organise-pages.md`](../../../../docs/modules/M40-organise-pages.md); the one
-contract addition: [ADR 0014](../../../../docs/adr/0014-page-organisation-contracts.md).
+contract addition: [ADR 0015](../../../../docs/adr/0015-page-organisation-contracts.md).
 
 ## What is where
 

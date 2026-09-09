@@ -1,9 +1,12 @@
-# ADR 0014 — An empty document from the engine, for page organisation
+# ADR 0015 — An empty document from the engine, for page organisation
 
 - **Status:** accepted
 - **Date:** 2026-09-09
 - **Module:** M40 (Organise pages), needed again by M41 (merge, split, extract to files)
 - **Supersedes / amends:** nothing. Additive to ADR 0005 / 0007's `PdfEngine`.
+- **Numbering:** written as 0014 and renumbered to 0015 when it merged. M42 was in flight on its
+  own branch and took 0014 for the portfolio model; two parallel modules cannot see each other's
+  unmerged ADR numbers, so the second one to land renumbers.
 
 ## Context
 

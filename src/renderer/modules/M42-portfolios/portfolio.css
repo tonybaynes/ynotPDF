@@ -1,0 +1,351 @@
+/*
+ * The portfolio view (M42): the tab strip, the folder tree, the details table and the tiles.
+ *
+ * Every colour is a theme token — there is not a literal in this file — and nothing is
+ * translucent. Selection is a filled surface plus a border, never a tint, and every state a
+ * reader has to notice is carried by a word as well: "Opens first", "New", "A–Z" beside the sort
+ * arrow. Column headings stay put while the list scrolls under them.
+ */
+
+.pf-host {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-app);
+  color: var(--fg);
+  z-index: 1;
+}
+
+.pf-host[hidden] {
+  display: none;
+}
+
+/* A drop from Explorer or Finder: a solid border, not a wash over the grid. */
+.pf-host.is-drop-target {
+  outline: calc(var(--border-width) * 2) dashed var(--accent);
+  outline-offset: calc(var(--border-width) * -2);
+}
+
+/* ---- the tab strip ---------------------------------------------------------------------- */
+
+.pf-tabs {
+  display: flex;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: var(--border-width) solid var(--border);
+  background: var(--bg-ribbon);
+  flex: none;
+}
+
+.pf-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-3);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg);
+  font-weight: var(--fw-body);
+  cursor: pointer;
+}
+
+.pf-tab:hover {
+  background: var(--bg-panel);
+}
+
+.pf-tab.is-current {
+  background: var(--bg-panel);
+  border-color: var(--accent);
+  font-weight: var(--fw-heading);
+}
+
+.pf-tab svg {
+  width: 1em;
+  height: 1em;
+  color: var(--icon);
+}
+
+/* ---- layout ----------------------------------------------------------------------------- */
+
+.pf-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.pf-body[hidden] {
+  display: none;
+}
+
+.pf-folders {
+  flex: none;
+  width: 15rem;
+  overflow: auto;
+  border-right: var(--border-width) solid var(--border);
+  background: var(--bg-panel);
+  padding: var(--sp-2) 0;
+}
+
+.pf-folders[hidden] {
+  display: none;
+}
+
+.pf-folder-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pf-folder-button {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-1) var(--sp-2);
+  padding-left: calc(var(--sp-2) + var(--pf-depth, 0) * var(--sp-3));
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pf-folder-button:hover {
+  background: var(--bg-app);
+}
+
+.pf-folder-button.is-current {
+  background: var(--selection);
+  border-color: var(--accent);
+  font-weight: var(--fw-heading);
+}
+
+.pf-folder-button.is-drop-target {
+  border-color: var(--accent);
+  border-style: dashed;
+}
+
+.pf-folder-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-folder-count {
+  flex: none;
+  font-size: var(--fs-2);
+  color: var(--fg-muted);
+}
+
+.pf-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pf-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: var(--border-width) solid var(--border);
+  flex: none;
+}
+
+.pf-count {
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-size: var(--fs-2);
+}
+
+.pf-grid {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.pf-empty {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-3);
+  color: var(--fg-muted);
+}
+
+.pf-empty[hidden],
+.pf-grid[hidden] {
+  display: none;
+}
+
+/* ---- details ---------------------------------------------------------------------------- */
+
+.pf-table {
+  display: flex;
+  flex-direction: column;
+  min-width: max-content;
+}
+
+.pf-tr {
+  display: grid;
+  grid-template-columns: minmax(18ch, 2fr) repeat(calc(var(--pf-columns, 4) - 1), minmax(10ch, 1fr));
+  gap: var(--sp-2);
+  align-items: center;
+  padding: var(--sp-1) var(--sp-3);
+  border-bottom: var(--border-width) solid var(--border);
+  border-left: calc(var(--border-width) * 2) solid transparent;
+  cursor: default;
+}
+
+.pf-th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-ribbon);
+  font-weight: var(--fw-heading);
+}
+
+.pf-td {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-td svg {
+  flex: none;
+  width: 1em;
+  height: 1em;
+  color: var(--icon);
+}
+
+.pf-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-weight: var(--fw-heading);
+  cursor: pointer;
+}
+
+.pf-sort:hover {
+  background: var(--bg-panel);
+}
+
+.pf-sort-word {
+  font-size: var(--fs-2);
+  color: var(--fg-muted);
+}
+
+.pf-tr[data-row]:hover {
+  background: var(--bg-panel);
+}
+
+.pf-tr.is-selected,
+.pf-tile.is-selected {
+  background: var(--selection);
+  border-left-color: var(--accent);
+}
+
+.pf-tr.is-drop-target,
+.pf-tile.is-drop-target {
+  border-top: calc(var(--border-width) * 2) solid var(--accent);
+}
+
+.pf-badge {
+  flex: none;
+  padding: 0 var(--sp-1);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-ribbon);
+  color: var(--fg);
+  font-size: var(--fs-2);
+}
+
+/* ---- tiles ------------------------------------------------------------------------------ */
+
+.pf-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+}
+
+.pf-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+  border: var(--border-width) solid var(--border);
+  border-left: calc(var(--border-width) * 2) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  cursor: default;
+}
+
+.pf-tile:hover {
+  border-color: var(--accent);
+}
+
+.pf-tile-picture {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 10rem;
+  background: var(--bg-app);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.pf-tile-picture img {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.pf-tile-picture svg {
+  width: 3rem;
+  height: 3rem;
+  color: var(--icon);
+}
+
+.pf-tile-name {
+  font-weight: var(--fw-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-tile-meta {
+  font-size: var(--fs-2);
+  color: var(--fg-muted);
+}
+
+.pf-tile-desc {
+  font-size: var(--fs-2);
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Focus is the shell's two-ring treatment; nothing here overrides it. */
+.pf-tab:focus-visible,
+.pf-folder-button:focus-visible,
+.pf-sort:focus-visible,
+.pf-tr:focus-visible,
+.pf-tile:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: calc(var(--border-width) * 1);
+}
