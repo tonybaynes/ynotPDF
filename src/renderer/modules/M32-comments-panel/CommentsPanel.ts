@@ -66,6 +66,8 @@ export function mountCommentsPanel(
 ): () => void {
   const disposers: Array<() => void> = [];
   let expanded: ModelId | null = null;
+  /** The annotation selection as the panel last saw it, so it can tell a change from a repeat. */
+  let seenSelection: ModelId | null = null;
   let result: RowResult = { rows: [], shown: 0, total: 0, authors: [], types: [] };
 
   // ---- chrome ---------------------------------------------------------------------------------
@@ -157,6 +159,8 @@ export function mountCommentsPanel(
   spacer.append(list);
   scroller.append(spacer);
   const empty = emptyMessage('This document has no comments.', 'message-square');
+  // Named so the acceptance test can tell this empty state from the shell's own.
+  empty.dataset['role'] = 'comment-empty';
   host.append(bar, searchRow, scroller, empty);
 
   // ---- rendering ------------------------------------------------------------------------------
@@ -188,6 +192,14 @@ export function mountCommentsPanel(
   };
 
   const paint = (): void => {
+    /*
+     * A repaint throws every row away and builds it again, which takes the focused element with
+     * it — and focus falling back to the body means the next arrow key reaches nobody. So the
+     * list remembers whether it held focus and puts it back on the row that now stands for the
+     * same place. Only when the *list* had it: a repaint while the reader is typing in the
+     * search field must not pull focus out of the field.
+     */
+    const hadFocus = list.contains(document.activeElement);
     const metrics = rowMetrics(result.rows, {
       width: usableWidth(),
       fontSize: FONT_SIZE,
@@ -205,7 +217,12 @@ export function mountCommentsPanel(
       list.append(element);
     }
     setRoving();
+    if (hadFocus) tabbableRow()?.focus();
   };
+
+  /** The one row that is a tab stop; the list is a single stop with roving focus inside it. */
+  const tabbableRow = (): HTMLElement | null =>
+    list.querySelector<HTMLElement>('[data-row][tabindex="0"]');
 
   const setRoving = (): void => {
     const rows = Array.from(list.querySelectorAll<HTMLElement>('[data-row]'));
@@ -391,10 +408,23 @@ export function mountCommentsPanel(
     return box;
   }
 
+  /**
+   * Picks a row. Only ever called from a click or a key inside the list, so it takes focus with
+   * it — which is what makes clicking a comment and then pressing an arrow key work.
+   *
+   * The panel stays authoritative about its own row. A reply is a hidden annotation, so the page
+   * cannot select it and the annotation selection stays on the comment above; the listener at the
+   * bottom therefore adopts the annotation selection only when it *changes*, and `seenSelection`
+   * is how it tells a change from the same value arriving again. Without that, every repaint
+   * after a reply was chosen would snap the row back and the arrow keys would do nothing.
+   */
   function choose(id: ModelId): void {
     expanded = id;
     comments.select(id);
+    seenSelection = comments.annotations.selection[0] ?? null;
+    expanded = id;
     paint();
+    tabbableRow()?.focus();
   }
 
   // ---- popovers -------------------------------------------------------------------------------
@@ -599,10 +629,32 @@ export function mountCommentsPanel(
 
   // ---- keyboard -------------------------------------------------------------------------------
 
+  /**
+   * The list's keys are handled on the panel's host rather than on the list element, because the
+   * list's children are rebuilt on every repaint and a handler bound further in loses the events
+   * the moment a row is replaced. The host outlives every repaint; the guard below keeps the
+   * search field's own arrow keys, and the toolbar's, out of it.
+   */
   const onKeyDown = (event: KeyboardEvent): void => {
-    const rows = result.rows;
+    const w = window as unknown as Record<string, unknown>;
+    ((w['__log'] as unknown[]) ??= []).push({
+      k: event.key,
+      cls: (event.target as HTMLElement | null)?.className ?? null,
+      live: comments.rows().rows.length,
+      exp: expanded,
+    });
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
+    // Read the list as it stands rather than from a captured copy: a repaint may have replaced
+    // both the rows and the array behind them between the last render and this key.
+    const rows = comments.rows().rows;
     if (rows.length === 0) return;
-    const at = rows.findIndex((row) => row.id === expanded);
+    const current =
+      expanded ??
+      list.querySelector<HTMLElement>('.comments-row.is-selected')?.dataset['id'] ??
+      null;
+    const at = rows.findIndex((row) => row.id === current);
     const move = (delta: number): void => {
       const next = rows[Math.min(rows.length - 1, Math.max(0, at + delta))];
       if (!next) return;
@@ -700,9 +752,13 @@ export function mountCommentsPanel(
 
   disposers.push(
     comments.subscribe(() => {
-      // The selection may have been made on the page rather than in the panel.
-      const selected = comments.annotations.selection[0];
-      if (selected !== undefined && selected !== expanded) expanded = selected;
+      // A selection made on the page rather than in the panel moves the panel's row too — but
+      // only when it actually changes, never when the same value arrives again (see `choose`).
+      const selected = comments.annotations.selection[0] ?? null;
+      if (selected !== seenSelection) {
+        seenSelection = selected;
+        if (selected !== null) expanded = selected;
+      }
       render();
     }),
   );

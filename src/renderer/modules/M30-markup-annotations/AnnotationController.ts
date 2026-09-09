@@ -259,6 +259,7 @@ export class AnnotationController {
 
   private onKeyDown(e: KeyboardEvent): void {
     if (isTypingTarget(e.target)) return;
+    if (this.inOtherSurface(e.target)) return;
     /*
      * A creation tool from another module owns the keyboard as it owns the pointer (M31): the
      * Enter that finishes a polygon and the Escape that abandons one go to the tool, through the
@@ -341,6 +342,24 @@ export class AnnotationController {
 
   private inDocument(target: EventTarget | null): boolean {
     return target instanceof Node && this.host.contains(target);
+  }
+
+  /**
+   * Whether the keyboard belongs to something other than the page (M32).
+   *
+   * This listener is on `window` in the capture phase, so it sees every key in the app before
+   * anything else does — which is right for the page area and wrong everywhere else. A panel
+   * that lists the same annotations has its own arrow keys, its own Delete and its own
+   * clipboard: without this, pressing Down in the Comments panel would nudge the comment on the
+   * page instead of moving to the next one, and Delete there would delete twice over.
+   *
+   * The test is deliberately narrow — a pane, a dialog or a popup — so the page area, the body
+   * and the ribbon keep behaving exactly as they did.
+   */
+  private inOtherSurface(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false;
+    if (this.host.contains(target)) return false;
+    return target.closest('.pane, .popup, dialog') !== null;
   }
 
   private stop(e: KeyboardEvent): void {

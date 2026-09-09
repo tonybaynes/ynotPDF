@@ -147,6 +147,22 @@ export default defineModule({
       },
     },
 
+    {
+      id: 'comments.select',
+      label: 'Go to comment',
+      category: 'Comment',
+      hidden: true,
+      description: 'Selects a comment and brings its page into view (pass { comment })',
+      when: hasComments,
+      run: (ctx) => {
+        const s = service(ctx);
+        const id = ctx.args['comment'];
+        if (typeof id !== 'string') return null;
+        s.select(id as ModelId, { jump: ctx.args['jump'] !== false });
+        return id;
+      },
+    },
+
     // ---- replies and status --------------------------------------------------------------------
     {
       id: 'comments.reply',
