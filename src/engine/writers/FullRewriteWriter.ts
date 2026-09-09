@@ -114,6 +114,7 @@ export class FullRewriteWriter implements Writer {
         throw new WriteUnsupported('corrupt', 'None of the planned pages is in the document');
       }
       reorderPages(doc, finalPages.refs, basePages);
+      pruneOrphanFields(doc, state);
       state.applied('pages');
     }
     applyBoxes(ctx, plan.pages, finalPages.refs, state);
@@ -1085,6 +1086,58 @@ function writeNamedDestinations(
   // A pre-1.2 `/Dests` dictionary in the catalogue would shadow half of this; the name tree we
   // just wrote holds everything it held.
   doc.catalog.delete(destsKey);
+}
+
+/**
+ * Drops `/AcroForm` fields that no surviving page carries a widget for.
+ *
+ * A field whose widgets went with the pages they were on is a field no reader can fill, no
+ * viewer draws and every validator complains about — and it is exactly what is left behind when
+ * pages are deleted (M40) or replaced by flattened copies (M41). The catalogue's `/AcroForm` is
+ * not part of the page tree, so nothing else in this writer would notice.
+ *
+ * Only runs when the page set actually changed. A field is kept if it, or anything under it, is
+ * still reachable from a page's `/Annots`.
+ */
+function pruneOrphanFields(doc: PDFDocument, state: WriteState): void {
+  const ctx = doc.context;
+  const acroForm = doc.catalog.lookupMaybe(PDFName.of('AcroForm'), PDFDict);
+  const fields = acroForm?.lookupMaybe(PDFName.of('Fields'), PDFArray);
+  if (!acroForm || !fields || fields.size() === 0) return;
+
+  // Every annotation, and every ancestor of one, that a surviving page still reaches.
+  const live = new Set<string>();
+  doc.catalog.Pages().traverse((node) => {
+    if (!(node instanceof PDFPageLeaf)) return;
+    const annots = ctx.lookupMaybe(node.get(PDFName.of('Annots')), PDFArray);
+    if (!annots) return;
+    for (let i = 0; i < annots.size(); i++) {
+      const raw = annots.get(i);
+      if (raw instanceof PDFRef) live.add(raw.toString());
+      let parent = ctx.lookupMaybe(raw, PDFDict)?.get(PDFName.of('Parent'));
+      for (let depth = 0; parent instanceof PDFRef && depth < 32; depth++) {
+        if (live.has(parent.toString())) break;
+        live.add(parent.toString());
+        parent = ctx.lookupMaybe(parent, PDFDict)?.get(PDFName.of('Parent'));
+      }
+    }
+  });
+
+  const kept = [];
+  for (let i = 0; i < fields.size(); i++) {
+    const raw = fields.get(i);
+    // A field written inline rather than as a reference cannot be matched, so it is kept: the
+    // cost of keeping one too many is a validator warning, and of dropping one too many is a
+    // form that has lost a field.
+    if (!(raw instanceof PDFRef) || live.has(raw.toString())) kept.push(raw);
+  }
+  if (kept.length === fields.size()) return;
+  if (kept.length === 0) {
+    doc.catalog.delete(PDFName.of('AcroForm'));
+    state.warn('The form was removed: none of its fields is on a page any more');
+    return;
+  }
+  acroForm.set(PDFName.of('Fields'), ctx.obj(kept));
 }
 
 // ---- outline ---------------------------------------------------------------------------------

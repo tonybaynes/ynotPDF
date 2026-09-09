@@ -53,7 +53,7 @@ data, print).
   registered **batchable operation** (each module registers its
   operations with an options schema + UI fragment). Modules merged later
   (redaction, signing, PDF/A, Office) register themselves — M120 must not
-  hard-code the list. Ops available at build time: OCR, watermark/header/
+  hard-code the list. Ops available at build time: deskew (M41), OCR, watermark/header/
   Bates, encrypt/remove security, redact-by-pattern, optimise, PDF/A,
   export image/text, export form data, flatten, split, combine, convert
   from Office/images, rename/metadata set, print (M13), run saved action.

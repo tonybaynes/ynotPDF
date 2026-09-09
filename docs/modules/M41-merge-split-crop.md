@@ -1,4 +1,4 @@
-# M41 — Merge, split, extract to files, crop & flatten
+# M41 — Merge, split, extract to files, crop, deskew & flatten
 
 | | |
 |---|---|
@@ -52,6 +52,34 @@ annotations" option).
 
 ## Scope — build all of this
 
+- **Deskew — straighten scanned pages (operator requirement, 2026-09-09:
+  "a lot of the files we work with are scanned and need to be
+  straightened slightly").**
+  - *Detect:* estimate each page's skew angle from a downsampled,
+    binarised render (projection-profile variance or Hough over ±15°,
+    0.1° resolution; ignore pages whose confidence is low — e.g. mostly
+    blank or pictures — and say so in words). Run in a worker; 100 pages
+    of A4 scans in under 20 s.
+  - *Apply:* rotate the **page content** about the page centre by wrapping
+    the content stream in `q cos sin −sin cos tx ty cm … Q` — no image
+    re-encoding, an existing OCR text layer and annotations rotate with it
+    (annotations via their `/Rect`/`/QuadPoints`; links included). Fill
+    the exposed corner wedges with white (or the detected page background)
+    behind the content; optionally shrink the CropBox by the wedge amount
+    ("trim edges" checkbox, default off). One undoable `Command` per run.
+    Re-running detection on a straightened page must return ≈ 0°.
+  - *UI:* Organise/Page tab → **Deskew** button and page-thumbnail context
+    menu (M12/M40). Dialog: scope (this page / selected / all / range);
+    per-page table with detected angle, confidence in words, checkbox;
+    **live before/after preview** of the current page with a **fine-tune
+    slider ±5° in 0.1° steps** and a numeric field; "Apply". Also a
+    one-click **Auto-deskew all** that skips low-confidence pages and
+    reports what it skipped.
+  - *Preference (M130):* "Straighten scanned pages automatically when
+    importing images / creating PDF from scanner" — default off; M91's
+    from-images path calls this when on.
+  - *Batch:* register `deskew` as a batchable op for M120; M90 OCR calls
+    it before recognition (default on in the OCR dialog).
 - Combine dialog (opaque, resizable): list of files/folders (drag-drop,
   add, remove, reorder, page-range per file, preview thumbnails), options
   (bookmark per file from filename, keep existing bookmarks, page size
@@ -102,6 +130,14 @@ None new.
 
 ## Acceptance tests — the module is done when these pass on all three OSes
 
+- Deskew: synthetic fixture `skewed.pdf` (scanned-looking text page rotated
+  by +2.3°, −1.1°, +7.5° and a blank page, built in `make-fixtures.ts`)
+  ⇒ detection within ±0.2° of each known angle, blank page reported
+  "skipped — not enough content"; apply ⇒ re-detect gives |angle| ≤ 0.2°;
+  the image XObject bytes are unchanged (no re-encoding); an annotation
+  on the page stays over the same word; undo restores the original stream.
+- Deskew on a real local scan (`test/fixtures/local/`, skip if absent):
+  operator judges the before/after preview straight — record in Build log.
 - Combine the whole fixture corpus → page count equals sum; bookmarks per
   file present; split back by bookmark ⇒ per-file page counts match
   originals.
@@ -242,8 +278,202 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+**Where the work happens.** Combine, split, crop-for-batch, flatten and deskew are
+pure functions over bytes in `src/engine/ops/`, built on pdf-lib. Nothing in
+there knows about a `Document`, a tab or a dialog, so M120's batch runner and
+M121's CLI get the same code the dialogs use. The renderer talks to them
+through `OpsClient`, which runs them in this module's own Worker
+(`ops.worker.ts`) — the same shape M21 uses for the writer and M91 for the
+converters — and falls back to running them in-process when there is no
+`Worker` (unit tests in Node), so what the tests exercise is what ships.
+
+**Why pdf-lib and not PDFium for the ops.** ADR 0010 already settled that
+writing is pdf-lib's job. Combine has to graft one outline per source file,
+split has to weigh a document repeatedly, and flatten has to lift an
+appearance stream into a page's resources: all three are object-graph surgery
+that PDFium's public API does not offer. PDFium stays the engine for
+rendering and for reading, which is what the detection halves of crop and
+deskew use.
+
+**Crop is boxes only.** `SetPageBoxCommand` (M20) already writes CropBox
+through the engine and the other four through the write plan, so the crop tool
+mints one of those per page and gets undo for nothing. The only gap was
+*reading* Trim/Bleed/Art — the model records them as `null` because
+`PdfEngine.pageSize` never returned them — so this module adds one additive
+engine method, `pageBoxes(doc, page)` (ADR 0018). Nothing re-encodes; a
+cropped page is the same content in a smaller window.
+
+**"Remove white margins"** renders the page at 100 dpi, walks the rows and
+columns inwards while they stay within a tolerance of the page's own
+background colour, and offers the result as a rectangle the reader can still
+adjust. The scan itself (`inkBounds`) is a pure function over RGBA, so it is
+unit-tested without a PDF.
+
+**Deskew detection** is the projection-profile method (Postl): render the page
+grayscale at ~110 dpi, downsample so the long edge is ~700 px, binarise
+against Otsu's threshold, keep the coordinates of the dark pixels only, and
+for each candidate angle bucket `y·cosθ + x·sinθ` into 1-px rows. Coarse pass
+±15° at 0.5°, then a fine pass ±0.6° at 0.02° around the winner. Working from
+the dark *coordinates* rather than the image is what makes 100 pages in well
+under 20 s possible: a text page is ~5 % ink, so each angle costs tens of
+thousands of adds rather than half a million.
+
+The profile is scored by the **sum of squared differences between adjacent
+rows**, not by its variance. The textbook criterion is the variance — the sum
+of the squared bucket counts — and it fails on the operator's own files: a
+boarding pass carries a barcode, a block of bars is a denser thing to
+concentrate than a page of writing, and the variance therefore peaks wherever
+the bars line up and declares a perfectly straight pass to lean by fifteen
+degrees. The difference criterion measures how *abruptly* the profile rises
+and falls, which is what a line of text is and what a solid block is not; on
+those files it is the whole difference between "0.00°" and "−14.98°", and on
+a page of text the two agree. A peak sitting against the end of the sweep is
+distrusted whichever criterion found it, because the real answer is then
+somewhere the sweep never looked.
+
+Confidence is the peak's height over the profile's own spread, reported in
+words ("clear" / "uncertain" / "not enough content") — never a bare number and
+never a colour. Source: the method is textbook (H. S. Baird 1987, W. Postl
+1986); no product was consulted.
+
+**Deskew and flatten replace their pages rather than mutate them.** Both change
+page *content*, and PDFium can neither wrap a content stream nor un-flatten a
+page, so an in-place engine mutation would not be undoable. Instead each runs
+its pure op over the sliced-out pages and puts the result back:
+`slicePages` → op → `ImportPagesCommand` at the same index →
+`DeletePagesCommand` on the originals → `RepointDestinationsCommand`, all in
+one `doc.batch`, so Edit ▸ Undo shows one entry and restores the pages exactly
+as they were, annotations included. The cost is that a deskewed page is a new
+model page with a new id; bookmarks and named destinations survive because
+`RepointDestinationsCommand` aims them at the replacement.
+
+**Deskew apply** wraps the page's existing content in
+`q  cosθ sinθ −sinθ cosθ tx ty  cm … Q` by adding two small streams around the
+`/Contents` array — the existing streams are neither decoded nor re-encoded, so
+image XObjects come through byte-identical — and paints a page-sized rectangle
+in the page's own background colour underneath, which is what fills the corner
+wedges. Annotation `/Rect` and `/QuadPoints` (links included) are rotated with
+the same matrix, `/Rect` as the bounding box of its rotated corners. "Trim
+edges" shrinks the CropBox by the wedge width; off by default.
+
+**Split by size** cannot be solved analytically — shared resources mean two
+pages together are smaller than the two apart — so it bisects: take pages
+greedily, serialise, and if the result is over budget drop pages and try
+again, remembering the ratio so the second guess is close. A single page that
+is over budget on its own goes out on its own with a warning rather than
+failing, which is the only honest answer.
+
+**Flatten** copies each annotation's `/AP /N` form XObject into the page's
+resources and appends `q <matrix> cm /Fmn Do Q`, using PDF 12.5.5's algorithm
+to map the appearance's `/BBox` through its `/Matrix` onto the annotation's
+`/Rect`, then drops the annotation. Widgets are flattened the same way and
+`/AcroForm` goes with them, so a flattened form has no fields and renders
+identically. Hidden and NoView annotations are dropped rather than drawn.
+When M61 lands it will regenerate widget appearances first; the hook is
+`FlattenOptions.appearances`.
+
+**Combine** writes its own `/Outlines` tree (`ops/outline.ts`) rather than
+reusing the writer's, which is welded to the write plan. One bookmark per
+source file, named from the file, with that file's own outline nested under it
+when "keep existing bookmarks" is on.
+
+**Units and ratios.** The crop dialog's numeric margins use the viewer's
+current unit (M11's `units.ts`), so the ruler and the dialog never disagree.
+
+**No new dependencies.** pdf-lib, PDFium and the shell are all this module
+needs.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Shipped, 2026-09-09.** Branch `mod/M41-merge-split-crop`, PR #30.
+
+**What is there.**
+
+- **Combine** (Convert ▸ Combine, `Mod+Shift+M`). Add files or drop them on the
+  window; reorder by drag or by `Alt+↑`/`Alt+↓`; a page range and a first-page
+  thumbnail per file; one bookmark per file with that file's own outline nested
+  under it; page-size normalisation that re-boxes and centres rather than
+  scaling; output to a new tab or straight to a file. Non-PDF inputs go through
+  M91's converters, so images, text, HTML and Markdown combine too.
+- **Split** (Organize ▸ Split). By page count, by measured file size, at every
+  top-level bookmark, or by ranges one file per line; a name pattern with eight
+  tokens; keep-or-drop for bookmarks, comments and form fields; a live summary
+  naming the first three files before anything is written.
+- **Crop.** A tool (`Mod+Shift+C`) that drags a rectangle on the page with eight
+  handles, arrow-key nudging and Enter to apply, and a dialog with margins in
+  the reader's own unit, a live preview of the rectangle over the page, a choice
+  of which of the five boxes to write, "change the page size to match", and
+  **Remove white margins**, which measures where the ink actually is.
+- **Flatten** (Organize ▸ Flatten). Comments and form fields, baked or removed,
+  over a page range. What the file left undrawn is drawn with the same
+  generators M21's writer uses, so a flatten and a save cannot disagree about
+  what a highlight looks like.
+- **Straighten** (Organize ▸ Straighten Pages). A per-page table with the angle,
+  the confidence in words and a tick; a before-and-after preview; a ±5° fine-tune
+  slider; and a one-click "Straighten Every Page" that skips what it cannot
+  measure and names it. Detection is ~35 ms a page.
+- **Batch hooks for M120.** Every operation is a pure function over bytes in
+  `src/engine/ops/`, with an options object and an `AbortSignal`. M120 registers
+  them by name; nothing needs a document or a window.
+- **The preference M130 renders and M91 reads**, `scan.autoDeskew`, is declared
+  here in this module's settings schema.
+
+**What the operator should know.**
+
+- Straightening or flattening a page **replaces** it, so the page keeps its
+  place but becomes a new page inside the app. Bookmarks and named destinations
+  follow it; a comment on it survives; undo puts everything back exactly. There
+  is one undo entry per run, however many pages it touched.
+- Cropping never re-encodes anything and leaves the paper size alone unless you
+  tick "change the page size to match", so a crop can always be taken back — in
+  ynotPDF or in any other reader.
+- **Deskew was measured against your own files** (`test/fixtures/local/`) and it
+  reads every one of them as straight, which they are: they are all born-digital
+  rather than scanned. That is also what found the one real bug in the detector —
+  see below. **I have no genuinely crooked scan to try**, so the last check is
+  yours: straighten one of the scans you actually work with and look at the
+  before-and-after preview. If it looks wrong, the page and the angle it reported
+  are all I need.
+
+**What was deferred, and why.**
+
+- **Regenerating a form field's appearance before flattening it** is M61's job
+  and M61 is not built. The hook is `FlattenOptions.appearances`; without it, a
+  widget the file never drew is kept and reported rather than silently lost.
+- **Office inputs to Combine** wait for M93, as the brief says. Everything M91
+  converts already works.
+- **A ratio constraint on the crop drag** is in the tool (`CropToolHost.ratio`)
+  but nothing offers it in the UI yet: the dialog is where a ratio belongs and it
+  is already the tallest of the five. It is one select away when it is wanted.
+
+**Three bugs the tests found, and one the operator's files found.**
+
+- pdf-lib's `lookupMaybe` *throws* on a type mismatch rather than answering
+  nothing, so reading a `/Dest` that is a name — one of its three legal
+  spellings — crashed the outline reader. Every lookup in `src/engine/ops/` now
+  goes through `pick`.
+- Flattening a form left its fields behind: the widgets went with the pages they
+  were baked into, but a field is a catalogue entry. Fixed in the model
+  (`DropFieldsCommand`) and in the file (M21's writer now prunes `/AcroForm` of
+  fields no surviving page reaches, which fixes the same latent bug for M40's
+  page delete).
+- The detector reported the angle with the wrong sign.
+- **The textbook criterion was wrong for your files.** Scoring the projection
+  profile by its *variance* is what every paper on this does, and it declares a
+  perfectly straight boarding pass to lean by fifteen degrees, because a barcode
+  is a denser thing to concentrate than a page of writing. Scoring the sum of
+  squared *differences between adjacent rows* measures how abruptly the profile
+  rises and falls — which is what a line of text is and a solid block is not —
+  and reads all of your files correctly. `test/unit/ops/local.test.ts` runs the
+  whole module over them and skips itself on any machine that has not got them.
+
+**Contract change:** [ADR 0017](../adr/0017-page-boxes-from-the-engine.md) adds
+`PdfEngine.pageBoxes`, so the crop dialog can say which of the five boxes a page
+actually carries instead of showing the CropBox under a Trim label.
+`PageBoxName` moved to `@shared/pdf` and `@core/model` re-exports it, so no
+existing import changed.
+
+**New fixture:** `skewed.pdf` — one grey "scan" drawn through a rotation about
+the page centre at +2.3°, −1.1° and +7.5°, plus a blank page and a highlight
+over a word. The skew is in the content stream, so the angle is exact and all
+three pages share one image XObject, which is how "no re-encoding" is provable.

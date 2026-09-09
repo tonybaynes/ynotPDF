@@ -73,6 +73,10 @@ Office (M93). Scanner/virtual printer (Parked).
 
 ## Design notes & constraints
 
+- From-images / scanner paths honour `scan.autoDeskew` (M130 setting owned
+  by M41): when on, run M41's deskew on each created page. If M41 is not
+  yet merged when you build, leave a clearly named hook and a Build-log
+  note; M41 wires it.
 - All converters are pure over bytes except web (needs main), so CLI and
   batch reuse them.
 

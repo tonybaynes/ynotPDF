@@ -1,0 +1,491 @@
+/*
+ * Document operations (M41): the five dialogs and the crop tool's rectangle.
+ *
+ * Every colour is a theme token; there is not a literal in this file, and nothing is translucent
+ * — the crop rectangle is drawn as two solid outlines rather than as a tinted overlay, because a
+ * tint over a page is exactly the case the operator cannot read.
+ */
+
+/* ---- shared dialog furniture ------------------------------------------------------------------ */
+
+.ops-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.ops-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.ops-summary {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--fs-2);
+}
+
+.ops-empty {
+  margin: var(--sp-5) auto;
+  color: var(--fg-muted);
+  font-style: italic;
+  text-align: center;
+}
+
+.ops-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.ops-check,
+.ops-radio {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  cursor: pointer;
+}
+
+.ops-check-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.ops-radios {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: var(--sp-4);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ops-radios legend {
+  padding: 0 var(--sp-2);
+  color: var(--fg);
+  font-weight: var(--fw-heading);
+}
+
+/*
+ * A radio button and the control it governs read as one line where the control is small enough
+ * to fit on it — "Every [2] pages" — and as an indented block where it is not.
+ */
+.ops-radio-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+}
+
+.ops-radio-row > .ops-ranges,
+.ops-radio-row > .field-hint {
+  flex-basis: 100%;
+  margin-inline-start: var(--sp-6);
+}
+
+.ops-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.ops-number,
+.ops-length {
+  width: 7ch;
+}
+
+/* Top, bottom, left, right as a 2 × 2 block: four stacked rows is a very tall way to say it. */
+.ops-margins {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3) var(--sp-4);
+}
+
+.ops-length-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.ops-unit {
+  color: var(--fg-muted);
+  font-size: var(--fs-2);
+}
+
+.ops-ranges {
+  width: 100%;
+  font-family: var(--font-mono);
+  resize: vertical;
+}
+
+.ops-examples {
+  margin: 0;
+  padding-inline-start: var(--sp-6);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2);
+}
+
+.ops-folder {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The button at its own width with the path beside it, rather than a full-width bar. */
+.ops-folder-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-3);
+}
+
+.ops-folder-row > .ops-folder {
+  flex: 1 1 12rem;
+}
+
+/* ---- the combine list -------------------------------------------------------------------------- */
+
+.ops-files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-height: 22rem;
+  overflow-y: auto;
+  padding: var(--sp-2);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+}
+
+.ops-file {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+}
+
+.ops-file:hover {
+  border-color: var(--border);
+}
+
+.ops-file[aria-selected='true'] {
+  border-color: var(--accent);
+}
+
+.ops-file[data-drop-target='true'] {
+  border-color: var(--accent);
+  border-style: dashed;
+}
+
+.ops-file:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+.ops-file-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 4.6rem;
+  height: 6rem;
+  border: var(--border-width) solid var(--border);
+  background: var(--bg-panel);
+}
+
+.ops-file-canvas {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.ops-file-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.ops-file-name {
+  overflow-wrap: anywhere;
+  color: var(--fg);
+}
+
+.ops-file-count,
+.ops-file-note {
+  color: var(--fg-muted);
+  font-size: var(--fs-2);
+}
+
+.ops-file-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.ops-file-range {
+  width: 10ch;
+}
+
+/* ---- the crop dialog --------------------------------------------------------------------------- */
+
+.ops-crop {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--sp-5);
+  align-items: start;
+}
+
+.ops-crop-controls,
+.ops-crop-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.ops-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 14rem;
+  padding: var(--sp-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-canvas);
+}
+
+.ops-preview-surface {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.ops-preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: 17rem;
+}
+
+/*
+ * The rectangle that will be kept. Two rings rather than one, for the same reason the focus ring
+ * has two: one colour cannot clear 3:1 against both a white page and a dark one.
+ */
+.ops-preview-rect {
+  position: absolute;
+  border: 2px solid var(--accent);
+  outline: var(--border-width) solid var(--focus-contrast);
+  pointer-events: none;
+}
+
+/* ---- the straighten dialog --------------------------------------------------------------------- */
+
+.ops-skew {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-5);
+  align-items: start;
+}
+
+.ops-skew-list,
+.ops-skew-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.ops-table-scroll {
+  max-height: 22rem;
+  overflow-y: auto;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ops-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-2);
+}
+
+.ops-table th,
+.ops-table td {
+  padding: var(--sp-2) var(--sp-3);
+  text-align: start;
+  border-bottom: var(--border-width) solid var(--border);
+}
+
+.ops-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-panel);
+  color: var(--fg);
+  font-weight: var(--fw-heading);
+}
+
+.ops-row[aria-current='true'] {
+  background: var(--bg-input);
+}
+
+.ops-row-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.ops-row-button:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+.ops-angle {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Word *and* icon: the operator cannot read a status told in colour alone. */
+.ops-confidence {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  white-space: nowrap;
+}
+
+.ops-confidence svg {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  color: var(--icon);
+}
+
+.ops-skew-previews {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+}
+
+.ops-skew-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+}
+
+.ops-skew-pane figcaption {
+  color: var(--fg-muted);
+  font-size: var(--fs-2);
+  text-align: center;
+}
+
+/* The frame clips the turned page, which is what makes the corner wedges visible in the preview. */
+.ops-skew-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  height: 14rem;
+  border: var(--border-width) solid var(--border);
+  background: var(--bg-panel);
+}
+
+.ops-skew-image {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.ops-tune {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.ops-slider {
+  flex: 1 1 auto;
+  min-width: 8rem;
+}
+
+/* ---- the crop tool's rectangle ----------------------------------------------------------------- */
+
+/*
+ * Drawn on the page's tool layer, in page-relative percentages, so a zoom or a scroll needs no
+ * arithmetic. Two solid rings, no fill: a tint over the page would hide the very content the
+ * reader is trying to crop to.
+ */
+.crop-frame {
+  position: absolute;
+  border: 2px solid var(--accent);
+  outline: var(--border-width) solid var(--focus-contrast);
+  cursor: move;
+}
+
+.crop-frame:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+.crop-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px;
+  border: var(--border-width) solid var(--focus-contrast);
+  background: var(--accent);
+}
+
+.crop-handle[data-handle='nw'] {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+.crop-handle[data-handle='n'] {
+  top: 0;
+  left: 50%;
+  cursor: ns-resize;
+}
+.crop-handle[data-handle='ne'] {
+  top: 0;
+  left: 100%;
+  cursor: nesw-resize;
+}
+.crop-handle[data-handle='e'] {
+  top: 50%;
+  left: 100%;
+  cursor: ew-resize;
+}
+.crop-handle[data-handle='se'] {
+  top: 100%;
+  left: 100%;
+  cursor: nwse-resize;
+}
+.crop-handle[data-handle='s'] {
+  top: 100%;
+  left: 50%;
+  cursor: ns-resize;
+}
+.crop-handle[data-handle='sw'] {
+  top: 100%;
+  left: 0;
+  cursor: nesw-resize;
+}
+.crop-handle[data-handle='w'] {
+  top: 50%;
+  left: 0;
+  cursor: ew-resize;
+}
+
+/* ---- narrow windows ---------------------------------------------------------------------------- */
+
+@media (max-width: 60rem) {
+  .ops-crop,
+  .ops-skew {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

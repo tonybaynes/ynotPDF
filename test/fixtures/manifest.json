@@ -189,6 +189,16 @@
     "corrupt.pdf": { "error": "corrupt" },
     "huge-page-count.pdf": { "pages": 1000, "size": [200, 280], "text": "1", "renderPages": 1 },
     "scanned.pdf": { "pages": 1, "text": "", "objects": ["image"] },
+    "skewed.pdf": {
+      "pages": 4,
+      "size": [595.28, 841.89],
+      "text": "",
+      "annotations": 1,
+      "subtypes": ["Highlight"],
+      "objects": ["image"],
+      "renderPages": 4,
+      "notes": "M41: one grey scan drawn at +2.3, -1.1 and +7.5 degrees, then a blank page"
+    },
 
     "fonts.pdf": {
       "pages": 1,

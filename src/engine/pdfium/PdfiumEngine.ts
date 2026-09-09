@@ -14,7 +14,15 @@
  * M21's writer applies them. The mutation helpers live in `mutations.ts`.
  */
 
-import type { PageIndex, PageSize, PdfMatrix, PdfPoint, PdfRect, Rotation } from '@shared/pdf';
+import type {
+  PageBoxes,
+  PageIndex,
+  PageSize,
+  PdfMatrix,
+  PdfPoint,
+  PdfRect,
+  Rotation,
+} from '@shared/pdf';
 import { normalizeRect } from '@shared/pdf';
 import { PageGeometry } from '../geometry';
 import { appearanceInput, defaultAppearanceService } from '../appearance';
@@ -494,6 +502,43 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
 
   pageSizeSync(doc: DocHandle, page: PageIndex): PageSize {
     return this.geometry(this.loadPage(this.doc(doc), page)).pageSize;
+  }
+
+  /**
+   * Every box the page carries, `null` where it carries none (M41, ADR 0017).
+   *
+   * Deliberately *not* routed through {@link geometry}, which exists to answer "how big is this
+   * page" and therefore substitutes a MediaBox when the file has none. Here a missing box is the
+   * answer, so each getter's own success flag is reported as it stands. PDFium does synthesise a
+   * CropBox from the MediaBox, which is what every renderer does and what a reader expects to
+   * see, so `crop` comes back non-null for any page that has a MediaBox.
+   */
+  pageBoxes(doc: DocHandle, page: PageIndex): Promise<PageBoxes> {
+    return run(() => {
+      const p = this.loadPage(this.doc(doc), page);
+      const ffi = this.ffi;
+      return ffi.scope((s) => {
+        const buf = s.alloc(16);
+        const read = (fn: string): PdfRect | null => {
+          if (!ffi.call(fn, p.page, buf, buf + 4, buf + 8, buf + 12)) return null;
+          const r = normalizeRect({
+            x0: ffi.f32(buf, 0),
+            y0: ffi.f32(buf, 1),
+            x1: ffi.f32(buf, 2),
+            y1: ffi.f32(buf, 3),
+          });
+          // A zero-area box is a box the file got wrong; saying "none" is the honest answer.
+          return r.x1 - r.x0 > 0 && r.y1 - r.y0 > 0 ? r : null;
+        };
+        return {
+          media: read('FPDFPage_GetMediaBox'),
+          crop: read('FPDFPage_GetCropBox'),
+          bleed: read('FPDFPage_GetBleedBox'),
+          trim: read('FPDFPage_GetTrimBox'),
+          art: read('FPDFPage_GetArtBox'),
+        };
+      });
+    });
   }
 
   /** The geometry helper for a page (with an optional extra view rotation). */

@@ -73,6 +73,8 @@ Cloud sync of settings.
 
 ## Design notes & constraints
 
+- Scan page carries `scan.autoDeskew` ("Straighten scanned pages automatically
+  when importing images", default off) registered by M41; M91 reads it.
 - **View page must carry `ui.leftPaneOnOpen`** (Pages / Bookmarks / Last
   used / Closed — default Pages), registered by M12. The operator relies
   on the thumbnail pane; it must be settable here in words, not only from

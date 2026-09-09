@@ -49,6 +49,10 @@ correct).
 
 ## Scope — build all of this
 
+- **Deskew before recognition:** call M41's `deskew` command on each
+  image-only page (default on, checkbox in the OCR dialog) — straight
+  input is the single biggest accuracy win for Tesseract. Do not build a
+  second deskew.
 - Tesseract packaging: native `tesseract` CLI + `tessdata_fast` (eng by
   default) bundled per OS by `fetch-binaries.ts`; `tesseract.js` WASM as
   fallback when the binary fails; language packs downloadable in-app to

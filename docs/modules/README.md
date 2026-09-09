@@ -23,7 +23,7 @@ One self-contained brief per module. Tell a conversation:
 | 4 | [M42 PDF Portfolios — create, edit, cover sheet, extract](./M42-portfolios.md) | Core | M12, M21 |
 | 4 | [M31 Annotations — shapes, ink & eraser, stamps, file attachments](./M31-shapes-ink-stamps.md) | Core | M30 |
 | 4 | [M32 Comments panel, replies & status, FDF/XFDF, summarise](./M32-comments-panel.md) | Core | M30 |
-| 4 | [M41 Merge, split, extract to files, crop & flatten](./M41-merge-split-crop.md) | Core | M40 |
+| 4 | [M41 Merge, split, extract to files, crop, deskew & flatten](./M41-merge-split-crop.md) | Core | M40 |
 | 4 | [M72 Document properties, metadata & XMP, initial view](./M72-properties-metadata.md) | Core | M21 |
 | 4 | [M130 Preferences, keyboard shortcuts editor, ribbon/QAT customisation, UI scale, i18n framework](./M130-preferences.md) | Core | M02, M01 |
 | 5 | [M33 Measuring tools — distance, perimeter, area, calibration](./M33-measuring-tools.md) | Core | M31 |

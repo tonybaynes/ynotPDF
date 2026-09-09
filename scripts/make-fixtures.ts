@@ -37,6 +37,8 @@
  *   corrupt.pdf            a PDF header followed by garbage
  *   huge-page-count.pdf    1000 tiny pages
  *   scanned.pdf            one full-page 150-dpi grayscale "scan" (for OCR later)
+ *   --- M41 ---
+ *   skewed.pdf             four pages: a "scan" drawn at +2.3°, −1.1° and +7.5°, plus a blank one
  *   --- M72 ---
  *   fonts.pdf              standard-14, missing TrueType, embedded, embedded subset,
  *                          Type 0 (CID TrueType) and Type 3 fonts
@@ -78,9 +80,13 @@ import {
   PDFString,
   StandardFonts,
   beginText,
+  concatTransformationMatrix,
   degrees,
+  drawObject,
   endText,
   moveText,
+  popGraphicsState,
+  pushGraphicsState,
   rgb,
   setFontAndSize,
   showText,
@@ -1804,6 +1810,146 @@ async function scanned(): Promise<void> {
   await save(doc, 'scanned.pdf');
 }
 
+// ---- M41: skewed scan ------------------------------------------------------------------------
+/**
+ * `skewed.pdf` — four pages that look like a scan that went through the feeder crooked.
+ *
+ * The same greyscale "page of text" image is drawn on each of the first three pages through a
+ * rotation about the page centre, at +2.3°, −1.1° and +7.5°; the fourth is blank. The skew is
+ * therefore in the *content stream* rather than in the pixels, which means the angle is exact —
+ * a test can assert the detector to a fifth of a degree without arguing with a resampler — and
+ * all three pages share one image XObject, so a test can prove that straightening the page did
+ * not re-encode it.
+ *
+ * A highlight annotation sits over the third word of the fourth text line on page 1, so a test
+ * can check that annotations turn with the page they are on.
+ */
+const SKEW_ANGLES = [2.3, -1.1, 7.5];
+
+async function skewed(): Promise<void> {
+  const doc = await newDoc('Skewed scan (synthetic)');
+  const w = 900; // A4-ish at ~110 dpi: enough lines for a projection profile, small enough to be quick
+  const h = 1273;
+  let seed = 41;
+  const rnd = (): number => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  const rows: Array<{ y: number; words: Array<[number, number]> }> = [];
+  for (let y = 120; y < h - 120; y += 32) {
+    const words: Array<[number, number]> = [];
+    let x = 100;
+    while (x < w - 150) {
+      const len = 30 + Math.floor(rnd() * 90);
+      words.push([x, x + len]);
+      x += len + 16;
+    }
+    rows.push({ y, words });
+  }
+  const png = makePng(
+    w,
+    h,
+    (x, y) => {
+      for (const row of rows) {
+        if (y >= row.y && y < row.y + 13) {
+          for (const [x0, x1] of row.words) if (x >= x0 && x < x1) return 20;
+        }
+      }
+      return 250;
+    },
+    true,
+  );
+  const img = await doc.embedPng(png);
+  const [pw, ph] = A4;
+  for (const angle of SKEW_ANGLES) {
+    const page = doc.addPage(A4);
+    // White paper first, so the corners the rotation exposes are page rather than nothing.
+    page.drawRectangle({ x: 0, y: 0, width: pw, height: ph, color: rgb(1, 1, 1) });
+    const radians = (-angle * Math.PI) / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const cx = pw / 2;
+    const cy = ph / 2;
+    page.node.setXObject(PDFName.of('Scan'), img.ref);
+    page.pushOperators(
+      pushGraphicsState(),
+      concatTransformationMatrix(
+        cos,
+        sin,
+        -sin,
+        cos,
+        cx - cx * cos + cy * sin,
+        cy - cx * sin - cy * cos,
+      ),
+      concatTransformationMatrix(pw, 0, 0, ph, 0, 0),
+      drawObject('Scan'),
+      popGraphicsState(),
+    );
+  }
+  const blankPage = doc.addPage(A4);
+  blankPage.drawRectangle({ x: 0, y: 0, width: pw, height: ph, color: rgb(1, 1, 1) });
+
+  // A highlight over a word on page 1, in the coordinates the skewed content put it in.
+  const first = doc.getPage(0);
+  const row = rows[3];
+  if (!row) throw new Error('skewed.pdf needs at least four rows of text');
+  const quad = skewedQuad(SKEW_ANGLES[0] ?? 0, pw, ph, w, h, row);
+  const at = (i: number): number => quad[i] ?? 0;
+  first.node.set(
+    PDFName.of('Annots'),
+    doc.context.obj([
+      doc.context.obj({
+        Type: 'Annot',
+        Subtype: 'Highlight',
+        Rect: [
+          Math.min(at(0), at(4)),
+          Math.min(at(5), at(7)),
+          Math.max(at(2), at(6)),
+          Math.max(at(1), at(3)),
+        ],
+        QuadPoints: quad,
+        C: [1, 1, 0],
+        F: 4,
+        T: PDFHexString.fromText('ynotPDF fixtures'),
+        Contents: PDFHexString.fromText('third word, fourth line'),
+      }),
+    ]),
+  );
+  await save(doc, 'skewed.pdf');
+}
+
+/** The eight QuadPoints of one word of one text row, after the page's skew has been applied. */
+function skewedQuad(
+  angle: number,
+  pw: number,
+  ph: number,
+  imageWidth: number,
+  imageHeight: number,
+  row: { y: number; words: Array<[number, number]> },
+): number[] {
+  const word = row.words[2] ?? row.words[0] ?? [100, 160];
+  // Image pixels → page points: the image fills the page, and its y counts downwards.
+  const toPage = (px: number, py: number): [number, number] => [
+    (px / imageWidth) * pw,
+    ph - (py / imageHeight) * ph,
+  ];
+  const radians = (-angle * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const cx = pw / 2;
+  const cy = ph / 2;
+  const turn = ([x, y]: [number, number]): [number, number] => [
+    cos * x - sin * y + (cx - cx * cos + cy * sin),
+    sin * x + cos * y + (cy - cx * sin - cy * cos),
+  ];
+  const topLeft = turn(toPage(word[0], row.y - 2));
+  const topRight = turn(toPage(word[1], row.y - 2));
+  const bottomLeft = turn(toPage(word[0], row.y + 15));
+  const bottomRight = turn(toPage(word[1], row.y + 15));
+  // QuadPoints order per PDF 12.5.6.10: upper-left, upper-right, lower-left, lower-right.
+  return [...topLeft, ...topRight, ...bottomLeft, ...bottomRight];
+}
+
 // ---- M91: inputs for "Create PDF from images / web / Markdown / text" (create/) -----------
 const CREATE = join(OUT, 'create');
 mkdirSync(join(CREATE, 'site'), { recursive: true });
@@ -2751,6 +2897,7 @@ await cjkRtl();
 damaged(blankBytes, textBytes);
 await hugePageCount();
 await scanned();
+await skewed();
 await fonts();
 await initialView();
 createFixtures();
