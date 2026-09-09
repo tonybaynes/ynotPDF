@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xfdf xml:space="preserve" xmlns="http://ns.adobe.com/xfdf/">
+	<annots>
+		<strikeout coords="90,660,300,660,90,646,300,646" creationdate="D:20260902090000+01'00'" date="D:20260902090500+01'00'" flags="print" name="fx-1001" opacity="1" page="0" rect="90,646,300,660" subject="Strikeout" title="C. Editor" color="#E60000">
+			<contents>Delete this sentence.</contents>
+		</strikeout>
+		<underline coords="90,620,260,620,90,606,260,606" creationdate="D:20260902090600+01'00'" date="D:20260902090600+01'00'" flags="print" name="fx-1002" page="0" rect="90,606,260,620" title="C. Editor" color="#0072C6"/>
+		<squiggly coords="90,580,200,580,90,566,200,566" creationdate="D:20260902090700+01'00'" date="D:20260902090700+01'00'" flags="print" name="fx-1003" page="0" rect="90,566,200,580" title="C. Editor" color="#7030A0"/>
+		<circle color="#0072C6" creationdate="D:20260902091000+01'00'" date="D:20260902091000+01'00'" flags="print" interior-color="#FFF2CC" name="fx-1004" page="1" rect="200,400,320,470" title="C. Editor" width="3"/>
+		<polyline color="#4472C4" creationdate="D:20260902091500+01'00'" date="D:20260902091500+01'00'" flags="print" head="None" name="fx-1005" page="1" rect="60,150,240,240" tail="ClosedArrow" title="C. Editor" vertices="60,150;120,240;240,180" width="1"/>
+		<caret creationdate="D:20260902092000+01'00'" date="D:20260902092000+01'00'" flags="print" fringe="0,0,0,0" name="fx-1006" page="0" rect="310,646,318,660" title="C. Editor">
+			<contents>Insert a comma here.</contents>
+		</caret>
+		<fileattachment creationdate="D:20260902092500+01'00'" date="D:20260902092500+01'00'" file="notes.txt" flags="print" icon="PushPin" name="fx-1007" page="1" rect="500,700,520,720" title="C. Editor"/>
+		<text creationdate="D:20260902093000+01'00'" date="D:20260902093000+01'00'" flags="print" icon="Note" name="fx-1008" page="0" rect="400,500,420,520" title="C. Editor">
+			<contents>Second reviewer's note.</contents>
+		</text>
+		<text creationdate="D:20260902094000+01'00'" date="D:20260902094000+01'00'" flags="print" icon="Comment" inreplyto="fx-1008" name="fx-1009" page="0" rect="400,500,420,520" replyType="R" title="C. Editor">
+			<contents>Agreed — will fix.</contents>
+		</text>
+		<text creationdate="D:20260902094100+01'00'" date="D:20260902094100+01'00'" flags="print" icon="Comment" inreplyto="fx-1008" name="fx-1010" page="0" rect="400,500,420,520" replyType="R" state="Completed" statemodel="Review" title="C. Editor"/>
+		<highlight color="#00B050" coords="90,520,340,520,90,506,340,506" creationdate="D:20260902095000+01'00'" date="D:20260902095000+01'00'" flags="print" name="fx-1011" page="0" rect="90,506,340,520" subject="Highlight" title="D. Second Reader">
+			<contents>Good — keep this wording.</contents>
+		</highlight>
+	</annots>
+	<f href="/C/Users/reviewer/report.pdf"/>
+</xfdf>

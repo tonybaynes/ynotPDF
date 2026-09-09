@@ -1646,6 +1646,8 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
             ['intent', 'IT'],
             ['defaultStyle', 'DS'],
             ['lineEnding', 'LE'],
+            // `/RT` says what an `/IRT` means: `/R` a reply, `/Group` a grouped annotation (M32).
+            ['replyType', 'RT'],
           ] as const) {
             const value = str(pdfKey);
             if (value) extra[modelKey] = value;

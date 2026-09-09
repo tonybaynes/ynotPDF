@@ -62,9 +62,15 @@ export function isDrawing(a: ModelAnnotation): boolean {
 const RASTERISED = new Set(['Square', 'Circle', 'Ink', 'Highlight']);
 
 /** Whether the overlay has to draw this annotation (see the file comment). */
-export function drawnByOverlay(a: ModelAnnotation, edited: ReadonlySet<string>): boolean {
+export function drawnByOverlay(
+  a: ModelAnnotation,
+  edited: ReadonlySet<string>,
+  raster = true,
+): boolean {
   if (!isDrawing(a)) return false;
   if (a.flags.hidden || a.flags.noView) return false;
+  // Nothing in the raster to collide with, so the overlay draws everything (M32, ADR 0017).
+  if (!raster) return true;
   if (RASTERISED.has(a.subtype)) return false;
   if (a.family === 'stamp' || a.family === 'fileAttachment') return a.extra['hasAP'] !== true;
   return edited.has(a.id) || a.extra['hasAP'] !== true;
@@ -202,10 +208,14 @@ function stampShapes(a: ModelAnnotation, picture: StampPicture): AnnotationShape
 export function toLayerAnnotation(
   a: ModelAnnotation,
   page: number,
-  options: { readonly edited: ReadonlySet<string>; readonly hidden?: boolean },
+  options: {
+    readonly edited: ReadonlySet<string>;
+    readonly hidden?: boolean;
+    readonly raster?: boolean;
+  },
   picture: StampPicture = null,
 ): LayerAnnotation {
-  const draws = drawnByOverlay(a, options.edited);
+  const draws = drawnByOverlay(a, options.edited, options.raster ?? true);
   const vertices = a.family === 'shape' ? a.vertices : [];
   return {
     id: a.id,
