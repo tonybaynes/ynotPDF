@@ -20,6 +20,7 @@ import {
 } from '@modules/M20-document-model/DocumentService';
 import { defineModule, type ServiceContext } from '@shared/module';
 import { registerPropertiesCodecs } from './commands';
+import { readInitialView, readProperties } from './properties';
 import { PropertiesService, PROPERTIES_SERVICE } from './PropertiesService';
 import { PROPERTIES_SETTINGS_SCHEMA } from './settings';
 import type { PropertiesTabId } from './dialog';
@@ -165,7 +166,6 @@ export default defineModule({
       run: async (ctx) => {
         const doc = activeDocument(ctx);
         const service = properties(ctx);
-        const { readInitialView, readProperties } = await import('./properties');
         const before = readProperties(doc);
         const beforeView = readInitialView(doc);
         const patch = (ctx.args['properties'] ?? {}) as Record<string, unknown>;

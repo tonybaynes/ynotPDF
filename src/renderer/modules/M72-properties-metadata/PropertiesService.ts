@@ -17,10 +17,6 @@ import type { FontUsage } from '@engine/PdfEngine';
 import { el } from '@app/dom';
 import { pageSizeOf, type ModelPage } from '@core/model';
 import {
-  DOCUMENT_SERVICE,
-  type DocumentService,
-} from '@modules/M20-document-model/DocumentService';
-import {
   securityPropertiesPanel,
   SECURITY_SERVICE,
   type SecurityService,
@@ -78,10 +74,6 @@ export class PropertiesService {
 
   get settings(): PropertiesSettings {
     return this.settingsValue;
-  }
-
-  private get documents(): DocumentService {
-    return this.registry.service<DocumentService>(DOCUMENT_SERVICE);
   }
 
   private get panels(): PanelsService | null {
