@@ -327,7 +327,8 @@ export function icon(name: string | undefined, options: IconOptions = {}): SVGSV
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.setAttribute('fill', 'none');
   svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '2');
+  // Lucide's default is 2; the operator finds that heavy — half of it (2026-09-09).
+  svg.setAttribute('stroke-width', '1');
   svg.setAttribute('stroke-linecap', 'round');
   svg.setAttribute('stroke-linejoin', 'round');
   svg.setAttribute('class', `icon icon-${options.size ?? 'sm'}`);

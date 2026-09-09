@@ -238,8 +238,168 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **`/IRT` is written as a reference, and the plan names its target by `/NM`.** A reply is only a
+  reply because `/IRT` is an *indirect reference* to the parent's dictionary (ISO 32000-1
+  12.5.6.2) — a string or a name there is ignored by every other reader. `DictValue` has no way to
+  say "the object of that other annotation", so it gains one kind, `annotationRef`, whose value is
+  the target's `/NM` name; the writer resolves it against the page's `/Annots` after every
+  insert, so a reply to an annotation added in the same save works too. M30 and M31 do not give
+  an annotation an `/NM` — nothing needed to point at one until now — so M32 gives one to any
+  comment it replies to, in the same undo step as the reply, and an export invents one for the
+  file only, never writing it back. ADR 0017.
+- **`/RT` is `replyType` in the `extra` bag**, mapped in `engine/appearance/dict.ts` beside
+  `stateModel`, so `/R` (a reply) and `/Group` (a grouped annotation) round-trip. A status change
+  is a `Text` annotation with `/IRT`, `/State` and `/StateModel` and no `/Contents` — which is
+  what Acrobat and Foxit both write, and why a status is *history*, not a field: the newest one
+  wins and the older ones stay as the record of who set what.
+- **The panel reads the model and nothing else.** It subscribes to `Document` and to M30's
+  `AnnotationService`; it never calls the engine. Every change it makes goes out as a `Command`
+  through M30's service, which is what makes the whole panel undoable for free.
+- **Row building is a pure function** (`rows.ts`): annotations + filter + sort + grouping →
+  a flat list of rows with depth. The virtualised list then only has to map an index to a row, and
+  the grouping/sorting/filtering is unit-testable without a DOM.
+- **Comment visibility is a view flag, never the file's `/F` bit.** Hiding a comment must not
+  change the document, so nothing is written. Two switches do it together: M11's tile renderer
+  stops drawing annotation appearance streams, and M30's overlay draws the ones that stay visible
+  instead — the same generators that already draw a FreeText draw a highlight when the raster is
+  not carrying it. `AnnotationProvider.toLayer` gains one option, `raster: false`, for that.
+  While everything is visible the raster does the drawing exactly as before, so the common case
+  costs nothing. ADR 0017.
+- **XFDF is the real format; FDF is offered because Acrobat still writes it.** `engine/xfdf/` is
+  pure and has no DOM: `read.ts` and `write.ts` for XFDF (fast-xml-parser, MIT), `fdf.ts` for
+  FDF's PDF object syntax, and `convert.ts` for `ModelAnnotation` ↔ the neutral record in
+  `types.ts`. Coordinates need no flipping — XFDF is in the same PDF user space as `/Rect` (XFDF
+  3.0 §2.2) — but `page` is 0-based there and 1-based nowhere, which is the one off-by-one worth
+  naming.
+- **Import merges by `/NM`, and the conflict policy is the reader's.** "Replace" overwrites the
+  annotation with the same `/NM`; "Add" gives every incoming annotation a fresh `/NM` so nothing
+  is lost. Replies are resolved after the pass that creates the parents, by name, so an export
+  whose replies come before their targets still imports.
+- **Summarise renders through the engine and assembles with pdf-lib.** The engine rasterises each
+  page (the only way to get PDFium's own drawing of the annotations into a new file without
+  copying page trees), pdf-lib places it and draws the comment blocks, the sequence numbers and
+  the connector lines beside it. `summary/layout.ts` is pure — it decides where every block and
+  every line goes from sizes alone — so the page counts and the block positions are unit-tested
+  without rendering anything.
+- **Status is a word and an icon, and the words are ours.** Accepted, Rejected, Cancelled,
+  Completed, None (the `/StateModel /Review` set of ISO 32000-1 12.5.6.4) plus the `/Marked` set's
+  checkmark, each with a Lucide glyph and its name in text. No status is told apart by colour
+  alone, and the two that a dichromat would otherwise confuse — Accepted and Rejected — differ in
+  glyph, in word and in lightness.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-09 on `mod/M32-comments-panel` (worktree `../ynotPDF-M32`).**
+
+### What shipped
+
+- **The Comments panel** — the left pane's review list: a virtualised list (row heights computed
+  in `metrics.ts`, rows positioned absolutely, only the ones near the viewport in the DOM),
+  grouping by page, author, type, date or status, sorting by any of the five in either direction,
+  a search field that reads the whole thread, a filter popover over author, type, status,
+  checkmark and date, a count badge that says "8 of 21" while a filter is on, an inline reply
+  editor, a status menu, keyboard navigation, and a context menu.
+- **Replies and status as PDF semantics.** A reply is a hidden `Text` annotation with `/IRT`,
+  `/RT /R` and `/Contents`; a status is the same thing carrying `/State` and `/StateModel` and no
+  text, which is what ISO 32000-1 12.5.6.4 describes and what Acrobat and Foxit both write. The
+  panel therefore shows the *current* status as the newest one in the thread and can say who set
+  it, with the earlier decisions still in the file as the record.
+- **The checkmark** is the `/Marked` state model, kept separate from the five review states
+  because it is the reader's own flag rather than a review decision.
+- **Show and hide** — globally, by type and by author — as a **view flag** that never touches the
+  file: the raster stops drawing annotation appearance streams and M30's overlay draws the ones
+  that are still visible (ADR 0017).
+- **`src/engine/xfdf/`** — pure, no DOM, no engine: XFDF read and write, FDF read and write over a
+  small PDF object lexer of our own (`pdfsyntax.ts` — pdf-lib will not open an FDF), the shared
+  value conversions, and the model converters. Stamps export by reference, ink by gesture,
+  replies and status by `/NM`, form data optionally, UTF-8 throughout.
+- **Import** merges by `/NM` with a conflict policy the reader picks — replace, or add as a second
+  copy — in one `document.batch`, so an import of two hundred comments is one undo step. Replies
+  are threaded in a second pass, because an export is free to list a reply before its target.
+- **`src/engine/summary/`** — the four layouts Foxit and Acrobat both offer (connector lines on
+  separate pages, connector lines on one page, comments only, sequence numbers on separate
+  pages), with sort order, text size, page range and empty-page handling. `layout.ts` is pure, so
+  the page counts, the ordering, the spill onto a second page and the block bounds are all tested
+  without rendering anything; `build.ts` places the rendered page pictures and draws the blocks,
+  connectors and numbered markers.
+- **Everything is a registered command** — 27 of them, all in the palette, all taking plain-data
+  arguments so M120's batch can run them with no UI: reply, the five statuses, checkmark, delete,
+  delete-all, next/previous, expand/collapse, group, sort, search, filter, show/hide (all, by
+  type, by author), import, export, summarise, and print-with-comments (which turns M13's
+  annotation setting on and hands over).
+- **Two hidden probes**, `dev.comments` and `dev.commentThread`, are how the acceptance tests read
+  the module out of the running app.
+
+### Contract changes (ADR 0017)
+
+- `DictValue` gains `annotationRef`, so `/IRT` can be written as a **real indirect reference**.
+  The plan names the target by its `/NM` and `FullRewriteWriter` resolves it after every planned
+  annotation on the page exists — so a reply to an annotation added in the same save works.
+- `ViewerService.setAnnotationsVisible(visible)` — M11's `flags()` read a hard-coded `true`.
+- `AnnotationProvider.toLayer` gains `raster?: boolean`, and `AnnotationService.setVisibility`
+  takes the filter. Both are what let the overlay draw the comment layer when the raster is off.
+- `engine/appearance/dict.ts` gains `replyType` → `/RT` and `inReplyTo` → `/IRT`.
+
+### Four things that were not as expected
+
+- **Every reply in every file came back unthreaded.** `Document.adoptAnnotations` bound its model
+  ids *after* converting the engine's annotations, and `/IRT` is resolved during that conversion —
+  so the resolver was looking at an empty table and every reply lost its parent. Ids are bound
+  first now. This was M20 code that had never been exercised: M30 held reply threads in memory
+  and nothing had yet loaded one from disk.
+- **`/IRT` was never written at all.** `toEngineAnnotation` does not carry it and PDFium has no
+  setter, so M30's "replies are read, written and preserved" held for the model and not for the
+  file. That is what `annotationRef` is for.
+- **The summary refused to build when a comment used a character WinAnsi cannot encode.** pdf-lib
+  throws rather than substituting, so one Greek word in one comment would have failed the whole
+  summary. `summary/text.ts` maps the look-alikes, drops control characters and marks the rest
+  with `?`. It runs during *layout*, so the width the wrapper measures is the width that is drawn.
+  The limit is real: embedding a Unicode face needs a font subsetter, which this repo does not
+  have before M51.
+- **Arrow keys in the panel silently moved the comment on the page.** M30's controller listens for
+  keys on `window` in the *capture* phase, so with a comment selected it took every arrow, Delete
+  and Ctrl+C/X/V before any panel could see them — the comments list appeared dead, and Down was
+  actually nudging the annotation. The controller now stands aside when the key belongs to a pane,
+  a dialog or a popup; the page area, the body and the ribbon are untouched.
+
+### Bugs the tests found
+
+- **A repaint threw focus away.** The list rebuilds its rows on every repaint, which destroyed the
+  focused element and dropped focus to the body — so the second arrow key went nowhere. The list
+  now remembers whether it held focus and restores it, and only when the *list* had it, so a
+  repaint while the reader is typing in the search field does not pull focus out of the field.
+- **The panel's row selection fought the page's.** The panel adopted the annotation selection on
+  every notification; a reply is a hidden annotation the page cannot select, so choosing one
+  snapped the row straight back. The panel now adopts the annotation selection only when it
+  *changes*.
+- **`PDFString.of` truncated the em dashes in the fixture** to `\x14`, which is what first showed
+  the summary's encoding problem. The fixture uses `PDFHexString.fromText` for anything non-ASCII
+  now, and carries one deliberately non-Latin comment so the path stays tested.
+- **The empty state said the wrong thing.** "This document has no comments" and "no comment
+  matches the filter" are different states and the reader has to be able to tell.
+
+### Fixtures
+
+`test/fixtures/comments.pdf` — two pages, twenty-one annotations of eleven kinds by three
+reviewers, two reply threads, an Accepted status and a Rejected one, `/NM` on every one.
+`test/fixtures/xfdf/` — `acrobat.xfdf`, `foxit.xfdf` and `acrobat.fdf`.
+
+### What was deferred, and why
+
+- **The exchange fixtures are ours, not exports.** The brief asks for files exported by Acrobat
+  and Foxit. They are written here to the shapes those two produce — 0-based `page`, `coords` for
+  quads, `<inklist><gesture>`, `start`/`end` for a line, `<contents-richtext>`, a nested `<popup>`
+  that is not a comment of its own — from the XFDF grammar (Adobe XFDF 3.0 / ISO 19444-1) rather
+  than from a real export, because there was none to hand. The reader handles the three places
+  those two differ from each other. **If the operator drops a genuine export from each into
+  `test/fixtures/xfdf/`, the "imports with all fields" acceptance gains real teeth** — the test is
+  data-driven and will take them as they are.
+- **Comment visibility is exact for the global switch and close for the rest.** With any filter
+  on, our own generators draw the comment layer instead of PDFium. For everything this app makes
+  that is the same drawing; an annotation that arrived from another editor with an appearance we
+  do not reproduce exactly will look slightly different while comments are being hidden, and goes
+  back to PDFium's own drawing the moment they are all shown. The file is untouched throughout.
+  The alternative — writing `/F` — would have been faithful on screen and wrong in the file.
+- **Rich text (`/RC`) is carried, not rendered.** It round-trips through both formats and through
+  a save; the panel shows the plain `/Contents` beside it. A rich-text editor is M30's popup, not
+  this module's list.

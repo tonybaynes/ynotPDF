@@ -140,6 +140,22 @@
         "Watermark"
       ]
     },
+    "comments.pdf": {
+      "pages": 2,
+      "annotations": 14,
+      "text": "Draft under review",
+      "subtypes": [
+        "Caret",
+        "FreeText",
+        "Highlight",
+        "Squiggly",
+        "Stamp",
+        "StrikeOut",
+        "Text",
+        "Underline"
+      ],
+      "notes": "21 annotations across two pages: 17 comments of eleven kinds by three reviewers, plus two replies, an Accepted status and a Rejected one (M32)"
+    },
     "javascript.pdf": {
       "pages": 1,
       "fields": 1,

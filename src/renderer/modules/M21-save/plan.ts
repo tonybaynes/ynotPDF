@@ -23,7 +23,7 @@ import {
   type AppearanceInput,
   type AppearanceResources,
 } from '@engine/appearance/types';
-import { dictEntries } from '@engine/appearance/dict';
+import { dictEntries, dictMapping, type DictValue } from '@engine/appearance/dict';
 import {
   blobKey,
   COLUMN_SUBTYPE,
@@ -233,7 +233,7 @@ function plannedAnnotations(
     } = { index, subtype: annotation.subtype, rect: annotation.rect };
     if (insert) entry.insert = true;
     if (wasChanged) {
-      entry.properties = changedProperties(annotation);
+      entry.properties = changedProperties(annotation, (id) => doc.annotation(id)?.name ?? null);
     }
     entry.appearance = { input, replace: wasChanged };
     out.push(entry);
@@ -254,7 +254,10 @@ function plannedAnnotations(
  * original comment named — overwriting something the model reads less exactly than the file holds
  * it — does not apply to one the reader has just edited: there the model *is* the intent.
  */
-function changedProperties(a: ModelAnnotation): PlannedAnnotationProperties {
+function changedProperties(
+  a: ModelAnnotation,
+  nameOf: (id: ModelId) => string | null,
+): PlannedAnnotationProperties {
   const props: Record<string, unknown> = {
     contents: a.contents,
     author: a.author,
@@ -274,7 +277,23 @@ function changedProperties(a: ModelAnnotation): PlannedAnnotationProperties {
   if ('vertices' in a) props['vertices'] = a.vertices.length > 0 ? a.vertices : null;
   // Dictionary entries the engine has no setter for — `/CL`, `/Q`, `/Rotate`, `/RD` — and the
   // ones it can only write as strings where the file wants a name.
-  const entries = dictEntries(a.extra);
+  const entries: Record<string, DictValue | null> = dictEntries(a.extra);
+  /*
+   * `/IRT` is a reference to another annotation's object, which is the one thing the model holds
+   * as an id and the file holds as a pointer (M32, ADR 0017). The plan is the last place that can
+   * see both, so it looks the parent's `/NM` up here and the writer resolves the name once every
+   * annotation on the page exists. A parent with no `/NM` cannot be pointed at; M32 gives one to
+   * every annotation it replies to, so by save time there always is one.
+   */
+  const irt = dictMapping('inReplyTo');
+  if (irt) {
+    const parent = a.inReplyTo === null ? null : nameOf(a.inReplyTo);
+    if (parent !== null && parent !== '') {
+      entries[irt.pdfKey] = { kind: 'annotationRef', value: parent };
+    } else if (a.inReplyTo === null) {
+      entries[irt.pdfKey] = null;
+    }
+  }
   if (Object.keys(entries).length > 0) props['entries'] = entries;
   return props;
 }

@@ -35,6 +35,9 @@ export default defineConfig({
         'src/engine/create/**/*.ts',
         // M41's document operations: pure over bytes and over pixels, so all of them are gated.
         'src/engine/ops/**/*.ts',
+        // M32's exchange and summary halves: both pure over text, bytes and sizes.
+        'src/engine/xfdf/**/*.ts',
+        'src/engine/summary/**/*.ts',
         'src/shared/pageSizes.ts',
         'scripts/lib/**/*.ts',
         'src/renderer/theme/**/*.ts',
@@ -205,6 +208,21 @@ export default defineConfig({
         'src/renderer/modules/M41-merge-split-crop/cropTool.ts',
         'src/renderer/modules/M41-merge-split-crop/fields.ts',
         'src/renderer/modules/M41-merge-split-crop/ops.worker.ts',
+        /*
+         * M32's DOM and shell half, for the same reason again: the Comments panel is a
+         * virtualised list with popovers and an inline editor, `CommentsService` orchestrates
+         * the viewer, the annotation service and the settings, `dialogs.ts` *is* the three
+         * option dialogs, `manifest.ts` the contribution points, and `summarise.ts` needs a
+         * canvas and a running engine to render a page. All are proved by Playwright in
+         * `test/e2e/comments.spec.ts`; everything they are built out of — the threads, the rows,
+         * the row geometry, the statuses, the exchange and the whole of `engine/xfdf/` and
+         * `engine/summary/` — is pure and gated below.
+         */
+        'src/renderer/modules/M32-comments-panel/CommentsPanel.ts',
+        'src/renderer/modules/M32-comments-panel/CommentsService.ts',
+        'src/renderer/modules/M32-comments-panel/dialogs.ts',
+        'src/renderer/modules/M32-comments-panel/manifest.ts',
+        'src/renderer/modules/M32-comments-panel/summarise.ts',
       ],
       reporter: ['text', 'lcov'],
       thresholds: {
@@ -515,6 +533,49 @@ export default defineConfig({
           lines: 75,
           functions: 80,
           statements: 75,
+        },
+        // M32. The exchange formats decide what a reviewer sends and receives, so the readers,
+        // the writers and the value conversions under them are held high; the summary layout
+        // decides what the printed record says.
+        'src/engine/xfdf/read.ts': { lines: 80, functions: 95, statements: 78 },
+        'src/engine/xfdf/write.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/xfdf/fdf.ts': { lines: 85, functions: 95, statements: 82 },
+        'src/engine/xfdf/pdfsyntax.ts': { lines: 90, functions: 95, statements: 90 },
+        'src/engine/xfdf/values.ts': { lines: 95, functions: 95, statements: 92 },
+        'src/engine/xfdf/convert.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/summary/layout.ts': { lines: 95, functions: 90, statements: 92 },
+        'src/engine/summary/build.ts': { lines: 95, functions: 95, statements: 92 },
+        'src/engine/summary/text.ts': { lines: 95, functions: 95, statements: 95 },
+        // The panel’s pure half: what a thread is, what the list shows and how tall a row is.
+        'src/renderer/modules/M32-comments-panel/model.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M32-comments-panel/rows.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 88,
+        },
+        'src/renderer/modules/M32-comments-panel/metrics.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M32-comments-panel/status.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M32-comments-panel/exchange.ts': {
+          lines: 85,
+          functions: 75,
+          statements: 85,
+        },
+        'src/renderer/modules/M32-comments-panel/settings.ts': {
+          lines: 80,
+          functions: 60,
+          statements: 80,
         },
       },
     },

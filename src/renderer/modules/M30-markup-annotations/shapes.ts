@@ -46,9 +46,16 @@ const RASTERISED = new Set(['Highlight', 'Underline', 'Squiggly', 'StrikeOut', '
  * the appearance stream it had, so the raster no longer carries it whatever its subtype. For
  * everything else the file's own `/AP` decides — which is what `extra.hasAP` reports.
  */
-export function drawnByOverlay(a: ModelAnnotation, edited: ReadonlySet<string>): boolean {
+export function drawnByOverlay(
+  a: ModelAnnotation,
+  edited: ReadonlySet<string>,
+  raster = true,
+): boolean {
   if (!isOurs(a)) return false;
   if (a.flags.hidden || a.flags.noView) return false;
+  // With the raster not drawing annotations at all (M32, ADR 0017) there is nothing to collide
+  // with, so the overlay draws the lot — including the subtypes PDFium would have drawn.
+  if (!raster) return true;
   // An edit drops the appearance stream, but PDFium rebuilds one for the subtypes it knows the
   // moment the page reloads — so those go back into the raster on their own, and a note gets
   // ours pushed in explicitly. Only the ones PDFium never draws are left for the overlay.
@@ -364,11 +371,13 @@ function lerp(a: PdfPoint, b: PdfPoint, t: number): PdfPoint {
 export function toLayerAnnotation(
   a: ModelAnnotation,
   page: number,
-  options: { readonly edited: ReadonlySet<string>; readonly hidden?: boolean } = {
-    edited: new Set(),
-  },
+  options: {
+    readonly edited: ReadonlySet<string>;
+    readonly hidden?: boolean;
+    readonly raster?: boolean;
+  } = { edited: new Set() },
 ): LayerAnnotation {
-  const draws = drawnByOverlay(a, options.edited);
+  const draws = drawnByOverlay(a, options.edited, options.raster ?? true);
   const callout = a.family === 'freeText' ? calloutOf(a.extra) : [];
   return {
     id: a.id,

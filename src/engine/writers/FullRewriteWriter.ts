@@ -273,6 +273,9 @@ export class FullRewriteWriter implements Writer {
       );
       return;
     }
+    // `/IRT` names another annotation on the page, which may itself be one of the inserts below,
+    // so the references are collected here and resolved once every dictionary exists (ADR 0017).
+    const references: Array<{ owner: PDFDict; key: string; name: string }> = [];
     for (const entry of planned) {
       const dict = entry.insert
         ? newAnnotation(ctx, annots, entry)
@@ -283,7 +286,7 @@ export class FullRewriteWriter implements Writer {
         );
         continue;
       }
-      if (entry.properties) applyAnnotationProperties(doc, dict, entry, state);
+      if (entry.properties) applyAnnotationProperties(doc, dict, entry, state, references);
       if (entry.appearance) {
         const has = dict.get(PDFName.of('AP')) !== undefined;
         if (!has || entry.appearance.replace) {
@@ -295,6 +298,7 @@ export class FullRewriteWriter implements Writer {
         }
       }
     }
+    resolveAnnotationRefs(ctx, annots, references, state);
   }
 }
 
@@ -1308,6 +1312,7 @@ function applyAnnotationProperties(
   dict: PDFDict,
   entry: PlannedAnnotation,
   state: WriteState,
+  references: Array<{ owner: PDFDict; key: string; name: string }> = [],
 ): void {
   const ctx = doc.context;
   const props = entry.properties;
@@ -1396,7 +1401,43 @@ function applyAnnotationProperties(
       else state.warn(`The attached file "${value.value}" is not in the document`);
       continue;
     }
+    if (value.kind === 'annotationRef') {
+      // Deferred: the annotation it names may not exist yet (M32, ADR 0017).
+      references.push({ owner: dict, key, name: value.value });
+      continue;
+    }
     dict.set(PDFName.of(key), dictValue(ctx, value));
+  }
+}
+
+/**
+ * Points every deferred `/IRT`-style entry at the annotation its `/NM` names (M32, ADR 0017).
+ *
+ * Run after the whole page has been written, so a reply to an annotation inserted in the same
+ * save resolves. A name that matches nothing leaves the entry out and says so: an annotation in
+ * the right place beats one carrying a reference to an object that is not there.
+ */
+function resolveAnnotationRefs(
+  ctx: PDFContext,
+  annots: PDFArray,
+  references: ReadonlyArray<{ owner: PDFDict; key: string; name: string }>,
+  state: WriteState,
+): void {
+  if (references.length === 0) return;
+  const byName = new Map<string, PDFRef>();
+  for (let i = 0; i < annots.size(); i++) {
+    const ref = annots.get(i);
+    if (!(ref instanceof PDFRef)) continue;
+    const dict = ctx.lookupMaybe(ref, PDFDict);
+    const nm: unknown = dict?.get(PDFName.of('NM'));
+    const name =
+      nm instanceof PDFHexString || nm instanceof PDFString ? nm.decodeText() : undefined;
+    if (name !== undefined && name !== '' && !byName.has(name)) byName.set(name, ref);
+  }
+  for (const { owner, key, name } of references) {
+    const target = byName.get(name);
+    if (target) owner.set(PDFName.of(key), target);
+    else state.warn(`A reply's target comment "${name}" is not on the page, so it was left loose`);
   }
 }
 
@@ -1417,7 +1458,9 @@ function mergeDict(
       target.set(PDFName.of(key), nested);
       continue;
     }
-    if (value.kind === 'embeddedFile') continue; // only meaningful at the top level (`/FS`)
+    // Both resolve against something else in the document, and only at the top level: `/FS` on
+    // the annotation itself, `/IRT` on the annotation itself (M32, ADR 0017).
+    if (value.kind === 'embeddedFile' || value.kind === 'annotationRef') continue;
     target.set(PDFName.of(key), dictValue(ctx, value));
   }
 }
@@ -1435,7 +1478,10 @@ function dictAt(ctx: PDFContext, owner: PDFDict, key: string): PDFDict | undefin
 /** One planned dictionary entry as a pdf-lib object (M30, ADR 0013; M31 added the arrays of names). */
 function dictValue(
   ctx: PDFContext,
-  value: Exclude<DictValue, { kind: 'dict' } | { kind: 'embeddedFile' }>,
+  value: Exclude<
+    DictValue,
+    { kind: 'dict' } | { kind: 'embeddedFile' } | { kind: 'annotationRef' }
+  >,
 ): PDFArray | PDFHexString | PDFName | PDFNumber {
   switch (value.kind) {
     case 'string':

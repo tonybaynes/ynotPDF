@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xfdf xmlns="http://ns.adobe.com/xfdf/" xml:space="preserve">
+<annots>
+<highlight color="#FFFF00" creationdate="D:20260901101500Z00'00'" date="D:20260901101530Z00'00'" flags="print" name="acr-0001" page="0" rect="72.00,700.00,240.00,714.00" subject="Highlight" title="A. Reviewer" coords="72,714,240,714,72,700,240,700">
+<popup flags="print,nozoom,norotate" open="no" page="0" rect="300,600,500,700"/>
+<contents>Check this figure</contents>
+</highlight>
+<text color="#FFD100" creationdate="D:20260901101600Z00'00'" date="D:20260901101600Z00'00'" flags="print" icon="Comment" name="acr-0002" page="0" rect="120.00,540.00,140.00,560.00" subject="Sticky Note" title="A. Reviewer">
+<contents>The margin looks wrong on this page.</contents>
+<contents-richtext><body xmlns="http://www.w3.org/1999/xhtml"><p>The margin looks <b>wrong</b> on this page.</p></body></contents-richtext>
+</text>
+<text creationdate="D:20260901103000Z00'00'" date="D:20260901103000Z00'00'" flags="print" icon="Comment" inreplyto="acr-0002" name="acr-0003" page="0" rect="120.00,540.00,140.00,560.00" replyType="R" state="Accepted" statemodel="Review" title="B. Author"/>
+<freetext color="#000000" creationdate="D:20260901104500Z00'00'" date="D:20260901104500Z00'00'" flags="print" intent="FreeTextCallout" justification="0" name="acr-0004" page="1" rect="60.00,400.00,300.00,460.00" rotation="0" subject="Callout" title="A. Reviewer" callout="40,380,120,400,160,420" head="OpenArrow" width="1">
+<contents>Move this paragraph up.</contents>
+<defaultappearance>0 0 0 rg /Helv 11 Tf</defaultappearance>
+<defaultstyle>font: Helvetica 11.0pt; text-align:left; color:#000000</defaultstyle>
+</freetext>
+<ink color="#0000FF" creationdate="D:20260901105000Z00'00'" date="D:20260901105000Z00'00'" flags="print" name="acr-0005" page="1" rect="100.00,200.00,180.00,260.00" title="A. Reviewer" width="2">
+<inklist>
+<gesture>100,200;120,240;140,210</gesture>
+<gesture>150,220;180,260</gesture>
+</inklist>
+</ink>
+<line color="#008000" creationdate="D:20260901105500Z00'00'" date="D:20260901105500Z00'00'" flags="print" head="None" name="acr-0006" page="1" rect="200.00,300.00,400.00,320.00" start="200,300" end="400,320" tail="OpenArrow" title="A. Reviewer" width="1.5"/>
+<polygon color="#FF00FF" creationdate="D:20260901110000Z00'00'" date="D:20260901110000Z00'00'" flags="print" interior-color="#EEEEEE" name="acr-0007" page="1" rect="50.00,50.00,150.00,120.00" vertices="50,50;150,60;120,120" title="A. Reviewer" width="1">
+<border-effect style="C" intensity="2"/>
+</polygon>
+<stamp creationdate="D:20260901111000Z00'00'" date="D:20260901111000Z00'00'" flags="print" name="acr-0008" icon="SBApproved" page="1" rect="380.00,80.00,520.00,130.00" rotation="0" subject="Stamp" title="A. Reviewer"/>
+<square color="#FF0000" creationdate="D:20260901111500Z00'00'" date="D:20260901111500Z00'00'" dashes="3,2" flags="print" name="acr-0009" page="0" rect="300.00,300.00,420.00,360.00" title="A. Reviewer" width="2"/>
+</annots>
+<f href="report.pdf"/>
+<ids original="9A2B4C6D8E0F1122334455667788990A" modified="0B1C2D3E4F5061728394A5B6C7D8E9F0"/>
+</xfdf>

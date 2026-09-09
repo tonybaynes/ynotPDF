@@ -1,0 +1,430 @@
+/*
+ * M32 — the Comments panel.
+ *
+ * Colours come only from theme tokens; a status is a word *and* an icon, never a colour on its
+ * own, so the tokens here decorate something the reader can already read. Nothing is transparent:
+ * the popovers inherit the shell's opaque popup surface, and no rule in this file sets an alpha,
+ * an `opacity` below 1 or a `backdrop-filter`.
+ *
+ * The list is absolutely positioned inside a spacer whose height is the sum of the row heights
+ * `metrics.ts` computed, which is what makes the virtualisation work: the scrollbar is the right
+ * size before any row exists.
+ */
+
+.comments-searchrow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: var(--border-width) solid var(--border);
+  color: var(--icon);
+}
+
+.comments-searchrow > svg {
+  flex: none;
+  width: var(--icon-size);
+  height: var(--icon-size);
+}
+
+.comments-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+  font-weight: var(--fw-body);
+}
+
+.comments-search:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+.comments-count {
+  flex: none;
+}
+
+.comments-badge {
+  display: inline-block;
+  min-width: 2ch;
+  padding: 0 var(--sp-2);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--fg);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-heading);
+  text-align: center;
+}
+
+.comments-scroll {
+  position: relative;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.comments-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.comments-list {
+  position: absolute;
+  inset: 0;
+}
+
+.comments-group,
+.comments-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.comments-group {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3);
+  border-bottom: var(--border-width) solid var(--border);
+  background: var(--bg-ribbon);
+  color: var(--fg);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-heading);
+  cursor: pointer;
+}
+
+.comments-group > svg {
+  flex: none;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  color: var(--icon);
+}
+
+.comments-group-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comments-group-count {
+  flex: none;
+  color: var(--fg-muted);
+}
+
+.comments-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: var(--border-width) solid var(--border);
+  background: var(--bg-panel);
+  color: var(--fg);
+  font-size: var(--fs-2);
+  cursor: pointer;
+}
+
+.comments-row:hover {
+  background: var(--bg-hover);
+}
+
+.comments-row.is-selected {
+  background: var(--bg-selected);
+}
+
+.comments-row:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: calc(-1 * var(--focus-width));
+}
+
+.comments-row.is-reply {
+  padding-left: calc(var(--sp-3) + 18px);
+  border-left: 2px solid var(--border-strong);
+}
+
+.comments-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.comments-head > svg {
+  flex: none;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  color: var(--icon);
+}
+
+.comments-author {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--fw-heading);
+}
+
+.comments-date,
+.comments-page {
+  flex: none;
+  color: var(--fg-muted);
+  font-size: var(--fs-1);
+}
+
+.comments-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-1);
+  color: var(--fg-muted);
+}
+
+.comments-type,
+.comments-replies {
+  color: var(--fg-muted);
+}
+
+/*
+ * Status: the icon takes the colour, the word never does. A reader who cannot separate the hues
+ * still has "Accepted" and "Rejected" spelled out beside two different glyphs.
+ */
+.comments-status,
+.comments-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--fg);
+}
+
+.comments-status > svg,
+.comments-check > svg {
+  width: var(--icon-size);
+  height: var(--icon-size);
+}
+
+.comments-status[data-status='accepted'] > svg {
+  color: var(--success);
+}
+
+.comments-status[data-status='rejected'] > svg {
+  color: var(--danger);
+}
+
+.comments-status[data-status='cancelled'] > svg {
+  color: var(--warning);
+}
+
+.comments-status[data-status='completed'] > svg {
+  color: var(--info);
+}
+
+.comments-status[data-status='none'] {
+  color: var(--fg-muted);
+}
+
+.comments-status[data-status='none'] > svg {
+  color: var(--icon);
+}
+
+.comments-check > svg {
+  color: var(--info);
+}
+
+.comments-text {
+  margin: 0;
+  overflow: hidden;
+  color: var(--fg);
+  line-height: var(--lh);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.comments-match {
+  background: var(--selection);
+  color: var(--fg);
+}
+
+.comments-twisty,
+.comments-twisty-space {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.comments-twisty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--icon);
+  cursor: pointer;
+}
+
+.comments-twisty.is-empty {
+  visibility: hidden;
+}
+
+.comments-twisty:hover {
+  background: var(--bg-hover);
+}
+
+.comments-twisty:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+}
+
+.comments-replybox {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.comments-replyinput {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+}
+
+.comments-replyinput:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+.comments-replysend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-app);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.comments-replysend:hover {
+  background: var(--bg-hover);
+}
+
+.comments-replysend:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+.comments-replysend > svg {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  color: var(--icon);
+}
+
+/* ---- the popovers -------------------------------------------------------------------------- */
+
+.comments-popup {
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.comments-popover {
+  display: flex;
+  flex-direction: column;
+  min-width: 15rem;
+  padding: var(--sp-2);
+  background: var(--bg-modal);
+  color: var(--fg);
+}
+
+.comments-popover-title {
+  margin: var(--sp-2) 0 var(--sp-1);
+  color: var(--fg-muted);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-heading);
+  text-transform: none;
+}
+
+.comments-popover-title:first-child {
+  margin-top: 0;
+}
+
+.comments-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.comments-choice > svg {
+  flex: none;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  color: var(--icon);
+}
+
+.comments-choice:hover {
+  background: var(--bg-hover);
+}
+
+.comments-choice:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+.comments-daterow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.comments-daterow input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--sp-1);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+}
+
+.comments-reset {
+  margin-top: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-app);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.comments-reset:hover {
+  background: var(--bg-hover);
+}
+
+.comments-reset:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}

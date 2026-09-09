@@ -532,16 +532,24 @@ export class Document {
     pageId: ModelId,
     list: ReadonlyArray<Annotation>,
   ): ReadonlyArray<ModelAnnotation> {
-    const bindings: [ModelId, string][] = [];
     const resolve = (engineId: string): ModelId | null =>
       this.idTable.modelId('annotation', engineId) ?? null;
-    const out = list.map((a) => {
-      const id = this.idTable.modelId('annotation', a.id) ?? this.ids.next('annotation');
-      bindings.push([id, a.id]);
-      return toModelAnnotation(id, pageId, a, resolve);
+    /*
+     * Every id is bound *before* any annotation is converted, because `/IRT` is resolved during
+     * the conversion: binding as we went left a reply pointing at nothing whenever its target had
+     * not been reached yet, and binding afterwards left every reply on a freshly-loaded page
+     * unthreaded (M32).
+     */
+    const ids = list.map(
+      (a) => this.idTable.modelId('annotation', a.id) ?? this.ids.next('annotation'),
+    );
+    list.forEach((a, at) => {
+      const id = ids[at];
+      if (id !== undefined) this.idTable.bind('annotation', id, a.id);
     });
-    for (const [id, key] of bindings) this.idTable.bind('annotation', id, key);
-    return out;
+    return list.map((a, at) =>
+      toModelAnnotation(ids[at] ?? this.ids.next('annotation'), pageId, a, resolve),
+    );
   }
 
   // ---- model mutation (called by commands, not by UI code) --------------------------------------

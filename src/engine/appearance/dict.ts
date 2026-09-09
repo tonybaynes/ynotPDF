@@ -37,7 +37,13 @@ export type DictValue =
    * writer resolves it to the file specification, sets the entry to that object, and removes the
    * name-tree entry so the file is listed once — on the annotation.
    */
-  | { readonly kind: 'embeddedFile'; readonly value: string };
+  | { readonly kind: 'embeddedFile'; readonly value: string }
+  /**
+   * A reference to another annotation on the same page, by its `/NM` name (M32, ADR 0017). The
+   * writer resolves it once every planned annotation exists, so a reply to one added in the same
+   * save works; a name that matches nothing is warned about and the entry is left out.
+   */
+  | { readonly kind: 'annotationRef'; readonly value: string };
 
 /** How one model key reaches the file. */
 export interface DictMapping {
@@ -87,6 +93,15 @@ export const ANNOTATION_DICT_MAPPINGS: ReadonlyArray<DictMapping> = [
   { key: 'intent', pdfKey: 'IT', kind: 'name', engineWritable: true },
   // The review-state model a `/State` belongs to ("Review" or "Marked"); M32 uses it.
   { key: 'stateModel', pdfKey: 'StateModel', kind: 'string', engineWritable: true },
+  // `/RT` — what an `/IRT` means: `/R` a reply, `/Group` an annotation grouped with the target.
+  { key: 'replyType', pdfKey: 'RT', kind: 'name', engineWritable: true },
+  /*
+   * `/IRT` — the annotation this one replies to (M32, ADR 0017). It is listed here so the table
+   * stays the single answer to "which PDF key is that?", but it is never produced by
+   * `dictEntries`: `inReplyTo` is a first-class model field rather than an `extra` key, and only
+   * M21's plan can turn the model id it holds into the target's `/NM`.
+   */
+  { key: 'inReplyTo', pdfKey: 'IRT', kind: 'annotationRef', engineWritable: false },
   // The callout's leader line: 6 numbers (tip, knee, shoulder) or 4 (tip, shoulder).
   { key: 'callout', pdfKey: 'CL', kind: 'numbers', engineWritable: false },
   // Quadding: 0 left, 1 centre, 2 right.
@@ -177,6 +192,7 @@ export function toDictValue(mapping: DictMapping, value: unknown): DictValue | n
     case 'string':
     case 'name':
     case 'embeddedFile':
+    case 'annotationRef':
       return typeof value === 'string' && value !== ''
         ? { kind: mapping.kind, value }
         : /* an empty string is a removal, not a value */ null;
@@ -217,6 +233,8 @@ export function dictEntries(
   const out: Record<string, DictValue | null> = {};
   for (const mapping of ANNOTATION_DICT_MAPPINGS) {
     if (options.skipEngineWritable && mapping.engineWritable) continue;
+    // `/IRT` names another object; only the plan can build it (M32, ADR 0017).
+    if (mapping.kind === 'annotationRef') continue;
     if (!(mapping.key in extra)) continue;
     const raw = extra[mapping.key];
     if (raw === null || raw === undefined || raw === '' || mapping.empty?.(raw) === true) {

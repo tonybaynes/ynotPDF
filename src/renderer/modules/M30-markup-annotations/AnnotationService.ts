@@ -107,11 +107,19 @@ export interface AnnotationProvider {
   /** Tool ids that create something and must own the pointer while active. */
   readonly creationTools?: ReadonlySet<string>;
   owns(a: ModelAnnotation): boolean;
-  /** What the overlay draws and lets the reader grab. */
+  /**
+   * What the overlay draws and lets the reader grab. `raster` (default true) says whether the
+   * tile raster is drawing annotation appearance streams; with it false the overlay draws every
+   * annotation the provider owns, because there is nothing to draw it twice (M32, ADR 0017).
+   */
   toLayer(
     a: ModelAnnotation,
     page: number,
-    options: { readonly edited: ReadonlySet<string>; readonly hidden?: boolean },
+    options: {
+      readonly edited: ReadonlySet<string>;
+      readonly hidden?: boolean;
+      readonly raster?: boolean;
+    },
   ): LayerAnnotation;
   /** A patch that moves the annotation by a page-space delta, geometry included. */
   movePatch(a: ModelAnnotation, dx: number, dy: number): AnnotationPatch;
@@ -491,11 +499,13 @@ export class AnnotationService {
     const document = this.documentService()?.get(tabId);
     if (!state || !document) return;
     const items = [];
+    const filter = this.visibility;
     for (const [index, page] of document.state.pages.entries()) {
       for (const a of document.annotations(page.id)) {
         const options = {
           edited: state.edited,
-          ...(this.editing === a.id ? { hidden: true } : {}),
+          ...(this.editing === a.id || (filter !== null && !filter(a)) ? { hidden: true } : {}),
+          ...(filter === null ? {} : { raster: false }),
         };
         const provider = this.providerFor(a);
         if (provider) items.push(provider.toLayer(a, index, options));
@@ -504,6 +514,24 @@ export class AnnotationService {
     }
     state.layer.set(items);
     state.layer.setSelection(state.selection);
+  }
+
+  /**
+   * A view filter over which annotations are shown (M32, ADR 0017). While one is registered the
+   * overlay draws the whole comment layer itself — M32 turns the raster's annotations off to
+   * match — and an annotation the filter rejects is neither drawn nor hit-tested. Nothing here
+   * touches the document: hiding a comment is a view state, never a change to the file.
+   */
+  private visibility: ((a: ModelAnnotation) => boolean) | null = null;
+
+  /** True while a filter is registered, which is when the raster must stop drawing annotations. */
+  get filtering(): boolean {
+    return this.visibility !== null;
+  }
+
+  setVisibility(filter: ((a: ModelAnnotation) => boolean) | null): void {
+    this.visibility = filter;
+    for (const tabId of this.tabs.keys()) this.repaint(tabId);
   }
 
   /** The annotation whose inline editor is open; the layer hides it so text is not drawn twice. */
