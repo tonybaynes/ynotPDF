@@ -1,4 +1,4 @@
-# M41 — Merge, split, extract to files, crop & flatten
+# M41 — Merge, split, extract to files, crop, deskew & flatten
 
 | | |
 |---|---|
@@ -52,6 +52,34 @@ annotations" option).
 
 ## Scope — build all of this
 
+- **Deskew — straighten scanned pages (operator requirement, 2026-09-09:
+  "a lot of the files we work with are scanned and need to be
+  straightened slightly").**
+  - *Detect:* estimate each page's skew angle from a downsampled,
+    binarised render (projection-profile variance or Hough over ±15°,
+    0.1° resolution; ignore pages whose confidence is low — e.g. mostly
+    blank or pictures — and say so in words). Run in a worker; 100 pages
+    of A4 scans in under 20 s.
+  - *Apply:* rotate the **page content** about the page centre by wrapping
+    the content stream in `q cos sin −sin cos tx ty cm … Q` — no image
+    re-encoding, an existing OCR text layer and annotations rotate with it
+    (annotations via their `/Rect`/`/QuadPoints`; links included). Fill
+    the exposed corner wedges with white (or the detected page background)
+    behind the content; optionally shrink the CropBox by the wedge amount
+    ("trim edges" checkbox, default off). One undoable `Command` per run.
+    Re-running detection on a straightened page must return ≈ 0°.
+  - *UI:* Organise/Page tab → **Deskew** button and page-thumbnail context
+    menu (M12/M40). Dialog: scope (this page / selected / all / range);
+    per-page table with detected angle, confidence in words, checkbox;
+    **live before/after preview** of the current page with a **fine-tune
+    slider ±5° in 0.1° steps** and a numeric field; "Apply". Also a
+    one-click **Auto-deskew all** that skips low-confidence pages and
+    reports what it skipped.
+  - *Preference (M130):* "Straighten scanned pages automatically when
+    importing images / creating PDF from scanner" — default off; M91's
+    from-images path calls this when on.
+  - *Batch:* register `deskew` as a batchable op for M120; M90 OCR calls
+    it before recognition (default on in the OCR dialog).
 - Combine dialog (opaque, resizable): list of files/folders (drag-drop,
   add, remove, reorder, page-range per file, preview thumbnails), options
   (bookmark per file from filename, keep existing bookmarks, page size
@@ -102,6 +130,14 @@ None new.
 
 ## Acceptance tests — the module is done when these pass on all three OSes
 
+- Deskew: synthetic fixture `skewed.pdf` (scanned-looking text page rotated
+  by +2.3°, −1.1°, +7.5° and a blank page, built in `make-fixtures.ts`)
+  ⇒ detection within ±0.2° of each known angle, blank page reported
+  "skipped — not enough content"; apply ⇒ re-detect gives |angle| ≤ 0.2°;
+  the image XObject bytes are unchanged (no re-encoding); an annotation
+  on the page stays over the same word; undo restores the original stream.
+- Deskew on a real local scan (`test/fixtures/local/`, skip if absent):
+  operator judges the before/after preview straight — record in Build log.
 - Combine the whole fixture corpus → page count equals sum; bookmarks per
   file present; split back by bookmark ⇒ per-file page counts match
   originals.

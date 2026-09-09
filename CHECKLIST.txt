@@ -116,7 +116,7 @@ WAVE 3
       needs: M21 M11 M13
       prompt: Read D:\Projects\ynotPDF\docs\modules\M30-markup-annotations.md and carry out the "Your task" section in full.
 
-[ ] M40  Organise pages — insert, delete, extract, replace, rotate, move, labels
+[✔] M40  Organise pages — insert, delete, extract, replace, rotate, move, labels
       model:  Opus
       needs: M21 M12
       prompt: Read D:\Projects\ynotPDF\docs\modules\M40-organise-pages.md and carry out the "Your task" section in full.
@@ -139,7 +139,7 @@ WAVE 4
       needs: M30
       prompt: Read D:\Projects\ynotPDF\docs\modules\M32-comments-panel.md and carry out the "Your task" section in full.
 
-[ ] M41  Merge, split, extract to files, crop & flatten
+[ ] M41  Merge, split, extract to files, crop, deskew & flatten
       model:  Opus
       needs: M40
       prompt: Read D:\Projects\ynotPDF\docs\modules\M41-merge-split-crop.md and carry out the "Your task" section in full.
@@ -155,7 +155,7 @@ WAVE 4
       prompt: Read D:\Projects\ynotPDF\docs\modules\M130-preferences.md and carry out the "Your task" section in full.
 
   >>> MILESTONE 1 — usable viewer & annotator (v0.1)
-      open, view, search, print, annotate, comment, organise pages, merge/split, save, encrypt, create PDFs, preferences
+      open, view, search, print, annotate, comment, organise pages, merge/split, deskew scans, save, encrypt, create PDFs, preferences
 
 
 WAVE 5
