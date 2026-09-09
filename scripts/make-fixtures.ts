@@ -26,6 +26,8 @@
  *   links.pdf              URI and GoTo link annotations (one with QuadPoints)
  *   forms-all.pdf          every AcroForm field type incl. listbox, password and signature
  *   annotations-all.pdf    every annotation subtype in PDF 32000-1 table 169 + a reply
+ *   --- M32 ---
+ *   comments.pdf           2 pages, 20 mixed comments by 3 reviewers, reply threads and statuses
  *   javascript.pdf         document-level JavaScript (OpenAction + /Names /JavaScript)
  *   xfa.pdf                AcroForm with an /XFA packet (must open with hasXfa = true)
  *   pdfa-1b.pdf            PDF/A-1b structure: XMP with pdfaid, OutputIntent (structure only)
@@ -1310,6 +1312,245 @@ async function annotationsAll(): Promise<void> {
   await save(doc, 'annotations-all.pdf');
 }
 
+// ---- M32: a review document with twenty mixed comments ---------------------------------------
+/**
+ * `comments.pdf` — two pages carrying twenty comments of eleven kinds by three reviewers, with
+ * reply threads, review statuses written the way the spec has them (a reply carrying `/State` and
+ * `/StateModel`) and an `/NM` on every one so an exchange file can point at them.
+ *
+ * The point of it is the *mixture*: M32's acceptance is that an XFDF export and re-import of a
+ * file like this comes back field for field, and every kind here carries something the others do
+ * not — quads, ink strokes, vertices, a callout's leader, a dash, a cloud, an icon name.
+ */
+async function comments(): Promise<void> {
+  const doc = await newDoc('Comment review sample');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const one = doc.addPage(A4);
+  const two = doc.addPage(A4);
+  for (const [page, heading] of [
+    [one, 'Draft under review — page one'],
+    [two, 'Draft under review — page two'],
+  ] as const) {
+    page.drawText(heading, { x: 60, y: 780, size: 14, font });
+    for (let line = 0; line < 12; line++) {
+      page.drawText(
+        `Line ${String(line + 1)}: the quick brown fox jumps over the lazy dog, twice over.`,
+        { x: 60, y: 740 - line * 24, size: 11, font },
+      );
+    }
+  }
+
+  const REVIEWERS = ['A. Reviewer', 'C. Editor', 'D. Second Reader'];
+  const reviewer = (n: number): PDFString => PDFString.of(REVIEWERS[n % 3] ?? 'A. Reviewer');
+  let counter = 0;
+  const nm = (): PDFString => PDFString.of(`cmt-${String(++counter).padStart(3, '0')}`);
+
+  const quads = (x0: number, y0: number, x1: number, y1: number): number[] => [
+    x0,
+    y1,
+    x1,
+    y1,
+    x0,
+    y0,
+    x1,
+    y0,
+  ];
+
+  /** One comment. Returns its reference so a reply can point at it. */
+  const comment = (page: PDFPage, who: number, dict: Record<string, unknown>): PDFRef =>
+    addAnnot(doc, page, { T: reviewer(who), NM: nm(), ...dict });
+
+  // Page one — the markup family, notes and free text.
+  const first = comment(one, 0, {
+    Subtype: 'Highlight',
+    Rect: [60, 726, 420, 742],
+    QuadPoints: quads(60, 726, 420, 742),
+    C: [1, 1, 0],
+    Contents: PDFString.of('This opening sentence needs to say what the document is for.'),
+    Subj: PDFString.of('Highlight'),
+  });
+  comment(one, 1, {
+    Subtype: 'Underline',
+    Rect: [60, 702, 380, 718],
+    QuadPoints: quads(60, 702, 380, 718),
+    C: [0, 0.45, 0.78],
+    Contents: PDFString.of('Underlined for emphasis.'),
+  });
+  comment(one, 1, {
+    Subtype: 'Squiggly',
+    Rect: [60, 678, 300, 694],
+    QuadPoints: quads(60, 678, 300, 694),
+    C: [0.44, 0.19, 0.63],
+    Contents: PDFString.of('Wording is awkward here.'),
+  });
+  comment(one, 2, {
+    Subtype: 'StrikeOut',
+    Rect: [60, 654, 340, 670],
+    QuadPoints: quads(60, 654, 340, 670),
+    C: [0.9, 0, 0],
+    Contents: PDFString.of('Delete this clause.'),
+  });
+  const note = comment(one, 0, {
+    Subtype: 'Text',
+    Rect: [470, 720, 490, 740],
+    Name: 'Comment',
+    Contents: PDFString.of('Does the margin here match the house style?'),
+    Subj: PDFString.of('Sticky note'),
+  });
+  comment(one, 1, {
+    Subtype: 'FreeText',
+    Rect: [60, 560, 300, 620],
+    DA: PDFString.of('0 0 0 rg /Helv 11 Tf'),
+    DS: PDFString.of('font: Helvetica 11.0pt; text-align:left; color:#000000'),
+    Q: 0,
+    Contents: PDFString.of('Move this paragraph above the table.'),
+    IT: 'FreeTextCallout',
+    CL: [40, 540, 120, 560, 160, 580],
+    LE: 'OpenArrow',
+    BS: { W: 1 },
+    Subj: PDFString.of('Callout'),
+  });
+  comment(one, 2, {
+    Subtype: 'FreeText',
+    Rect: [330, 560, 520, 600],
+    DA: PDFString.of('0 0 0 rg /Helv 10 Tf'),
+    DS: PDFString.of('font: Helvetica 10.0pt; text-align:left; color:#000000'),
+    Q: 0,
+    IT: 'FreeTextTypewriter',
+    Contents: PDFString.of('Typed straight onto the page.'),
+  });
+  comment(one, 0, {
+    Subtype: 'Caret',
+    Rect: [350, 654, 362, 670],
+    RD: [0, 0, 0, 0],
+    C: [0, 0, 1],
+    Contents: PDFString.of('Insert a comma here.'),
+  });
+  comment(one, 2, {
+    Subtype: 'Highlight',
+    Rect: [60, 630, 260, 646],
+    QuadPoints: quads(60, 630, 260, 646),
+    C: [0, 0.69, 0.31],
+    IT: 'AreaHighlight',
+    // Non-ASCII on purpose, as a hex string: a reviewer writes in their own language, and
+    // `PDFString.of` would truncate anything above Latin-1 (M32).
+    Contents: PDFHexString.fromText('Good — keep this wording. Καλά.'),
+  });
+  comment(one, 1, {
+    Subtype: 'Stamp',
+    Rect: [400, 470, 540, 520],
+    Name: 'SBApproved',
+    Contents: PDFString.of('Approved for circulation.'),
+    Subj: PDFString.of('Stamp'),
+  });
+
+  // Page two — shapes, ink and a second note.
+  comment(two, 0, {
+    Subtype: 'Square',
+    Rect: [60, 600, 240, 680],
+    C: [0.9, 0, 0],
+    IC: [1, 0.95, 0.8],
+    BS: { W: 2, S: 'D', D: [3, 2] },
+    Contents: PDFString.of('Box this figure off from the text.'),
+  });
+  comment(two, 1, {
+    Subtype: 'Circle',
+    Rect: [280, 600, 440, 680],
+    C: [0, 0.45, 0.78],
+    IC: [1, 0.95, 0.8],
+    BS: { W: 3 },
+    Contents: PDFString.of('Circle the total.'),
+  });
+  comment(two, 2, {
+    Subtype: 'Line',
+    Rect: [60, 540, 400, 580],
+    L: [60, 540, 400, 580],
+    C: [0.29, 0.45, 0.77],
+    BS: { W: 1.5 },
+    LE: ['None', 'OpenArrow'],
+    Contents: PDFString.of('This points at the wrong column.'),
+  });
+  comment(two, 0, {
+    Subtype: 'Polygon',
+    Rect: [60, 420, 220, 520],
+    Vertices: [60, 420, 220, 440, 180, 520],
+    C: [0.6, 0, 0.6],
+    BE: { S: 'C', I: 2 },
+    Contents: PDFString.of('The shaded area is out of date.'),
+  });
+  comment(two, 1, {
+    Subtype: 'PolyLine',
+    Rect: [260, 420, 460, 520],
+    Vertices: [260, 420, 320, 520, 460, 460],
+    C: [0.27, 0.45, 0.77],
+    LE: ['None', 'ClosedArrow'],
+    Contents: PDFString.of('Follow this path instead.'),
+  });
+  comment(two, 2, {
+    Subtype: 'Ink',
+    Rect: [60, 300, 260, 400],
+    InkList: [
+      [60, 300, 100, 380, 140, 320],
+      [160, 340, 200, 400, 260, 350],
+    ],
+    C: [0.1, 0.1, 0.1],
+    BS: { W: 2 },
+    Contents: PDFString.of('Sketched correction.'),
+  });
+  comment(two, 0, {
+    Subtype: 'Text',
+    Rect: [500, 700, 520, 720],
+    Name: 'Help',
+    Contents: PDFString.of('Is this table still needed?'),
+  });
+
+  // A thread on the first highlight: two replies and a status, as the spec writes them.
+  const reply = addAnnot(doc, one, {
+    Subtype: 'Text',
+    Rect: [60, 726, 80, 746],
+    NM: nm(),
+    T: PDFString.of('C. Editor'),
+    IRT: first,
+    RT: 'R',
+    F: 2,
+    Contents: PDFHexString.fromText('Agreed — I will rewrite it.'),
+  });
+  addAnnot(doc, one, {
+    Subtype: 'Text',
+    Rect: [60, 726, 80, 746],
+    NM: nm(),
+    T: PDFString.of('A. Reviewer'),
+    IRT: reply,
+    RT: 'R',
+    F: 2,
+    Contents: PDFString.of('Thank you.'),
+  });
+  addAnnot(doc, one, {
+    Subtype: 'Text',
+    Rect: [60, 726, 80, 746],
+    NM: nm(),
+    T: PDFString.of('A. Reviewer'),
+    IRT: first,
+    RT: 'R',
+    F: 2,
+    State: PDFString.of('Accepted'),
+    StateModel: PDFString.of('Review'),
+  });
+  // …and a rejection on the sticky note, so the panel has two different statuses to show.
+  addAnnot(doc, one, {
+    Subtype: 'Text',
+    Rect: [470, 720, 490, 740],
+    NM: nm(),
+    T: PDFString.of('D. Second Reader'),
+    IRT: note,
+    RT: 'R',
+    F: 2,
+    State: PDFString.of('Rejected'),
+    StateModel: PDFString.of('Review'),
+  });
+  await save(doc, 'comments.pdf');
+}
+
 // ---- M10: JavaScript -----------------------------------------------------------------------
 async function javascript(): Promise<void> {
   const doc = await newDoc('JavaScript-bearing');
@@ -2082,6 +2323,7 @@ await pageLabels();
 await links();
 await formsAll();
 await annotationsAll();
+await comments();
 await javascript();
 await xfa();
 await pdfa();

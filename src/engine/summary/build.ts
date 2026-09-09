@@ -15,6 +15,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { PdfPoint } from '@shared/pdf';
 import { SUMMARY_BLOCK_PADDING, SUMMARY_HEADING_GAP, SUMMARY_MARGIN } from './layout';
+import { toDrawableText } from './text';
 import type { SummaryOptions, SummaryPagePlan, SummaryPlan } from './types';
 
 /** A rendered source page. `png` is the encoded image; the size is the page's own, in points. */
@@ -113,7 +114,7 @@ export async function buildSummary(input: BuildSummaryInput): Promise<BuiltSumma
     // A summary of nothing is still a document: it says so, rather than being a zero-page file
     // no viewer will open.
     const sheet = doc.addPage([595.28, 841.89]);
-    sheet.drawText(`${options.title} — no comments`, {
+    sheet.drawText(toDrawableText(`${options.title} — no comments`), {
       x: SUMMARY_MARGIN,
       y: 841.89 - SUMMARY_MARGIN - 12,
       font: bold,
@@ -128,7 +129,7 @@ export async function buildSummary(input: BuildSummaryInput): Promise<BuiltSumma
 
 function drawSheet(sheet: PDFPage, page: SummaryPagePlan, body: PDFFont, bold: PDFFont): void {
   if (page.heading !== null) {
-    sheet.drawText(page.heading, {
+    sheet.drawText(toDrawableText(page.heading), {
       x: SUMMARY_MARGIN,
       y: page.height - SUMMARY_MARGIN - SUMMARY_HEADING_GAP + 6,
       font: bold,
@@ -172,7 +173,7 @@ function drawSheet(sheet: PDFPage, page: SummaryPagePlan, body: PDFFont, bold: P
     for (const line of block.lines) {
       y -= line.size * 1.35;
       if (line.text === '') continue;
-      sheet.drawText(line.text, {
+      sheet.drawText(toDrawableText(line.text), {
         x: block.x + SUMMARY_BLOCK_PADDING + line.indent,
         y: y + line.size * 0.25,
         font: line.bold ? bold : body,

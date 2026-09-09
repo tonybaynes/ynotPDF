@@ -17,6 +17,7 @@ export {
   SUMMARY_BLOCK_PADDING,
   SUMMARY_HEADING_GAP,
 } from './layout';
+export { toDrawableText } from './text';
 export {
   buildSummary,
   type BuildSummaryInput,

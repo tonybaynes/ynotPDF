@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
 import {
   buildSummary,
+  toDrawableText,
   clampFontSize,
   compareComments,
   DEFAULT_SUMMARY_OPTIONS,
@@ -200,6 +201,27 @@ describe('clampFontSize and formatSummaryDate', () => {
     expect(formatSummaryDate('2026-09-01T10:15:00Z')).toContain('2026');
     expect(formatSummaryDate('not a date')).toBe('');
     expect(formatSummaryDate(null)).toBe('');
+  });
+});
+
+describe('toDrawableText', () => {
+  it('keeps what the standard fonts can draw', () => {
+    expect(toDrawableText('Plain ASCII')).toBe('Plain ASCII');
+    expect(toDrawableText('Café — “quoted” … •')).toBe('Café — “quoted” … •');
+  });
+
+  it('maps the look-alikes rather than dropping them', () => {
+    expect(toDrawableText('a b')).toBe('a b');
+    expect(toDrawableText('a‑b')).toBe('a-b');
+    expect(toDrawableText('a−b')).toBe('a-b');
+    expect(toDrawableText('a﻿b')).toBe('ab');
+  });
+
+  it('drops control characters and marks what it cannot draw', () => {
+    expect(toDrawableText('ab')).toBe('ab');
+    expect(toDrawableText('a	b')).toBe('a    b');
+    expect(toDrawableText('Καλά')).toBe('????');
+    expect(toDrawableText('日本語')).toBe('???');
   });
 });
 

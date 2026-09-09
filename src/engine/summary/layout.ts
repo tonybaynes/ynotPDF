@@ -11,6 +11,7 @@
 
 import { textWidth, wrapText } from '@engine/appearance/metrics';
 import type { PdfPoint } from '@shared/pdf';
+import { toDrawableText } from './text';
 import {
   MAX_SUMMARY_FONT_SIZE,
   MIN_SUMMARY_FONT_SIZE,
@@ -85,7 +86,7 @@ export function blockLines(
   const head = size + 1;
   const lines: SummaryTextLine[] = [];
   const prefix = options.sequenceNumbers ? `${String(sequence)}. ` : '';
-  const heading = `${prefix}${comment.type} — ${comment.author}`;
+  const heading = toDrawableText(`${prefix}${comment.type} — ${comment.author}`);
   for (const text of wrapText(heading, HEAD_FONT, head, width)) {
     lines.push({ text, bold: true, size: head, indent: 0 });
   }
@@ -100,8 +101,9 @@ export function blockLines(
       lines.push({ text, bold: false, size, indent: 0 });
     }
   }
-  if (comment.text.trim() !== '') {
-    for (const text of wrapText(comment.text, BODY_FONT, size, width)) {
+  const body = toDrawableText(comment.text);
+  if (body.trim() !== '') {
+    for (const text of wrapText(body, BODY_FONT, size, width)) {
       lines.push({ text, bold: false, size, indent: 0 });
     }
   }
@@ -114,11 +116,12 @@ export function blockLines(
     ]
       .filter((part) => part !== '')
       .join(' · ');
-    for (const text of wrapText(replyHead, HEAD_FONT, size, width - indent)) {
+    for (const text of wrapText(toDrawableText(replyHead), HEAD_FONT, size, width - indent)) {
       lines.push({ text, bold: true, size, indent });
     }
-    if (reply.text.trim() !== '') {
-      for (const text of wrapText(reply.text, BODY_FONT, size, width - indent)) {
+    const replyBody = toDrawableText(reply.text);
+    if (replyBody.trim() !== '') {
+      for (const text of wrapText(replyBody, BODY_FONT, size, width - indent)) {
         lines.push({ text, bold: false, size, indent });
       }
     }

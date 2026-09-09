@@ -23,6 +23,10 @@
     "render": ["c880000000000000"],
     "text": "Non-embedded CJK (Type0 / UniGB-UCS2-H) and Hebrew (glyph names): 中文测试 שלום"
   },
+  "comments.pdf": {
+    "render": ["a2c2c0f000000000", "a0f0f0f080000000"],
+    "text": "Draft under review — page one Line 1: the quick brown fox jumps over the lazy dog, twice over. Line 2: the quick brown fox jumps over the lazy dog, twice over. Line 3: the quick brown fox jumps over t"
+  },
   "encrypted-aes128.pdf": {
     "render": ["00d0000000000000"],
     "text": "Encrypted with AES-128 (AESV2). User password: ynot Owner password: owner. Standard security handler, R4."
