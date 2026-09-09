@@ -13,7 +13,7 @@
  */
 
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { YnotTestApi } from '../../src/shared/testApi';
@@ -42,11 +42,38 @@ export interface LaunchOptions {
 /** The user-data dir of the most recent launch, for `reuseUserData`. */
 let lastUserData: string | undefined;
 
+/** Every profile this worker has created, removed when the worker exits. */
+const createdProfiles = new Set<string>();
+let cleanupInstalled = false;
+
+/**
+ * A fresh Electron profile that will not outlive the test run.
+ *
+ * Nothing removed these before: every `launchApp()` left a `ynot-e2e-*` directory in the OS
+ * temp folder, a full Electron profile each, and a day of module work left a thousand of them
+ * and two gigabytes behind. They are removed when the worker process exits rather than when
+ * the app closes, because `reuseUserData` needs a profile to survive its first close — a test
+ * that checks a setting persists across a restart launches twice into the same directory.
+ * `exit` handlers have to be synchronous, which `rmSync` is; a worker killed outright still
+ * leaves its profiles, which is no worse than before.
+ */
+function newUserData(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'ynot-e2e-'));
+  createdProfiles.add(dir);
+  if (!cleanupInstalled) {
+    cleanupInstalled = true;
+    process.on('exit', () => {
+      for (const profile of createdProfiles) {
+        rmSync(profile, { recursive: true, force: true });
+      }
+    });
+  }
+  return dir;
+}
+
 export async function launchApp(options: LaunchOptions = {}): Promise<App> {
   const userData =
-    options.reuseUserData && lastUserData !== undefined
-      ? lastUserData
-      : mkdtempSync(join(tmpdir(), 'ynot-e2e-'));
+    options.reuseUserData && lastUserData !== undefined ? lastUserData : newUserData();
   lastUserData = userData;
   const executable = process.env['YNOT_E2E_EXECUTABLE'];
   const app = await electron.launch({
