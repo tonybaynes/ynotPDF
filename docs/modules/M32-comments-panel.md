@@ -238,7 +238,52 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **`/IRT` is written as a reference, and the plan names its target by `/NM`.** A reply is only a
+  reply because `/IRT` is an *indirect reference* to the parent's dictionary (ISO 32000-1
+  12.5.6.2) — a string or a name there is ignored by every other reader. `DictValue` has no way to
+  say "the object of that other annotation", so it gains one kind, `annotationRef`, whose value is
+  the target's `/NM` name; the writer resolves it against the page's `/Annots` after every
+  insert, so a reply to an annotation added in the same save works too. Every annotation this app
+  writes already carries an `/NM`, and M32 gives one to a parent that arrived without. ADR 0016.
+- **`/RT` is `replyType` in the `extra` bag**, mapped in `engine/appearance/dict.ts` beside
+  `stateModel`, so `/R` (a reply) and `/Group` (a grouped annotation) round-trip. A status change
+  is a `Text` annotation with `/IRT`, `/State` and `/StateModel` and no `/Contents` — which is
+  what Acrobat and Foxit both write, and why a status is *history*, not a field: the newest one
+  wins and the older ones stay as the record of who set what.
+- **The panel reads the model and nothing else.** It subscribes to `Document` and to M30's
+  `AnnotationService`; it never calls the engine. Every change it makes goes out as a `Command`
+  through M30's service, which is what makes the whole panel undoable for free.
+- **Row building is a pure function** (`rows.ts`): annotations + filter + sort + grouping →
+  a flat list of rows with depth. The virtualised list then only has to map an index to a row, and
+  the grouping/sorting/filtering is unit-testable without a DOM.
+- **Comment visibility is a view flag, never the file's `/F` bit.** Hiding a comment must not
+  change the document, so nothing is written. Two switches do it together: M11's tile renderer
+  stops drawing annotation appearance streams, and M30's overlay draws the ones that stay visible
+  instead — the same generators that already draw a FreeText draw a highlight when the raster is
+  not carrying it. `AnnotationProvider.toLayer` gains one option, `raster: false`, for that.
+  While everything is visible the raster does the drawing exactly as before, so the common case
+  costs nothing. ADR 0016.
+- **XFDF is the real format; FDF is offered because Acrobat still writes it.** `engine/xfdf/` is
+  pure and has no DOM: `read.ts` and `write.ts` for XFDF (fast-xml-parser, MIT), `fdf.ts` for
+  FDF's PDF object syntax, and `convert.ts` for `ModelAnnotation` ↔ the neutral record in
+  `types.ts`. Coordinates need no flipping — XFDF is in the same PDF user space as `/Rect` (XFDF
+  3.0 §2.2) — but `page` is 0-based there and 1-based nowhere, which is the one off-by-one worth
+  naming.
+- **Import merges by `/NM`, and the conflict policy is the reader's.** "Replace" overwrites the
+  annotation with the same `/NM`; "Add" gives every incoming annotation a fresh `/NM` so nothing
+  is lost. Replies are resolved after the pass that creates the parents, by name, so an export
+  whose replies come before their targets still imports.
+- **Summarise renders through the engine and assembles with pdf-lib.** The engine rasterises each
+  page (the only way to get PDFium's own drawing of the annotations into a new file without
+  copying page trees), pdf-lib places it and draws the comment blocks, the sequence numbers and
+  the connector lines beside it. `summary/layout.ts` is pure — it decides where every block and
+  every line goes from sizes alone — so the page counts and the block positions are unit-tested
+  without rendering anything.
+- **Status is a word and an icon, and the words are ours.** Accepted, Rejected, Cancelled,
+  Completed, None (the `/StateModel /Review` set of ISO 32000-1 12.5.6.4) plus the `/Marked` set's
+  checkmark, each with a Lucide glyph and its name in text. No status is told apart by colour
+  alone, and the two that a dichromat would otherwise confuse — Accepted and Rejected — differ in
+  glyph, in word and in lightness.
 
 ## Build log (fill in at merge)
 

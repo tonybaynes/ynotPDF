@@ -1,0 +1,33 @@
+%FDF-1.2
+1 0 obj
+<< /FDF << /F (report.pdf) /Annots [ 2 0 R 3 0 R 4 0 R 5 0 R ] /Fields [ 6 0 R ] >> >>
+endobj
+2 0 obj
+<< /Type /Annot /Subtype /Highlight /Page 0 /Rect [ 72 700 240 714 ]
+   /QuadPoints [ 72 714 240 714 72 700 240 700 ] /C [ 1 1 0 ] /F 4
+   /NM (fdf-0001) /T (A. Reviewer) /Subj (Highlight)
+   /Contents (Check this figure) /CreationDate (D:20260901101500Z00'00')
+   /M (D:20260901101530Z00'00') >>
+endobj
+3 0 obj
+<< /Type /Annot /Subtype /Text /Page 0 /Rect [ 120 540 140 560 ] /Name /Comment
+   /C [ 1 0.819 0 ] /F 4 /NM (fdf-0002) /T (A. Reviewer)
+   /Contents <FEFF00540068006500200063006F00700079002000730061007900730020201C00E9006C0061006E201D>
+   /CreationDate (D:20260901101600Z00'00') /M (D:20260901101600Z00'00') >>
+endobj
+4 0 obj
+<< /Type /Annot /Subtype /Text /Page 0 /Rect [ 120 540 140 560 ] /Name /Comment /F 4
+   /NM (fdf-0003) /T (B. Author) /IRT 3 0 R /RT /R /State (Rejected) /StateModel (Review)
+   /CreationDate (D:20260901103000Z00'00') /M (D:20260901103000Z00'00') >>
+endobj
+5 0 obj
+<< /Type /Annot /Subtype /Ink /Page 1 /Rect [ 100 200 180 260 ] /C [ 0 0 1 ]
+   /BS << /Type /Border /W 2 >> /F 4 /NM (fdf-0004) /T (A. Reviewer)
+   /InkList [ [ 100 200 120 240 140 210 ] [ 150 220 180 260 ] ] >>
+endobj
+6 0 obj
+<< /T (name.first) /V (Ada) >>
+endobj
+trailer
+<< /Root 1 0 R >>
+%%EOF

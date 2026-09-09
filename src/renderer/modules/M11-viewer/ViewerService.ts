@@ -558,11 +558,24 @@ export class ViewerService {
 
   // ---- helpers ------------------------------------------------------------------------------------
 
+  /**
+   * Whether the raster draws annotation appearance streams. A view flag only — nothing is written
+   * to the file — set by M32 when the reader hides comments (ADR 0017). The overlay draws the
+   * comments that stay visible while this is off.
+   */
+  private annotationsVisible = true;
+
+  setAnnotationsVisible(visible: boolean): void {
+    if (this.annotationsVisible === visible) return;
+    this.annotationsVisible = visible;
+    for (const viewer of this.viewers.values()) viewer.setFlags(this.flags());
+  }
+
   /** The render flags built from the settings plus M01's live Night Mode state. */
   flags(): RenderFlags {
     const s = this.settingsValue;
     return {
-      annotations: true,
+      annotations: this.annotationsVisible,
       forms: true,
       grayscale: s.grayscale,
       smoothText: s.smoothText,
