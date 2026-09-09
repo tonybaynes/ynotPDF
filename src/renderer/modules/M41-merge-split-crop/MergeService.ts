@@ -88,7 +88,7 @@ export class MergeService {
   private readonly registry: Registry;
   private readonly shell: ShellServices;
   private readonly storage: SettingsStorage;
-  private readonly clientValue: OpsClient;
+  private clientValue: OpsClient | null;
   private settingsValue: MergeSettings = DEFAULT_MERGE_SETTINGS;
   private readonly listeners = new Set<(settings: MergeSettings) => void>();
   /** What the last operation did, for the e2e suite to read back. */
@@ -98,7 +98,7 @@ export class MergeService {
     this.registry = options.registry;
     this.shell = options.shell;
     this.storage = options.storage ?? ipcSettingsStorage();
-    this.clientValue = options.client ?? OpsClient.spawn();
+    this.clientValue = options.client ?? null;
   }
 
   // ---- settings ---------------------------------------------------------------------------------
@@ -107,8 +107,20 @@ export class MergeService {
     return this.settingsValue;
   }
 
+  /**
+   * The operations Worker, started the first time something needs it.
+   *
+   * Lazily, as M21's writer and M91's converters are: a Worker costs a thread and a megabyte of
+   * parsed bundle at boot, and most sessions never combine, split or straighten anything.
+   */
   get client(): OpsClient {
+    this.clientValue ??= OpsClient.spawn();
     return this.clientValue;
+  }
+
+  /** Whether the work runs off the main thread — answered without starting the Worker to find out. */
+  get offThread(): boolean {
+    return this.clientValue?.offThread ?? typeof Worker !== 'undefined';
   }
 
   async load(): Promise<void> {
@@ -231,7 +243,7 @@ export class MergeService {
         await this.organise.withProgress(
           { title: 'Combine files', text: 'Reading the files', pages },
           async (report, signal) => {
-            const job = this.clientValue.combine(sources, options, (fraction, message) => {
+            const job = this.client.combine(sources, options, (fraction, message) => {
               report(fraction ?? 0, message);
             });
             signal.addEventListener('abort', () => {
@@ -253,7 +265,7 @@ export class MergeService {
         await this.organise.withProgress(
           { title: 'Split document', text: 'Working out the parts', pages: doc.pageCount },
           async (report, signal) => {
-            const job = this.clientValue.split(bytes, options, (fraction, message) => {
+            const job = this.client.split(bytes, options, (fraction, message) => {
               report(fraction ?? 0, message);
             });
             signal.addEventListener('abort', () => {
@@ -448,7 +460,7 @@ export class MergeService {
         order.forEach((page, i) => {
           mapped[i] = angles[page] ?? 0;
         });
-        const job = this.clientValue.deskew(
+        const job = this.client.deskew(
           bytes,
           {
             angles: mapped,
@@ -498,7 +510,7 @@ export class MergeService {
           }
         : undefined,
       transform: async (bytes, _order, report, signal) => {
-        const job = this.clientValue.flatten(
+        const job = this.client.flatten(
           bytes,
           {
             annotations: options.annotations,
@@ -691,7 +703,8 @@ export class MergeService {
   }
 
   dispose(): void {
-    this.clientValue.dispose();
+    this.clientValue?.dispose();
+    this.clientValue = null;
   }
 }
 
