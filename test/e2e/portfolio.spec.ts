@@ -10,7 +10,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchApp, type App } from './harness';
@@ -337,6 +337,63 @@ test.describe('taking files out', () => {
     expect(typeof merged === 'number' ? merged : 0).toBeGreaterThan(0);
     const pageCount = (await app.run('dev.viewerState')) as { pageCount: number };
     expect(pageCount.pageCount).toBeGreaterThan(0);
+  });
+});
+
+test.describe('saving', () => {
+  test.afterEach(closeAll);
+
+  /** Copies the fixture into the workspace so the test can write over it. */
+  function stage(as = 'portfolio.pdf'): string {
+    const path = join(workspace, as);
+    copyFileSync(join(FIXTURES, 'portfolio.pdf'), path);
+    return path;
+  }
+
+  test('a file added in this session is in the saved file, with its bytes', async () => {
+    // The one path the unit tests cannot reach: the writer running in its own Worker inside the
+    // real app, embedding a stream and computing its checksum there rather than in Node.
+    const path = stage('saved-portfolio.pdf');
+    await app.run('file.openRecent', { path });
+    await app.page.waitForSelector('.pf-host:not([hidden])');
+    await app.page.waitForTimeout(200);
+
+    const body = 'A late addition, saved for real.';
+    await app.run('dev.portfolioAddBytes', {
+      name: 'late.txt',
+      bytes: Array.from(new TextEncoder().encode(body)),
+    });
+    const outcome = (await app.run('file.save')) as { saved: boolean; reason?: string };
+    expect(outcome.saved, outcome.reason ?? 'save failed').toBe(true);
+    await closeAll();
+
+    // Open what was written and ask it what it holds.
+    await app.run('file.openRecent', { path });
+    await app.page.waitForSelector('.pf-host:not([hidden])');
+    await app.page.waitForTimeout(200);
+    const s = await state();
+    expect(s.files.map((f) => f.name)).toContain('late.txt');
+    expect(s.files).toHaveLength(6);
+    // And the five that were already there are still there, in their folders.
+    expect(s.files.filter((f) => f.folderId !== 0)).toHaveLength(2);
+  });
+
+  test('changing one description leaves the file a portfolio', async () => {
+    const path = stage('described-portfolio.pdf');
+    await app.run('file.openRecent', { path });
+    await app.page.waitForSelector('.pf-host:not([hidden])');
+    await select('people.csv');
+    await app.run('portfolio.describeFile', { description: 'Everyone on the job' });
+    const outcome = (await app.run('file.save')) as { saved: boolean; reason?: string };
+    expect(outcome.saved, outcome.reason ?? 'save failed').toBe(true);
+    await closeAll();
+
+    await app.run('file.openRecent', { path });
+    await app.page.waitForSelector('.pf-host:not([hidden])');
+    const s = await state();
+    expect(s.isPortfolio).toBe(true);
+    expect(s.files.find((f) => f.name === 'people.csv')?.description).toBe('Everyone on the job');
+    expect(s.folders).toEqual(['All files', 'Statements']);
   });
 });
 
