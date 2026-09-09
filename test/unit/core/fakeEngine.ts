@@ -242,6 +242,12 @@ export class FakeEngine implements PdfEngine {
     return Promise.resolve(this.create(spec));
   }
 
+  /** An empty document, as M40 extracts into (ADR 0014). */
+  createDocument(): Promise<DocHandle> {
+    this.note('createDocument');
+    return Promise.resolve(this.create({ pageCount: 0 }));
+  }
+
   close(doc: DocHandle): Promise<void> {
     this.note('close');
     this.doc(doc);

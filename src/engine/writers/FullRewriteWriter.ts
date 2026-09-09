@@ -51,6 +51,7 @@ import {
   type Writer,
 } from '../Writer';
 import { defaultAppearanceService, type AppearanceService } from '../appearance';
+import { pageLabelNums } from '../pageLabels';
 import { isNonEmbeddedFont, type AppearanceFont, type AppearanceStream } from '../appearance/types';
 import type { DictValue } from '../appearance/dict';
 import { yieldMacrotask } from '../yield';
@@ -562,54 +563,19 @@ function rectArray(ctx: PDFContext, r: PdfRect): PDFArray {
 
 // ---- page labels -----------------------------------------------------------------------------
 
-/** Trailing digits of a label, and everything before them. `"A-12"` → `{ prefix: "A-", n: 12 }`. */
-function splitLabel(label: string): { prefix: string; n: number } | null {
-  const m = /^(.*?)(\d+)$/.exec(label);
-  if (!m) return null;
-  const [, prefix = '', digits = ''] = m;
-  // A leading zero means the numbering is not `/S /D` — "007" must survive as itself.
-  if (digits.length > 1 && digits.startsWith('0')) return null;
-  return { prefix, n: Number(digits) };
-}
-
-/**
- * Writes `/PageLabels`. Runs of decimal labels that count up by one — with or without a shared
- * prefix — compress to a single `/S /D` range; anything else gets its own `/P` entry, which
- * reproduces the string exactly whatever it is.
+/*
+ * Page-label numbering moved to `src/engine/pageLabels.ts` when M40 gained a Page Numbering
+ * dialog: the writer and that dialog have to agree exactly on what "i, ii, iii" means, and two
+ * implementations of a numeral are two chances to disagree. `pageLabelNums` is re-exported here
+ * because M21's tests import it from this file.
  */
-export function pageLabelNums(labels: ReadonlyArray<string>): { index: number; entry: unknown }[] {
-  const out: { index: number; entry: unknown }[] = [];
-  let i = 0;
-  while (i < labels.length) {
-    const label = labels[i] ?? '';
-    const split = splitLabel(label);
-    if (!split) {
-      out.push({ index: i, entry: { P: label } });
-      i++;
-      continue;
-    }
-    let end = i + 1;
-    while (end < labels.length) {
-      const next = splitLabel(labels[end] ?? '');
-      if (next?.prefix !== split.prefix || next.n !== split.n + (end - i)) break;
-      end++;
-    }
-    out.push({
-      index: i,
-      entry:
-        split.prefix === '' ? { S: 'D', St: split.n } : { S: 'D', P: split.prefix, St: split.n },
-    });
-    i = end;
-  }
-  return out;
-}
+export { pageLabelNums } from '../pageLabels';
 
 function writePageLabels(doc: PDFDocument, pages: ReadonlyArray<PlannedPage>): void {
   const ctx = doc.context;
   const labels = pages.map((p) => p.label ?? '');
   const nums: PDFObject[] = [];
-  for (const { index, entry } of pageLabelNums(labels)) {
-    const e = entry as { S?: string; P?: string; St?: number };
+  for (const { index, entry: e } of pageLabelNums(labels)) {
     const dict = ctx.obj({});
     if (e.S !== undefined) dict.set(PDFName.of('S'), PDFName.of(e.S));
     if (e.P !== undefined) dict.set(PDFName.of('P'), PDFHexString.fromText(e.P));

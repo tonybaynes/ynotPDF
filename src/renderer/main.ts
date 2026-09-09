@@ -24,6 +24,7 @@ import selectFindManifest from '@modules/M13-select-find-print/manifest';
 import annotationManifest from '@modules/M30-markup-annotations/manifest';
 import documentManifest from '@modules/M20-document-model/manifest';
 import saveManifest from '@modules/M21-save/manifest';
+import organiseManifest from '@modules/M40-organise-pages/manifest';
 import securityManifest from '@modules/M70-encryption/manifest';
 import createManifest from '@modules/M91-create-pdf/manifest';
 import { ThemeManager } from '@theme/ThemeManager';
@@ -68,6 +69,7 @@ registry.register(navigationManifest);
 registry.register(saveManifest);
 registry.register(selectFindManifest);
 registry.register(annotationManifest);
+registry.register(organiseManifest);
 registry.register(securityManifest);
 registry.register(createManifest);
 

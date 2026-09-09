@@ -1,0 +1,168 @@
+/*
+ * Organise pages (M40): the drag feedback on the thumbnails panel, and the two dialog parts that
+ * are more than a form field — the page-range summary and the page picker strip.
+ *
+ * Every colour is a theme token; there is not a literal in this file. Nothing is translucent: the
+ * drag ghost is a solid surface with a border, not a tint, because a semi-transparent label over
+ * a page thumbnail is exactly the case the operator cannot read.
+ */
+
+/* ---- dragging pages -------------------------------------------------------------------------- */
+
+/*
+ * While a drag is running the pointer must not select text or turn into an I-beam anywhere in the
+ * window — the pointer leaves the panel constantly on the way to a tab.
+ */
+body.is-page-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+body.is-page-dragging .thumb-cell {
+  cursor: grabbing;
+}
+
+/*
+ * Where the pages would land. A solid bar rather than a gap or a glow: it has to be visible in
+ * High Contrast, and it has to be tellable from the "current page" bar M12 draws, which is why
+ * this one is wider and sits between cells rather than inside one.
+ */
+.organise-drop-marker {
+  position: absolute;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+  outline: var(--border-width) solid var(--focus-contrast);
+  pointer-events: none;
+  z-index: 3;
+}
+
+/*
+ * What is being carried, in words. "Move 3 pages" / "Copy 3 pages" — the difference between the
+ * two is a word, never the cursor shape alone, because a modifier key held down is not something
+ * a reader can see.
+ */
+.organise-drag-ghost {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--fg);
+  font-size: var(--fs-2);
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+/* ---- the page-range field ---------------------------------------------------------------------- */
+
+.organise-range {
+  margin-bottom: var(--sp-3);
+}
+
+/*
+ * The summary under the field ("3 pages: 2-4"). It is a hint, so it is italic like every other
+ * hint in the app — and, like every other hint, it is not fainter than the theme's muted text.
+ */
+.organise-summary {
+  margin-top: var(--sp-1);
+  min-height: 1.2em;
+}
+
+.organise-preview {
+  margin-top: var(--sp-2);
+  min-height: 1.2em;
+}
+
+/* ---- the page picker strip --------------------------------------------------------------------- */
+
+/*
+ * The thumbnails in Insert-from-file. It scrolls horizontally and never grows the dialog: a
+ * five-hundred-page file and a one-page file open the same dialog at the same size.
+ */
+.organise-strip {
+  display: flex;
+  gap: var(--sp-2);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: var(--sp-2);
+  margin-bottom: var(--sp-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-app);
+  min-height: 9rem;
+}
+
+.organise-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: none;
+  padding: var(--sp-1);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.organise-cell:hover {
+  background: var(--bg-hover);
+}
+
+/* The checkbox is the control, so the focus ring belongs to the whole cell when it has focus. */
+.organise-cell:focus-within {
+  border-color: var(--focus);
+  outline: var(--border-width) solid var(--focus-contrast);
+}
+
+/* A chosen page is filled *and* bordered, never colour alone. */
+.organise-cell:has(input:checked) {
+  background: var(--bg-selected);
+  border-color: var(--border-strong);
+}
+
+.organise-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 6rem;
+  height: 7.5rem;
+  border: var(--border-width) solid var(--border);
+  background: var(--page-paper);
+}
+
+.organise-thumb canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.organise-cell-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--fg);
+  font-size: var(--fs-2);
+}
+
+.organise-thumb-label {
+  min-width: 1.5em;
+  text-align: center;
+}
+
+/* ---- the page-numbering status field ------------------------------------------------------ */
+
+/*
+ * "Numbered A-1" beside the shell's "Page 3 of 6". The word is always there — a bare "A-1" in a
+ * status bar is not something a reader can interpret — and the value is the emphasised half.
+ */
+.status-page-label {
+  gap: var(--sp-1);
+  color: var(--fg-muted);
+}
+
+.status-page-label-value {
+  color: var(--fg);
+  font-weight: var(--fw-heading);
+}

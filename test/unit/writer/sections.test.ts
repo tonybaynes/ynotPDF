@@ -60,10 +60,14 @@ describe('page labels', () => {
     expect(pageLabelNums(['A-1', 'A-2'])).toEqual([
       { index: 0, entry: { S: 'D', P: 'A-', St: 1 } },
     ]);
-    expect(pageLabelNums(['i', 'ii'])).toEqual([
-      { index: 0, entry: { P: 'i' } },
-      { index: 1, entry: { P: 'ii' } },
-    ]);
+    // Roman and alphabetic runs became real numbering styles when M40 gained a Page Numbering
+    // dialog: the writer and that dialog have to agree, and "i, ii, iii …" written as a hundred
+    // `/P` literals is a numbering no other application can continue. Still exactly reversible —
+    // `test/unit/organise/labels.test.ts` re-renders every entry this produces and compares.
+    expect(pageLabelNums(['i', 'ii'])).toEqual([{ index: 0, entry: { S: 'r', St: 1 } }]);
+    expect(pageLabelNums(['A', 'B'])).toEqual([{ index: 0, entry: { S: 'A', St: 1 } }]);
+    // A word is still spelled out, because no numbering style can produce one.
+    expect(pageLabelNums(['Cover'])).toEqual([{ index: 0, entry: { P: 'Cover' } }]);
     // A run that skips a number is two runs, not one wrong one.
     expect(pageLabelNums(['1', '3'])).toEqual([
       { index: 0, entry: { S: 'D', St: 1 } },

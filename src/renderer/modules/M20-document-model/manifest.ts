@@ -264,6 +264,10 @@ export default defineModule({
     },
   ],
 
+  // The Organize tab's Rotate group was here as scaffolding "until M40 lands". M40 owns that
+  // tab now and its rotate commands act on the *selected* pages, where these two act on a page
+  // named by argument and default to the first — which is not what a button on the Organize tab
+  // means. The commands stay (M11 and the e2e suite call them by id); only the ribbon group went.
   ribbon: [
     {
       id: 'edit.history',
@@ -275,13 +279,6 @@ export default defineModule({
         { kind: 'button', command: 'edit.undo', size: 'large', dynamicLabel: undoLabel },
         { kind: 'button', command: 'edit.redo', size: 'large', dynamicLabel: redoLabel },
       ],
-    },
-    {
-      id: 'organize.rotate',
-      tab: 'organize',
-      label: 'Rotate',
-      order: 10,
-      items: ['page.rotateLeft', 'page.rotateRight'],
     },
   ],
 

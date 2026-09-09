@@ -451,6 +451,12 @@ export interface PdfEngine {
    * {@link OpenFailure} when the file cannot be opened.
    */
   open(bytes: Uint8Array, options?: OpenOptions): Promise<DocHandle>;
+  /**
+   * A new, empty document with no pages (M40, ADR 0014). The caller owns the handle and must
+   * `close` it. `importPages` fills it; saving one that is still empty is a caller error,
+   * because a PDF must have at least one page.
+   */
+  createDocument(): Promise<DocHandle>;
   /** Releases all engine resources for the document. The handle is invalid afterwards. */
   close(doc: DocHandle): Promise<void>;
 
@@ -605,6 +611,9 @@ export class NotImplementedEngine implements PdfEngine {
   open(..._args: unknown[]): Promise<DocHandle> {
     return Promise.reject(new NotImplementedError('open'));
   }
+  createDocument(..._args: unknown[]): Promise<DocHandle> {
+    return Promise.reject(new NotImplementedError('createDocument'));
+  }
   close(..._args: unknown[]): Promise<void> {
     return Promise.reject(new NotImplementedError('close'));
   }
@@ -719,6 +728,7 @@ export class NotImplementedEngine implements PdfEngine {
 export const ENGINE_METHODS = [
   'info',
   'open',
+  'createDocument',
   'close',
   'pageCount',
   'pageSize',

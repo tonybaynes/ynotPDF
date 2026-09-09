@@ -155,6 +155,20 @@ export default defineConfig({
         'src/renderer/modules/M30-markup-annotations/manifest.ts',
         'src/renderer/modules/M30-markup-annotations/tools.ts',
         'src/renderer/view/AnnotationLayer.ts',
+        /*
+         * M40's DOM and shell half, for the same reason again. `OrganiseService` orchestrates the
+         * dialogs, the engine, the progress dialog and the tab strip; `dialogs.ts` *is* the Organize
+         * dialogs; `manifest.ts` is the contribution points; and `dnd.ts` is a pointer-drag
+         * controller that only exists once there is a grid to drag in. All four are proved by
+         * Playwright in `test/e2e/organise.spec.ts`, which is where a drag with an insertion marker
+         * belongs. Everything they are built out of — the range dialect, the numbering, the
+         * settings, the commands and the slicing — is pure and gated below, and so is the one pure
+         * function inside `dnd.ts` (`insertionIndexFor`), which has its own unit tests.
+         */
+        'src/renderer/modules/M40-organise-pages/OrganiseService.ts',
+        'src/renderer/modules/M40-organise-pages/dialogs.ts',
+        'src/renderer/modules/M40-organise-pages/manifest.ts',
+        'src/renderer/modules/M40-organise-pages/dnd.ts',
       ],
       reporter: ['text', 'lcov'],
       thresholds: {
@@ -382,6 +396,35 @@ export default defineConfig({
         'src/engine/appearance/freetext.ts': { lines: 90, functions: 90, statements: 90 },
         'src/engine/appearance/markup.ts': { lines: 90, functions: 90, statements: 90 },
         'src/engine/appearance/note.ts': { lines: 90, functions: 90, statements: 90 },
+        // M40. The range dialect decides which pages a destructive command acts on and the
+        // numbering decides what the file says a page is called, so both are held high; the
+        // commands are what undo has to reverse exactly.
+        'src/renderer/modules/M40-organise-pages/range.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M40-organise-pages/labels.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/engine/pageLabels.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/renderer/modules/M40-organise-pages/commands.ts': {
+          lines: 85,
+          functions: 85,
+          statements: 85,
+        },
+        'src/renderer/modules/M40-organise-pages/extract.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M40-organise-pages/settings.ts': {
+          lines: 85,
+          functions: 80,
+          statements: 85,
+        },
       },
     },
   },

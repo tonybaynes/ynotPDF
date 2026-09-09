@@ -248,8 +248,236 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+Provenance (operator rule, 2026-09-09): the behaviour below comes from the PDF specification
+(ISO 32000-1 §12.4.2 page labels, §7.7.3 the page tree), from this project's own `PLAN.md`
+conventions, and from Foxit 14 **as a user sees it** — which commands exist on its Organize tab
+and roughly what their dialogs ask for. No Foxit file has been opened, and no icon, string or
+help text comes from one. Icons are Lucide (ISC) throughout, recorded in `resources/credits.json`.
+
+- **One service, one targeting rule.** `OrganiseService` (service `"organise"`) answers the only
+  question every command here asks: *which pages?* A command takes `{ pages }` or `{ range }` if
+  given; failing that it uses the thumbnail multi-selection M12 already puts in the shell's
+  `Selection` under the `pages` kind; failing that, the current page. One rule, one
+  implementation, so the palette, the ribbon, the context menu and the e2e suite can never
+  disagree about what "Delete Pages" would delete.
+- **The range syntax is a pure parser** (`range.ts`), not a dialog. `1-3,5,8-` plus Foxit's
+  extras — `odd`, `even`, `landscape`, `portrait`, `current`, `selected`, `all`, `last`, and a
+  bare trailing dash for "to the end". It is a filter chain: tokens select, then odd/even and
+  orientation narrow. Everything that takes a range in this module — and in M41 later — parses
+  the same string with the same function, unit-tested against the awkward cases: reversed pairs,
+  en dashes pasted from a document, out-of-range numbers, duplicates, empty text.
+- **Page order stays model-only; page content is engine work.** M20's split is kept exactly.
+  Delete, move, reverse and swap are edits to the model's page array with a `page-order` write
+  intent, because `FPDFPage_Delete` cannot be undone and an engine-backed delete would make undo
+  a lie. Only three operations genuinely add content — insert blank, insert from a file,
+  duplicate — and those go to the engine **appended at its end**, so no existing engine index
+  shifts and undo is a delete of the highest indexes. That is M20's `InsertPagesCommand` trick,
+  reused rather than re-invented.
+- **One command for every reordering.** `ReorderPagesCommand` takes the whole new page-id order
+  and remembers the old one. Move, reverse, swap, and a multi-page drag are that one command with
+  a different label — one thing to get right, one journal codec, one undo entry however many
+  pages moved. A drag that ends where it started produces no command at all.
+- **Insert-from-file is one path whatever the file is.** A PDF opens in the engine directly; an
+  image, a text file, HTML or Markdown goes through M91's `CreateService.convertFile` first,
+  which M91's own build log names as M40's path. So Insert → From File accepts a JPEG, and the
+  clipboard insert is the same code with the clipboard as its source. Foxit's From Scanner is
+  out of scope: the app has no scanner support anywhere yet.
+- **Extract needs an empty document, so the engine gains one call.** `PdfEngine.createDocument()`
+  (ADR 0014, additive, `FPDF_CreateNewDocument`) returns a handle with no pages, and `importPages`
+  copies into it. The alternative — creating a one-page blank through M91 and deleting the page
+  afterwards — would put a stray media box and an extra `FPDFPage_Delete` between the reader and
+  their file for no reason. M41 needs the same call for split and merge, which is why it is a
+  contract addition rather than a private helper.
+- **"With comments" means markup, not every annotation.** PDFium's page import deep-copies a page
+  with its `/Annots`, so extracting *with* comments is the default and costs nothing. Extracting
+  *without* them removes the markup families only — highlight, underline, squiggly, strike-out,
+  note, ink, shapes, free text, stamp, file attachment — and keeps `/Widget` and `/Link`, because
+  a form field or a link is part of the page rather than a comment on it.
+- **Deleting a page takes its dangling bookmarks with it**, as this brief asks, through
+  `PruneOutlineCommand` inside the same undo entry as the delete — so one Ctrl+Z puts both back.
+  This is a deliberate difference from M21's build log, which chose to leave the heading in place;
+  M40's brief asks for Foxit's behaviour, so the setting `organise.pruneBookmarksOnDelete` exists
+  and defaults to **on**, and turning it off gives M21's behaviour. Either way the writer still
+  prunes the dead `/Dest` on the way out. Links are left to the writer: finding every dangling
+  link would mean loading every page's annotations, and M21 already prunes them at save time.
+- **Nothing has to follow a moved page, because nothing points at an index.** Annotations are
+  filed under a `pageId`, destinations name a `pageId`, field widgets name a `pageId` (M20).
+  Reordering rewrites one array. On save the writer reorders the same `PDFRef`s, so a bookmark's
+  `/Dest [ref /XYZ …]` still names the page object it always named — which is why the reorder
+  acceptance test needs no outline rebuild, and why a plain reorder deliberately records no
+  `outline` write intent.
+- **Page labels are resolved strings in the model and a numbering scheme in the file.**
+  `labels.ts` turns (style, prefix, start, range) into the per-page strings the model, the
+  thumbnails and the status bar all show. The file gets a real `/PageLabels` tree because
+  `pageLabelNums` in M21's writer is taught to recognise runs of lower/upper roman and alphabetic
+  labels as well as decimal ones, emitting `/S /r`, `/S /R`, `/S /a`, `/S /A` with an optional
+  `/P` prefix. It is a pure function with a unit test and is exactly reversible, so a round-trip
+  still reports no differences; anything it cannot describe as a run stays a literal `/P` entry,
+  which reproduces any string at all.
+- **Drag-and-drop is a pointer controller, not HTML5 drag.** It is installed once by this module
+  and delegates from the document root, so M12's virtualised grid can build and drop cells
+  underneath it without either module knowing the other's internals — M40 edits no M12 file.
+  Pointer events give the insertion marker, edge auto-scroll and a Ctrl-to-copy modifier that a
+  drag image cannot; and a drag under five pixels stays a click, so selecting still works.
+- **Dragging pages "between two documents" lands on a tab.** Foxit shows two documents side by
+  side and drags between their thumbnail panels; this shell has one navigation pane and no split
+  view (M02), so there is no second panel to drop on. The reachable equivalent is dropping on
+  another document's **tab**, which copies the pages into it, with the command
+  `organize.copyToDocument` doing the same from the palette with a chooser. When a split view
+  exists, the same controller gains a second drop target and nothing else changes.
+- **Progress belongs to the operation, not to the loop.** Anything that touches more than twenty
+  pages, or reads a file, runs under M02's cancellable progress dialog after the same 400 ms delay
+  M21 uses — so a three-page insert never flashes a dialog and a 500-page extract can be stopped.
+- **Every change is one undo entry with a name a reader recognises**: "Insert 3 pages", "Delete 2
+  pages", "Reverse pages", "Label pages". M20's `dynamicLabel` reads them back on the Undo button.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-09 on `mod/M40-organise-pages` (worktree `../ynotPDF-M40`).** Green locally on
+Windows: lint (eslint, prettier, the colour/opacity rules, `tsc` on both projects), 2 438 unit
+tests with the coverage gates, 251 Playwright tests.
+
+### What shipped
+
+- **The Organize tab, in four groups**, and twenty-one commands behind them: insert blank, insert
+  from a file, insert from the clipboard, delete, extract, replace, duplicate, reverse, move, swap,
+  copy to another document, rotate left / right / 180 / by range, move up / down / to the start /
+  to the end, and page numbering with its own "remove numbering". Every one is in the command
+  palette, five have shortcuts, and the thumbnail context menu is the same list rather than a
+  second implementation of it.
+- **One targeting rule, in one place.** `OrganiseService.target()` answers "which pages?" the same
+  way for every command: what the caller passed (`{ pages }` or `{ range }`), else the thumbnail
+  multi-selection M12 leaves in the shell's `Selection`, else the current page.
+- **The range dialect** (`range.ts`, pure): `1-3,5,8-` plus `odd`, `even`, `landscape`,
+  `portrait`, `current`, `selected`, `all`, `last`. It reads as a filter chain — selectors choose,
+  the words narrow — so `"1-20, even, landscape"` and `"even"` both mean what a person expects.
+  Reversed pairs, en dashes pasted out of a document, whitespace and duplicates are all handled;
+  a page past the end is an *error in words*, not a silent trim.
+- **Four document commands** with journal codecs. `ReorderPagesCommand` is the only one that
+  rearranges anything — move, reverse, swap and every drag are that command with a different
+  label, so there is one thing to get right and one undo entry however many pages moved.
+  `ImportPagesCommand` carries the source bytes so it can replay itself after a crash;
+  `SetPageLabelsCommand` renumbers a run in one entry; `PruneOutlineCommand` removes the bookmarks
+  a deleted page leaves dangling, in the same undo entry as the delete.
+- **Thumbnail drag-and-drop** (`dnd.ts`): single and multi-page, an insertion marker between
+  cells, edge auto-scroll, Ctrl to copy, Escape to abandon, and a five-pixel threshold so a click
+  is still a click. It delegates from the document root, so **no M12 file was touched** and the
+  drag survives the auto-scroll that rebuilds the cells underneath it.
+- **Page numbering, properly.** The dialog offers the five styles the format has plus "prefix
+  only", with a live preview of what the first three pages would be called. The model holds
+  resolved strings, as M20 defined; the *file* gets a real `/PageLabels` tree.
+- **Extraction** to a new tab, to one file, or to one file per page with a naming pattern —
+  with or without comments, and optionally deleting the pages afterwards in the same breath.
+- **Progress that only appears when it is wanted**: after 400 ms for a small job, immediately for
+  one over twenty pages, and cancellable throughout.
+
+### Decisions worth knowing about
+
+- **`PdfEngine.createDocument()` (ADR 0014)** is the module's one contract addition. Extract needs
+  an empty document to import into, and the alternatives were a blank page created through M91 and
+  then deleted, or a second page-copying implementation in pdf-lib — the thing ADR 0010 refused to
+  do for the writer, for the same reason. M41 needs the same call for split and merge.
+- **The numbering moved to `src/engine/pageLabels.ts`.** M21's writer and M40's dialog have to
+  agree exactly on what "iii" is, and two implementations of a roman numeral are two chances to
+  disagree. The writer's `pageLabelNums` is re-exported from its old home so M21's tests still
+  import it from there.
+- **Dragging pages "between two documents" lands on a tab.** Foxit shows two documents side by
+  side and drags between their thumbnail panels; this shell has one navigation pane and no split
+  view, so there is no second panel to drop on. Dropping on another document's **tab** copies the
+  pages into it, and `organize.copyToDocument` does the same from the palette. When a split view
+  exists the same controller gains a second drop target and nothing else changes.
+- **A plain reorder deliberately records no `outline` write intent.** The writer reorders the same
+  `PDFRef`s, so a bookmark's `/Dest [ref /XYZ …]` still names the page object it always named —
+  rebuilding the outline would risk losing what the model never read, to fix something that is not
+  broken. The acceptance test proves it by reopening the saved file and checking every bookmark.
+- **Deleting a page takes its dangling bookmarks with it**, which is this brief's requirement and
+  a deliberate difference from M21's build log, where the heading was left in place. The setting
+  `organise.pruneBookmarksOnDelete` gives M21's behaviour back; either way the writer still prunes
+  the dead `/Dest` on the way out.
+- **M20's Rotate group left the Organize tab.** It was scaffolding "until M40 lands", and it acts
+  on a page named by argument, defaulting to the first — so a reader who selected page 4 and
+  pressed Rotate on the ribbon turned page 1. M40's rotate commands act on the selection and are
+  what the tab carries now. M20's commands themselves stay: M11 and its own e2e suite call them
+  by id.
+
+### Bugs found while building, all real
+
+- **A synchronous engine throw skipped every `.catch()`.** The in-memory engine validates its
+  arguments before returning a promise, and so does the PDFium adapter for a bad handle — so
+  `engine.close(x).catch(() => undefined)` in a `finally` could itself throw and replace the
+  failure that got us there with a useless one about a handle. There is a `quietly()` helper now
+  and every cleanup path goes through it.
+- **A page label of "Cover" was written into the file as a numbering.** The greedy split read it
+  as the prefix "Cove" numbered "r" — the eighteenth letter. It reproduces the string, so nothing
+  visibly broke, but a title page is not numbered and an insert in another application would have
+  carried the numbering on into nonsense. A prefix may no longer end in a letter, and "007" is
+  refused for the same reason on the digit side.
+- **A run of letters silently split into three ranges** at c, d, i, l, m, v and x, because "c" is
+  roman 100 as readily as it is the third letter. A run is now continued by asking "what would
+  this label be *in the style this run is already in?*" rather than by best guess.
+- **"One file per page" could overwrite twenty files with the twentieth.** A naming pattern that
+  mentioned neither `{page}` nor `{label}` produced one name for every page. The page number is
+  appended when the pattern does not name it — before the extension, so a pattern ending in `.pdf`
+  does not produce `Report.pdf 3.pdf`.
+- **Moving pages did not carry the selection with them**, so pressing "move down" twice moved two
+  *different* pages: the second press acted on whichever page had arrived at the index the first
+  one left. Every move reselects what it moved now.
+- **The status bar showed the page's position and never its number.** They are different things
+  once a document is numbered — "A-1" is what is printed on the paper and what a colleague means
+  on the telephone. A "Numbered A-1" field sits beside the shell's "Page 3 of 6", and hides itself
+  for a document that has no numbering rather than saying "Numbered 3".
+
+### Shared files touched (PLAN.md §12.3)
+
+- `src/engine/PdfEngine.ts` — additive: `createDocument()`, the name in `ENGINE_METHODS`, and the
+  method on `NotImplementedEngine` (ADR 0014).
+- `src/engine/pdfium/PdfiumEngine.ts` — the implementation (`FPDF_CreateNewDocument`).
+- `src/engine/pageLabels.ts` — **new**: the `/PageLabels` numbering, shared by M21's writer and
+  M40's dialog. `src/engine/writers/FullRewriteWriter.ts` re-exports `pageLabelNums` from it and
+  its own copy is gone.
+- `src/renderer/modules/M20-document-model/manifest.ts` — the `organize.rotate` ribbon group
+  removed, with a comment saying where it went. Its commands are untouched.
+- `src/renderer/main.ts`, `src/renderer/index.html` — registers the M40 manifest and its CSS.
+- `resources/credits.json` — **new**, per the operator's 2026-09-09 rule: the icon sets and fonts
+  the app ships, with source, author and licence. M131 renders it as the acknowledgements page.
+- `vitest.config.ts` — coverage gates for M40's pure half; its DOM half excluded as every other
+  module's is, and proved by Playwright.
+- `test/unit/core/fakeEngine.ts` — `createDocument` on the in-memory engine.
+- `test/unit/writer/sections.test.ts` — one assertion updated: a roman run is a numbering now.
+
+### Tests
+
+2 438 unit tests and 251 e2e tests. The four acceptance tests:
+
+- **Reorder 50 pages by drag → undo → redo.** A five-page fixture grown to fifty, one page dragged
+  from the front to position 40 through the same call the pointer controller makes, then undone
+  and redone; then a three-page drag, to prove a multi-selection keeps its own order. The saved
+  file is reopened from disk. A second test reverses a document with a nested outline, saves,
+  reopens, and checks that **every bookmark still targets the page it targeted**.
+- **Insert 3 pages from fixture B into A at position 2 with bookmarks.** Page count, the sizes of
+  the pages that were already there, the ids either side of the join, and the grafted outline
+  entries pointing into the inserted range — then undo, which takes the pages and their bookmarks
+  away together and leaves no validation issue. A second test inserts a JPEG, because a non-PDF
+  goes through M91's converters on the same path.
+- **Extract pages 2-4 with comments.** The written file is *reopened* and asked for its page count
+  and its annotations, rather than trusted. Twelve more tests against real PDFium prove the slice
+  keeps content, size, rotation and annotations, removes the markup and keeps the links when asked,
+  and leaves the source document untouched.
+- **Page labels "A-1…" show in the status bar and the thumbnails, and `/PageLabels` is written.**
+  The status field, the thumbnail labels, the pages outside the range left alone, and the file
+  reopened from disk with its numbering intact. A second test does the same for roman numbering,
+  which is the case that used to be written as literals.
+
+### Deferred, and why
+
+- **Insert from a scanner** is out, as the brief says: the app has no scanner support anywhere yet.
+- **Page transitions** are out, as the brief says.
+- **Side-by-side thumbnail panels** need a split navigation pane M02 does not have. The
+  cross-document drag lands on a tab instead (above), which is the reachable equivalent and not a
+  fork: the same controller gains a second drop target when the pane exists.
+- **Dangling *links* are left to the writer.** Finding every link that pointed at a deleted page
+  would mean loading every page's annotations, and M21's writer already prunes them on the way
+  out. Only the bookmarks, which the reader can see in a panel, are pruned in the model.
+- **Split, merge, crop and flatten are M41's**, as the brief says. `createDocument` and
+  `slicePages` are the two things M41 will want from here, and both are already contracts rather
+  than private helpers.

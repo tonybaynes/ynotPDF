@@ -315,6 +315,39 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
     return handle;
   }
 
+  /**
+   * A new, empty document (M40, ADR 0014). `importPages` fills it; it has no bytes of its own,
+   * so `bytesPtr` is zero and `bytes` is empty — `closeDoc` frees a null pointer happily and
+   * the raw catalogue pass re-serialises because `mutated` starts true.
+   */
+  createDocument(): Promise<DocHandle> {
+    return run(() => {
+      const doc = this.ffi.call('FPDF_CreateNewDocument');
+      if (doc === 0) throw new EngineError('internal', 'PDFium could not create a document');
+      const formInfo = this.ffi.malloc(256);
+      this.ffi.m.HEAPU8.fill(0, formInfo, formInfo + 256);
+      this.ffi.setI32(formInfo, 1, 0);
+      const form = this.ffi.call('FPDFDOC_InitFormFillEnvironment', doc, formInfo);
+      if (form !== 0) this.ffi.call('FPDF_RemoveFormFieldHighlight', form);
+      const handle = this.nextHandle++ as DocHandle;
+      this.docs.set(handle, {
+        handle,
+        doc,
+        form,
+        formInfo,
+        bytesPtr: 0,
+        bytes: new Uint8Array(0),
+        encrypted: false,
+        pages: new Map(),
+        raw: null,
+        // There are no bytes to re-read, so every raw pass must serialise what is here now.
+        mutated: true,
+        hiddenLayerNames: new Set(),
+      });
+      return handle;
+    });
+  }
+
   close(doc: DocHandle): Promise<void> {
     return run(() => {
       this.closeDoc(doc);
