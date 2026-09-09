@@ -546,24 +546,29 @@ test.describe('PDF Portfolios', () => {
   // The operator's own portfolio; git-ignored, so CI and other machines skip this.
   test.skip(!existsSync(PORTFOLIO), 'test/fixtures/local/Sample Portfolio.pdf is not here');
 
-  test('opens on its cover sheet with the Attachments panel listing its three PDFs', async () => {
+  test('opens on its files with the Attachments panel listing its three PDFs', async () => {
     const bytes = Array.from(readFileSync(PORTFOLIO));
     await app.run('file.openBytes', {
       file: { path: PORTFOLIO, name: 'Sample Portfolio.pdf', bytes },
     });
-    await app.page.waitForSelector('.viewer-content .page');
+    // M42 gives the document area to the portfolio's file grid; the cover sheet is a tab away,
+    // which is what this used to wait for.
+    await app.page.waitForSelector('.pf-host:not([hidden])');
     await app.page.waitForTimeout(400);
 
     const state = await navState();
     expect(state.panel).toBe('nav.attachments');
     expect(state.portfolio).not.toBeNull();
     expect(state.attachments.length).toBe(3);
-    // The cover sheet is the document's own page, and it is rendered.
-    expect((await viewState()).pageCount).toBeGreaterThanOrEqual(1);
     await expect(app.page.locator('.nav-note')).toContainText('PDF Portfolio');
 
     // Its schema columns, not our generic four.
     expect(state.portfolio?.fields).toBeGreaterThan(0);
+
+    // The cover sheet is still the document's own page, and it still renders.
+    await app.page.getByRole('tab', { name: 'Cover sheet' }).click();
+    await app.page.waitForSelector('.viewer-content .page');
+    expect((await viewState()).pageCount).toBeGreaterThanOrEqual(1);
   });
 
   test('double-clicking an embedded PDF opens it in a new tab', async () => {

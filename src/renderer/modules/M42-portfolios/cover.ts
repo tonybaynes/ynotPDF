@@ -333,3 +333,34 @@ export function formatBytes(bytes: number): string {
   }
   return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit] ?? 'kB'}`;
 }
+
+/**
+ * The one page a portfolio has when the reader asked for no cover sheet.
+ *
+ * A PDF must have a page, so "none" cannot mean zero. It says what the file is, which is what an
+ * application that cannot show portfolios would otherwise leave the reader guessing at.
+ */
+export async function plainFirstPage(title: string): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const size = resolvePageSize({ kind: 'preset', id: 'A4' }, 'portrait');
+  const page = doc.addPage([size.width, size.height]);
+  const left = 72;
+  page.drawText(toWinAnsi(title), { x: left, y: size.height - 96, size: 20, font: bold });
+  page.drawText('This document is a PDF Portfolio.', {
+    x: left,
+    y: size.height - 128,
+    size: 11,
+    font,
+  });
+  page.drawText('Open it in a reader that supports portfolios to see the files it holds.', {
+    x: left,
+    y: size.height - 146,
+    size: 11,
+    font,
+  });
+  doc.setTitle(title);
+  doc.setProducer('ynotPDF');
+  return await doc.save({ useObjectStreams: false });
+}

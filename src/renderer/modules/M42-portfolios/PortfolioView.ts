@@ -492,6 +492,7 @@ export function mountPortfolioView(
       new Promise((resolve) => {
         entry.file(
           (file) => {
+            service.note(`Reading ${file.name}…`);
             void file.arrayBuffer().then((buffer) => {
               incoming.push({
                 name: file.name,
@@ -525,7 +526,10 @@ export function mountPortfolioView(
       if (entry.isFile) await readFile(entry as FileSystemFileEntry, path);
       else if (entry.isDirectory) await readDirectory(entry as FileSystemDirectoryEntry, path);
     };
-    for (const entry of roots) await walk(entry, '');
+    for (const entry of roots) {
+      service.note(`Reading ${entry.name}…`);
+      await walk(entry, '');
+    }
     if (incoming.length === 0) {
       // No directory API (an older drop source): fall back to the plain file list.
       for (const file of Array.from(data.files)) {
@@ -537,6 +541,7 @@ export function mountPortfolioView(
         });
       }
     }
+    service.note(null);
     if (incoming.length > 0) await service.addFiles(incoming);
   };
 

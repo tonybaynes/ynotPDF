@@ -119,7 +119,11 @@ test.describe('a portfolio opens on its files', () => {
 
   test('the Portfolio ribbon tab is there for a portfolio and not for anything else', async () => {
     await openPortfolio();
-    await expect(app.page.getByRole('tab', { name: 'Portfolio', exact: true })).toBeVisible();
+    // A contextual tab announces itself as one, so the accessible name is prefixed; the id is
+    // what identifies it.
+    const portfolioTab = app.page.locator('#ribbon-tab-portfolio');
+    await expect(portfolioTab).toBeVisible();
+    await expect(portfolioTab).toHaveAccessibleName(/Portfolio/);
     await closeAll();
 
     const bytes = Array.from(readFileSync(join(FIXTURES, 'multipage.pdf')));
@@ -127,7 +131,7 @@ test.describe('a portfolio opens on its files', () => {
       file: { path: 'C:/fixtures/multipage.pdf', name: 'multipage.pdf', bytes },
     });
     await app.page.waitForSelector('.viewer-content .page');
-    await expect(app.page.getByRole('tab', { name: 'Portfolio', exact: true })).toHaveCount(0);
+    await expect(app.page.locator('#ribbon-tab-portfolio')).toHaveCount(0);
     expect((await state()).isPortfolio).toBe(false);
   });
 

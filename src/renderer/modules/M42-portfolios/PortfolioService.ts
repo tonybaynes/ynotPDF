@@ -57,7 +57,7 @@ import {
   ReplaceFileCommand,
   setPortfolioRecord,
 } from './commands';
-import { generateCover } from './cover';
+import { generateCover, plainFirstPage } from './cover';
 import { portfolioFrom } from './read';
 import {
   DEFAULT_PORTFOLIO_SETTINGS,
@@ -246,12 +246,18 @@ export class PortfolioService {
       const collection = await document.engine.collection(document.handle);
       if (collection === null) return;
       const attachments = await document.engine.attachments(document.handle);
-      const portfolio = portfolioFrom(collection, attachments);
-      if (portfolio === null) return;
+      const read = portfolioFrom(collection, attachments);
+      if (read === null) return;
+      // A file written for a navigator we do not have falls back to the reader's own preference
+      // (M130's hook), rather than to whatever the format happened to say.
+      const portfolio =
+        collection.view === 'custom' ? { ...read, view: this.settingsValue.defaultView } : read;
       // Reading is not an edit: it must not make the document dirty and must not be undoable.
       setPortfolioRecord(document, portfolio);
-      const state = this.ui.get(tab.id);
-      if (state) state.pane = 'files';
+      const state = this.ui.get(tab.id) ?? null;
+      // `/View /H` is a portfolio asking to be shown as its cover sheet only. That is the file's
+      // choice about its own contents, so it is honoured — the Files tab is still one click away.
+      if (state) state.pane = portfolio.view === 'hidden' ? 'cover' : 'files';
       this.changed();
     } catch {
       // A file whose collection cannot be read is treated as an ordinary document; the
@@ -287,8 +293,12 @@ export class PortfolioService {
    */
   async createEmpty(title = 'Portfolio'): Promise<Document | null> {
     if (!this.registry.hasService(DOCUMENT_SERVICE)) return null;
-    const portfolio = emptyPortfolio();
-    const cover = await generateCover(portfolio, { title });
+    const portfolio: Portfolio = { ...emptyPortfolio(), view: this.settingsValue.defaultView };
+    // A PDF must have a page, so "no cover sheet" is a plain one rather than none at all: a
+    // reader whose application cannot show portfolios still gets something to look at.
+    const cover = this.settingsValue.coverSheetOnNew
+      ? await generateCover(portfolio, { title })
+      : await plainFirstPage(title);
     const service = this.registry.service<DocumentService>(DOCUMENT_SERVICE);
     const opened = await service.open(cover, { path: null, name: `${title}.pdf`, title });
     if (this.registry.hasService(VIEWER_SERVICE)) {
@@ -302,7 +312,7 @@ export class PortfolioService {
     await opened.document.apply(
       new PortfolioEditCommand(opened.document, 'New portfolio', {
         ...portfolio,
-        generatedCover: true,
+        generatedCover: this.settingsValue.coverSheetOnNew,
       }),
     );
     this.changed();
@@ -940,6 +950,11 @@ export class PortfolioService {
     return this.registry.hasService(NAVIGATION_SERVICE)
       ? this.registry.service<NavigationService>(NAVIGATION_SERVICE)
       : null;
+  }
+
+  /** Says what is happening, in the status bar. `null` puts it back to Ready. */
+  note(message: string | null): void {
+    this.status(message);
   }
 
   private status(message: string | null): void {

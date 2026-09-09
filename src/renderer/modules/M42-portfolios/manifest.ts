@@ -10,7 +10,17 @@
  */
 
 import { registerIcon } from '@app/icons';
-import { Files, FolderPlus, FolderTree, PanelsTopLeft } from 'lucide';
+import {
+  ArrowDown,
+  ArrowUp,
+  Combine,
+  Files,
+  FolderDown,
+  FolderInput,
+  FolderPlus,
+  FolderTree,
+  PanelsTopLeft,
+} from 'lucide';
 import type { ShellServices } from '@app/services';
 import type { Registry } from '@core/Registry';
 import { defineModule, type CommandContext, type ServiceContext } from '@shared/module';
@@ -29,6 +39,18 @@ import { mountPortfolioView, type PortfolioViewHandle } from './PortfolioView';
 import { PORTFOLIO_SETTINGS_SCHEMA } from './settings';
 import { convertToSinglePdf } from './merge';
 import './portfolio.css';
+
+// Registered at import time, not in `activate`: the File ▸ New page and the empty state draw a
+// creator's icon while the shell is mounting, which happens before any module activates.
+registerIcon('files', Files);
+registerIcon('folder-plus', FolderPlus);
+registerIcon('folder-tree', FolderTree);
+registerIcon('folder-input', FolderInput);
+registerIcon('folder-down', FolderDown);
+registerIcon('panels-top-left', PanelsTopLeft);
+registerIcon('combine', Combine);
+registerIcon('arrow-up', ArrowUp);
+registerIcon('arrow-down', ArrowDown);
 
 let live: PortfolioService | null = null;
 let view: PortfolioViewHandle | null = null;
@@ -835,10 +857,6 @@ export default defineModule({
   activate(ctx) {
     const registry = ctx.service<Registry>('registry');
     if (registry.hasService(PORTFOLIO_SERVICE)) return undefined;
-    registerIcon('files', Files);
-    registerIcon('folder-plus', FolderPlus);
-    registerIcon('folder-tree', FolderTree);
-    registerIcon('panels-top-left', PanelsTopLeft);
     const shell = registry.service<ShellServices>('shellServices');
     const instance = new PortfolioService({ registry, shell });
     live = instance;
