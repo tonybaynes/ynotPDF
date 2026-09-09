@@ -665,7 +665,7 @@ const DEV: ReadonlyArray<CommandSpec> = [
       return {
         settings: { ...service.settings },
         last: service.lastOutcome,
-        offThread: service.client.offThread,
+        offThread: service.offThread,
         pageCount: doc?.pageCount ?? 0,
         pageIds: doc?.state.pages.map((p) => p.id) ?? [],
         boxes:
