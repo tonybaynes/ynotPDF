@@ -568,6 +568,12 @@ export type WriteIntent =
   | 'attachments'
   | 'annotations'
   | 'fields'
+  /**
+   * The PDF Portfolio structure was edited (M42, ADR 0014). The writer rebuilds `/Collection`,
+   * `/Folders` and the `/EmbeddedFiles` name tree from the plan, reusing every embedded stream
+   * the reader did not replace.
+   */
+  | 'portfolio'
   | 'custom';
 
 /** Everything a module may hang off the document, one namespace per module id. */

@@ -65,6 +65,11 @@
     "outline.pdf": { "pages": 3, "outline": 3, "text": "Chapter 1" },
     "layers.pdf": { "pages": 1, "layers": 2, "text": "Layer: Base" },
     "attachments.pdf": { "pages": 1, "attachments": 2 },
+    "portfolio.pdf": {
+      "pages": 1,
+      "attachments": 5,
+      "notes": "PDF Portfolio: /Collection, /Folders (root + Statements), five embedded files"
+    },
     "rotated.pdf": {
       "pages": 4,
       "size": [419.53, 595.28],

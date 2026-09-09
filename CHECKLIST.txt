@@ -124,7 +124,7 @@ WAVE 3
 
 WAVE 4
 ------
-[ ] M42  PDF Portfolios — create, edit, cover sheet, extract
+[✔] M42  PDF Portfolios — create, edit, cover sheet, extract
       model:  Opus
       needs: M12 M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M42-portfolios.md and carry out the "Your task" section in full.

@@ -24,6 +24,14 @@ import {
   type AppearanceResources,
 } from '@engine/appearance/types';
 import { dictEntries } from '@engine/appearance/dict';
+import {
+  blobKey,
+  COLUMN_SUBTYPE,
+  orderFields,
+  portfolioOf,
+  PORTFOLIO_NAMESPACE,
+  type Portfolio,
+} from '@shared/portfolio';
 import type {
   PlannedAnnotation,
   PlannedAttachment,
@@ -37,6 +45,8 @@ import type {
   PlannedOutlineItem,
   PlannedPage,
   PlannedXObject,
+  PlannedPortfolio,
+  PlannedPortfolioFile,
   WritePlan,
 } from '@engine/Writer';
 
@@ -76,6 +86,9 @@ export function buildWritePlan(doc: Document): PlanResult {
   });
 
   const metadataFallback = plannedMetadata(doc);
+  const portfolio = intents.has('portfolio')
+    ? plannedPortfolio(doc, portfolioOf(doc.custom(PORTFOLIO_NAMESPACE)), warnings)
+    : null;
   const plan: WritePlan = {
     pages,
     pagesUnchanged: !intents.has('page-order'),
@@ -89,7 +102,11 @@ export function buildWritePlan(doc: Document): PlanResult {
     namedDestinations: intents.has('destinations') ? plannedNamedDestinations(state) : null,
     layers: intents.has('layers') ? plannedLayers(doc) : null,
     fields: intents.has('fields') ? plannedFields(doc, touched.fields) : null,
-    attachments: intents.has('attachments') ? plannedAttachments(state) : null,
+    // A portfolio's embedded files are written by the portfolio section, which rebuilds every
+    // file specification anyway — planning both would move the same descriptions twice.
+    attachments:
+      intents.has('attachments') && portfolio === null ? plannedAttachments(state) : null,
+    portfolio,
     xobjects: plannedXObjects(doc),
   };
   return { plan, warnings };
@@ -384,6 +401,70 @@ function plannedAttachments(state: Document['state']): PlannedAttachment[] {
       description: a.description,
       mimeType: a.mimeType,
     }));
+}
+
+// ---- portfolio (M42, ADR 0014) ------------------------------------------------------------------
+
+/**
+ * The portfolio as the writer wants it.
+ *
+ * Two things happen here and nowhere else. The reader's own order is folded into the file's
+ * custom fields under the order column, because the format has no order array and a viewer
+ * shows what its sort column says. And a file added in this session is looked up in
+ * `Document.blobs`: a file whose bytes are not there any more cannot be written, and dropping
+ * it silently would lose it, so it is reported and left out of this save rather than of the
+ * document.
+ */
+function plannedPortfolio(
+  doc: Document,
+  portfolio: Portfolio | null,
+  warnings: string[],
+): PlannedPortfolio | null {
+  if (!portfolio) return null;
+  const files: PlannedPortfolioFile[] = [];
+  for (const file of [...portfolio.files].sort((a, b) => a.order - b.order)) {
+    let source: PlannedPortfolioFile['source'];
+    if (file.source.kind === 'embedded') {
+      source = { kind: 'keep', treeKey: file.source.treeKey };
+    } else {
+      const bytes = doc.blobs.get(blobKey(file.id));
+      if (!bytes) {
+        warnings.push(`The bytes of "${file.name}" are no longer in memory, so it was not saved`);
+        continue;
+      }
+      source = { kind: 'bytes', bytes, created: file.created, modified: file.modified };
+    }
+    files.push({
+      name: file.name,
+      folderId: file.folderId,
+      description: file.description,
+      mimeType: file.mimeType,
+      fields: orderFields(file, portfolio.orderKey),
+      source,
+    });
+  }
+  return {
+    view: portfolio.view,
+    schema: portfolio.schema.map((column) => ({
+      key: column.key,
+      label: column.label,
+      subtype: COLUMN_SUBTYPE[column.kind],
+      order: column.order,
+      visible: column.visible,
+    })),
+    sort: portfolio.sort,
+    reorderKey: portfolio.orderKey,
+    initialFile: portfolio.initialFile,
+    folders: portfolio.folders.map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      parentId: folder.parentId,
+      description: folder.description,
+      created: folder.created,
+      modified: folder.modified,
+    })),
+    files,
+  };
 }
 
 function plannedLayers(doc: Document): PlannedLayer[] {

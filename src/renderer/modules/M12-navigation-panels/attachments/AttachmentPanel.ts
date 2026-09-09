@@ -139,13 +139,18 @@ export function mountAttachmentPanel(
     portfolioNote.hidden = collection === null;
     if (collection !== null) {
       const files = embedded.length === 1 ? '1 file' : `${String(embedded.length)} files`;
+      // M42 gives the document area to the portfolio's own file grid, with the cover sheet a tab
+      // away — so this says where the files are rather than describing a page that is not there.
+      const show = toolButton({
+        label: 'Show the portfolio’s files in the document area',
+        icon: 'external-link',
+        id: 'attachment-show-portfolio',
+        onPress: () => void nav.run('portfolio.showFiles'),
+      });
       portfolioNote.replaceChildren(
         icon('files'),
-        el(
-          'span',
-          null,
-          `PDF Portfolio — ${files}. The page behind this panel is the portfolio's cover sheet.`,
-        ),
+        el('span', null, `PDF Portfolio — ${files}, shown as a grid in the document area.`),
+        show,
       );
     }
 

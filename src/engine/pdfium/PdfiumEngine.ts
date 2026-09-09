@@ -695,6 +695,11 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         ...optional('description', a.description ?? extra.description),
         ...optional('mimeType', a.mimeType ?? extra.mimeType),
         ...optional('collectionFields', extra.collectionFields),
+        // The name-tree key and the folder it names (M42, ADR 0014). PDFium reports the file
+        // specification's own `/UF`, which is the clean name; the key carries the `<n>` prefix
+        // that says which portfolio folder the file is in, and is what the writer matches on.
+        ...optional('treeKey', extra.treeKey),
+        ...optional('folderId', extra.folderId),
       };
     });
   }

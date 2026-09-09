@@ -10,18 +10,19 @@ derived from fixed dates, ids and labelled pseudo-random seeds). Expected facts 
 
 ## Synthetic files (M00)
 
-| File              | Exercises                                                                         |
-| ----------------- | --------------------------------------------------------------------------------- |
-| `blank.pdf`       | 1 A4 page, no content                                                             |
-| `multipage.pdf`   | 5 pages: A4 ×2, Letter, landscape A4, A4 with `/Rotate 90`; page numbers drawn    |
-| `text.pdf`        | Helvetica / Times / Courier at 24, 11, 10, 9 pt; wrapped paragraphs; rotated run  |
-| `image.pdf`       | Embedded 64×64 RGB PNG drawn twice (scaled, rotated)                              |
-| `form.pdf`        | AcroForm: text, checkbox (checked), radio group, dropdown, multiline text, button |
-| `annotated.pdf`   | Square, Circle, Highlight (QuadPoints), Text note, Ink annotations                |
-| `encrypted.pdf`   | RC4 128-bit standard security (R3). User password `ynot`, owner `owner`           |
-| `outline.pdf`     | 3 pages, nested bookmarks (chapter → section) with XYZ destinations               |
-| `layers.pdf`      | Optional content: `Base` (on) and `Overlay` (off) with BDC/EMC marked content     |
-| `attachments.pdf` | Two embedded files (`note.txt`, `people.csv`) in the EmbeddedFiles name tree      |
+| File              | Exercises                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------- |
+| `blank.pdf`       | 1 A4 page, no content                                                                 |
+| `multipage.pdf`   | 5 pages: A4 ×2, Letter, landscape A4, A4 with `/Rotate 90`; page numbers drawn        |
+| `text.pdf`        | Helvetica / Times / Courier at 24, 11, 10, 9 pt; wrapped paragraphs; rotated run      |
+| `image.pdf`       | Embedded 64×64 RGB PNG drawn twice (scaled, rotated)                                  |
+| `form.pdf`        | AcroForm: text, checkbox (checked), radio group, dropdown, multiline text, button     |
+| `annotated.pdf`   | Square, Circle, Highlight (QuadPoints), Text note, Ink annotations                    |
+| `encrypted.pdf`   | RC4 128-bit standard security (R3). User password `ynot`, owner `owner`               |
+| `outline.pdf`     | 3 pages, nested bookmarks (chapter → section) with XYZ destinations                   |
+| `layers.pdf`      | Optional content: `Base` (on) and `Overlay` (off) with BDC/EMC marked content         |
+| `attachments.pdf` | Two embedded files (`note.txt`, `people.csv`) in the EmbeddedFiles name tree          |
+| `portfolio.pdf`   | A PDF Portfolio: `/Collection`, `/Folders` (root + "Statements"), five embedded files |
 
 ## Synthetic files added by M10
 
