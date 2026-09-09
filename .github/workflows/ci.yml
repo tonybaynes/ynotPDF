@@ -197,7 +197,11 @@ jobs:
             try { Add-MpPreference -ExclusionPath $p -ErrorAction Stop; "excluded: $p" }
             catch { "could not exclude $p : $($_.Exception.Message)" }
           }
-          "real-time monitoring actually disabled: $((Get-MpPreference).DisableRealtimeMonitoring)"
+          # Best effort means best effort: on a runner where the Defender service is not running,
+          # `Get-MpPreference` throws 0x800106ba, and unguarded that fails the whole job over a
+          # diagnostic line. It went red on one arm64 run and green on another for the same commit.
+          try { "real-time monitoring actually disabled: $((Get-MpPreference -ErrorAction Stop).DisableRealtimeMonitoring)" }
+          catch { "Defender preferences unavailable on this runner: $($_.Exception.Message)" }
           Get-PSDrive C | Select-Object Used, Free | Format-List
 
       # Two installers, because the NSIS one does not survive this runner. Every earlier run
