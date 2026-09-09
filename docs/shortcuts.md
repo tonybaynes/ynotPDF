@@ -124,6 +124,28 @@ with nothing selected switches to Select Text, which is what you need next.
 | —           | `annot.textbox`    | Text Box — a bordered box with words in it                |
 | —           | `annot.callout`    | Callout — a text box with a leader line                   |
 
+The drawing tools (M31) draw with the pointer: drag a box or a line, or click each corner of a
+polygon and press Enter. Hold `Shift` for a square, a circle or a 45° line.
+
+| Keys        | Command              | What it does                                                  |
+| ----------- | -------------------- | ------------------------------------------------------------- |
+| —           | `draw.rectangle`     | Rectangle; `Shift` for a square                               |
+| —           | `draw.ellipse`       | Oval; `Shift` for a circle                                    |
+| —           | `draw.line`          | Line; `Shift` keeps it to 45°                                 |
+| —           | `draw.arrow`         | Arrow — a line with a head at its end                         |
+| —           | `draw.polygon`       | Polygon — click the corners, `Enter` or the first corner ends |
+| —           | `draw.polyline`      | Polyline — click the corners, `Enter` or a double-click ends  |
+| —           | `draw.cloud`         | Cloud — a polygon with a cloudy border                        |
+| —           | `draw.areaHighlight` | Area Highlight — highlight a rectangle of the page            |
+| `Mod+Alt+D` | `draw.pencil`        | Pencil — freehand; strokes drawn together become one          |
+| `Mod+Alt+E` | `draw.eraser`        | Eraser — cut or remove pencil strokes                         |
+| `Mod+Alt+S` | `draw.stamp`         | Stamp — place the current stamp; drag to size it              |
+| —           | `draw.stampCustom`   | Custom Stamp — from a picture, the clipboard or a PDF page    |
+| —           | `draw.stamps`        | Show or hide the stamp palette                                |
+| —           | `draw.attachFile`    | Attach File — pin a file to the page                          |
+
+While drawing a polygon, `Backspace` takes the last corner back and `Escape` abandons it.
+
 With a comment selected, in the page area:
 
 | Keys                        | Command                                    | What it does                                        |

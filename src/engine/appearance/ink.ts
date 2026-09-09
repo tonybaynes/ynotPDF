@@ -128,7 +128,7 @@ export function inkDrawings(input: AppearanceInput): ShapeDrawing[] {
   const out: ShapeDrawing[] = [];
   strokes.forEach((points, index) => {
     const pressure = pressures?.[index];
-    const usable = pressure !== undefined && pressure.length === points.length;
+    const usable = pressure?.length === points.length;
     if (!usable || points.length < 2) {
       out.push(drawing(smoothStrokeOps(points), stroke, width, dash));
       return;
@@ -170,11 +170,14 @@ function drawing(
   width: number,
   dash: ReadonlyArray<number>,
 ): ShapeDrawing {
-  return dash.length > 0 ? { ops, stroke, fill: null, width, dash } : { ops, stroke, fill: null, width };
+  return dash.length > 0
+    ? { ops, stroke, fill: null, width, dash }
+    : { ops, stroke, fill: null, width };
 }
 
 /** `/Ink`: every stroke smoothed, round-capped and round-joined. A single point draws a dot. */
-export const inkAppearance: AppearanceGenerator = (input) => paintDrawings(input, inkDrawings(input));
+export const inkAppearance: AppearanceGenerator = (input) =>
+  paintDrawings(input, inkDrawings(input));
 
 /** The `/Rect` that contains every stroke at its widest. */
 export function inkRect(
@@ -200,7 +203,11 @@ export function pointSegmentDistance(p: PdfPoint, a: PdfPoint, b: PdfPoint): num
 }
 
 /** Whether an eraser circle touches a stroke: any point or segment within `radius`. */
-export function strokeHit(points: ReadonlyArray<PdfPoint>, center: PdfPoint, radius: number): boolean {
+export function strokeHit(
+  points: ReadonlyArray<PdfPoint>,
+  center: PdfPoint,
+  radius: number,
+): boolean {
   const first = points[0];
   if (!first) return false;
   if (points.length === 1) return Math.hypot(first.x - center.x, first.y - center.y) <= radius;
@@ -232,9 +239,7 @@ export function splitStroke(
     if (current.length >= 2) fragments.push(current);
     current = [];
   };
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    if (!p) continue;
+  for (const p of points) {
     if (inside(p)) {
       flush();
       continue;

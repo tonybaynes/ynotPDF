@@ -39,6 +39,7 @@ export {
   quadRects,
   ATTACHMENT_ICONS,
   ATTACHMENT_ICON_LABELS,
+  attachmentIconDrawings,
   isAttachmentIcon,
   type AttachmentIcon,
 } from './generators';

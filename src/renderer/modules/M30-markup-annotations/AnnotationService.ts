@@ -51,7 +51,12 @@ import {
   type FreeTextStyle,
   type Quad,
 } from '@engine/appearance';
-import { AnnotationLayer, resizeRect, type BoxHandle } from '@view/AnnotationLayer';
+import {
+  AnnotationLayer,
+  resizeRect,
+  type BoxHandle,
+  type LayerAnnotation,
+} from '@view/AnnotationLayer';
 import type { Viewer } from '@modules/M11-viewer/Viewer';
 import { VIEWER_SERVICE, type ViewerService } from '@modules/M11-viewer/ViewerService';
 import { DOCUMENT_SERVICE, type DocumentService } from '@modules/M20-document-model/manifest';
@@ -323,8 +328,13 @@ export class AnnotationService {
   }
 
   /** The fields every annotation this app makes carries, for a provider's own drafts. */
-  async commonFields(subject: string): Promise<
-    Pick<ModelAnnotation, 'author' | 'created' | 'modified' | 'subject' | 'flags' | 'opacity' | 'contents'>
+  async commonFields(
+    subject: string,
+  ): Promise<
+    Pick<
+      ModelAnnotation,
+      'author' | 'created' | 'modified' | 'subject' | 'flags' | 'opacity' | 'contents'
+    >
   > {
     const identity = await this.requireIdentity();
     const now = new Date().toISOString();

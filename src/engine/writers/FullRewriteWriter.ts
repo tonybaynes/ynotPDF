@@ -1346,7 +1346,7 @@ function applyAnnotationProperties(
     }
     if (value.kind === 'dict') {
       // Merged, not replaced: `/BS /W` from the border width above has to survive a `/BS /D`.
-      const existing = dict.lookupMaybe(PDFName.of(key), PDFDict) ?? ctx.obj({});
+      const existing = dictAt(ctx, dict, key) ?? ctx.obj({});
       mergeDict(ctx, existing, value.value);
       dict.set(PDFName.of(key), existing);
       continue;
@@ -1373,7 +1373,7 @@ function mergeDict(
       continue;
     }
     if (value.kind === 'dict') {
-      const nested = target.lookupMaybe(PDFName.of(key), PDFDict) ?? ctx.obj({});
+      const nested = dictAt(ctx, target, key) ?? ctx.obj({});
       mergeDict(ctx, nested, value.value);
       target.set(PDFName.of(key), nested);
       continue;
@@ -1381,6 +1381,16 @@ function mergeDict(
     if (value.kind === 'embeddedFile') continue; // only meaningful at the top level (`/FS`)
     target.set(PDFName.of(key), dictValue(ctx, value));
   }
+}
+
+/**
+ * The dictionary an entry holds, or undefined when there is none or it is something else.
+ * `lookupMaybe(key, PDFDict)` would throw on the something else, and a stray `/BS 3` in a
+ * file from elsewhere must not fail the whole save.
+ */
+function dictAt(ctx: PDFContext, owner: PDFDict, key: string): PDFDict | undefined {
+  const value: unknown = ctx.lookup(owner.get(PDFName.of(key)));
+  return value instanceof PDFDict ? value : undefined;
 }
 
 /** One planned dictionary entry as a pdf-lib object (M30, ADR 0013; M31 added the arrays of names). */
@@ -1449,6 +1459,25 @@ function takeEmbeddedFile(doc: PDFDocument, name: string): PDFRef | PDFDict | nu
         if (found === null) return false;
         const survivors = items.filter((_v, index) => index !== i - 1 && index !== i);
         node.set(PDFName.of('Names'), ctx.obj(survivors));
+        // The same tidy-up `writeAttachments` does for a tree entry (M12, ADR 0011): PDFium
+        // wrote the description and the type into `/Params`, where nothing reads them.
+        const spec = ctx.lookupMaybe(found, PDFDict);
+        const ef = spec?.lookupMaybe(PDFName.of('EF'), PDFDict);
+        const streamRef = ef?.get(PDFName.of('F')) ?? ef?.get(PDFName.of('UF'));
+        const stream = streamRef ? ctx.lookupMaybe(streamRef, PDFStream) : undefined;
+        const params = stream?.dict.lookupMaybe(PDFName.of('Params'), PDFDict);
+        if (spec && params) {
+          const desc = params.get(PDFName.of('Desc'));
+          if (desc && spec.get(PDFName.of('Desc')) === undefined)
+            spec.set(PDFName.of('Desc'), desc);
+          params.delete(PDFName.of('Desc'));
+          const subtype = params.lookup(PDFName.of('Subtype'));
+          const mime = textValue(subtype);
+          if (stream && mime !== undefined && mime !== '') {
+            stream.dict.set(PDFName.of('Subtype'), PDFName.of(mime));
+          }
+          params.delete(PDFName.of('Subtype'));
+        }
         return true;
       }
     }

@@ -16,7 +16,11 @@ import type { ShellServices } from '@app/services';
 import type { Document } from '@core/Document';
 import type { ModelId } from '@core/Ids';
 import type { PdfPoint } from '@shared/pdf';
-import { vertexIndexOf, type BoxHandle, type HandleId } from '@view/AnnotationLayer';
+import { BOX_HANDLES, type BoxHandle, type HandleId } from '@view/AnnotationLayer';
+
+function isBoxHandle(id: HandleId): id is BoxHandle {
+  return (BOX_HANDLES as ReadonlyArray<string>).includes(id);
+}
 import type { DocumentView } from '@view/DocumentView';
 import type { AnnotationService } from './AnnotationService';
 import { CREATION_TOOL_IDS, SELECT_ANNOTATION_TOOL } from './tools';
@@ -152,10 +156,10 @@ export class AnnotationController {
     const id = handle.on as ModelId;
     if (handle.id === 'tip' || handle.id === 'knee') {
       this.drag = { kind: 'callout', id, which: handle.id };
-    } else if (vertexIndexOf(handle.id) !== null) {
-      this.drag = { kind: 'handle', id, handle: handle.id };
-    } else {
+    } else if (isBoxHandle(handle.id)) {
       this.drag = { kind: 'resize', id, handle: handle.id };
+    } else {
+      this.drag = { kind: 'handle', id, handle: handle.id };
     }
     this.capture(e);
   }

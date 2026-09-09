@@ -170,7 +170,10 @@ export function roundedRectOps(r: PdfRect, radius: number): PathOp[] {
  * sit under it — which is what a dynamic stamp's "by whom, when" line is.
  */
 export function stampDrawing(lines: ReadonlyArray<string>, color: number): StampDrawing {
-  const texts = lines.map((line, i) => ({ text: i === 0 ? line.toUpperCase() : line, size: i === 0 ? BIG : SMALL }));
+  const texts = lines.map((line, i) => ({
+    text: i === 0 ? line.toUpperCase() : line,
+    size: i === 0 ? BIG : SMALL,
+  }));
   const widest = Math.max(1, ...texts.map((t) => textWidth(t.text, STAMP_FONT, t.size)));
   const textHeight = texts.reduce((sum, t, i) => sum + t.size + (i > 0 ? GAP : 0), 0);
   const width = Math.ceil(widest + PAD_X * 2 + BORDER * 2);
@@ -188,7 +191,14 @@ export function stampDrawing(lines: ReadonlyArray<string>, color: number): Stamp
     const w = textWidth(t.text, STAMP_FONT, t.size);
     // Baseline: the ascent of Helvetica-Bold is about 0.72 em; the descent leaves room below.
     const baseline = top - t.size * 0.78;
-    placed.push({ text: t.text, x: (width - w) / 2, y: baseline, size: t.size, font: STAMP_FONT, color });
+    placed.push({
+      text: t.text,
+      x: (width - w) / 2,
+      y: baseline,
+      size: t.size,
+      font: STAMP_FONT,
+      color,
+    });
     top = baseline - t.size * 0.22 - GAP;
   });
   return {
@@ -228,7 +238,8 @@ export function stampForm(drawing: StampDrawing): AppearanceStream {
 /** A stable key for a drawing: the same lines and colour share one embedded object. */
 export function stampKey(id: string, lines: ReadonlyArray<string>, color: number): string {
   let hash = 5381;
-  for (const ch of `${lines.join('\n')}|${color}`) hash = ((hash << 5) + hash + ch.charCodeAt(0)) | 0;
+  for (const ch of `${lines.join('\n')}|${color}`)
+    hash = ((hash << 5) + hash + ch.charCodeAt(0)) | 0;
   return `stamp:${id}:${(hash >>> 0).toString(16)}`;
 }
 
@@ -318,7 +329,8 @@ export function stampSizeOf(
 ): { width: number; height: number } | null {
   const raw = extra[STAMP_SIZE];
   if (!Array.isArray(raw) || raw.length !== 2) return null;
-  const [w, h] = raw;
+  const w: unknown = raw[0];
+  const h: unknown = raw[1];
   if (typeof w !== 'number' || typeof h !== 'number' || !(w > 0) || !(h > 0)) return null;
   return { width: w, height: h };
 }

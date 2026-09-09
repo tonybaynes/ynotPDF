@@ -41,6 +41,17 @@
     "note": "FFD400",
     "typewriter": "000000",
     "textbox": "000000",
-    "callout": "0B5CD6"
+    "callout": "0B5CD6",
+    "rectangle": "0B5CD6",
+    "ellipse": "0B5CD6",
+    "line": "0B5CD6",
+    "arrow": "0B5CD6",
+    "polygon": "0B5CD6",
+    "polyline": "0B5CD6",
+    "cloud": "0B5CD6",
+    "areaHighlight": "FFE14D",
+    "pencil": "C2185B",
+    "stamp": "0B5CD6",
+    "attachFile": "0B5CD6"
   }
 }

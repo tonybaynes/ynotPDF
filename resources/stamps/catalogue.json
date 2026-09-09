@@ -1,0 +1,216 @@
+{
+  "$comment": "The stamp catalogue (M31). Data, not code: each entry is drawn by src/engine/appearance/stamp.ts as a rounded box with bold upper-case text in one colour, the generic business-stamp look every PDF editor shares — nothing here is anyone's artwork. `id` is the annotation's /Name; where ISO 32000-1 table 181 names a standard stamp (Approved, Draft, Confidential, Final, ForComment, NotApproved, …) that name is used so other readers recognise it. Lines may carry the tokens {name}, {initials}, {date} and {time}, which make a stamp dynamic. Colours are PDF content colours (RRGGBB), never theme tokens: a stamp keeps its colour whatever theme the reader uses.",
+  "version": 1,
+  "categories": [
+    { "id": "business", "label": "Standard business" },
+    { "id": "sign", "label": "Sign here" },
+    { "id": "dynamic", "label": "Dynamic" }
+  ],
+  "stamps": [
+    {
+      "id": "Approved",
+      "label": "Approved",
+      "category": "business",
+      "lines": ["APPROVED"],
+      "color": "1F6E43"
+    },
+    {
+      "id": "NotApproved",
+      "label": "Not approved",
+      "category": "business",
+      "lines": ["NOT APPROVED"],
+      "color": "B3261E"
+    },
+    {
+      "id": "Draft",
+      "label": "Draft",
+      "category": "business",
+      "lines": ["DRAFT"],
+      "color": "465063"
+    },
+    {
+      "id": "Final",
+      "label": "Final",
+      "category": "business",
+      "lines": ["FINAL"],
+      "color": "0B5CD6"
+    },
+    {
+      "id": "Completed",
+      "label": "Completed",
+      "category": "business",
+      "lines": ["COMPLETED"],
+      "color": "1F6E43"
+    },
+    {
+      "id": "Confidential",
+      "label": "Confidential",
+      "category": "business",
+      "lines": ["CONFIDENTIAL"],
+      "color": "B3261E"
+    },
+    {
+      "id": "ForComment",
+      "label": "For comment",
+      "category": "business",
+      "lines": ["FOR COMMENT"],
+      "color": "0B5CD6"
+    },
+    {
+      "id": "ForPublicRelease",
+      "label": "For public release",
+      "category": "business",
+      "lines": ["FOR PUBLIC RELEASE"],
+      "color": "1F6E43"
+    },
+    {
+      "id": "NotForPublicRelease",
+      "label": "Not for public release",
+      "category": "business",
+      "lines": ["NOT FOR PUBLIC RELEASE"],
+      "color": "B3261E"
+    },
+    { "id": "Void", "label": "Void", "category": "business", "lines": ["VOID"], "color": "B3261E" },
+    {
+      "id": "Reviewed",
+      "label": "Reviewed",
+      "category": "business",
+      "lines": ["REVIEWED"],
+      "color": "0B5CD6"
+    },
+    {
+      "id": "Received",
+      "label": "Received",
+      "category": "business",
+      "lines": ["RECEIVED"],
+      "color": "5B2D91"
+    },
+    {
+      "id": "Revised",
+      "label": "Revised",
+      "category": "business",
+      "lines": ["REVISED"],
+      "color": "B35900"
+    },
+    {
+      "id": "Preliminary",
+      "label": "Preliminary",
+      "category": "business",
+      "lines": ["PRELIMINARY"],
+      "color": "465063"
+    },
+    {
+      "id": "Expired",
+      "label": "Expired",
+      "category": "business",
+      "lines": ["EXPIRED"],
+      "color": "B3261E"
+    },
+    {
+      "id": "AsIs",
+      "label": "As is",
+      "category": "business",
+      "lines": ["AS IS"],
+      "color": "465063"
+    },
+    {
+      "id": "TopSecret",
+      "label": "Top secret",
+      "category": "business",
+      "lines": ["TOP SECRET"],
+      "color": "B3261E"
+    },
+    {
+      "id": "Departmental",
+      "label": "Departmental",
+      "category": "business",
+      "lines": ["DEPARTMENTAL"],
+      "color": "0B5CD6"
+    },
+    {
+      "id": "Experimental",
+      "label": "Experimental",
+      "category": "business",
+      "lines": ["EXPERIMENTAL"],
+      "color": "B35900"
+    },
+    { "id": "Sold", "label": "Sold", "category": "business", "lines": ["SOLD"], "color": "B3261E" },
+    {
+      "id": "SignHere",
+      "label": "Sign here",
+      "category": "sign",
+      "lines": ["SIGN HERE"],
+      "color": "B3261E"
+    },
+    {
+      "id": "InitialHere",
+      "label": "Initial here",
+      "category": "sign",
+      "lines": ["INITIAL HERE"],
+      "color": "B3261E"
+    },
+    {
+      "id": "Witness",
+      "label": "Witness",
+      "category": "sign",
+      "lines": ["WITNESS"],
+      "color": "B3261E"
+    },
+    {
+      "id": "Accepted",
+      "label": "Accepted",
+      "category": "sign",
+      "lines": ["ACCEPTED"],
+      "color": "1F6E43"
+    },
+    {
+      "id": "Rejected",
+      "label": "Rejected",
+      "category": "sign",
+      "lines": ["REJECTED"],
+      "color": "B3261E"
+    },
+    {
+      "id": "DynamicApproved",
+      "label": "Approved, by whom and when",
+      "category": "dynamic",
+      "lines": ["APPROVED", "By {name} on {date} at {time}"],
+      "color": "1F6E43"
+    },
+    {
+      "id": "DynamicReviewed",
+      "label": "Reviewed, by whom and when",
+      "category": "dynamic",
+      "lines": ["REVIEWED", "By {name} on {date} at {time}"],
+      "color": "0B5CD6"
+    },
+    {
+      "id": "DynamicReceived",
+      "label": "Received, when",
+      "category": "dynamic",
+      "lines": ["RECEIVED", "{date} {time}"],
+      "color": "5B2D91"
+    },
+    {
+      "id": "DynamicRevised",
+      "label": "Revised, by whom and when",
+      "category": "dynamic",
+      "lines": ["REVISED", "By {name} on {date}"],
+      "color": "B35900"
+    },
+    {
+      "id": "DynamicConfidential",
+      "label": "Confidential, who and when",
+      "category": "dynamic",
+      "lines": ["CONFIDENTIAL", "{name} · {date}"],
+      "color": "B3261E"
+    },
+    {
+      "id": "DynamicInitials",
+      "label": "Initials and date",
+      "category": "dynamic",
+      "lines": ["{initials}", "{date}"],
+      "color": "0B5CD6"
+    }
+  ]
+}

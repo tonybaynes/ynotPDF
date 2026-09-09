@@ -57,6 +57,11 @@ export interface DictMapping {
    * means the value is coerced by `kind` alone.
    */
   readonly encode?: (value: unknown) => DictValue | null;
+  /**
+   * A value that means "this entry is absent" — a cloud intensity of 0 — so it removes the
+   * entry rather than being skipped as malformed.
+   */
+  readonly empty?: (value: unknown) => boolean;
 }
 
 /** A finite-number array, or null. */
@@ -106,18 +111,23 @@ export const ANNOTATION_DICT_MAPPINGS: ReadonlyArray<DictMapping> = [
     pdfKey: 'LE',
     kind: 'names',
     engineWritable: false,
-    encode: (value) =>
-      Array.isArray(value) && value.length === 2 && value.every((v) => typeof v === 'string')
-        ? { kind: 'names', value: value as string[] }
-        : null,
+    encode: (value) => {
+      const names = Array.isArray(value)
+        ? value.filter((v): v is string => typeof v === 'string')
+        : [];
+      return Array.isArray(value) && names.length === 2 && names.length === value.length
+        ? { kind: 'names', value: names }
+        : null;
+    },
   },
   {
     key: 'cloudy',
     pdfKey: 'BE',
     kind: 'dict',
     engineWritable: false,
+    // The model holds the intensity (0..2); `0` means "not cloudy", which removes `/BE`.
+    empty: (value) => typeof value === 'number' && value <= 0,
     encode: (value) => {
-      // The model holds the intensity (0..2); `0` means "not cloudy", which removes `/BE`.
       const intensity = typeof value === 'number' && Number.isFinite(value) ? value : 0;
       if (intensity <= 0) return null;
       return {
@@ -176,10 +186,14 @@ export function toDictValue(mapping: DictMapping, value: unknown): DictValue | n
       const numbers = finiteNumbers(value);
       return numbers && numbers.length > 0 ? { kind: 'numbers', value: numbers } : null;
     }
-    case 'names':
-      return Array.isArray(value) && value.every((v) => typeof v === 'string')
-        ? { kind: 'names', value: value as string[] }
+    case 'names': {
+      const names = Array.isArray(value)
+        ? value.filter((v): v is string => typeof v === 'string')
         : null;
+      return names && Array.isArray(value) && names.length === value.length
+        ? { kind: 'names', value: names }
+        : null;
+    }
     case 'dict':
       return null;
   }
@@ -193,8 +207,8 @@ export function toDictValue(mapping: DictMapping, value: unknown): DictValue | n
  * are considered, and only those the caller asks about — `engineWrote` names the ones PDFium has
  * already put in the bytes, so the plan does not write them a second time.
  *
- * A key whose value cannot be encoded — a cloud with intensity 0, an empty dash — is a removal
- * too: the reader turned the thing off, and the file must not keep saying it is on.
+ * A key whose value means "off" — a cloud with intensity 0, an empty dash — is a removal too: the
+ * reader turned the thing off, and the file must not keep saying it is on.
  */
 export function dictEntries(
   extra: Readonly<Record<string, unknown>>,
@@ -205,13 +219,15 @@ export function dictEntries(
     if (options.skipEngineWritable && mapping.engineWritable) continue;
     if (!(mapping.key in extra)) continue;
     const raw = extra[mapping.key];
-    if (raw === null || raw === undefined || raw === '') {
+    if (raw === null || raw === undefined || raw === '' || mapping.empty?.(raw) === true) {
       // `/BS` also carries the border width; a dash going away is a solid border, not no border.
       out[mapping.pdfKey] = mapping.pdfKey === 'BS' ? toDictValue(mapping, []) : null;
       continue;
     }
+    // A value that cannot be encoded is malformed, not absent: it is skipped rather than
+    // half-written or removed, which is what M30 promised for a `/CL` with a word in it.
     const value = toDictValue(mapping, raw);
-    out[mapping.pdfKey] = value;
+    if (value) out[mapping.pdfKey] = value;
   }
   return out;
 }

@@ -59,7 +59,8 @@ export function isLineEnding(value: unknown): value is LineEnding {
 export function lineEndingsOf(extra: Readonly<Record<string, unknown>>): [LineEnding, LineEnding] {
   const raw = extra['lineEndings'];
   if (Array.isArray(raw) && raw.length === 2) {
-    const [a, b] = raw;
+    const a: unknown = raw[0];
+    const b: unknown = raw[1];
     return [isLineEnding(a) ? a : 'None', isLineEnding(b) ? b : 'None'];
   }
   return ['None', 'None'];
@@ -298,7 +299,11 @@ export function lineEndingDrawing(
   switch (kind) {
     case 'OpenArrow':
       return {
-        ops: [{ op: 'M', ...at(-size, wing) }, { op: 'L', ...tip }, { op: 'L', ...at(-size, -wing) }],
+        ops: [
+          { op: 'M', ...at(-size, wing) },
+          { op: 'L', ...tip },
+          { op: 'L', ...at(-size, -wing) },
+        ],
         closed: false,
         trim: 0,
       };
@@ -372,7 +377,10 @@ export function lineEndingDrawing(
       const along = size * 0.5;
       const across = size * 0.87;
       return {
-        ops: [{ op: 'M', ...at(-along, across) }, { op: 'L', ...at(along, -across) }],
+        ops: [
+          { op: 'M', ...at(-along, across) },
+          { op: 'L', ...at(along, -across) },
+        ],
         closed: false,
         trim: 0,
       };
@@ -380,13 +388,14 @@ export function lineEndingDrawing(
     case 'Butt': {
       const h = size / 2;
       return {
-        ops: [{ op: 'M', ...at(0, h) }, { op: 'L', ...at(0, -h) }],
+        ops: [
+          { op: 'M', ...at(0, h) },
+          { op: 'L', ...at(0, -h) },
+        ],
         closed: false,
         trim: 0,
       };
     }
-    case 'None':
-      return null;
   }
 }
 
@@ -410,10 +419,7 @@ function strokeColor(input: AppearanceInput): number {
   return input.color ?? DEFAULT_COLOR;
 }
 
-function withDash(
-  drawing: Omit<ShapeDrawing, 'dash'>,
-  dash: ReadonlyArray<number>,
-): ShapeDrawing {
+function withDash(drawing: Omit<ShapeDrawing, 'dash'>, dash: ReadonlyArray<number>): ShapeDrawing {
   return dash.length > 0 ? { ...drawing, dash } : drawing;
 }
 
@@ -505,7 +511,15 @@ function lineDrawings(input: AppearanceInput): ShapeDrawing[] {
   const b = { x: to.x - ux * (end?.trim ?? 0), y: to.y - uy * (end?.trim ?? 0) };
   out.push(
     withDash(
-      { ops: [{ op: 'M', ...a }, { op: 'L', ...b }], stroke, fill: null, width },
+      {
+        ops: [
+          { op: 'M', ...a },
+          { op: 'L', ...b },
+        ],
+        stroke,
+        fill: null,
+        width,
+      },
       dash,
     ),
   );

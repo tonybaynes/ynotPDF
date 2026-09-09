@@ -224,24 +224,39 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
           };
           const number = (key: string): number | undefined =>
             dict?.lookupMaybe(PDFName.of(key), PDFNumber)?.asNumber();
+          /*
+           * These are read with `lookup` and `instanceof`, not `lookupMaybe(key, Type)`: the
+           * typed form *throws* when the entry exists as another type — a callout's `/LE` is one
+           * name, not an array — and a throw here loses the colours of every annotation after it
+           * on the page.
+           */
+          const entryOf = (owner: PDFDict | undefined, key: string): unknown =>
+            owner ? ctx.lookup(owner.get(PDFName.of(key))) : undefined;
           // A Line's `/LE` is two names; a callout's is one, which the string pass reads.
           let lineEndings: readonly [string, string] | undefined;
-          const le = dict?.lookupMaybe(PDFName.of('LE'), PDFArray)?.asArray();
-          if (le && le.length === 2) {
-            const [a, b] = le;
+          const le = entryOf(dict, 'LE');
+          if (le instanceof PDFArray && le.size() === 2) {
+            const a: unknown = le.get(0);
+            const b: unknown = le.get(1);
             if (a instanceof PDFName && b instanceof PDFName) {
               lineEndings = [a.decodeText(), b.decodeText()];
             }
           }
           let cloudy: number | undefined;
-          const be = dict?.lookupMaybe(PDFName.of('BE'), PDFDict);
-          if (be?.lookupMaybe(PDFName.of('S'), PDFName)?.decodeText() === 'C') {
-            cloudy = be.lookupMaybe(PDFName.of('I'), PDFNumber)?.asNumber() ?? 1;
+          const be = entryOf(dict, 'BE');
+          if (be instanceof PDFDict) {
+            const style = entryOf(be, 'S');
+            if (style instanceof PDFName && style.decodeText() === 'C') {
+              const intensity = entryOf(be, 'I');
+              cloudy = intensity instanceof PDFNumber ? intensity.asNumber() : 1;
+            }
           }
           let dashArray: ReadonlyArray<number> | undefined;
-          const d = bs?.lookupMaybe(PDFName.of('D'), PDFArray);
-          if (d) {
-            const nums = d.asArray().map((v) => (v instanceof PDFNumber ? v.asNumber() : Number.NaN));
+          const d = entryOf(bs, 'D');
+          if (d instanceof PDFArray) {
+            const nums = d
+              .asArray()
+              .map((v) => (v instanceof PDFNumber ? v.asNumber() : Number.NaN));
             if (nums.length > 0 && !nums.some((n) => Number.isNaN(n))) dashArray = nums;
           }
           out.push({

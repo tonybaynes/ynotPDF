@@ -18,7 +18,8 @@
  */
 
 import type { PdfRect } from '@shared/pdf';
-import { ContentBuilder } from './content';
+import { ContentBuilder, type PathOp } from './content';
+import type { ShapeDrawing } from './shapes';
 import type { AppearanceGenerator, AppearanceInput, AppearanceStream } from './types';
 
 /** Applies `/CA` as a graphics state when it is anything but fully opaque. */
@@ -82,75 +83,131 @@ export function isAttachmentIcon(value: unknown): value is AttachmentIcon {
 }
 
 /**
- * `/FileAttachment`: the icon `/Name` asks for, drawn to fill the rect. PDFium draws nothing for
- * these. Four icons, as the PDF spec names them; anything else is the push pin.
+ * The strokes and fills of one attachment icon, drawn to fill `rect` (M31 shares this with the
+ * overlay). Four icons, as the PDF spec names them; anything else is the push pin.
  */
-export const fileAttachmentAppearance: AppearanceGenerator = (input) => {
-  const { x0, y0, x1, y1 } = input.rect;
+export function attachmentIconDrawings(
+  rect: PdfRect,
+  icon: string | null | undefined,
+  colour: number,
+): ShapeDrawing[] {
+  const { x0, y0, x1, y1 } = rect;
   const w = x1 - x0;
   const h = y1 - y0;
-  if (w <= 0 || h <= 0) return null;
-  const b = new ContentBuilder();
-  const at = (fx: number, fy: number): [number, number] => [x0 + fx * w, y0 + fy * h];
-  const colour = input.color ?? 0x000000;
-  b.save();
-  applyOpacity(b, input);
-  b.fillColor(colour)
-    .strokeColor(colour)
-    .lineWidth(Math.max(0.5, Math.min(w, h) / 12))
-    .lineCap(1)
-    .lineJoin(1);
-  const icon = isAttachmentIcon(input.extra['icon']) ? input.extra['icon'] : 'PushPin';
-  switch (icon) {
-    case 'Paperclip':
+  if (w <= 0 || h <= 0) return [];
+  const at = (fx: number, fy: number): { x: number; y: number } => ({
+    x: x0 + fx * w,
+    y: y0 + fy * h,
+  });
+  const width = Math.max(0.5, Math.min(w, h) / 12);
+  const line = (points: ReadonlyArray<[number, number]>): PathOp[] =>
+    points.map(([fx, fy], i) => ({ op: i === 0 ? 'M' : 'L', ...at(fx, fy) }));
+  const stroke = (ops: PathOp[]): ShapeDrawing => ({ ops, stroke: colour, fill: null, width });
+  const fill = (ops: PathOp[]): ShapeDrawing => ({ ops, stroke: null, fill: colour, width: 0 });
+  switch (isAttachmentIcon(icon) ? icon : 'PushPin') {
+    case 'Paperclip': {
       // A clip: an outer loop and an inner one, open at the top.
-      b.moveTo(...at(0.3, 0.15));
-      b.lineTo(...at(0.3, 0.75));
-      b.curveTo(...at(0.3, 0.95), ...at(0.7, 0.95), ...at(0.7, 0.75));
-      b.lineTo(...at(0.7, 0.3));
-      b.curveTo(...at(0.7, 0.15), ...at(0.5, 0.15), ...at(0.5, 0.3));
-      b.lineTo(...at(0.5, 0.7));
-      b.stroke();
-      break;
+      const a = at(0.3, 0.95);
+      const b = at(0.7, 0.95);
+      const c = at(0.7, 0.15);
+      const d = at(0.5, 0.15);
+      return [
+        stroke([
+          { op: 'M', ...at(0.3, 0.15) },
+          { op: 'L', ...at(0.3, 0.75) },
+          { op: 'C', x1: a.x, y1: a.y, x2: b.x, y2: b.y, ...at(0.7, 0.75) },
+          { op: 'L', ...at(0.7, 0.3) },
+          { op: 'C', x1: c.x, y1: c.y, x2: d.x, y2: d.y, ...at(0.5, 0.3) },
+          { op: 'L', ...at(0.5, 0.7) },
+        ]),
+      ];
+    }
     case 'Graph':
       // Axes and a rising line.
-      b.moveTo(...at(0.15, 0.85));
-      b.lineTo(...at(0.15, 0.15));
-      b.lineTo(...at(0.85, 0.15));
-      b.stroke();
-      b.moveTo(...at(0.25, 0.3));
-      b.lineTo(...at(0.45, 0.55));
-      b.lineTo(...at(0.6, 0.4));
-      b.lineTo(...at(0.85, 0.8));
-      b.stroke();
-      break;
+      return [
+        stroke(
+          line([
+            [0.15, 0.85],
+            [0.15, 0.15],
+            [0.85, 0.15],
+          ]),
+        ),
+        stroke(
+          line([
+            [0.25, 0.3],
+            [0.45, 0.55],
+            [0.6, 0.4],
+            [0.85, 0.8],
+          ]),
+        ),
+      ];
     case 'Tag':
       // A luggage tag with its hole.
-      b.moveTo(...at(0.15, 0.6));
-      b.lineTo(...at(0.45, 0.9));
-      b.lineTo(...at(0.9, 0.45));
-      b.lineTo(...at(0.6, 0.15));
-      b.lineTo(...at(0.15, 0.6));
-      b.closePath().fill();
-      b.moveTo(...at(0.3, 0.6));
-      b.lineTo(...at(0.36, 0.66));
-      b.stroke();
-      break;
+      return [
+        fill([
+          ...line([
+            [0.15, 0.6],
+            [0.45, 0.9],
+            [0.9, 0.45],
+            [0.6, 0.15],
+          ]),
+          { op: 'Z' },
+        ]),
+        stroke(
+          line([
+            [0.3, 0.6],
+            [0.36, 0.66],
+          ]),
+        ),
+      ];
     case 'PushPin':
-      // Head of the pin.
-      b.moveTo(...at(0.3, 0.55));
-      b.lineTo(...at(0.7, 0.55));
-      b.lineTo(...at(0.62, 0.95));
-      b.lineTo(...at(0.38, 0.95));
-      b.closePath().fill();
-      // Body and point.
-      b.moveTo(...at(0.5, 0.55));
-      b.lineTo(...at(0.5, 0.05));
-      b.stroke();
-      b.moveTo(...at(0.22, 0.5));
-      b.lineTo(...at(0.78, 0.5));
-      b.stroke();
-      break;
+      return [
+        // Head of the pin.
+        fill([
+          ...line([
+            [0.3, 0.55],
+            [0.7, 0.55],
+            [0.62, 0.95],
+            [0.38, 0.95],
+          ]),
+          { op: 'Z' },
+        ]),
+        // Body and point.
+        stroke(
+          line([
+            [0.5, 0.55],
+            [0.5, 0.05],
+          ]),
+        ),
+        stroke(
+          line([
+            [0.22, 0.5],
+            [0.78, 0.5],
+          ]),
+        ),
+      ];
+  }
+}
+
+/** `/FileAttachment`: the icon `/Name` asks for, drawn to fill the rect. PDFium draws nothing for these. */
+export const fileAttachmentAppearance: AppearanceGenerator = (input) => {
+  const drawings = attachmentIconDrawings(
+    input.rect,
+    typeof input.extra['icon'] === 'string' ? input.extra['icon'] : null,
+    input.color ?? 0x000000,
+  );
+  if (drawings.length === 0) return null;
+  const b = new ContentBuilder();
+  b.save();
+  applyOpacity(b, input);
+  for (const d of drawings) {
+    b.save();
+    if (d.stroke !== null) b.strokeColor(d.stroke).lineWidth(d.width).lineCap(1).lineJoin(1);
+    if (d.fill !== null) b.fillColor(d.fill);
+    b.path(d.ops);
+    if (d.fill !== null) b.fill();
+    else b.stroke();
+    b.restore();
   }
   b.restore();
   return finish(input, b);

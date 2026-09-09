@@ -268,7 +268,10 @@ export class ContentBuilder {
    * Draws a shared XObject (M31, ADR 0015): `q <matrix> cm /Fm1 Do Q`. `key` names a
    * `WritePlan.xobjects` entry; the writer resolves it to the one embedded object.
    */
-  drawXObject(key: string, matrix: readonly [number, number, number, number, number, number]): this {
+  drawXObject(
+    key: string,
+    matrix: readonly [number, number, number, number, number, number],
+  ): this {
     const name = this.xobjectName(key);
     this.painted = true;
     this.save();
