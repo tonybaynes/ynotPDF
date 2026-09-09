@@ -462,6 +462,18 @@ Nine more, all real, all fixed here and all with a test:
   they resolve the service by name, while the drag and the status field silently did not.
   Re-activation re-binds instead of bailing out.
 
+### And one more, found by CI rather than by a test of this module
+
+- **The status field cost the viewer frames on a long scroll.** It answered “does this document
+  number its pages?” by comparing every page label with its position, and it did that on every
+  page change — which during a scroll is nearly every frame. On a thousand-page document that is
+  O(pages) of work per frame, and it surfaced as M11’s 500-page scroll acceptance test failing on
+  a macOS runner while the same commit passed everywhere else. The answer can only change when
+  the *document* changes, so it is computed there and cached; the page-change handler is one
+  array lookup now, coalesced at 120 ms for the reason M12’s thumbnail panel coalesces its own. A
+  status field that follows a tenth of a second behind is indistinguishable from one that follows
+  every frame. The dropped frames are not.
+
 ### Shared files touched (PLAN.md §12.3)
 
 - `src/engine/PdfEngine.ts` — additive: `createDocument()`, the name in `ENGINE_METHODS`, and the

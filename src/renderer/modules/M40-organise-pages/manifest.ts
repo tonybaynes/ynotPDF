@@ -995,16 +995,27 @@ const NUMBERING_STATUS: StatusItemSpec = {
     wrap.hidden = true;
     host.append(wrap);
 
-    const refresh = (): void => {
+    /**
+     * Whether this document numbers its pages at all, cached.
+     *
+     * Answering it means comparing every page's label with its position, and the reader's page
+     * changes on nearly every frame of a scroll — so asking it per frame is O(pages) per frame,
+     * which a thousand-page document feels. It can only change when the *document* changes, so
+     * that is when it is recomputed.
+     */
+    let numbered = false;
+    let follow: ReturnType<typeof setTimeout> | null = null;
+
+    const recount = (): void => {
+      const doc = live?.document ?? null;
+      numbered = doc?.state.pages.some((p, i) => p.label !== String(i + 1)) ?? false;
+    };
+
+    /** Cheap: one array lookup. Everything expensive is in `recount`. */
+    const paint = (): void => {
       const service = live;
       const doc = service?.document ?? null;
-      if (!service || !doc) {
-        wrap.hidden = true;
-        return;
-      }
-      const page = doc.state.pages[service.currentPage];
-      // "Numbered 3" for a page that is simply the third one says nothing worth the space.
-      const numbered = doc.state.pages.some((p, i) => p.label !== String(i + 1));
+      const page = doc?.state.pages[service?.currentPage ?? 0] ?? null;
       if (!page || !numbered) {
         wrap.hidden = true;
         return;
@@ -1014,40 +1025,52 @@ const NUMBERING_STATUS: StatusItemSpec = {
       wrap.title = `This page is numbered ${page.label} in the document`;
     };
 
+    const refresh = (): void => {
+      recount();
+      paint();
+    };
+
     const shell = ctx.service<ShellServices>('shellServices');
-    const stops = [
-      shell.ui.select(
-        (state) => state.view.page,
-        () => {
-          refresh();
-        },
-      ),
-      shell.documents.subscribe(() => {
-        refresh();
-      }),
-    ];
-    // A renumbering is a document change, not a view change, so the document is watched too.
+    const stops: Array<() => void> = [];
     let stopDocument: (() => void) | null = null;
     let watched: Document | null = null;
+
     const rebind = (): void => {
       const doc = live?.document ?? null;
       if (doc === watched) return;
       stopDocument?.();
       watched = doc;
-      stopDocument = doc
-        ? doc.store.subscribe(() => {
-            refresh();
-          })
-        : null;
+      // A renumbering is a document change rather than a view change, so the document is watched
+      // too — and that is the only thing that can make the answer to "is this numbered?" move.
+      stopDocument = doc ? doc.store.subscribe(refresh) : null;
     };
+
     stops.push(
+      shell.ui.select(
+        (state) => state.view.page,
+        () => {
+          // Coalesced, for the same reason M12's thumbnail panel coalesces: a long scroll
+          // announces a new page on nearly every frame, and a status field that follows 120 ms
+          // behind the last one is indistinguishable from one that follows every one — while the
+          // viewer's own frames are not.
+          if (follow !== null) clearTimeout(follow);
+          follow = setTimeout(() => {
+            follow = null;
+            paint();
+          }, 120);
+        },
+        { immediate: false },
+      ),
       shell.documents.subscribe(() => {
         rebind();
+        refresh();
       }),
     );
+
     rebind();
     refresh();
     return () => {
+      if (follow !== null) clearTimeout(follow);
       stopDocument?.();
       for (const stop of stops) stop();
       wrap.remove();
