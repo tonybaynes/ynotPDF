@@ -231,6 +231,10 @@
     "render": ["0010301010100080", "0101006c6c000000", "0600101010301003"],
     "text": "/Rotate 0"
   },
+  "skewed.pdf": {
+    "render": ["c0d2ac9ca8b4acfc", "f498a498a8a894d0", "c0d4eedea8e8c8f4", "0000000000000000"],
+    "text": ""
+  },
   "scanned.pdf": {
     "render": ["a8e29490d490a8a8"],
     "text": ""
