@@ -204,10 +204,12 @@ before the writer ever runs and needs no plan section of its own.
   `file:read`, so a 1 GB folder never becomes a 1 GB IPC message.
 - **`file:writeInto`** writes one file under a base directory at a relative path, creating
   the directories on the way. "Extract all" preserves the folder structure, and doing it one
-  file at a time is what keeps the memory flat. Every path segment is sanitised with the
-  existing `safeFileName`, and a relative path that escapes the base directory is refused in
-  main — the names come from inside a PDF, and a file specification is free to say
-  `../../.bashrc`.
+  file at a time is what keeps the memory flat. The names come from inside a PDF, where a file
+  specification is free to say `../../.bashrc`, so main takes the path apart: `..` and `.`
+  segments are dropped, each remaining one goes through the existing `safeFileName`, and the
+  resolved path is checked to be inside the base directory before anything is written. A climbing
+  path therefore lands in the chosen folder rather than failing the extraction — the file still
+  arrives, and it cannot arrive anywhere else.
 
 ### 8. `Document` gains a `blobs` side table
 
