@@ -14,7 +14,7 @@
  * that into one undoable command per page.
  */
 
-import { field, formGrid, type DialogHandle, type Dialogs } from '@app/dialog/Dialogs';
+import { type DialogHandle, type Dialogs } from '@app/dialog/Dialogs';
 import { el } from '@app/dom';
 import { marginsFromRect, rectFromMargins, type Margins } from '@engine/ops/crop';
 import type { PageBoxes, PageBoxName, PdfRect } from '@shared/pdf';
@@ -58,11 +58,12 @@ export async function askCrop(options: CropDialogOptions): Promise<CropChoice | 
 
   const boxSelect = select<PageBoxName>({
     label: 'Set which box',
+    hint: `Measured from the ${nameOf(options.box)} of page ${options.pageLabel}.`,
     value: box,
     choices: CROP_BOXES.map((choice) => ({
       value: choice.value,
       // Saying which boxes the file carries is the whole reason `pageBoxes` exists (ADR 0017).
-      label: `${choice.label}${options.boxes[choice.value] === null ? ' — not set on this page' : ''}`,
+      label: `${choice.label}${options.boxes[choice.value] === null ? ' (not set on this page)' : ''}`,
     })),
     onChange: (value) => {
       box = value;
@@ -178,23 +179,24 @@ export async function askCrop(options: CropDialogOptions): Promise<CropChoice | 
     handle?.setEnabled('ok', width >= 1 && height >= 1 && (pages?.length ?? 0) > 0);
   }
 
-  const body = el('div.ops-dialog.ops-crop');
-  const controls = el('div.ops-crop-controls');
-  controls.append(
-    formGrid(top.element, bottom.element, left.element, right.element),
-    field({
-      label: 'Measured from',
-      input: el('p.field-hint', null, `the ${nameOf(box)} of page ${options.pageLabel}`),
-    }),
-    boxSelect.element,
-    changePageSize.element,
-    range.element,
-    summary,
-  );
+  // The two buttons sit straight under the numbers they fill in, because "remove white margins"
+  // is what most readers came here to press and it must not be below the fold.
   const buttons = el('div.ops-toolbar');
   buttons.append(detect, whole);
-  controls.append(buttons);
-  body.append(controls, preview);
+
+  const marginGrid = el('div.ops-margins');
+  marginGrid.append(top.element, bottom.element, left.element, right.element);
+
+  const controls = el('div.ops-crop-controls');
+  controls.append(marginGrid, buttons, boxSelect.element, changePageSize.element, range.element);
+
+  // The summary goes under the picture rather than under the fields: it is *about* the picture,
+  // and that column has the room.
+  const side = el('div.ops-crop-side');
+  side.append(preview, summary);
+
+  const body = el('div.ops-dialog.ops-crop');
+  body.append(controls, side);
 
   void (async () => {
     const drawn = await options.preview();

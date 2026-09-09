@@ -257,6 +257,41 @@ export function radioGroup<T extends string>(options: {
   };
 }
 
+/**
+ * A number box that sits on the same line as whatever names it, with its own screen-reader
+ * label and a visible unit after it: "Every [2] pages".
+ *
+ * A radio button's option and the number it governs are one sentence; giving the number a
+ * heading of its own says they are two, and doubles the height of the dialog to say it.
+ */
+export function inlineNumber(options: {
+  readonly label: string;
+  readonly value: number;
+  readonly suffix: string;
+  readonly min?: number;
+  readonly max?: number;
+  readonly step?: number;
+  readonly onChange?: (value: number) => void;
+}): { element: HTMLElement; input: HTMLInputElement } {
+  const input = el('input.input.ops-number', {
+    type: 'number',
+    value: String(options.value),
+    'aria-label': options.label,
+    ...(options.min === undefined ? {} : { min: String(options.min) }),
+    ...(options.max === undefined ? {} : { max: String(options.max) }),
+    step: String(options.step ?? 1),
+  });
+  if (options.onChange) {
+    input.addEventListener('input', () => {
+      const typed = Number(input.value);
+      if (Number.isFinite(typed)) options.onChange?.(typed);
+    });
+  }
+  const row = el('div.ops-inline');
+  row.append(input, el('span.ops-unit', null, options.suffix));
+  return { element: row, input };
+}
+
 /** A number input with a unit-free label — page counts, megabytes, degrees. */
 export function numberField(options: {
   readonly label: string;

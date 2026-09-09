@@ -92,6 +92,12 @@ function rectArg(args: CommandArgs): PdfRect | undefined {
   return { x0: r.x0 as number, y0: r.y0 as number, x1: r.x1 as number, y1: r.y1 as number };
 }
 
+/** Whether the caller named pages at all — a range, a list, or a thumbnail selection. */
+function anyTarget(ctx: ServiceContext & { args?: CommandArgs }): boolean {
+  if (ctx.args?.['pages'] !== undefined || ctx.args?.['range'] !== undefined) return true;
+  return ops(ctx).selection.as('pages') !== null;
+}
+
 /** The target of a command, from its arguments or the selection (M40's rule). */
 function target(ctx: ServiceContext & { args?: CommandArgs }) {
   return ops(ctx).target({
@@ -537,8 +543,17 @@ const DESKEW: CommandSpec = {
   when: hasDocument,
   run: async (ctx) => {
     const service = ops(ctx);
-    service.require();
-    const where = target(ctx);
+    const doc = service.require();
+    // Scanned documents are crooked page by page, so "Straighten Pages" means the whole document
+    // unless the reader has picked some — which is not M40's usual rule, and is right here: the
+    // dialog is a per-page table with a tick against each row, so offering one row would be
+    // offering the wrong question.
+    const where = anyTarget(ctx)
+      ? target(ctx)
+      : service.organise.targetOf(
+          doc.state.pages.map((_, i) => i),
+          doc,
+        );
     const given = ctx.args['angles'];
     if (given && typeof given === 'object') {
       // The e2e path: exact angles, no measuring and no dialog.

@@ -309,18 +309,32 @@ background colour, and offers the result as a rectangle the reader can still
 adjust. The scan itself (`inkBounds`) is a pure function over RGBA, so it is
 unit-tested without a PDF.
 
-**Deskew detection** is the projection-profile variance method (Postl): render
-the page grayscale at ~110 dpi, downsample so the long edge is ~700 px,
-binarise against Otsu's threshold, keep the coordinates of the dark pixels
-only, and for each candidate angle bucket `y·cosθ + x·sinθ` into 1-px rows and
-score the profile by the sum of squared bucket counts. Coarse pass ±15° at
-0.5°, then a fine pass ±0.6° at 0.02° around the winner. Working from the dark
-*coordinates* rather than the image is what makes 100 pages in well under 20 s
-possible: a text page is ~5 % ink, so each angle costs tens of thousands of
-adds rather than half a million. Confidence is the peak's height over the
-profile's own spread, reported in words ("clear" / "uncertain" / "not enough
-content") — never a bare number and never a colour. Source: the method is
-textbook (H. S. Baird 1987, W. Postl 1986); no product was consulted.
+**Deskew detection** is the projection-profile method (Postl): render the page
+grayscale at ~110 dpi, downsample so the long edge is ~700 px, binarise
+against Otsu's threshold, keep the coordinates of the dark pixels only, and
+for each candidate angle bucket `y·cosθ + x·sinθ` into 1-px rows. Coarse pass
+±15° at 0.5°, then a fine pass ±0.6° at 0.02° around the winner. Working from
+the dark *coordinates* rather than the image is what makes 100 pages in well
+under 20 s possible: a text page is ~5 % ink, so each angle costs tens of
+thousands of adds rather than half a million.
+
+The profile is scored by the **sum of squared differences between adjacent
+rows**, not by its variance. The textbook criterion is the variance — the sum
+of the squared bucket counts — and it fails on the operator's own files: a
+boarding pass carries a barcode, a block of bars is a denser thing to
+concentrate than a page of writing, and the variance therefore peaks wherever
+the bars line up and declares a perfectly straight pass to lean by fifteen
+degrees. The difference criterion measures how *abruptly* the profile rises
+and falls, which is what a line of text is and what a solid block is not; on
+those files it is the whole difference between "0.00°" and "−14.98°", and on
+a page of text the two agree. A peak sitting against the end of the sweep is
+distrusted whichever criterion found it, because the real answer is then
+somewhere the sweep never looked.
+
+Confidence is the peak's height over the profile's own spread, reported in
+words ("clear" / "uncertain" / "not enough content") — never a bare number and
+never a colour. Source: the method is textbook (H. S. Baird 1987, W. Postl
+1986); no product was consulted.
 
 **Deskew and flatten replace their pages rather than mutate them.** Both change
 page *content*, and PDFium can neither wrap a content stream nor un-flatten a

@@ -107,17 +107,40 @@ export function detectSkew(raster: Raster, options: DetectOptions = {}): SkewEst
 
   const score = (degrees: number): number => projectionScore(xs, ys, width, height, degrees);
   const coarse = sweep(score, -opts.maxAngle, opts.maxAngle, 0.5);
-  const fine = sweep(score, coarse.angle - 0.6, coarse.angle + 0.6, 0.02);
+  // Clamped, so an answer can never be outside the range this was asked to look in — a winner
+  // at the very edge would otherwise be refined half a degree past it.
+  const fine = sweep(
+    score,
+    Math.max(-opts.maxAngle, coarse.angle - 0.6),
+    Math.min(opts.maxAngle, coarse.angle + 0.6),
+    0.02,
+  );
   const flat = score(fine.angle) / Math.max(1e-9, coarse.mean);
   // The sweep finds the angle that *straightens* the page; the reader is told how far the page
   // leans, which is the other one.
   const skew = -fine.angle;
 
+  /*
+   * A peak sitting against the end of the sweep is not a peak: whatever the profile is following
+   * carries on past the widest angle considered, so the real answer is somewhere this never
+   * looked. It happens on a page whose strongest lines are not text — a barcode, a table rule, a
+   * photograph's edge — and reporting "15 degrees" for one of those would have the reader turn a
+   * perfectly straight page onto its side.
+   */
+  const atTheEdge = Math.abs(Math.abs(fine.angle) - opts.maxAngle) < 0.05;
+
   // A straight page's peak stands well clear of the sweep's own average; a page of pictures, or
   // one with three words on it, produces a profile that barely moves and must not be trusted.
-  const confidence: SkewConfidence = flat >= 1.5 ? 'clear' : flat >= 1.15 ? 'uncertain' : 'none';
-  const reason =
-    confidence === 'clear'
+  const confidence: SkewConfidence = atTheEdge
+    ? 'none'
+    : flat >= 1.5
+      ? 'clear'
+      : flat >= 1.15
+        ? 'uncertain'
+        : 'none';
+  const reason = atTheEdge
+    ? 'the strongest lines on this page are not text'
+    : confidence === 'clear'
       ? 'lines of text line up'
       : confidence === 'uncertain'
         ? 'the lines are faint or few, so check the preview'
@@ -132,7 +155,7 @@ export function detectSkew(raster: Raster, options: DetectOptions = {}): SkewEst
   };
 }
 
-/** Best angle in `[from, to]` at `step`, and the mean score over the sweep. */
+/** The peak of the profile over `[from, to]` at `step`, and the mean score across the sweep. */
 function sweep(
   score: (degrees: number) => number,
   from: number,
@@ -156,11 +179,21 @@ function sweep(
 }
 
 /**
- * The projection-profile score at one angle: how concentrated the ink is once rotated back.
+ * The projection-profile score at one angle: how *sharply* the ink starts and stops down the page
+ * once rotated back.
  *
- * Squaring the bucket counts is what turns "the ink is spread over n rows" into a number that
- * peaks when it is spread over as few as possible. It is the same quantity as the variance of
- * the profile, up to a constant that does not depend on the angle.
+ * The obvious score is the variance of the profile — the sum of the squared bucket counts —
+ * which is the textbook one and rewards ink being concentrated in few rows. It has a failure
+ * this module met on the operator's own files: a boarding pass carries a barcode, and a block of
+ * bars is a denser thing to concentrate than a page of writing, so the variance peaks at
+ * whatever angle lines the bars up and a perfectly straight pass is declared to lean by fifteen
+ * degrees.
+ *
+ * The sum of squared *differences between adjacent rows* does not have it. What it measures is
+ * how abruptly the profile rises and falls, and lines of text are the sharpest thing on a page:
+ * ink, then paper, then ink, forty times down the sheet. A barcode's block is dense but flat, so
+ * it scores little however it is turned. On the operator's boarding passes this is the whole
+ * difference between "0.00°" and "−14.98°"; on a page of text the two agree.
  */
 function projectionScore(
   xs: Int32Array,
@@ -181,7 +214,10 @@ function projectionScore(
     if (row >= 0 && row < buckets.length) buckets[row] = (buckets[row] ?? 0) + 1;
   }
   let sum = 0;
-  for (const n of buckets) sum += n * n;
+  for (let i = 1; i < buckets.length; i++) {
+    const step = (buckets[i] ?? 0) - (buckets[i - 1] ?? 0);
+    sum += step * step;
+  }
   // Divided by the row count so sweeps at different angles, which have different spans, compare.
   return sum / buckets.length;
 }

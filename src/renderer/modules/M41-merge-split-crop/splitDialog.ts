@@ -21,7 +21,7 @@ import {
   planGroups,
   type SplitRule,
 } from '@engine/ops/split';
-import { checkbox, numberField, radioGroup } from './fields';
+import { checkbox, inlineNumber, radioGroup } from './fields';
 import { parseRange, type RangeContext } from '@modules/M40-organise-pages/range';
 
 export type SplitKind = 'count' | 'size' | 'bookmarks' | 'ranges';
@@ -60,22 +60,26 @@ export async function askSplit(options: SplitDialogOptions): Promise<SplitChoice
   let folder: string | null = null;
   let handle: DialogHandle | null = null;
 
-  const countInput = numberField({
+  // Beside the radio rather than under it with a heading of its own: "Every [2] pages" is one
+  // sentence, and a labelled box below it would make the dialog twice as tall for no more meaning.
+  const countInput = inlineNumber({
     label: 'Pages in each file',
     value: everyPages,
     min: 1,
     max: Math.max(1, options.pageCount),
+    suffix: 'pages',
     onChange: (value) => {
       everyPages = Math.max(1, Math.round(value));
       kind = 'count';
       refresh();
     },
   });
-  const sizeInput = numberField({
-    label: 'Largest file size, MB',
+  const sizeInput = inlineNumber({
+    label: 'Largest file size in megabytes',
     value: sizeMb,
     min: 0.05,
     step: 0.05,
+    suffix: 'MB',
     onChange: (value) => {
       sizeMb = value;
       kind = 'size';
@@ -83,7 +87,7 @@ export async function askSplit(options: SplitDialogOptions): Promise<SplitChoice
     },
   });
   const rangeLines = el('textarea.input.ops-ranges', {
-    rows: '4',
+    rows: '3',
     spellcheck: 'false',
     'aria-label': 'One range per line',
     placeholder: '1-4\n5-9\n10-',
@@ -106,7 +110,7 @@ export async function askSplit(options: SplitDialogOptions): Promise<SplitChoice
     name: 'ops-split-kind',
     value: 'count',
     choices: [
-      { value: 'count', label: 'Every so many pages', extra: countInput.element },
+      { value: 'count', label: 'Every', extra: countInput.element },
       { value: 'size', label: 'Into files no bigger than', extra: sizeInput.element },
       { value: 'bookmarks', label: 'At every top-level bookmark', extra: bookmarkNote },
       { value: 'ranges', label: 'By page ranges, one file per line', extra: rangeLines },
@@ -123,9 +127,10 @@ export async function askSplit(options: SplitDialogOptions): Promise<SplitChoice
     spellcheck: 'false',
   });
   pattern.addEventListener('input', refresh);
-  const keepBookmarks = checkbox({ label: 'Keep bookmarks', checked: options.keepBookmarks });
-  const keepComments = checkbox({ label: 'Keep comments', checked: options.keepComments });
-  const keepForms = checkbox({ label: 'Keep form fields', checked: options.keepForms });
+  // The heading over them says "Keep", so the boxes do not have to say it three times more.
+  const keepBookmarks = checkbox({ label: 'Bookmarks', checked: options.keepBookmarks });
+  const keepComments = checkbox({ label: 'Comments', checked: options.keepComments });
+  const keepForms = checkbox({ label: 'Form fields', checked: options.keepForms });
 
   const folderLine = el('p.field-hint.ops-folder', { role: 'status' });
   const chooseFolder = el('button.btn', { type: 'button' }, 'Choose folder…');
@@ -188,6 +193,9 @@ export async function askSplit(options: SplitDialogOptions): Promise<SplitChoice
     handle?.setEnabled('ok', options.canWriteFiles && folder !== null && groups.length > 0);
   }
 
+  const folderRow = el('div.ops-folder-row');
+  folderRow.append(chooseFolder, folderLine);
+
   const body = el('div.ops-dialog');
   body.append(
     radios.element,
@@ -202,8 +210,7 @@ export async function askSplit(options: SplitDialogOptions): Promise<SplitChoice
         input: stack(keepBookmarks.element, keepComments.element, keepForms.element),
       }),
     ),
-    field({ label: 'Folder', input: chooseFolder }),
-    folderLine,
+    folderRow,
     summary,
     examples,
   );

@@ -436,6 +436,23 @@ test.describe('straighten', () => {
     expect(result.skipped).toEqual(['4']);
   });
 
+  test('the dialog opens on the whole document, with a row for every page', async () => {
+    await open('skewed.pdf');
+    void app.run('organize.deskew');
+    const dialog = app.page.locator('#ops-deskew');
+    await dialog.waitFor({ timeout: 30_000 });
+    // Scanned documents are crooked page by page, so the dialog offers the whole document rather
+    // than the current page — including the one it could not measure, unticked and saying why.
+    await expect(dialog.locator('.ops-row')).toHaveCount(4);
+    await expect(dialog.locator('.ops-row input[type="checkbox"]:checked')).toHaveCount(3);
+    await expect(dialog.getByText('Skipped')).toBeVisible();
+    // Nothing in it is translucent, and the modal is opaque (the operator's rule).
+    const opacity = await dialog.evaluate((el) => getComputedStyle(el).opacity);
+    expect(opacity).toBe('1');
+    await app.page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => undefined);
+  });
+
   test('a straightened document saves and reopens straight', async () => {
     const path = stage('skewed.pdf', 'straightened.pdf');
     await openPath(path);
