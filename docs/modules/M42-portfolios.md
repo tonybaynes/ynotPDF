@@ -316,7 +316,13 @@ argument; this is the short form.
    not printed from HTML through Chromium. Printing gives richer layout but needs the main
    process and a real window, so it could not be unit-tested and would not run in a batch action.
    The template keeps the wording, the sizes and the columns out of the code.
-8. **A portfolio now opens on its files.** The document area shows the grid and the cover sheet
+8. **M12's Attachments panel stops editing a portfolio's files.** Its add, delete and describe
+   commands go straight to the engine, which knows nothing about folders, order or column values,
+   so using them on a portfolio would go behind the model's back and the next save would rebuild
+   the name tree without the change. On a portfolio they stand down and the Portfolio tab does
+   the work; opening and saving a file out are untouched, and a build without M42 behaves exactly
+   as it did.
+9. **A portfolio now opens on its files.** The document area shows the grid and the cover sheet
    is a tab away. M12's panel note said "the page behind this panel is the portfolio's cover
    sheet", which this made untrue, so the note and the acceptance test that asserted it were both
    updated rather than left to drift.
@@ -355,5 +361,5 @@ members on `Attachment`, three on `PdfCollection`); `rawdoc.ts` and `PdfiumEngin
 `Writer.ts` (one nullable plan section, one phase); `FullRewriteWriter` (calling it);
 `model.ts` (one write intent); `Document` (a `blobs` side table); M21's plan builder;
 `src/shared/ipc.ts` + `src/main/{ipc,files}.ts` (two channels); `main.ts` (registering the
-manifest); M12's attachments panel (the note, see decision 8); `scripts/make-fixtures.ts` and the
+manifest); M12's attachments panel and manifest (the note and the editing guard, decisions 8 and 9); `scripts/make-fixtures.ts` and the
 fixture corpus.

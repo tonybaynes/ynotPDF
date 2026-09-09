@@ -135,6 +135,27 @@ test.describe('a portfolio opens on its files', () => {
     expect((await state()).isPortfolio).toBe(false);
   });
 
+  test('the Attachments panel stops editing a portfolio’s files behind its back', async () => {
+    await openPortfolio();
+    // M12's add/delete/describe go straight to the engine, which knows nothing about folders,
+    // order or column values — so on a portfolio they stand down and the Portfolio tab does it.
+    expect(await app.isEnabled('attachments.add')).toBe(false);
+    expect(await app.isEnabled('attachments.delete')).toBe(false);
+    expect(await app.isEnabled('attachments.describe')).toBe(false);
+    // Reading one out is still fine, and so is the portfolio's own add.
+    expect(await app.isEnabled('attachments.saveAs')).toBe(true);
+    expect(await app.isEnabled('portfolio.addFiles')).toBe(true);
+    await closeAll();
+
+    const bytes = Array.from(readFileSync(join(FIXTURES, 'attachments.pdf')));
+    await app.run('file.openBytes', {
+      file: { path: 'C:/fixtures/attachments.pdf', name: 'attachments.pdf', bytes },
+    });
+    await app.page.waitForSelector('.viewer-content .page');
+    // An ordinary document with attachments is untouched by any of that.
+    expect(await app.isEnabled('attachments.add')).toBe(true);
+  });
+
   test('an ordinary document leaves the grid hidden', async () => {
     const bytes = Array.from(readFileSync(join(FIXTURES, 'attachments.pdf')));
     await app.run('file.openBytes', {
