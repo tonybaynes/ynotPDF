@@ -462,6 +462,33 @@ D:\Projects\ynotPDF\
 
 ---
 
+### Foxit is the feature reference only
+
+Never copy Foxit's icons, artwork, wording, help text or documentation. Icons: Lucide or our
+own; generic conventions shared across Adobe/Foxit/Tungsten (magnifier, hand, highlighter,
+stamp, padlock) are fine, Foxit's specific artwork is not. Help: written from scratch (M131). Logo: provisional.
+
+### Clean-room record — the app will undercut large competitors on price
+
+They cannot object to the price; they can object to their material in our product or to a
+name clash. Defence is provenance: (1) no code, artwork, strings, templates, fonts or help from
+any competitor — never inspect their installed files, learn as a user only; (2) every
+third-party component credited with its licence (Help → Open-source software, CI-gated);
+(3) each brief's Design decisions names the source of a behaviour (public docs, ISO 32000 —
+which carries Adobe's public patent licence for implementing PDF — or our own choice);
+(4) git history shows independent authorship from a plan written before any code. Before
+launch (operator): trademark search and registration for the name/logo, our own EULA and
+privacy policy drafted by a lawyer (M131's first-run screen shows them), marketing that never
+uses competitors' logos and makes only verifiable comparisons.
+
+### Licensing — the app is sold commercially
+
+Permissive licences only (MIT, BSD, ISC, Apache-2.0, 0BSD; OFL for fonts). CI gates npm
+(`scripts/check-licenses.ts`) and, from M131, binaries and credits too. **Never bundle or link:
+Ghostscript, MuPDF, iText (AGPL); Poppler, pdf2htmlEX, GPL-only Hunspell dictionaries (GPL).**
+MPL-2.0 programs (LibreOffice) may only be *called* when the user has installed them. Every
+component is credited on the generated Help → Open-source software page.
+
 ## 9. Conventions
 
 - TypeScript `strict`; no `any` without a comment. ESLint + Prettier on
