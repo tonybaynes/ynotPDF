@@ -43,8 +43,10 @@ jobs:
           # The runner image ships Google's Chrome apt repository, which intermittently serves a
           # package index whose hash does not match its own Release file. `apt-get update` then
           # exits 100 and the whole job dies at step three — for a repository nothing here
-          # installs from. Removing it first makes this step depend only on Ubuntu's own mirrors.
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          # installs from. Every source file that mentions it goes first, by content rather than
+          # by name: the image has used both `google-chrome.list` and the deb822 `.sources` form.
+          sudo grep -rlF dl.google.com /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null |
+            sudo xargs -r rm -f
           sudo apt-get update
           sudo apt-get install -y rpm libfuse2 xvfb
 

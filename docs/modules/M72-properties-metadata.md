@@ -299,6 +299,11 @@ is colourblind: black and red read as the same colour):**
   mode, layout, open action, viewer preferences, `/Lang` and the base URL, and is non-null only
   when the document carries the new `view` write intent; `PlannedMetadata` gains `custom` and
   `trapped`. A document nobody has retitled still plans nothing at all. ADR 0017.
+- **A properties edit normalises the two dates to UTC.** The writer's `isoToPdfDate` writes
+  `D:…Z00'00'`, so a file whose `/CreationDate` said `+01:00` comes back saying `Z` — the same
+  instant, one hour different on the clock face and not at all in what a reader is shown, because
+  the dialog formats from the instant. Checked against the operator's own files, where it is the
+  only difference a title change makes besides the title.
 - **Dates are shown in the reader's locale and stored in UTC.** Created and modified are
   `Intl.DateTimeFormat` in en-GB by default (PLAN §9); what goes into `/CreationDate` and
   `xmp:CreateDate` is ISO 8601. Modified is set by the save, not by the dialog, so a reader who
