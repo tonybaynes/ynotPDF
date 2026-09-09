@@ -51,7 +51,9 @@ interface PortfolioFile {
   readonly size: number | null;
   readonly created: string | null; // ISO 8601
   readonly modified: string | null;
-  readonly fields: Readonly<Record<string, string>>; // custom schema values (`/CI`)
+  readonly fields: Readonly<Record<string, string>>; // custom schema values (`/CI`), as strings;
+  // the writer restores each value's type from its column (`/N` → number, `/D` → date string),
+  // and the raw reader hands a date column's value over as ISO
   readonly order: number;
 }
 
@@ -68,7 +70,7 @@ interface Portfolio {
   readonly view: 'details' | 'tile' | 'hidden';
   readonly schema: ReadonlyArray<PortfolioColumn>;
   readonly sort: { readonly key: string; readonly ascending: boolean } | null;
-  readonly initialFile: string | null;
+  readonly initialFile: string | null; // the file's name; on disk `/D` is its name-tree key
   readonly folders: ReadonlyArray<PortfolioFolder>;
   readonly files: ReadonlyArray<PortfolioFile>;
 }

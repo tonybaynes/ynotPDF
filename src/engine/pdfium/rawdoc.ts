@@ -322,7 +322,11 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
               : resolved instanceof PDFName
                 ? resolved.decodeText()
                 : undefined);
-          if (text !== undefined) fields[key.decodeText()] = text;
+          // A date column's value is a PDF date; hand it over as ISO like every other date here,
+          // so the model treats it as one and the writer can put it back in the same form.
+          if (text !== undefined) {
+            fields[key.decodeText()] = /^D:\d{8}/.test(text) ? (pdfDate(text) ?? text) : text;
+          }
         }
       }
       embeddedFiles.push({

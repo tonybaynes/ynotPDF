@@ -15,6 +15,7 @@ import {
   KNOWN_ORDER_KEYS,
   ORDER_KEY,
   orderColumn,
+  parseTreeKey,
   rootFolder,
   ROOT_FOLDER_ID,
   STANDARD_COLUMNS,
@@ -84,7 +85,9 @@ export function portfolioFrom(
     view: collection.view === 'custom' ? empty.view : collection.view,
     schema: columns,
     sort,
-    initialFile: collection.initialFile ?? null,
+    // `/D` is a name-tree key (`<0>name`), or a bare name in a file that keys without folders.
+    initialFile:
+      collection.initialFile === undefined ? null : parseTreeKey(collection.initialFile).name,
     folders,
     files: files.map((f) => ({ ...f, order: renumbered.get(f.id) ?? f.order })),
     orderKey,

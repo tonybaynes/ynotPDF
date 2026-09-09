@@ -299,12 +299,17 @@ argument; this is the short form.
    leave an embedded stream byte-identical.
 3. **Folder membership is the name-tree key prefix**, `<ID>name` — what Acrobat 9 and Foxit
    both write, and what the operator's own portfolio uses. A key with no prefix is a file at the
-   top level, which is also what an ordinary attachment looks like.
+   top level, which is also what an ordinary attachment looks like. `/D`, the initial file, is
+   one of these keys and not a bare name: a viewer looks it up in the tree (ISO 32000 12.3.5).
 4. **Order is a schema column.** The format has no order array: a viewer shows what its `/Sort`
    column says. The reader's order is written into a custom number column, and the column is
    whichever key the file already uses (`/Reorder`, or Foxit's `foxit:Order`) so a portfolio made
    in Foxit keeps ordering on Foxit's own key rather than growing a second one beside it. A file
-   with none gets `ynot:Order`, hidden, with `/Sort` pointed at it.
+   with none gets `ynot:Order`, hidden, with `/Sort` pointed at it. **Every `/CI` value is
+   written in the type its column declares** — a number column gets numbers, a date column PDF
+   dates — because Foxit sorts `foxit:Order` numerically and silently falls back to name order
+   when the values are strings. That is what the operator's Foxit check found (2026-09-09), and
+   the writer test on the operator's own file now guards it.
 5. **The module folder is `src/renderer/modules/M42-portfolios/`**, not the `portfolio/` this
    brief's header says: PLAN §7 and §12 both name `<Mid>-<slug>`, and every other module follows
    it.
@@ -342,9 +347,16 @@ creators on File ▸ New, a context menu, and settings for M130.
 real engine, edits one description, saves through the real writer and compares every embedded
 stream byte for byte — on the synthetic `portfolio.pdf` fixture and, when it is on the machine,
 on the operator's own `Sample Portfolio.pdf`. `/Params` (size, dates, checksum) and `/Subtype`
-come back unchanged too. **Still outstanding: the operator has not yet confirmed that Foxit opens
-the saved file as a portfolio** — that is the one acceptance line this session could not check
-itself.
+come back unchanged too.
+
+**Foxit check, 2026-09-09.** The operator opened a copy of `Sample Portfolio.pdf` saved by
+ynotPDF in Foxit PDF Editor: it opened as a portfolio, in the tile layout the original uses,
+with all three files. The same check showed two faults the byte-level tests could not: the files
+came back sorted by name because the writer had turned Foxit's numeric `foxit:Order` values into
+strings, and `/D` was written as a bare file name rather than a name-tree key. Both were fixed on
+`fix/M42-portfolio-order` the same day, with writer tests — one of them on the operator's file.
+A synthetic portfolio saved by ynotPDF also opens in Foxit; it shows the details layout because
+its `/View` says so, which is the fixture's choice and not a fault.
 
 **Cross-OS render hashes.** `portfolio.pdf` was added to the corpus. Its hash was generated on
 Windows and written to all three platform files: every other standard-font fixture has byte-equal

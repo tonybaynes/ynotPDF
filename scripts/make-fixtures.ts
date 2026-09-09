@@ -894,7 +894,8 @@ async function portfolio(): Promise<void> {
     ef.set(PDFName.of('F'), streamRef);
     ef.set(PDFName.of('UF'), streamRef);
     const ci = ctx.obj({});
-    ci.set(PDFName.of('ynot:Order'), PDFString.of(String(entry.order)));
+    // A number column holds numbers: it is what Foxit writes, and what a viewer sorts on.
+    ci.set(PDFName.of('ynot:Order'), PDFNumber.of(entry.order));
     const spec = ctx.obj({});
     spec.set(PDFName.of('Type'), PDFName.of('Filespec'));
     spec.set(PDFName.of('F'), PDFString.of(entry.name));
@@ -967,7 +968,8 @@ async function portfolio(): Promise<void> {
   collection.set(PDFName.of('Schema'), ctx.register(schema));
   collection.set(PDFName.of('Sort'), ctx.register(sort));
   collection.set(PDFName.of('Reorder'), PDFName.of('ynot:Order'));
-  collection.set(PDFName.of('D'), PDFString.of('instruction.pdf'));
+  // `/D` is a name-tree key, not a file name.
+  collection.set(PDFName.of('D'), PDFString.of('<0>instruction.pdf'));
   collection.set(PDFName.of('Folders'), rootRef);
   doc.catalog.set(PDFName.of('Collection'), ctx.register(collection));
 
