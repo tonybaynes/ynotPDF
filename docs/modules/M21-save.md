@@ -103,7 +103,13 @@ must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
 vendored, adapted or copied (code, icons, fonts, data) goes in
-`resources/credits.json`. Permissive licences only._
+`resources/credits.json`. Permissive licences only (MIT, BSD, ISC,
+Apache-2.0, 0BSD, OFL for fonts; MPL-2.0 only for an external program the
+user installs, never bundled). **Never bundle or link, however tempting:
+Ghostscript, MuPDF, iText (AGPL); Poppler/pdftotext/pdftoppm, pdf2htmlEX,
+GPL-only Hunspell dictionaries (GPL).** Dual-licensed packages are used
+under their permissive option and credited as such (`node-forge` = BSD).
+The app is sold commercially; a copyleft component would block that._
 
 pdf-lib, chokidar (MIT).
 
@@ -123,7 +129,33 @@ pdf-lib, chokidar (MIT).
 ## Project context (identical in every module brief — read once per session)
 
 **ynotPDF** is a cross-platform (Windows / macOS / Linux) desktop PDF editor
-targeting the feature set of **Foxit PDF Editor 14**, with four colour themes
+targeting the feature set of **Foxit PDF Editor 14** — *feature set only*:
+**never copy Foxit's icons, artwork, wording, help text or documentation.**
+Industry-standard icon conventions shared by Adobe, Foxit, Tungsten and
+others (magnifier = zoom, hand = pan, highlighter, stamp, padlock, pen for
+sign) are generic — use them freely; what must not be copied is Foxit's
+*specific artwork*: its exact shapes, colours, pixel layouts. Icons come
+from **Lucide (ISC) first**; when it lacks one, **Tabler Icons (MIT)** or
+**Phosphor (MIT)** — same stroke style — then Fluent UI System Icons (MIT),
+Material Symbols / Remix Icon (Apache-2.0); otherwise draw our own in the
+Lucide stroke style. Not Font Awesome, Flaticon/Freepik, Noun Project or
+Icons8. **Clipart / illustrations** (stamps, cover sheets, help, first
+run): Openclipart and Public Domain Vectors (CC0), Wikimedia Commons (only
+files marked CC0 / public domain / CC BY), unDraw and Pixabay (own free
+commercial licences). Never CC BY-SA, BY-NC or BY-ND; never Freepik,
+Flaticon, Vecteezy, Clker or image-search results. CC0 preferred, CC BY
+acceptable. Every set and every clipart item used is entered in
+`resources/credits.json` with source URL, author and licence. Similar in
+idea or better, never traced or pixel-copied. **Never open, read, extract or decompile anything from an
+installed Foxit, Adobe or Tungsten product** (e.g. `C:\Program Files\Foxit
+Software\…`) — not icons, strings, templates, fonts, help, stamps or
+JavaScript; their EULAs forbid it and it would leave a copying trail. Learn
+their behaviour only as a user would, from the running app and public
+documentation. Record in your Design decisions where a feature's
+behaviour came from (public docs, the PDF spec ISO 32000, our own choice)
+— this file is the provenance record. Help and
+documentation are written from scratch for ynotPDF. *(Operator rule,
+2026-09-09.)* Four colour themes
 and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;
 `/d/Projects/ynotPDF` in Git Bash). Master plan: `PLAN.md`. Session rules:
 `CLAUDE.md`. This brief is one module of that plan.
