@@ -1,5 +1,5 @@
 /**
- * M41's own document command: re-aiming destinations (bookmarks, links, named destinations) at
+ * M41's own document commands: re-aiming destinations (bookmarks, links, named destinations) at
  * pages that have taken the place of the ones they used to point at.
  *
  * Everything else this module does to an open document is already a command somebody else owns.
@@ -19,10 +19,11 @@ import type { CommandJson } from '@core/Command';
 import type { Document, DocumentCommand } from '@core/Document';
 import type { ModelId } from '@core/Ids';
 import { registerCommandCodec } from '@core/Journal';
-import type { WriteIntent } from '@core/model';
+import type { ModelField, WriteIntent } from '@core/model';
 
 export const MERGE_COMMAND_ID = {
   repointDestinations: 'page.repointDestinations',
+  dropFields: 'form.dropFields',
 } as const;
 
 /** One destination and the page it should aim at from now on. */
@@ -95,6 +96,18 @@ export class RepointDestinationsCommand implements DocumentCommand {
 
 /** Registers this module's codecs so a recovery file can replay what it did (M21). */
 export function registerMergeCodecs(): void {
+  registerCommandCodec(MERGE_COMMAND_ID.dropFields, (doc, payload) => {
+    const record = asRecord(payload);
+    const raw = record['fieldIds'];
+    if (!Array.isArray(raw) || !raw.every((id) => typeof id === 'string')) return null;
+    const label = record['label'];
+    return new DropFieldsCommand(
+      doc,
+      raw as ModelId[],
+      typeof label === 'string' ? label : undefined,
+    );
+  });
+
   registerCommandCodec(MERGE_COMMAND_ID.repointDestinations, (doc, payload) => {
     const record = asRecord(payload);
     const raw = record['entries'];
@@ -141,4 +154,92 @@ export function repointingsFor(
     out.push({ destinationId: destination.id, pageId: replacement });
   }
   return out;
+}
+
+/**
+ * Drops fields that have no widget left on any page.
+ *
+ * Flattening a form bakes every widget into the page and takes it off; the field itself is a
+ * catalogue entry, not a page one, so nothing else removes it, and what would be left is a form
+ * whose fields no reader can fill, no viewer draws and every validator complains about.
+ *
+ * Model-only, with a `fields` write intent. M21's writer prunes the file's own `/AcroForm` of
+ * fields no surviving page reaches, so the model and the file agree without this command having
+ * to know anything about `/AcroForm`.
+ */
+export class DropFieldsCommand implements DocumentCommand {
+  readonly id = MERGE_COMMAND_ID.dropFields;
+  readonly label: string;
+  private readonly doc: Document;
+  private readonly fieldIds: ReadonlyArray<ModelId>;
+  private removed: Array<{ field: ModelField; index: number }> = [];
+
+  constructor(doc: Document, fieldIds: ReadonlyArray<ModelId>, label = 'Remove form fields') {
+    this.doc = doc;
+    this.fieldIds = [...fieldIds];
+    this.label = label;
+  }
+
+  get writeIntents(): ReadonlyArray<WriteIntent> {
+    return ['fields'];
+  }
+
+  get isNoop(): boolean {
+    return this.fieldIds.every((id) => this.doc.field(id) === null);
+  }
+
+  do(): Promise<void> {
+    this.removed = [];
+    // Highest index first, so the indexes recorded for the undo stay valid as the list shortens.
+    const ordered = [...this.fieldIds].sort(
+      (a, b) =>
+        this.doc.state.fields.findIndex((f) => f.id === b) -
+        this.doc.state.fields.findIndex((f) => f.id === a),
+    );
+    for (const id of ordered) {
+      const gone = this.doc.removeFieldRecord(id);
+      if (gone) this.removed.push(gone);
+    }
+    return Promise.resolve();
+  }
+
+  undo(): Promise<void> {
+    // Lowest index first, putting each field back where it was.
+    for (const { field, index } of [...this.removed].sort((a, b) => a.index - b.index)) {
+      this.doc.putFieldRecord(field, index);
+    }
+    return Promise.resolve();
+  }
+
+  toJSON(): CommandJson {
+    return { id: this.id, data: { fieldIds: this.fieldIds, label: this.label } };
+  }
+}
+
+/**
+ * Fields with no widget left on any page — what a flatten leaves behind.
+ *
+ * A whole *branch* has to go, not just its leaves. A radio group is one field with a widget per
+ * button, and a dotted name like `address.city` invents a parent to hold its children; drop the
+ * leaves and the parent is left holding nothing, which is just as much a field no reader can
+ * fill. So a field goes when neither it nor anything under it has a widget left.
+ */
+export function fieldsWithoutWidgets(doc: Document): ModelId[] {
+  const byId = new Map(doc.state.fields.map((field) => [field.id, field]));
+  const empty = new Map<ModelId, boolean>();
+
+  const isEmpty = (id: ModelId, depth = 0): boolean => {
+    const cached = empty.get(id);
+    if (cached !== undefined) return cached;
+    const field = byId.get(id);
+    // A cycle in the tree would be a model bug, but it must not hang a flatten.
+    if (!field || depth > 64) return false;
+    empty.set(id, false);
+    const answer =
+      field.widgets.length === 0 && field.childIds.every((child) => isEmpty(child, depth + 1));
+    empty.set(id, answer);
+    return answer;
+  };
+
+  return doc.state.fields.filter((field) => isEmpty(field.id)).map((field) => field.id);
 }

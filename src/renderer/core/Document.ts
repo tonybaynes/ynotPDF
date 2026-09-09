@@ -624,6 +624,46 @@ export class Document {
     if (name !== '') this.events.emit({ type: 'field:changed', fieldId, name });
   }
 
+  /**
+   * Takes a field out of the tree, unhooking it from its parent (M41).
+   *
+   * Answers what was removed and where it was, so an undo can put it back exactly. A field with
+   * no widget left on any page is what flattening a form produces, and one left in the tree is a
+   * field no reader can fill and every validator complains about.
+   */
+  removeFieldRecord(fieldId: ModelId): { field: ModelField; index: number } | null {
+    const index = this.state.fields.findIndex((f) => f.id === fieldId);
+    const field = this.state.fields[index];
+    if (index < 0 || !field) return null;
+    this.store.set((s) => ({
+      fields: s.fields
+        .filter((f) => f.id !== fieldId)
+        .map((f) =>
+          f.childIds.includes(fieldId)
+            ? { ...f, childIds: f.childIds.filter((id) => id !== fieldId) }
+            : f,
+        ),
+    }));
+    this.events.emit({ type: 'field:changed', fieldId, name: field.name });
+    return { field, index };
+  }
+
+  /** Puts a removed field back where it was, parent link included (M41). */
+  putFieldRecord(field: ModelField, index: number): void {
+    this.store.set((s) => {
+      const fields = s.fields
+        .filter((f) => f.id !== field.id)
+        .map((f) =>
+          f.id === field.parentId && !f.childIds.includes(field.id)
+            ? { ...f, childIds: [...f.childIds, field.id] }
+            : f,
+        );
+      fields.splice(Math.max(0, Math.min(index, fields.length)), 0, field);
+      return { fields };
+    });
+    this.events.emit({ type: 'field:changed', fieldId: field.id, name: field.name });
+  }
+
   /** Points a destination at another page, or at none when its page has been removed. */
   setDestinationPageRecord(destinationId: ModelId, pageId: ModelId | null): void {
     this.store.set((s) => ({

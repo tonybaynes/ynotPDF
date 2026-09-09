@@ -70,6 +70,14 @@ function boolArg(args: CommandArgs, key: string): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
+/** Accepts a `Uint8Array`, an `ArrayBuffer` or the plain array the e2e bridge produces. */
+function toBytes(value: unknown): Uint8Array | null {
+  if (value instanceof Uint8Array) return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (Array.isArray(value)) return Uint8Array.from(value as number[]);
+  return null;
+}
+
 function boxArg(args: CommandArgs): PageBoxName | undefined {
   const given = stringArg(args, 'box');
   return CROP_BOXES.find((choice) => choice.value === given)?.value;
@@ -145,8 +153,9 @@ const COMBINE: CommandSpec = {
     if (Array.isArray(given)) {
       // The e2e path: `{ files: [{ name, bytes }] }`, no picker and no dialog.
       for (const file of given as ReadonlyArray<{ name?: unknown; bytes?: unknown }>) {
-        if (typeof file.name !== 'string' || !(file.bytes instanceof Uint8Array)) continue;
-        const source = await service.sourceFor({ name: file.name, bytes: file.bytes });
+        const bytes = toBytes(file.bytes);
+        if (typeof file.name !== 'string' || bytes === null) continue;
+        const source = await service.sourceFor({ name: file.name, bytes });
         entries.push(entryFor(source.name, source.bytes));
       }
       if (entries.length === 0) throw new OpFailed('There are no files to combine');

@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { PDFStream } from 'pdf-lib';
-import { PDFArray, PDFDict, PDFDocument, PDFName } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName } from 'pdf-lib';
 import { flatten, placementMatrix } from '@engine/ops/flatten';
 import { OpCancelled } from '@engine/ops/types';
 
@@ -173,5 +173,153 @@ describe('flatten', () => {
     await expect(
       flatten(fixture('annotated.pdf'), {}, { signal: controller.signal }),
     ).rejects.toBeInstanceOf(OpCancelled);
+  });
+});
+
+describe('drawing what the file did not', () => {
+  /** A document with one annotation that has no `/AP` of its own. */
+  async function undrawn(
+    subtype: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<Uint8Array> {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([200, 200]);
+    const ctx = doc.context;
+    page.node.set(
+      PDFName.of('Annots'),
+      ctx.obj([
+        ctx.obj({
+          Type: 'Annot',
+          Subtype: subtype,
+          Rect: [20, 20, 120, 80],
+          C: [1, 0, 0],
+          F: 4,
+          ...extra,
+        }),
+      ]),
+    );
+    return await doc.save({ addDefaultPage: false, updateFieldAppearances: false });
+  }
+
+  it('draws a square the file left to the viewer, with the same generators M21 uses', async () => {
+    const result = await flatten(await undrawn('Square'));
+    expect(result.flattened).toBe(1);
+    const after = await PDFDocument.load(result.bytes);
+    expect(annotationCount(after)).toBe(0);
+    expect(xobjectNames(after).some((n) => n.startsWith('/Fx'))).toBe(true);
+  });
+
+  it('draws a highlight from its quads', async () => {
+    const result = await flatten(
+      await undrawn('Highlight', { QuadPoints: [20, 80, 120, 80, 20, 20, 120, 20] }),
+    );
+    expect(result.flattened).toBe(1);
+  });
+
+  it('draws an ink stroke from its paths', async () => {
+    const result = await flatten(
+      await undrawn('Ink', { InkList: [[20, 20, 60, 60, 100, 30]], BS: { W: 3 } }),
+    );
+    expect(result.flattened).toBe(1);
+  });
+
+  it('leaves a subtype nothing knows how to draw, and says so', async () => {
+    const result = await flatten(await undrawn('Screen'));
+    expect(result.flattened).toBe(0);
+    expect(result.warnings.join(' ')).toContain('no drawing of its own');
+    expect(annotationCount(await PDFDocument.load(result.bytes))).toBe(1);
+  });
+
+  it('leaves an annotation with no position alone', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([200, 200]);
+    page.node.set(
+      PDFName.of('Annots'),
+      doc.context.obj([doc.context.obj({ Type: 'Annot', Subtype: 'Square', C: [0, 0, 1] })]),
+    );
+    const bytes = await doc.save({ addDefaultPage: false, updateFieldAppearances: false });
+    const result = await flatten(bytes);
+    expect(result.flattened).toBe(0);
+    expect(result.warnings.join(' ')).toMatch(/no position|no drawing/);
+  });
+
+  it('removes an unticked box rather than leaving it as a live field', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([200, 200]);
+    const ctx = doc.context;
+    // `/AS /Off` with an `/AP /N` that has only an "on" state: nothing to draw.
+    const on = ctx.register(
+      ctx.flateStream('', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 10, 10] }),
+    );
+    const widget = ctx.register(
+      ctx.obj({
+        Type: 'Annot',
+        Subtype: 'Widget',
+        FT: 'Btn',
+        T: PDFHexString.fromText('agree'),
+        Rect: [10, 10, 30, 30],
+        AS: 'Off',
+        AP: ctx.obj({ N: ctx.obj({ Yes: on }) }),
+      }),
+    );
+    page.node.set(PDFName.of('Annots'), ctx.obj([widget]));
+    doc.catalog.set(PDFName.of('AcroForm'), ctx.obj({ Fields: ctx.obj([widget]) }));
+    const bytes = await doc.save({ addDefaultPage: false, updateFieldAppearances: false });
+
+    const result = await flatten(bytes);
+    expect(result.flattened).toBe(0);
+    expect(result.removed).toBe(1);
+    const after = await PDFDocument.load(result.bytes);
+    expect(annotationCount(after)).toBe(0);
+    expect(after.catalog.get(PDFName.of('AcroForm'))).toBeUndefined();
+  });
+
+  it('uses the appearance the host supplies for a widget that has none (M61’s hook)', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([200, 200]);
+    const ctx = doc.context;
+    const widget = ctx.register(
+      ctx.obj({
+        Type: 'Annot',
+        Subtype: 'Widget',
+        FT: 'Tx',
+        T: PDFHexString.fromText('city'),
+        V: PDFHexString.fromText('York'),
+        Rect: [10, 10, 110, 40],
+      }),
+    );
+    page.node.set(PDFName.of('Annots'), ctx.obj([widget]));
+    doc.catalog.set(PDFName.of('AcroForm'), ctx.obj({ Fields: ctx.obj([widget]) }));
+    const bytes = await doc.save({ addDefaultPage: false, updateFieldAppearances: false });
+
+    const asked: string[] = [];
+    const result = await flatten(bytes, {
+      appearances: (field) => {
+        asked.push(`${field.fieldType} ${field.fieldName}=${field.value}`);
+        return Promise.resolve(new TextEncoder().encode('0 0 1 rg 0 0 100 30 re f'));
+      },
+    });
+    expect(asked).toEqual(['/Tx city=York']);
+    expect(result.flattened).toBe(1);
+    const after = await PDFDocument.load(result.bytes);
+    expect(annotationCount(after)).toBe(0);
+  });
+
+  it('keeps a widget the host declines to draw', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([200, 200]);
+    const ctx = doc.context;
+    const widget = ctx.register(
+      ctx.obj({ Type: 'Annot', Subtype: 'Widget', FT: 'Tx', Rect: [10, 10, 110, 40] }),
+    );
+    page.node.set(PDFName.of('Annots'), ctx.obj([widget]));
+    doc.catalog.set(PDFName.of('AcroForm'), ctx.obj({ Fields: ctx.obj([widget]) }));
+    const bytes = await doc.save({ addDefaultPage: false, updateFieldAppearances: false });
+
+    const result = await flatten(bytes, { appearances: () => Promise.resolve(null) });
+    expect(result.flattened).toBe(0);
+    const after = await PDFDocument.load(result.bytes);
+    expect(annotationCount(after)).toBe(1);
+    expect(after.catalog.get(PDFName.of('AcroForm'))).toBeDefined();
   });
 });

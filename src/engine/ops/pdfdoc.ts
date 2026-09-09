@@ -35,6 +35,32 @@ export const BOX_KEYS: Readonly<Record<PageBoxName, string>> = {
   art: 'ArtBox',
 };
 
+/**
+ * `ctx.lookupMaybe(value, Type)`, but answering `null` instead of throwing when the object turns
+ * out to be something else.
+ *
+ * pdf-lib raises `UnexpectedObjectTypeError` on a type mismatch, which is right for a library
+ * asserting its own invariants and quite wrong here: `/Dest` is legally an array, a name *or* a
+ * string, `/Rect` is an array in a healthy file and anything at all in a damaged one, and an op
+ * that throws on the first oddity would refuse to combine a folder because one file in it is
+ * eccentric. Every lookup in this folder goes through here.
+ */
+export function pick<T extends PDFObject>(
+  ctx: PDFContext,
+  value: PDFObject | undefined,
+  // The class object itself. Typed by what an instance *is* rather than by a constructor
+  // signature, because pdf-lib's classes keep their constructors private or protected.
+  type: { readonly prototype: T },
+): T | null {
+  if (value === undefined) return null;
+  try {
+    const resolved = ctx.lookupMaybe(value, type as never) as T | undefined;
+    return resolved ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** US Letter, which is what a PDF reader falls back to when a page has no usable MediaBox. */
 export const FALLBACK_BOX: PdfRect = { x0: 0, y0: 0, x1: 612, y1: 792 };
 
@@ -91,10 +117,10 @@ export function readBox(leaf: PDFPageLeaf, box: PageBoxName): PdfRect | null {
   const key = PDFName.of(BOX_KEYS[box]);
   // MediaBox and CropBox are inheritable (PDF 7.7.3.4); the other three are not.
   const raw = box === 'media' || box === 'crop' ? leaf.getInheritableAttribute(key) : leaf.get(key);
-  const array = leaf.context.lookupMaybe(raw, PDFArray);
+  const array = pick(leaf.context, raw, PDFArray);
   if (!array || array.size() < 4) return null;
   const at = (i: number): number => {
-    const value = leaf.context.lookupMaybe(array.get(i), PDFNumber);
+    const value = pick(leaf.context, array.get(i), PDFNumber);
     return value ? value.asNumber() : Number.NaN;
   };
   const rect = normalizeRect({ x0: at(0), y0: at(1), x1: at(2), y1: at(3) });
@@ -128,10 +154,7 @@ export function rectArray(ctx: PDFContext, r: PdfRect): PDFArray {
 
 /** `/Rotate`, normalised to 0/90/180/270 clockwise. */
 export function readRotation(leaf: PDFPageLeaf): number {
-  const raw = leaf.context.lookupMaybe(
-    leaf.getInheritableAttribute(PDFName.of('Rotate')),
-    PDFNumber,
-  );
+  const raw = pick(leaf.context, leaf.getInheritableAttribute(PDFName.of('Rotate')), PDFNumber);
   const degrees = raw ? raw.asNumber() : 0;
   return (((Math.round(degrees / 90) % 4) + 4) % 4) * 90;
 }
@@ -161,7 +184,7 @@ export interface FlatBookmark {
  */
 export function readOutline(doc: PDFDocument): FlatBookmark[] {
   const ctx = doc.context;
-  const root = ctx.lookupMaybe(doc.catalog.get(PDFName.of('Outlines')), PDFDict);
+  const root = pick(ctx, doc.catalog.get(PDFName.of('Outlines')), PDFDict);
   if (!root) return [];
   const pageIndexOf = new Map<string, number>();
   doc.getPages().forEach((page, i) => pageIndexOf.set(page.ref.toString(), i));
@@ -174,9 +197,9 @@ export function readOutline(doc: PDFDocument): FlatBookmark[] {
     const direct = item.get(PDFName.of('Dest'));
     const resolved = resolveDest(ctx, direct, named);
     if (resolved !== null) return pageOf(resolved);
-    const action = ctx.lookupMaybe(item.get(PDFName.of('A')), PDFDict);
+    const action = pick(ctx, item.get(PDFName.of('A')), PDFDict);
     if (!action) return null;
-    if (ctx.lookupMaybe(action.get(PDFName.of('S')), PDFName)?.asString() !== '/GoTo') {
+    if (pick(ctx, action.get(PDFName.of('S')), PDFName)?.asString() !== '/GoTo') {
       return null;
     }
     const viaAction = resolveDest(ctx, action.get(PDFName.of('D')), named);
@@ -186,21 +209,21 @@ export function readOutline(doc: PDFDocument): FlatBookmark[] {
   const pageOf = (dest: PDFArray): number | null => {
     const first = dest.get(0);
     if (first instanceof PDFRef) return pageIndexOf.get(first.toString()) ?? null;
-    const number = ctx.lookupMaybe(first, PDFNumber);
+    const number = pick(ctx, first, PDFNumber);
     return number ? number.asNumber() : null;
   };
 
   const walk = (firstRaw: PDFObject | undefined, parent: number | null, depth: number): void => {
     if (depth > 32) return;
-    let node = ctx.lookupMaybe(firstRaw, PDFDict);
+    let node = pick(ctx, firstRaw, PDFDict);
     let guard = 0;
     while (node && guard++ < 8192) {
       if (seen.has(node)) break;
       seen.add(node);
       const title = readText(ctx, node.get(PDFName.of('Title')));
-      const flags = ctx.lookupMaybe(node.get(PDFName.of('F')), PDFNumber);
+      const flags = pick(ctx, node.get(PDFName.of('F')), PDFNumber);
       const bits = flags ? flags.asNumber() : 0;
-      const count = ctx.lookupMaybe(node.get(PDFName.of('Count')), PDFNumber);
+      const count = pick(ctx, node.get(PDFName.of('Count')), PDFNumber);
       const index = out.length;
       out.push({
         title,
@@ -212,7 +235,7 @@ export function readOutline(doc: PDFDocument): FlatBookmark[] {
         open: count ? count.asNumber() > 0 : false,
       });
       walk(node.get(PDFName.of('First')), index, depth + 1);
-      node = ctx.lookupMaybe(node.get(PDFName.of('Next')), PDFDict);
+      node = pick(ctx, node.get(PDFName.of('Next')), PDFDict);
     }
   };
 
@@ -229,18 +252,18 @@ function readNameTreeDests(doc: PDFDocument): Map<string, PDFArray> {
     if (array && !out.has(name)) out.set(name, array);
   };
 
-  const legacy = ctx.lookupMaybe(doc.catalog.get(PDFName.of('Dests')), PDFDict);
+  const legacy = pick(ctx, doc.catalog.get(PDFName.of('Dests')), PDFDict);
   if (legacy) {
     for (const [key, value] of legacy.entries()) put(key.asString().replace(/^\//, ''), value);
   }
 
-  const names = ctx.lookupMaybe(doc.catalog.get(PDFName.of('Names')), PDFDict);
-  const dests = names ? ctx.lookupMaybe(names.get(PDFName.of('Dests')), PDFDict) : undefined;
+  const names = pick(ctx, doc.catalog.get(PDFName.of('Names')), PDFDict);
+  const dests = names ? pick(ctx, names.get(PDFName.of('Dests')), PDFDict) : undefined;
   if (!dests) return out;
 
   const visit = (node: PDFDict, depth: number): void => {
     if (depth > 32) return;
-    const pairs = ctx.lookupMaybe(node.get(PDFName.of('Names')), PDFArray);
+    const pairs = pick(ctx, node.get(PDFName.of('Names')), PDFArray);
     if (pairs) {
       for (let i = 0; i + 1 < pairs.size(); i += 2) {
         const key = pairs.get(i);
@@ -249,10 +272,10 @@ function readNameTreeDests(doc: PDFDocument): Map<string, PDFArray> {
         if (name !== null) put(name, pairs.get(i + 1));
       }
     }
-    const kids = ctx.lookupMaybe(node.get(PDFName.of('Kids')), PDFArray);
+    const kids = pick(ctx, node.get(PDFName.of('Kids')), PDFArray);
     if (!kids) return;
     for (let i = 0; i < kids.size(); i++) {
-      const kid = ctx.lookupMaybe(kids.get(i), PDFDict);
+      const kid = pick(ctx, kids.get(i), PDFDict);
       if (kid) visit(kid, depth + 1);
     }
   };
@@ -262,11 +285,11 @@ function readNameTreeDests(doc: PDFDocument): Map<string, PDFArray> {
 
 /** A destination value that may be the array itself or a `/D` wrapper around it. */
 function destArray(ctx: PDFContext, value: PDFObject | undefined): PDFArray | null {
-  const array = ctx.lookupMaybe(value, PDFArray);
+  const array = pick(ctx, value, PDFArray);
   if (array) return array;
-  const dict = ctx.lookupMaybe(value, PDFDict);
+  const dict = pick(ctx, value, PDFDict);
   if (!dict) return null;
-  return ctx.lookupMaybe(dict.get(PDFName.of('D')), PDFArray) ?? null;
+  return pick(ctx, dict.get(PDFName.of('D')), PDFArray) ?? null;
 }
 
 /** Resolves `/Dest` in any of its three spellings to the destination array. */
@@ -278,7 +301,7 @@ function resolveDest(
   if (value === undefined) return null;
   const direct = destArray(ctx, value);
   if (direct) return direct;
-  const asName = ctx.lookupMaybe(value, PDFName);
+  const asName = pick(ctx, value, PDFName);
   if (asName) return named.get(asName.asString().replace(/^\//, '')) ?? null;
   const raw = value instanceof PDFRef ? ctx.lookup(value) : value;
   if (raw instanceof PDFString || raw instanceof PDFHexString) {
@@ -296,10 +319,10 @@ export function readText(ctx: PDFContext, value: PDFObject | undefined): string 
 
 /** A three-number colour array as `0xRRGGBB`. */
 function readColor(ctx: PDFContext, value: PDFObject | undefined): number | null {
-  const array = ctx.lookupMaybe(value, PDFArray);
+  const array = pick(ctx, value, PDFArray);
   if (!array || array.size() < 3) return null;
   const channel = (i: number): number => {
-    const n = ctx.lookupMaybe(array.get(i), PDFNumber);
+    const n = pick(ctx, array.get(i), PDFNumber);
     const v = n ? n.asNumber() : 0;
     return Math.max(0, Math.min(255, Math.round(v * 255)));
   };

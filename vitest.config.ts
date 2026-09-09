@@ -33,6 +33,8 @@ export default defineConfig({
         'src/engine/security/**/*.ts',
         // M91's converters: pure over bytes, so all of them are gated.
         'src/engine/create/**/*.ts',
+        // M41's document operations: pure over bytes and over pixels, so all of them are gated.
+        'src/engine/ops/**/*.ts',
         'src/shared/pageSizes.ts',
         'scripts/lib/**/*.ts',
         'src/renderer/theme/**/*.ts',
@@ -184,6 +186,25 @@ export default defineConfig({
         'src/renderer/modules/M40-organise-pages/dialogs.ts',
         'src/renderer/modules/M40-organise-pages/manifest.ts',
         'src/renderer/modules/M40-organise-pages/dnd.ts',
+        /*
+         * M41's DOM and shell half, for the same reason again: `MergeService` orchestrates the
+         * dialogs, the Worker, the engine and the tab strip; the five dialogs and the crop tool
+         * only exist once there is a document to drag a rectangle on; and `ops.worker.ts` is a
+         * Worker entry. All are proved by Playwright in `test/e2e/document-ops.spec.ts`, and
+         * everything they are built out of — the whole of `src/engine/ops/`, the commands and
+         * the settings — is pure and gated above and below. `OpsClient` is gated: its two paths
+         * are what a unit test can drive through a fake port.
+         */
+        'src/renderer/modules/M41-merge-split-crop/MergeService.ts',
+        'src/renderer/modules/M41-merge-split-crop/manifest.ts',
+        'src/renderer/modules/M41-merge-split-crop/combineDialog.ts',
+        'src/renderer/modules/M41-merge-split-crop/splitDialog.ts',
+        'src/renderer/modules/M41-merge-split-crop/cropDialog.ts',
+        'src/renderer/modules/M41-merge-split-crop/flattenDialog.ts',
+        'src/renderer/modules/M41-merge-split-crop/deskewDialog.ts',
+        'src/renderer/modules/M41-merge-split-crop/cropTool.ts',
+        'src/renderer/modules/M41-merge-split-crop/fields.ts',
+        'src/renderer/modules/M41-merge-split-crop/ops.worker.ts',
       ],
       reporter: ['text', 'lcov'],
       thresholds: {
@@ -469,6 +490,31 @@ export default defineConfig({
           lines: 85,
           functions: 80,
           statements: 85,
+        },
+        // M41's operations. These decide what a combined, split, cropped, flattened or
+        // straightened file actually says, so the gate is high; the two detectors are pure over
+        // pixels and gated with them.
+        'src/engine/ops/combine.ts': { lines: 85, functions: 85, statements: 85 },
+        'src/engine/ops/split.ts': { lines: 90, functions: 95, statements: 90 },
+        'src/engine/ops/crop.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/engine/ops/flatten.ts': { lines: 80, functions: 90, statements: 80 },
+        'src/engine/ops/deskew.ts': { lines: 90, functions: 95, statements: 90 },
+        'src/engine/ops/outline.ts': { lines: 90, functions: 95, statements: 90 },
+        'src/engine/ops/pdfdoc.ts': { lines: 80, functions: 90, statements: 80 },
+        'src/renderer/modules/M41-merge-split-crop/commands.ts': {
+          lines: 85,
+          functions: 85,
+          statements: 85,
+        },
+        'src/renderer/modules/M41-merge-split-crop/settings.ts': {
+          lines: 85,
+          functions: 80,
+          statements: 85,
+        },
+        'src/renderer/modules/M41-merge-split-crop/OpsClient.ts': {
+          lines: 75,
+          functions: 80,
+          statements: 75,
         },
       },
     },

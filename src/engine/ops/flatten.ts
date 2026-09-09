@@ -36,7 +36,7 @@ import type { PdfRect } from '@shared/pdf';
 import type { AnnotationSubtype } from '../PdfEngine';
 import { appearanceInput, createAppearanceService } from '../appearance';
 import { colorArrayToRgb } from '../pdfium/rawdoc';
-import { loadPdf, savePdf } from './pdfdoc';
+import { loadPdf, pick, savePdf } from './pdfdoc';
 import { OpFailed, checkCancelled, type OpContext, type OpResult } from './types';
 
 export interface FlattenOptions {
@@ -169,12 +169,12 @@ async function flattenPage(
 
   for (let i = 0; i < annots.size(); i++) {
     const raw = annots.get(i);
-    const dict = ctx.lookupMaybe(raw, PDFDict);
+    const dict = pick(ctx, raw, PDFDict);
     if (!dict) continue;
     const keep = (): void => {
       survivors.push(raw instanceof PDFRef ? raw : dict);
     };
-    const subtype = ctx.lookupMaybe(dict.get(PDFName.of('Subtype')), PDFName)?.asString() ?? '';
+    const subtype = pick(ctx, dict.get(PDFName.of('Subtype')), PDFName)?.asString() ?? '';
     const isWidget = subtype === '/Widget';
     if (isWidget ? !options.forms : !options.annotations) {
       if (isWidget) out.widgetsLeft++;
@@ -188,7 +188,7 @@ async function flattenPage(
       continue;
     }
 
-    const flags = ctx.lookupMaybe(dict.get(PDFName.of('F')), PDFNumber)?.asNumber() ?? 0;
+    const flags = pick(ctx, dict.get(PDFName.of('F')), PDFNumber)?.asNumber() ?? 0;
     const hidden = (flags & 2) !== 0 || (flags & 32) !== 0;
     if (options.remove || hidden) {
       out.removed++;
@@ -260,7 +260,7 @@ async function flattenPage(
 type Appearance = { stream: PDFStream; ref: PDFRef } | 'nothing' | null;
 
 function normalAppearance(ctx: PDFContext, annot: PDFDict): Appearance {
-  const ap = ctx.lookupMaybe(annot.get(PDFName.of('AP')), PDFDict);
+  const ap = pick(ctx, annot.get(PDFName.of('AP')), PDFDict);
   if (!ap) return null;
   const raw = ap.get(PDFName.of('N'));
   if (raw === undefined) return null;
@@ -269,7 +269,7 @@ function normalAppearance(ctx: PDFContext, annot: PDFDict): Appearance {
     return raw instanceof PDFRef ? { stream: resolved, ref: raw } : null;
   }
   if (!(resolved instanceof PDFDict)) return null;
-  const state = ctx.lookupMaybe(annot.get(PDFName.of('AS')), PDFName);
+  const state = pick(ctx, annot.get(PDFName.of('AS')), PDFName);
   const entries = resolved.entries();
   if (state) {
     const chosen = entries.find(([key]) => key.asString() === state.asString());
@@ -289,10 +289,9 @@ function normalAppearance(ctx: PDFContext, annot: PDFDict): Appearance {
 
 /** `/Rect`, normalised. */
 function rectOf(ctx: PDFContext, annot: PDFDict): PdfRect | null {
-  const array = ctx.lookupMaybe(annot.get(PDFName.of('Rect')), PDFArray);
+  const array = pick(ctx, annot.get(PDFName.of('Rect')), PDFArray);
   if (!array || array.size() < 4) return null;
-  const at = (i: number): number =>
-    ctx.lookupMaybe(array.get(i), PDFNumber)?.asNumber() ?? Number.NaN;
+  const at = (i: number): number => pick(ctx, array.get(i), PDFNumber)?.asNumber() ?? Number.NaN;
   const [left, right] = [at(0), at(2)];
   const [bottom, top] = [at(1), at(3)];
   if (![left, right, bottom, top].every((n) => Number.isFinite(n))) return null;
@@ -316,22 +315,21 @@ export function placementMatrix(
   rect: PdfRect,
 ): [number, number, number, number, number, number] {
   const dict = stream.dict;
-  const bboxArray = ctx.lookupMaybe(dict.get(PDFName.of('BBox')), PDFArray);
+  const bboxArray = pick(ctx, dict.get(PDFName.of('BBox')), PDFArray);
   if (!bboxArray || bboxArray.size() < 4) return [1, 0, 0, 1, 0, 0];
-  const n = (i: number): number => ctx.lookupMaybe(bboxArray.get(i), PDFNumber)?.asNumber() ?? 0;
+  const n = (i: number): number => pick(ctx, bboxArray.get(i), PDFNumber)?.asNumber() ?? 0;
   const bbox: PdfRect = {
     x0: Math.min(n(0), n(2)),
     y0: Math.min(n(1), n(3)),
     x1: Math.max(n(0), n(2)),
     y1: Math.max(n(1), n(3)),
   };
-  const matrixArray = ctx.lookupMaybe(dict.get(PDFName.of('Matrix')), PDFArray);
+  const matrixArray = pick(ctx, dict.get(PDFName.of('Matrix')), PDFArray);
   const m: number[] = matrixArray
     ? Array.from(
         { length: 6 },
         (_, i) =>
-          ctx.lookupMaybe(matrixArray.get(i), PDFNumber)?.asNumber() ??
-          (i === 0 || i === 3 ? 1 : 0),
+          pick(ctx, matrixArray.get(i), PDFNumber)?.asNumber() ?? (i === 0 || i === 3 ? 1 : 0),
       )
     : [1, 0, 0, 1, 0, 0];
 
@@ -360,18 +358,15 @@ export function placementMatrix(
 function addXObject(page: PDFPage, name: string, ref: PDFRef): void {
   const ctx = page.doc.context;
   const leaf = page.node;
-  let resources = ctx.lookupMaybe(leaf.get(PDFName.of('Resources')), PDFDict);
+  let resources = pick(ctx, leaf.get(PDFName.of('Resources')), PDFDict);
   if (!resources) {
     // Do not write into an inherited `/Resources`: it belongs to every page under that node.
-    const inherited = ctx.lookupMaybe(
-      leaf.getInheritableAttribute(PDFName.of('Resources')),
-      PDFDict,
-    );
+    const inherited = pick(ctx, leaf.getInheritableAttribute(PDFName.of('Resources')), PDFDict);
     resources = ctx.obj({});
     if (inherited) for (const [key, value] of inherited.entries()) resources.set(key, value);
     leaf.set(PDFName.of('Resources'), resources);
   }
-  let xobjects = ctx.lookupMaybe(resources.get(PDFName.of('XObject')), PDFDict);
+  let xobjects = pick(ctx, resources.get(PDFName.of('XObject')), PDFDict);
   if (!xobjects) {
     xobjects = ctx.obj({});
     resources.set(PDFName.of('XObject'), xobjects);
@@ -385,7 +380,7 @@ export function appendContent(doc: PDFDocument, page: PDFPage, content: string):
   const ref = ctx.register(ctx.flateStream(content));
   const key = PDFName.of('Contents');
   const existing = page.node.get(key);
-  const asArray = ctx.lookupMaybe(existing, PDFArray);
+  const asArray = pick(ctx, existing, PDFArray);
   if (asArray) {
     asArray.push(ref);
     return;
@@ -423,7 +418,7 @@ function drawItOurselves(
       rect,
       color: readColorEntry(ctx, annot, 'C'),
       interiorColor: readColorEntry(ctx, annot, 'IC'),
-      opacity: ctx.lookupMaybe(annot.get(PDFName.of('CA')), PDFNumber)?.asNumber() ?? null,
+      opacity: pick(ctx, annot.get(PDFName.of('CA')), PDFNumber)?.asNumber() ?? null,
       borderWidth: borderWidthOf(ctx, annot),
       quadPoints: numbersOf(ctx, annot, 'QuadPoints'),
       vertices: pointsOf(numbersOf(ctx, annot, 'Vertices')),
@@ -457,31 +452,31 @@ const APPEARANCES = /* @__PURE__ */ createAppearanceService();
 
 /** A `/C`- or `/IC`-style colour array as `0xRRGGBB`. */
 function readColorEntry(ctx: PDFContext, annot: PDFDict, key: string): number | null {
-  const array = ctx.lookupMaybe(annot.get(PDFName.of(key)), PDFArray);
+  const array = pick(ctx, annot.get(PDFName.of(key)), PDFArray);
   if (!array) return null;
   const components: number[] = [];
   for (let i = 0; i < array.size(); i++) {
-    components.push(ctx.lookupMaybe(array.get(i), PDFNumber)?.asNumber() ?? 0);
+    components.push(pick(ctx, array.get(i), PDFNumber)?.asNumber() ?? 0);
   }
   return colorArrayToRgb(components) ?? null;
 }
 
 /** `/BS /W`, falling back to the old `/Border` array's third number. */
 function borderWidthOf(ctx: PDFContext, annot: PDFDict): number | null {
-  const bs = ctx.lookupMaybe(annot.get(PDFName.of('BS')), PDFDict);
-  const width = bs ? ctx.lookupMaybe(bs.get(PDFName.of('W')), PDFNumber) : undefined;
+  const bs = pick(ctx, annot.get(PDFName.of('BS')), PDFDict);
+  const width = bs ? pick(ctx, bs.get(PDFName.of('W')), PDFNumber) : undefined;
   if (width) return width.asNumber();
-  const border = ctx.lookupMaybe(annot.get(PDFName.of('Border')), PDFArray);
+  const border = pick(ctx, annot.get(PDFName.of('Border')), PDFArray);
   if (!border || border.size() < 3) return null;
-  return ctx.lookupMaybe(border.get(2), PDFNumber)?.asNumber() ?? null;
+  return pick(ctx, border.get(2), PDFNumber)?.asNumber() ?? null;
 }
 
 function numbersOf(ctx: PDFContext, annot: PDFDict, key: string): number[] {
-  const array = ctx.lookupMaybe(annot.get(PDFName.of(key)), PDFArray);
+  const array = pick(ctx, annot.get(PDFName.of(key)), PDFArray);
   if (!array) return [];
   const out: number[] = [];
   for (let i = 0; i < array.size(); i++) {
-    out.push(ctx.lookupMaybe(array.get(i), PDFNumber)?.asNumber() ?? 0);
+    out.push(pick(ctx, array.get(i), PDFNumber)?.asNumber() ?? 0);
   }
   return out;
 }
@@ -495,15 +490,15 @@ function pointsOf(numbers: ReadonlyArray<number>): Array<{ x: number; y: number 
 }
 
 function inkPathsOf(ctx: PDFContext, annot: PDFDict): Array<Array<{ x: number; y: number }>> {
-  const list = ctx.lookupMaybe(annot.get(PDFName.of('InkList')), PDFArray);
+  const list = pick(ctx, annot.get(PDFName.of('InkList')), PDFArray);
   if (!list) return [];
   const out: Array<Array<{ x: number; y: number }>> = [];
   for (let i = 0; i < list.size(); i++) {
-    const path = ctx.lookupMaybe(list.get(i), PDFArray);
+    const path = pick(ctx, list.get(i), PDFArray);
     if (!path) continue;
     const numbers: number[] = [];
     for (let j = 0; j < path.size(); j++) {
-      numbers.push(ctx.lookupMaybe(path.get(j), PDFNumber)?.asNumber() ?? 0);
+      numbers.push(pick(ctx, path.get(j), PDFNumber)?.asNumber() ?? 0);
     }
     out.push(pointsOf(numbers));
   }
@@ -544,7 +539,7 @@ function describeField(ctx: PDFContext, annot: PDFDict, page: number): FieldNeed
     page,
     rect: rectOf(ctx, annot) ?? { x0: 0, y0: 0, x1: 0, y1: 0 },
     fieldName: text('T'),
-    fieldType: ctx.lookupMaybe(annot.get(PDFName.of('FT')), PDFName)?.asString() ?? '',
+    fieldType: pick(ctx, annot.get(PDFName.of('FT')), PDFName)?.asString() ?? '',
     value: text('V'),
   };
 }
@@ -554,9 +549,9 @@ function countWidgets(ctx: PDFContext, page: PDFPage): number {
   if (!annots) return 0;
   let n = 0;
   for (let i = 0; i < annots.size(); i++) {
-    const dict = ctx.lookupMaybe(annots.get(i), PDFDict);
+    const dict = pick(ctx, annots.get(i), PDFDict);
     if (!dict) continue;
-    if (ctx.lookupMaybe(dict.get(PDFName.of('Subtype')), PDFName)?.asString() === '/Widget') n++;
+    if (pick(ctx, dict.get(PDFName.of('Subtype')), PDFName)?.asString() === '/Widget') n++;
   }
   return n;
 }
@@ -569,9 +564,9 @@ function countWidgets(ctx: PDFContext, page: PDFPage): number {
  */
 function pruneAcroFormFields(doc: PDFDocument): void {
   const ctx = doc.context;
-  const form = ctx.lookupMaybe(doc.catalog.get(PDFName.of('AcroForm')), PDFDict);
+  const form = pick(ctx, doc.catalog.get(PDFName.of('AcroForm')), PDFDict);
   if (!form) return;
-  const fields = ctx.lookupMaybe(form.get(PDFName.of('Fields')), PDFArray);
+  const fields = pick(ctx, form.get(PDFName.of('Fields')), PDFArray);
   if (!fields) return;
   const live = new Set<string>();
   for (const page of doc.getPages()) {
@@ -580,7 +575,7 @@ function pruneAcroFormFields(doc: PDFDocument): void {
     for (let i = 0; i < annots.size(); i++) {
       const raw = annots.get(i);
       if (raw instanceof PDFRef) live.add(raw.toString());
-      const dict = ctx.lookupMaybe(raw, PDFDict);
+      const dict = pick(ctx, raw, PDFDict);
       const parent = dict?.get(PDFName.of('Parent'));
       if (parent instanceof PDFRef) live.add(parent.toString());
     }

@@ -23,7 +23,7 @@
 import type { PDFDocument } from 'pdf-lib';
 import { PDFDict, PDFName } from 'pdf-lib';
 import { writeOutlineTree, type OutlineEntry } from './outline';
-import { createPdf, loadPdf, readOutline, savePdf } from './pdfdoc';
+import { createPdf, loadPdf, pick, readOutline, savePdf } from './pdfdoc';
 import { OpFailed, checkCancelled, type OpContext } from './types';
 
 export type SplitRule =
@@ -322,8 +322,8 @@ function stripAnnotations(doc: PDFDocument, keep: { comments: boolean; forms: bo
     const survivors = [];
     for (let i = 0; i < annots.size(); i++) {
       const raw = annots.get(i);
-      const dict = ctx.lookupMaybe(raw, PDFDict);
-      const subtype = dict ? ctx.lookupMaybe(dict.get(PDFName.of('Subtype')), PDFName) : undefined;
+      const dict = pick(ctx, raw, PDFDict);
+      const subtype = dict ? pick(ctx, dict.get(PDFName.of('Subtype')), PDFName) : undefined;
       const isWidget = subtype?.asString() === '/Widget';
       if (isWidget ? keep.forms : keep.comments) survivors.push(raw);
     }

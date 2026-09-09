@@ -49,7 +49,13 @@ import { ImportPagesCommand } from '@modules/M40-organise-pages/commands';
 import { pageSizesOf, slicePages } from '@modules/M40-organise-pages/extract';
 import { countPages } from '@modules/M40-organise-pages/range';
 import { OpsClient } from './OpsClient';
-import { RepointDestinationsCommand, repointingsFor, type Repointing } from './commands';
+import {
+  DropFieldsCommand,
+  RepointDestinationsCommand,
+  fieldsWithoutWidgets,
+  repointingsFor,
+  type Repointing,
+} from './commands';
 import {
   DEFAULT_MERGE_SETTINGS,
   ipcSettingsStorage,
@@ -471,6 +477,7 @@ export class MergeService {
     readonly forms: boolean;
     readonly remove: boolean;
   }): Promise<number> {
+    const doc = this.require();
     const pages = [...options.target.indexes];
     if (pages.length === 0) return 0;
     const label = options.remove
@@ -482,6 +489,14 @@ export class MergeService {
       pages,
       label,
       title: options.remove ? 'Remove comments' : 'Flatten',
+      // A flattened widget is gone from its page, and a field with no widget anywhere is a field
+      // no reader can fill. Dropping it goes inside the same undo entry as the pages.
+      after: options.forms
+        ? async () => {
+            const orphans = fieldsWithoutWidgets(doc);
+            if (orphans.length > 0) await doc.apply(new DropFieldsCommand(doc, orphans, label));
+          }
+        : undefined,
       transform: async (bytes, _order, report, signal) => {
         const job = this.clientValue.flatten(
           bytes,
@@ -530,6 +545,8 @@ export class MergeService {
       report: (fraction: number, text?: string) => void,
       signal: AbortSignal,
     ) => Promise<Uint8Array>;
+    /** Anything else that belongs in the same undo entry, run after the pages are back. */
+    readonly after?: (() => Promise<void>) | undefined;
   }): Promise<number> {
     const doc = this.require();
     const order = [...options.pages].sort((a, b) => a - b);
@@ -595,6 +612,7 @@ export class MergeService {
       if (repointings.length > 0) {
         await doc.apply(new RepointDestinationsCommand(doc, repointings));
       }
+      await options.after?.();
     });
 
     this.selection.set({

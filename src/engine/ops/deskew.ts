@@ -35,7 +35,7 @@
 import type { PDFRef } from 'pdf-lib';
 import { PDFArray, PDFDict, PDFName, PDFNumber, type PDFContext } from 'pdf-lib';
 import type { PdfRect } from '@shared/pdf';
-import { effectiveBox, loadPdf, pageLeaves, savePdf, writeBoxes } from './pdfdoc';
+import { effectiveBox, loadPdf, pageLeaves, pick, savePdf, writeBoxes } from './pdfdoc';
 import { OpFailed, checkCancelled, type OpContext, type OpResult, type Raster } from './types';
 
 // ---- detection ---------------------------------------------------------------------------------
@@ -451,7 +451,7 @@ function wrapContent(
   const existing = leaf.get(key);
   const head = ctx.register(ctx.flateStream(`${before}\n`));
   const tail = ctx.register(ctx.flateStream(`\n${after}\n`));
-  const asArray = ctx.lookupMaybe(existing as never, PDFArray);
+  const asArray = pick(ctx, existing as never, PDFArray);
   const middle: unknown[] = [];
   if (asArray) {
     for (let i = 0; i < asArray.size(); i++) middle.push(asArray.get(i));
@@ -463,11 +463,11 @@ function wrapContent(
 
 /** The annotation dictionaries of a page. */
 function annotationsOf(ctx: PDFContext, leaf: { get(key: PDFName): unknown }): PDFDict[] {
-  const array = ctx.lookupMaybe(leaf.get(PDFName.of('Annots')) as never, PDFArray);
+  const array = pick(ctx, leaf.get(PDFName.of('Annots')) as never, PDFArray);
   if (!array) return [];
   const out: PDFDict[] = [];
   for (let i = 0; i < array.size(); i++) {
-    const dict = ctx.lookupMaybe(array.get(i), PDFDict);
+    const dict = pick(ctx, array.get(i), PDFDict);
     if (dict) out.push(dict);
   }
   return out;
@@ -486,9 +486,9 @@ function rotateAnnotation(
   annot: PDFDict,
   m: readonly [number, number, number, number, number, number],
 ): void {
-  const rectArray = ctx.lookupMaybe(annot.get(PDFName.of('Rect')), PDFArray);
+  const rectArray = pick(ctx, annot.get(PDFName.of('Rect')), PDFArray);
   if (rectArray && rectArray.size() >= 4) {
-    const n = (i: number): number => ctx.lookupMaybe(rectArray.get(i), PDFNumber)?.asNumber() ?? 0;
+    const n = (i: number): number => pick(ctx, rectArray.get(i), PDFNumber)?.asNumber() ?? 0;
     const corners = [
       applyMatrix(m, n(0), n(1)),
       applyMatrix(m, n(2), n(1)),
@@ -507,11 +507,11 @@ function rotateAnnotation(
     rotateNumberArray(ctx, annot, key, m);
   }
 
-  const ink = ctx.lookupMaybe(annot.get(PDFName.of('InkList')), PDFArray);
+  const ink = pick(ctx, annot.get(PDFName.of('InkList')), PDFArray);
   if (ink) {
     const paths: unknown[] = [];
     for (let i = 0; i < ink.size(); i++) {
-      const path = ctx.lookupMaybe(ink.get(i), PDFArray);
+      const path = pick(ctx, ink.get(i), PDFArray);
       paths.push(path ? ctx.obj(rotatedNumbers(ctx, path, m)) : ink.get(i));
     }
     annot.set(PDFName.of('InkList'), ctx.obj(paths as never));
@@ -528,7 +528,7 @@ function rotateNumberArray(
   key: string,
   m: readonly [number, number, number, number, number, number],
 ): void {
-  const array = ctx.lookupMaybe(annot.get(PDFName.of(key)), PDFArray);
+  const array = pick(ctx, annot.get(PDFName.of(key)), PDFArray);
   if (!array || array.size() < 2) return;
   annot.set(PDFName.of(key), ctx.obj(rotatedNumbers(ctx, array, m)));
 }
@@ -540,8 +540,8 @@ function rotatedNumbers(
 ): number[] {
   const out: number[] = [];
   for (let i = 0; i + 1 < array.size(); i += 2) {
-    const x = ctx.lookupMaybe(array.get(i), PDFNumber)?.asNumber() ?? 0;
-    const y = ctx.lookupMaybe(array.get(i + 1), PDFNumber)?.asNumber() ?? 0;
+    const x = pick(ctx, array.get(i), PDFNumber)?.asNumber() ?? 0;
+    const y = pick(ctx, array.get(i + 1), PDFNumber)?.asNumber() ?? 0;
     const p = applyMatrix(m, x, y);
     out.push(p.x, p.y);
   }
