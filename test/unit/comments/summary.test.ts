@@ -41,8 +41,20 @@ function options(over: Partial<SummaryOptions> = {}): SummaryOptions {
 }
 
 describe('compareComments', () => {
-  const a = comment({ id: 'a', page: 1, author: 'Zoe', date: '2026-01-01T00:00:00Z', type: 'Note' });
-  const b = comment({ id: 'b', page: 0, author: 'Adam', date: '2026-06-01T00:00:00Z', type: 'Ink' });
+  const a = comment({
+    id: 'a',
+    page: 1,
+    author: 'Zoe',
+    date: '2026-01-01T00:00:00Z',
+    type: 'Note',
+  });
+  const b = comment({
+    id: 'b',
+    page: 0,
+    author: 'Adam',
+    date: '2026-06-01T00:00:00Z',
+    type: 'Ink',
+  });
 
   it('orders by page, then down the page', () => {
     expect([a, b].sort(compareComments('page')).map((c) => c.id)).toEqual(['b', 'a']);
@@ -127,7 +139,11 @@ describe('layoutSummary', () => {
 
   it('spills a long list onto a second comments page', () => {
     const many = Array.from({ length: 40 }, (_, i) =>
-      comment({ id: `m${String(i)}`, page: 0, text: 'A comment with enough words in it to take a couple of lines when it is wrapped.' }),
+      comment({
+        id: `m${String(i)}`,
+        page: 0,
+        text: 'A comment with enough words in it to take a couple of lines when it is wrapped.',
+      }),
     );
     const plan = layoutSummary(many, SIZES, options({ pages: [0] }));
     const commentPages = plan.pages.filter((p) => p.document === null);
@@ -144,7 +160,9 @@ describe('layoutSummary', () => {
         comment({
           id: 'r1',
           status: 'Accepted',
-          replies: [{ author: 'B. Author', date: '2026-09-02T09:00:00Z', text: 'Will do.', status: null }],
+          replies: [
+            { author: 'B. Author', date: '2026-09-02T09:00:00Z', text: 'Will do.', status: null },
+          ],
         }),
       ],
       SIZES,
@@ -234,7 +252,8 @@ describe('buildSummary', () => {
     const built = await buildSummary({
       plan,
       options: opts,
-      render: (page) => Promise.resolve(page === 1 ? null : { png: PNG, width: A4.width, height: A4.height }),
+      render: (page) =>
+        Promise.resolve(page === 1 ? null : { png: PNG, width: A4.width, height: A4.height }),
       sourceTitle: 'report.pdf',
     });
     expect(built.unrendered).toEqual([1]);

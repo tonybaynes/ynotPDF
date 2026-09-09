@@ -89,7 +89,10 @@ export function blockLines(
   for (const text of wrapText(heading, HEAD_FONT, head, width)) {
     lines.push({ text, bold: true, size: head, indent: 0 });
   }
-  const meta = [formatSummaryDate(comment.date), comment.status === null ? '' : `Status: ${comment.status}`]
+  const meta = [
+    formatSummaryDate(comment.date),
+    comment.status === null ? '' : `Status: ${comment.status}`,
+  ]
     .filter((part) => part !== '')
     .join(' · ');
   if (meta !== '') {
@@ -132,7 +135,10 @@ function blockHeight(lines: ReadonlyArray<SummaryTextLine>): number {
 export function widestLine(lines: ReadonlyArray<SummaryTextLine>): number {
   return lines.reduce(
     (widest, line) =>
-      Math.max(widest, line.indent + textWidth(line.text, line.bold ? HEAD_FONT : BODY_FONT, line.size)),
+      Math.max(
+        widest,
+        line.indent + textWidth(line.text, line.bold ? HEAD_FONT : BODY_FONT, line.size),
+      ),
     0,
   );
 }
@@ -203,7 +209,11 @@ export function layoutSummary(
     list.map((comment) => ({ comment, sequence: sequenceOf.get(comment.id) ?? 0 }));
 
   if (options.layout === 'comments-only') {
-    return { pages: commentsOnly(numbered(ordered), sizeOf(options.pages[0] ?? 0), options), ordered, skipped };
+    return {
+      pages: commentsOnly(numbered(ordered), sizeOf(options.pages[0] ?? 0), options),
+      ordered,
+      skipped,
+    };
   }
 
   const pages: SummaryPagePlan[] = [];
@@ -260,7 +270,13 @@ function sideBySide(
   const commentWidth = Math.max(180, size.width * 0.6);
   const width = size.width + GUTTER + commentWidth + MARGIN * 2;
   const height = size.height + MARGIN * 2 + HEADING_GAP;
-  const documentBox = { sourcePage: page, x: MARGIN, y: MARGIN, width: size.width, height: size.height };
+  const documentBox = {
+    sourcePage: page,
+    x: MARGIN,
+    y: MARGIN,
+    width: size.width,
+    height: size.height,
+  };
   const column: Column = {
     x: MARGIN + size.width + GUTTER,
     width: commentWidth,
@@ -318,8 +334,7 @@ function facing(
     blocks,
     // A connector across a page boundary is drawn to the edge of the comment page: it points the
     // reader back at the page before it, which is what "on separate pages" can honestly do.
-    connectors:
-      options.layout === 'separate-connectors' ? edgeConnectors(blocks) : [],
+    connectors: options.layout === 'separate-connectors' ? edgeConnectors(blocks) : [],
     markers: [],
     heading: headingFor(page, entries.length, index),
   }));
@@ -349,7 +364,11 @@ function connectorsFor(
   for (const block of blocks) {
     const comment = bySequence.get(block.sequence);
     if (!comment) continue;
-    out.push({ from: anchorOnPage(comment.anchor, box), to: block.connector, sequence: block.sequence });
+    out.push({
+      from: anchorOnPage(comment.anchor, box),
+      to: block.connector,
+      sequence: block.sequence,
+    });
   }
   return out;
 }

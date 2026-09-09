@@ -104,6 +104,14 @@ function childMarkup(node: Node, name: string): string | null {
   return childText(node, name);
 }
 
+/** One `<gesture>`, which the parser gives as a bare string or as a node with a text child. */
+function gestureText(gesture: unknown): string {
+  if (typeof gesture === 'string') return gesture;
+  if (!gesture || typeof gesture !== 'object') return '';
+  const text = (gesture as Node)['#text'];
+  return typeof text === 'string' ? text : '';
+}
+
 /**
  * Reads an XFDF file. Throws {@link XfdfError} only when the input is not XFDF at all — a file
  * with no comments in it is an empty result, which is a legitimate thing to import.
@@ -220,13 +228,7 @@ function readPaths(node: Node, subtype: AnnotationSubtype): Array<Array<{ x: num
     const out: Array<Array<{ x: number; y: number }>> = [];
     for (const list of nodes(node, 'inklist')) {
       for (const gesture of children(list, 'gesture')) {
-        const text =
-          typeof gesture === 'string'
-            ? gesture
-            : gesture && typeof gesture === 'object'
-              ? String((gesture as Record<string, unknown>)['#text'] ?? '')
-              : '';
-        const points = parsePoints(text);
+        const points = parsePoints(gestureText(gesture));
         if (points.length > 0) out.push(points);
       }
       // A producer that wrote the gestures as text straight inside `<inklist>`.

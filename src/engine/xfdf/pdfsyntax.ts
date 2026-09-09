@@ -58,7 +58,9 @@ function decodePdfDoc(binary: string): string {
   let out = '';
   for (let i = 0; i < binary.length; i++) {
     const code = binary.charCodeAt(i) & 0xff;
-    out += String.fromCharCode(code >= 0x80 && code <= 0x9f ? (PDF_DOC_HIGH[code - 0x80] ?? code) : code);
+    out += String.fromCharCode(
+      code >= 0x80 && code <= 0x9f ? (PDF_DOC_HIGH[code - 0x80] ?? code) : code,
+    );
   }
   return out;
 }
@@ -83,7 +85,9 @@ export function decodePdfText(binary: string): string {
   if (binary.length >= 2 && binary.charCodeAt(0) === 0xfe && binary.charCodeAt(1) === 0xff) {
     let out = '';
     for (let i = 2; i + 1 < binary.length; i += 2) {
-      out += String.fromCharCode(((binary.charCodeAt(i) & 0xff) << 8) | (binary.charCodeAt(i + 1) & 0xff));
+      out += String.fromCharCode(
+        ((binary.charCodeAt(i) & 0xff) << 8) | (binary.charCodeAt(i + 1) & 0xff),
+      );
     }
     return out;
   }
@@ -363,7 +367,8 @@ function writeString(value: string): string {
   const needsHex = /[^\x20-\x7e]/.test(raw) || raw.includes('\\');
   if (needsHex) {
     let hex = '';
-    for (let i = 0; i < raw.length; i++) hex += (raw.charCodeAt(i) & 0xff).toString(16).padStart(2, '0');
+    for (let i = 0; i < raw.length; i++)
+      hex += (raw.charCodeAt(i) & 0xff).toString(16).padStart(2, '0');
     return `<${hex.toUpperCase()}>`;
   }
   return `(${raw.replace(/([()\\])/g, '\\$1')})`;

@@ -57,7 +57,7 @@ type Objects = Map<number, PdfValue>;
 
 /** Resolves a reference through the object map; anything else is returned unchanged. */
 function resolve(objects: Objects, value: PdfValue | undefined, depth = 0): PdfValue | undefined {
-  if (!value || value.kind !== 'ref' || depth > 32) return value;
+  if (value?.kind !== 'ref' || depth > 32) return value;
   return resolve(objects, objects.get(value.number), depth + 1);
 }
 
@@ -252,7 +252,7 @@ function readAnnotationDict(
     callout: asNumbers(entry(objects, map, 'CL')),
     padding: asNumbers(entry(objects, map, 'RD')),
     lineEnding: lineEndValue?.kind === 'name' ? lineEndValue.value : null,
-    lineEndings: lineEndings && lineEndings.length === 2 ? lineEndings : null,
+    lineEndings: lineEndings?.length === 2 ? lineEndings : null,
     dashArray: dashes.length > 0 ? dashes : null,
     cloudy,
     attachmentName: readFileName(objects, map),
@@ -328,7 +328,9 @@ export function writeFdf(doc: XfdfDocument): Uint8Array {
 
   doc.annotations.forEach((a, index) => {
     const number = index + 2;
-    bodies.push(`${String(number)} 0 obj\n${writeValue(annotationDict(a, numberByName))}\nendobj\n`);
+    bodies.push(
+      `${String(number)} 0 obj\n${writeValue(annotationDict(a, numberByName))}\nendobj\n`,
+    );
   });
 
   const fieldRefs: PdfValue[] = [];
@@ -412,7 +414,8 @@ function annotationDict(a: XfdfAnnotation, numberByName: ReadonlyMap<string, num
     IC: a.interiorColor === null ? null : pdfNumbers(colorComponents(a.interiorColor)),
     CA: a.opacity === null ? null : pdfNumber(a.opacity),
     BS: border,
-    BE: a.cloudy !== null && a.cloudy > 0 ? dict({ S: pdfName('C'), I: pdfNumber(a.cloudy) }) : null,
+    BE:
+      a.cloudy !== null && a.cloudy > 0 ? dict({ S: pdfName('C'), I: pdfNumber(a.cloudy) }) : null,
     QuadPoints: a.quadPoints.length > 0 ? pdfNumbers(a.quadPoints) : null,
     Name: a.icon === null ? null : pdfName(a.icon),
     State: a.state === null ? null : pdfString(a.state),
@@ -434,7 +437,7 @@ function annotationDict(a: XfdfAnnotation, numberByName: ReadonlyMap<string, num
     CL: a.callout.length > 0 ? pdfNumbers(a.callout) : null,
     RD: a.padding.length > 0 ? pdfNumbers(a.padding) : null,
     LE:
-      a.lineEndings && a.lineEndings.length === 2
+      a.lineEndings?.length === 2
         ? pdfArray(a.lineEndings.map(pdfName))
         : a.lineEnding === null
           ? null

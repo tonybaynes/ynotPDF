@@ -17,4 +17,9 @@ export {
   SUMMARY_BLOCK_PADDING,
   SUMMARY_HEADING_GAP,
 } from './layout';
-export { buildSummary, type BuildSummaryInput, type BuiltSummary, type RenderedPage } from './build';
+export {
+  buildSummary,
+  type BuildSummaryInput,
+  type BuiltSummary,
+  type RenderedPage,
+} from './build';

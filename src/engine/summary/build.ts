@@ -14,11 +14,7 @@
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { PdfPoint } from '@shared/pdf';
-import {
-  SUMMARY_BLOCK_PADDING,
-  SUMMARY_HEADING_GAP,
-  SUMMARY_MARGIN,
-} from './layout';
+import { SUMMARY_BLOCK_PADDING, SUMMARY_HEADING_GAP, SUMMARY_MARGIN } from './layout';
 import type { SummaryOptions, SummaryPagePlan, SummaryPlan } from './types';
 
 /** A rendered source page. `png` is the encoded image; the size is the page's own, in points. */
@@ -130,12 +126,7 @@ export async function buildSummary(input: BuildSummaryInput): Promise<BuiltSumma
   return { bytes, pageCount: doc.getPageCount(), unrendered };
 }
 
-function drawSheet(
-  sheet: PDFPage,
-  page: SummaryPagePlan,
-  body: PDFFont,
-  bold: PDFFont,
-): void {
+function drawSheet(sheet: PDFPage, page: SummaryPagePlan, body: PDFFont, bold: PDFFont): void {
   if (page.heading !== null) {
     sheet.drawText(page.heading, {
       x: SUMMARY_MARGIN,
@@ -146,7 +137,10 @@ function drawSheet(
     });
     sheet.drawLine({
       start: { x: SUMMARY_MARGIN, y: page.height - SUMMARY_MARGIN - SUMMARY_HEADING_GAP },
-      end: { x: page.width - SUMMARY_MARGIN, y: page.height - SUMMARY_MARGIN - SUMMARY_HEADING_GAP },
+      end: {
+        x: page.width - SUMMARY_MARGIN,
+        y: page.height - SUMMARY_MARGIN - SUMMARY_HEADING_GAP,
+      },
       thickness: 0.5,
       color: RULE,
     });

@@ -10,7 +10,7 @@ M32 builds the review workflow on top of the annotations M30 and M31 create. Thr
 it needs cannot be said with the contracts as they stand.
 
 1. **A reply is an object reference, and the plan has no way to write one.** `/IRT` must be an
-   *indirect reference* to the parent annotation's dictionary (ISO 32000-1, 12.5.6.2). Anything
+   _indirect reference_ to the parent annotation's dictionary (ISO 32000-1, 12.5.6.2). Anything
    else — a string, a name, the parent's `/NM` written literally — is ignored by Acrobat, Foxit
    and PDFium alike, so a reply written that way is a loose sticky note. `DictValue`
    (ADR 0013, extended by ADR 0015) can express strings, names, numbers, arrays, nested
@@ -51,10 +51,10 @@ always there by save time.
 
 Two mappings join `ANNOTATION_DICT_MAPPINGS`:
 
-| model key | PDF key | kind | engine-writable |
-|---|---|---|---|
-| `replyType` | `/RT` | `name` | yes |
-| `inReplyTo` | `/IRT` | `annotationRef` | no |
+| model key   | PDF key | kind            | engine-writable |
+| ----------- | ------- | --------------- | --------------- |
+| `replyType` | `/RT`   | `name`          | yes             |
+| `inReplyTo` | `/IRT`  | `annotationRef` | no              |
 
 `inReplyTo` is not read from `extra` — it is a first-class model field — so `dictEntries` never
 produces it; `plan.ts` adds the entry itself using the mapping's PDF key. Keeping it in the table

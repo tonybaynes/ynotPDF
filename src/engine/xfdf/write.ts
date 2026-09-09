@@ -31,17 +31,22 @@ const NS = 'http://ns.adobe.com/xfdf/';
 
 /** XML text escaping. `>` is escaped too: harmless, and it keeps `]]>` out of the output. */
 export function escapeXmlText(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    // A lone carriage return would be normalised away by an XML reader, which would silently
-    // change the text; as a character reference it survives.
-    .replace(/\r/g, '&#13;');
+  return (
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      // A lone carriage return would be normalised away by an XML reader, which would silently
+      // change the text; as a character reference it survives.
+      .replace(/\r/g, '&#13;')
+  );
 }
 
 export function escapeXmlAttribute(value: string): string {
-  return escapeXmlText(value).replace(/"/g, '&quot;').replace(/\n/g, '&#10;').replace(/\t/g, '&#9;');
+  return escapeXmlText(value)
+    .replace(/"/g, '&quot;')
+    .replace(/\n/g, '&#10;')
+    .replace(/\t/g, '&#9;');
 }
 
 type Attrs = Array<readonly [string, string | null]>;
@@ -127,7 +132,7 @@ function annotationLines(a: XfdfAnnotation, indent: string): string[] {
   else if (a.icon !== null) attrs.push(['icon', a.icon]);
 
   const heads = a.lineEndings;
-  if (heads && heads.length === 2) {
+  if (heads?.length === 2) {
     attrs.push(['head', heads[0] ?? null], ['tail', heads[1] ?? null]);
   } else if (a.lineEnding !== null) {
     attrs.push(['head', a.lineEnding]);

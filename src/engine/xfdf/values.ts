@@ -115,7 +115,9 @@ export function formatColor(value: number): string {
 export function packColorComponents(components: ReadonlyArray<number>): number | null {
   const to8 = (v: number): number => Math.max(0, Math.min(255, Math.round(v * 255)));
   if (components.length === 3) {
-    return (to8(components[0] ?? 0) << 16) | (to8(components[1] ?? 0) << 8) | to8(components[2] ?? 0);
+    return (
+      (to8(components[0] ?? 0) << 16) | (to8(components[1] ?? 0) << 8) | to8(components[2] ?? 0)
+    );
   }
   if (components.length === 1) {
     const g = to8(components[0] ?? 0);
@@ -125,9 +127,9 @@ export function packColorComponents(components: ReadonlyArray<number>): number |
     // CMYK, as a few producers write it.
     const [c = 0, m = 0, y = 0, k = 0] = components;
     return (
-      (to8((1 - Math.min(1, c + k)) as number) << 16) |
-      (to8((1 - Math.min(1, m + k)) as number) << 8) |
-      to8((1 - Math.min(1, y + k)) as number)
+      (to8(1 - Math.min(1, c + k)) << 16) |
+      (to8(1 - Math.min(1, m + k)) << 8) |
+      to8(1 - Math.min(1, y + k))
     );
   }
   return null;

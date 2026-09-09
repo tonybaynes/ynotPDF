@@ -42,7 +42,7 @@ export function formatOfName(name: string): CommentFormat | null {
 export function readComments(bytes: Uint8Array, hint?: CommentFormat | null): XfdfDocument {
   const head = bytesToBinary(bytes.subarray(0, 1024));
   const looksFdf = /%FDF-\d/.test(head);
-  const looksXfdf = head.includes('<xfdf') || head.includes('<XFDF') || /<\?xml/.test(head);
+  const looksXfdf = head.includes('<xfdf') || head.includes('<XFDF') || head.includes('<?xml');
   if (looksFdf) return readFdf(bytes);
   if (looksXfdf) return readXfdf(new TextDecoder('utf-8').decode(bytes));
   // Neither header is there: try what the caller expected, then the other, then say so plainly.
