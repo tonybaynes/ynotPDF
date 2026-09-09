@@ -132,8 +132,12 @@ export function installThumbnailDrag(options: ThumbnailDragOptions): ThumbnailDr
     }));
 
   /**
-   * Re-reads where the drop would land and repaints the marker, from the last known pointer
-   * position. Called on every move and on every auto-scroll frame.
+   * Re-reads where the drop would land and repaints the marker from the last known pointer
+   * position, without a pointer event.
+   *
+   * This is what auto-scroll needs: the pointer is not moving, so nothing else would re-aim,
+   * and the cells the marker was measured against have scrolled away. The move handler does
+   * the same work inline, because it has a real event and can also see a tab under the pointer.
    */
   const refreshTarget = (): void => {
     if (!lastPoint) return;
