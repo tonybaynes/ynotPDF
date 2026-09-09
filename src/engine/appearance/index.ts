@@ -11,16 +11,9 @@
  */
 
 import type { AnnotationSubtype } from '../PdfEngine';
-import {
-  circleAppearance,
-  fileAttachmentAppearance,
-  inkAppearance,
-  lineAppearance,
-  polygonAppearance,
-  polylineAppearance,
-  squareAppearance,
-} from './generators';
+import { fileAttachmentAppearance } from './generators';
 import { freeTextAppearance } from './freetext';
+import { inkAppearance } from './ink';
 import {
   caretAppearance,
   highlightAppearance,
@@ -29,12 +22,27 @@ import {
   underlineAppearance,
 } from './markup';
 import { noteAppearance } from './note';
+import {
+  circleAppearance,
+  lineAppearance,
+  polygonAppearance,
+  polylineAppearance,
+  squareAppearance,
+} from './shapes';
+import { stampAppearance } from './stamp';
 import type { AppearanceGenerator, AppearanceInput, AppearanceStream } from './types';
 
 export * from './types';
-export { ContentBuilder, num, pdfString, rgbComponents } from './content';
+export { ContentBuilder, num, pdfString, rgbComponents, type PathOp } from './content';
 export { glyphWidth, textWidth, wrapText } from './metrics';
-export { quadRects } from './generators';
+export {
+  quadRects,
+  ATTACHMENT_ICONS,
+  ATTACHMENT_ICON_LABELS,
+  attachmentIconDrawings,
+  isAttachmentIcon,
+  type AttachmentIcon,
+} from './generators';
 export {
   quads,
   quadNumbers,
@@ -91,6 +99,72 @@ export {
   type DictMapping,
   type DictValue,
 } from './dict';
+export {
+  LINE_ENDINGS,
+  LINE_ENDING_LABELS,
+  isLineEnding,
+  lineEndingsOf,
+  lineEndingDrawing,
+  endingSize,
+  cloudIntensityOf,
+  cloudRadius,
+  cloudOverhang,
+  cloudOps,
+  dashOf,
+  arcOps,
+  ellipseOps,
+  ellipsePoints,
+  rectPoints,
+  polygonOps,
+  signedArea,
+  opsBounds,
+  pointsBounds,
+  shapeDrawings,
+  shapeRectFor,
+  paintDrawings,
+  type LineEnding,
+  type EndingDrawing,
+  type ShapeDrawing,
+} from './shapes';
+export {
+  smoothStrokeOps,
+  catmullRomSegments,
+  inkDrawings,
+  inkRect,
+  pressuresOf,
+  widthForPressure,
+  pointSegmentDistance,
+  strokeHit,
+  splitStroke,
+  type BezierSegment,
+} from './ink';
+export {
+  parseStampCatalogue,
+  resolveStampTokens,
+  isDynamicStamp,
+  STAMP_TOKENS,
+  STAMP_FONT,
+  STAMP_KEY,
+  STAMP_SIZE,
+  stampDrawing,
+  stampForm,
+  stampKey,
+  stampMatrix,
+  stampRectAt,
+  stampSizeOf,
+  stampRotationOf,
+  applyMatrix,
+  transformOps,
+  matrixScale,
+  roundedRectOps,
+  drawingBounds,
+  type StampDefinition,
+  type StampCategory,
+  type StampCatalogue,
+  type StampTokenContext,
+  type StampDrawing,
+  type StampText,
+} from './stamp';
 
 /**
  * The subtypes PDFium generates an `/AP` for by itself when it loads a page
@@ -159,6 +233,7 @@ export function createAppearanceService(): AppearanceService {
   service.register('FileAttachment', fileAttachmentAppearance);
   service.register('Caret', caretAppearance);
   service.register('Text', noteAppearance);
+  service.register('Stamp', stampAppearance);
   return service;
 }
 

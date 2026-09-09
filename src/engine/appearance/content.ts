@@ -17,6 +17,24 @@ import {
   type ExtGStateSpec,
 } from './types';
 
+/**
+ * One step of a path: the same vocabulary as the overlay's `ShapeStep`, so geometry computed
+ * here — a cloud, a smoothed stroke, an arrow head — is painted by the layer and written to the
+ * file from one list (M31).
+ */
+export type PathOp =
+  | { readonly op: 'M' | 'L'; readonly x: number; readonly y: number }
+  | {
+      readonly op: 'C';
+      readonly x1: number;
+      readonly y1: number;
+      readonly x2: number;
+      readonly y2: number;
+      readonly x: number;
+      readonly y: number;
+    }
+  | { readonly op: 'Z' };
+
 /** Kappa: the circle-to-Bézier constant, `4/3 * (sqrt(2) - 1)`. */
 const KAPPA = 0.5522847498307936;
 
@@ -65,6 +83,7 @@ export class ContentBuilder {
   private readonly ops: string[] = [];
   private readonly gsStates = new Map<string, ExtGStateSpec>();
   private readonly fontNames = new Map<string, AppearanceFont>();
+  private readonly xobjectNames = new Map<string, string>();
   private gsSeq = 0;
   private painted = false;
 
@@ -221,6 +240,54 @@ export class ContentBuilder {
    * to draw the same thing is one too many.
    */
 
+  /**
+   * A cubic Bézier path, in the same op vocabulary the annotation overlay paints — so a cloud or
+   * a smoothed ink stroke is computed once and drawn by both (M31).
+   */
+  path(ops: ReadonlyArray<PathOp>): this {
+    for (const step of ops) {
+      switch (step.op) {
+        case 'M':
+          this.moveTo(step.x, step.y);
+          break;
+        case 'L':
+          this.lineTo(step.x, step.y);
+          break;
+        case 'C':
+          this.curveTo(step.x1, step.y1, step.x2, step.y2, step.x, step.y);
+          break;
+        case 'Z':
+          this.closePath();
+          break;
+      }
+    }
+    return this;
+  }
+
+  /**
+   * Draws a shared XObject (M31, ADR 0015): `q <matrix> cm /Fm1 Do Q`. `key` names a
+   * `WritePlan.xobjects` entry; the writer resolves it to the one embedded object.
+   */
+  drawXObject(
+    key: string,
+    matrix: readonly [number, number, number, number, number, number],
+  ): this {
+    const name = this.xobjectName(key);
+    this.painted = true;
+    this.save();
+    this.transform(...matrix);
+    this.push(`/${name} Do`);
+    return this.restore();
+  }
+
+  /** Registers a shared XObject by key and returns the name the stream refers to it by. */
+  xobjectName(key: string): string {
+    for (const [name, k] of this.xobjectNames) if (k === key) return name;
+    const name = `Fm${this.xobjectNames.size + 1}`;
+    this.xobjectNames.set(name, key);
+    return name;
+  }
+
   /** Registers a font resource and returns the name the stream refers to it by. */
   fontName(font: AppearanceFont): string {
     const key = fontKey(font);
@@ -264,6 +331,7 @@ export class ContentBuilder {
     return {
       extGState: Object.fromEntries(this.gsStates),
       fonts: Object.fromEntries(this.fontNames),
+      ...(this.xobjectNames.size > 0 ? { xobjects: Object.fromEntries(this.xobjectNames) } : {}),
     };
   }
 

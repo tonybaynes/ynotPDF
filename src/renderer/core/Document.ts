@@ -790,7 +790,10 @@ export class Document {
    * move; this puts the *engine* keys back in step by walking the two lists together.
    */
   rebindAttachments(engineIds: ReadonlyArray<string>): void {
-    const list = this.state.attachments.filter((a) => a.pageId === null);
+    // The files in the name tree are the ones with an `att.<n>` key — including one a
+    // FileAttachment annotation made this session claims for a page (M31): it is still in the
+    // tree until a save moves it on to the annotation, so it still shifts with the rest.
+    const list = this.state.attachments.filter((a) => a.engineId.startsWith('att.'));
     list.forEach((attachment, i) => {
       const key = engineIds[i];
       if (key === undefined) return;
