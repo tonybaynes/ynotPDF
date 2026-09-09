@@ -300,7 +300,121 @@ is colourblind: black and red read as the same colour):**
 - **Vertex handles are a layer feature.** `LayerAnnotation.vertices` plus `HandleSet 'vertices'`
   give a polygon or a polyline one handle per point (`v0…vN`); `ShapeImage` lets the layer draw a
   custom stamp's picture. Both are additive to `AnnotationLayer`, which is in `view/` for this.
+- **The PDFium adapter installs the app's own appearance for a Square, a Circle or an Ink as it
+  writes them** (found while testing, see the build log): PDFium would otherwise build one as the
+  page reloads and, for an Ink, inflate `/Rect` by half the border width every time — so after a
+  few edits the engine's rect and the model's disagreed and the writer refused to touch it.
+  Installing ours first means PDFium finds an `/AP` and generates nothing.
+- **Every custom stamp is a PNG** (operator, 2026-09-09): a picture file is re-encoded, a clipboard
+  image already is one, a PDF page is rendered by the engine at about 1 200 px on its longer side.
+  One stored format, and the "treat white as transparent" import option works for all of them.
+- **A creation tool owns the keyboard as it owns the pointer.** M30's controller opens or clears
+  the selection on Enter and Escape; while one of M31's tools is active those keys go to the tool
+  instead, through the viewer's own routing — the stroke the pencil just drew is selected, and
+  Enter has to finish the polygon, not open the stroke's popup.
+- **Provenance.** Line endings, `/BE` clouds, `/IT` intents, the standard stamp names and the
+  `/InkList`/`/AP` split are ISO 32000-1 (12.5.6.7–12.5.6.13, table 181). The tool gestures
+  (drag a box, click the corners, Enter to close, Shift to constrain), the stamp look (a rounded
+  box with bold upper-case text), the "keep tool selected" behaviour and the eraser's two modes
+  are the conventions every PDF editor shares, learned from public documentation and from using
+  editors as a reader would. Nothing was copied from any product's artwork, strings or files.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-09 on `mod/M31-shapes-ink-stamps` (worktree `../ynotPDF-M31`).**
+
+### What shipped
+
+- **Shapes** — rectangle, oval, line, arrow (ten `/LE` endings at either end, closed heads filled
+  with `/IC`), polygon, polyline and cloud (`/BE` intensity), plus area highlight as a `Highlight`
+  over a rectangle; stroke colour, width and dash, fill, Shift constraints, M11's grid snap,
+  eight box handles or one handle per vertex, and the rect that follows what a shape draws.
+- **Pencil and eraser** — raw points in `/InkList`, Catmull-Rom → Bézier smoothing in the
+  appearance, a pen's pressure kept per point and widening the stroke, strokes drawn close together
+  grouped into one annotation (setting), and an eraser that cuts a stroke into annotations or takes
+  it whole (setting), one composite command per pass.
+- **Stamps** — a 31-entry catalogue in `resources/stamps/catalogue.json` (standard business, sign
+  here, and dynamic stamps with `{name}`, `{initials}`, `{date}`, `{time}`), each also written as a
+  vector PDF by `npm run stamps`; a left-dock palette with previews, categories and favourites; a
+  custom-stamp dialog (picture file, clipboard or a PDF page → PNG, cropped by dragging, white made
+  transparent on request); placement by click or by drag, rotation, "Set as default"; and every
+  picture embedded **once** per document as a shared Form XObject (ADR 0015).
+- **File attachments** — a file pinned to a page with a choice of icon and a description, embedded
+  through the engine so M12's panel opens and saves it, and moved on to the annotation's `/FS` by
+  the writer so it is listed once.
+- **`src/engine/appearance/{shapes,ink,stamp}.ts`** — one list of drawings per annotation that the
+  overlay paints and the writer bakes; `dict.ts` gained `/LE`, `/BE`, `/BS /D` and `/FS`.
+- **The properties panel** — stroke, fill, dash, cloud, endings, stamp rotation, attachment icon and
+  its open/save buttons, as sections inside M30's panel through the provider hook.
+
+### The things that were not as expected
+
+- **PDFium inflates an Ink's `/Rect` every time it regenerates the appearance.** By half the border
+  width, on every reload after an edit, and the model never hears of it — so after a few edits the
+  writer, which checks the rect before writing, refused the annotation ("moved in the file"). The
+  adapter now installs our own appearance for Square, Circle and Ink as it writes them, so PDFium
+  generates nothing and the rect stays what the model said. The live page shows the cloud and the
+  smoothing straight away as a bonus.
+- **A PNG with alpha is two image objects in the file**: the picture and its soft mask. "Embedded
+  once" is checked as pictures-minus-masks, by pdf-lib and by qpdf's `--json`.
+- **PDFium reads an annotation's attached-file description from `/Params`**, not from the file
+  specification where the spec puts it. The writer now *copies* `/Desc` and the type on to the
+  specification rather than moving them, so the app reopening its own file keeps the description.
+- **pdf-lib's typed `lookupMaybe` throws on the wrong type.** Reading a callout's single-name `/LE`
+  as an array threw inside the raw pass and silently lost the colours of every annotation after it
+  on the page. Everything M31 reads goes through `lookup` and `instanceof` instead.
+- **Ending a pencil group put the pencil away, which ended the group, which put the pencil
+  away…** — a stack overflow the e2e found. The group is cleared before anything else runs.
+- **Enter finished nothing.** With the stroke just drawn still selected, M30's controller took the
+  key for the selection; and a consumed pointerdown never moves the focus, so the scroller that
+  routes keys to a tool never had it. A creation tool now owns the keyboard while active, and every
+  press focuses the page area.
+- **Node resolves `./content`, not `./content.ts`**, so a script under `scripts/` could not import
+  the engine's own code; `scripts/lib/register-ts.mjs` is a ten-line resolve hook that tries the
+  extension, used by `npm run stamps`.
+
+### Shared files touched (PLAN.md §12.3, all additive except where noted)
+
+- `src/engine/appearance/{types,content,dict,generators,index}.ts` — `xobjects` in the resources,
+  `PathOp` and `drawXObject`, three `DictValue` kinds and `encode`/`empty`, the attachment icons.
+- `src/engine/Writer.ts`, `src/engine/writers/FullRewriteWriter.ts` — `WritePlan.xobjects`,
+  shared XObjects embedded once, name arrays, dictionary merges, `/FS` resolution.
+- `src/engine/pdfium/{PdfiumEngine,mutations,rawdoc}.ts` — **two behaviour changes:** a Stamp or
+  FileAttachment keeps its `/AP` through a geometry-only patch, and Square/Circle/Ink get the
+  app's own appearance as they are written; the raw pass reads `/LE`, `/BE` and `/BS /D`.
+- `src/renderer/view/AnnotationLayer.ts` — `ShapeImage`, vertex handles.
+- `src/renderer/modules/M30-markup-annotations/{AnnotationService,AnnotationController,PropertiesPanel}.ts`
+  — the provider hook; **one behaviour change:** keys go to an active creation tool.
+- `src/renderer/modules/M21-save/plan.ts` — `xobjects` from `custom.xobjects`.
+- `src/renderer/core/Document.ts` — **one behaviour change:** `rebindAttachments` pairs by engine key.
+- `src/renderer/main.ts`, `src/renderer/index.html`, `vitest.config.ts`, `package.json` (`stamps`
+  script), `resources/annotations/colours.json` (tool defaults), `docs/shortcuts.md`,
+  `resources/README.md`, `test/unit/{annotations,writer}/appearance.test.ts` (two assertions
+  updated for the new key list and the path-based rectangle), `PLAN.md` §0.
+
+### Tests
+
+Green on Windows locally: lint (eslint, prettier, the colour/opacity rules, `tsc` on both
+projects), the unit suite with the coverage gates (13 new files, 133 tests in `test/unit/drawing/`),
+and the Playwright suite (`test/e2e/drawing.spec.ts`, 13 tests, one per acceptance line, plus every
+earlier module's spec).
+
+**The hands-on check the conventions ask for, recorded.** `test/unit/drawing/real-files.test.ts`
+draws a cloudy rectangle, an arrow, a pencil stroke, a turned stamp and a pinned file on the first
+page of each of the operator's own files in `test/fixtures/local/`, saves through the real pipeline
+and reopens; it skips itself on any machine without them. All four files round-trip with every
+annotation inside the page's crop box and carrying an appearance stream. Nothing about their
+contents is read, quoted or asserted.
+
+### Deferred, and why
+
+- **Turning a custom stamp reopened from a file.** Its picture is in the file's `/AP`, not in the
+  model, so it can be moved and resized (the appearance is kept and mapped to the new rect) but not
+  turned; the panel says so in words. Reading the XObject back out of the file is a job for the
+  incremental writer's era (M80), when the file rather than the journal is the source.
+- **A dynamic stamp reopened from a file** is in the same position: the resolved date is only in
+  its appearance.
+- **Line leaders (`/LL`, `/LLE`) and a line's caption (`/Cap`)** are M33's, where a dimension line
+  needs them; the `/LE` machinery they share is here.
+- **Pressure is appearance-only.** PDF ink has no width per point; `extra.pressures` never reaches
+  the file, so a reopened stroke is drawn at one width.

@@ -29,7 +29,7 @@ commit. Sub-conversations working in parallel follow **§12**.
 | 3 | M30 Annotations — text markup, notes, typewriter, text box, callout | [M30-markup-annotations.md](docs/modules/M30-markup-annotations.md) | ☑ |
 | 3 | M40 Organise pages — insert, delete, extract, replace, rotate, move, labels | [M40-organise-pages.md](docs/modules/M40-organise-pages.md) | ☐ |
 | 4 | M42 PDF Portfolios — create, edit, cover sheet, extract | [M42-portfolios.md](docs/modules/M42-portfolios.md) | ☐ |
-| 4 | M31 Annotations — shapes, ink & eraser, stamps, file attachments | [M31-shapes-ink-stamps.md](docs/modules/M31-shapes-ink-stamps.md) | ☐ |
+| 4 | M31 Annotations — shapes, ink & eraser, stamps, file attachments | [M31-shapes-ink-stamps.md](docs/modules/M31-shapes-ink-stamps.md) | ☑ |
 | 4 | M32 Comments panel, replies & status, FDF/XFDF, summarise | [M32-comments-panel.md](docs/modules/M32-comments-panel.md) | ☐ |
 | 4 | M41 Merge, split, extract to files, crop & flatten | [M41-merge-split-crop.md](docs/modules/M41-merge-split-crop.md) | ☐ |
 | 4 | M72 Document properties, metadata & XMP, initial view | [M72-properties-metadata.md](docs/modules/M72-properties-metadata.md) | ☐ |

@@ -86,6 +86,24 @@ drops the stream explicitly — `setAnnotationAppearance(null)` plus `extra.hasA
 changes something the picture must redraw for, and only when it can redraw it: a custom stamp
 reopened from a file can be moved and resized but not turned, and the panel says so in words.
 
+### 4a. The adapter installs the app's own appearance for Square, Circle and Ink
+
+`PdfiumEngine.addAnnotation` and `updateAnnotation` generate the app's appearance for those three
+subtypes and set it with `FPDFAnnot_SetAP` before the page reloads. PDFium would otherwise build
+its own as the page loads — and, for an Ink, inflate `/Rect` by half the border width on every
+regeneration, which the model never hears of, so after a few edits M21's writer refused to touch
+the annotation. With an `/AP` already there PDFium generates nothing; the rect stays what the model
+said, and the live page shows the cloud, the dash and the smoothed stroke. Pure vector only, which
+is all `FPDFAnnot_SetAP` can carry (ADR 0013); nothing above the engine changes.
+
+### 4b. A creation tool owns the keyboard while it is active
+
+M30's `AnnotationController` handles Enter, Escape, Delete and the arrows for the selection. While
+a tool a provider declared as a creation tool is active, it stands aside for keys as it already
+did for the pointer, so the Enter that finishes a polygon reaches the tool through the viewer's
+own routing rather than opening the popup of whatever is selected. M30's own creation tools take
+no keys and are unaffected.
+
 ### 5. `Document.rebindAttachments` pairs by engine key, not by page
 
 A file a FileAttachment annotation made this session is in the name tree (`att.<n>`) _and_ pinned
@@ -110,7 +128,10 @@ is a tree key, so a page-pinned file still shifts with its neighbours.
   `PdfEngine` is unchanged. All additive.
 - `src/renderer/modules/M30-markup-annotations/{AnnotationService,AnnotationController,PropertiesPanel}.ts`
   gain the provider hook; M30's own behaviour is unchanged when no provider is registered.
-- `src/engine/pdfium/mutations.ts` — one behaviour change, for two subtypes, with a test.
+- `src/engine/pdfium/mutations.ts` — one behaviour change, for two subtypes, with a test;
+  `PdfiumEngine.ts` — the appearance installed for three subtypes, with a test.
+- `scripts/lib/register-ts.mjs` — a resolve hook so a script can import the engine's own
+  TypeScript (Node resolves `./content`, not `./content.ts`); used by `npm run stamps`.
 - `src/renderer/core/Document.ts` — one behaviour change in `rebindAttachments`, with a test.
 - M33's measurements and M82's signatures register a provider and put their pictures in
   `custom.xobjects`; nothing else has to move.
