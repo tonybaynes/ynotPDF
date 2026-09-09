@@ -462,6 +462,11 @@ D:\Projects\ynotPDF\
 
 ---
 
+### Foxit is the feature reference only
+
+Never copy Foxit's icons, artwork, wording, help text or documentation. Icons: Lucide or our
+own (similar or better, never exact). Help: written from scratch (M131). Logo: provisional.
+
 ### Licensing — the app is sold commercially
 
 Permissive licences only (MIT, BSD, ISC, Apache-2.0, 0BSD; OFL for fonts). CI gates npm

@@ -1,6 +1,6 @@
 # resources/brand
 
-Operator-supplied brand assets (source of truth for the icon, splash, About dialog, DMG
+**Provisional** — the operator may change the logo (2026-09-09). Operator-supplied brand assets (source of truth for the icon, splash, About dialog, DMG
 background, website).
 
 | File                      | What                                                                                            |

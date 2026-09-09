@@ -118,7 +118,12 @@ None new.
 ## Project context (identical in every module brief — read once per session)
 
 **ynotPDF** is a cross-platform (Windows / macOS / Linux) desktop PDF editor
-targeting the feature set of **Foxit PDF Editor 14**, with four colour themes
+targeting the feature set of **Foxit PDF Editor 14** — *feature set only*:
+**never copy Foxit's icons, artwork, wording, help text or documentation.**
+Icons come from Lucide or are drawn by us; they may be similar in idea (a
+magnifier for zoom) or better, never traced or pixel-copied. Help and
+documentation are written from scratch for ynotPDF. *(Operator rule,
+2026-09-09.)* Four colour themes
 and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;
 `/d/Projects/ynotPDF` in Git Bash). Master plan: `PLAN.md`. Session rules:
 `CLAUDE.md`. This brief is one module of that plan.

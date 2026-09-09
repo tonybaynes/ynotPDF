@@ -35,3 +35,7 @@ brief. Otherwise pick the next unchecked module whose dependencies are ☑.
 `Sample Portfolio.pdf`, a Foxit PDF Portfolio containing them. Use them for manual checks;
 tests may open them only behind `existsSync` skips. Never commit or quote their contents.
 — all defined by M00. Replies to the operator: short, plain — eyesight.
+
+**Foxit is the feature reference, nothing more.** Never copy Foxit's icons, artwork, wording,
+help text or documentation — icons are Lucide or our own (similar in idea is fine, exact copies
+are not); help is written from scratch. The logo in `resources/brand/` is provisional.
