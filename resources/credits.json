@@ -1,0 +1,52 @@
+{
+  "$comment": "Third-party artwork and icon sets shipped in ynotPDF, with source, author and licence. Operator rule, 2026-09-09: every icon set and every clipart item used goes in here, and M131 renders it as the acknowledgements page. Add a row when you add artwork; the rule is permissive licences only — CC0 preferred, CC BY acceptable, never BY-SA / NC / ND, and never Freepik, Flaticon, Vecteezy, Clker, the Noun Project, Icons8, Font Awesome or an image-search result. Code dependencies are not listed here: `npm run licenses` covers those.",
+  "version": 1,
+  "iconSets": [
+    {
+      "id": "lucide",
+      "name": "Lucide",
+      "url": "https://lucide.dev",
+      "source": "https://github.com/lucide-icons/lucide",
+      "author": "Lucide contributors",
+      "licence": "ISC",
+      "licenceUrl": "https://github.com/lucide-icons/lucide/blob/main/LICENSE",
+      "usedBy": [
+        "M00",
+        "M01",
+        "M02",
+        "M10",
+        "M11",
+        "M12",
+        "M13",
+        "M20",
+        "M21",
+        "M30",
+        "M40",
+        "M70",
+        "M91"
+      ],
+      "note": "Every icon in the interface. Drawn inline as SVG with stroke=\"currentColor\", so contrast comes from the theme's --icon token and never from the icon itself."
+    }
+  ],
+  "clipart": [],
+  "fonts": [
+    {
+      "id": "dejavu",
+      "name": "DejaVu Fonts",
+      "url": "https://dejavu-fonts.github.io/",
+      "author": "DejaVu authors, Bitstream Inc.",
+      "licence": "Bitstream Vera / Public Domain (see resources/fonts/LICENSE-DejaVu.txt)",
+      "usedBy": ["M10"],
+      "note": "Substitution fonts for documents whose own fonts are not embedded."
+    },
+    {
+      "id": "liberation",
+      "name": "Liberation Fonts",
+      "url": "https://github.com/liberationfonts/liberation-fonts",
+      "author": "Red Hat, Inc.",
+      "licence": "SIL Open Font License 1.1 (see resources/fonts/LICENSE-Liberation.txt)",
+      "usedBy": ["M10"],
+      "note": "Metric-compatible substitutes for Arial, Times New Roman and Courier New."
+    }
+  ]
+}

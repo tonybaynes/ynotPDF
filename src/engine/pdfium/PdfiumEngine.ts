@@ -89,7 +89,7 @@ import { yieldMacrotask } from '../yield';
 /** Version string reported by `info()`; the wasm carries no runtime version API. */
 export const PDFIUM_BUILD = '@hyzyla/pdfium 2.1.13 (wasm)';
 
-/** Subtypes the adapter gives the app's own appearance as they are written (M31, ADR 0015). */
+/** Subtypes the adapter gives the app's own appearance as they are written (M31, ADR 0016). */
 const OWN_APPEARANCE_SUBTYPES: ReadonlySet<AnnotationSubtype> = new Set<AnnotationSubtype>([
   'Square',
   'Circle',
@@ -334,6 +334,39 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       hiddenLayerNames: new Set(),
     });
     return handle;
+  }
+
+  /**
+   * A new, empty document (M40, ADR 0016). `importPages` fills it; it has no bytes of its own,
+   * so `bytesPtr` is zero and `bytes` is empty — `closeDoc` frees a null pointer happily and
+   * the raw catalogue pass re-serialises because `mutated` starts true.
+   */
+  createDocument(): Promise<DocHandle> {
+    return run(() => {
+      const doc = this.ffi.call('FPDF_CreateNewDocument');
+      if (doc === 0) throw new EngineError('internal', 'PDFium could not create a document');
+      const formInfo = this.ffi.malloc(256);
+      this.ffi.m.HEAPU8.fill(0, formInfo, formInfo + 256);
+      this.ffi.setI32(formInfo, 1, 0);
+      const form = this.ffi.call('FPDFDOC_InitFormFillEnvironment', doc, formInfo);
+      if (form !== 0) this.ffi.call('FPDF_RemoveFormFieldHighlight', form);
+      const handle = this.nextHandle++ as DocHandle;
+      this.docs.set(handle, {
+        handle,
+        doc,
+        form,
+        formInfo,
+        bytesPtr: 0,
+        bytes: new Uint8Array(0),
+        encrypted: false,
+        pages: new Map(),
+        raw: null,
+        // There are no bytes to re-read, so every raw pass must serialise what is here now.
+        mutated: true,
+        hiddenLayerNames: new Set(),
+      });
+      return handle;
+    });
   }
 
   close(doc: DocHandle): Promise<void> {
@@ -695,7 +728,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         ...optional('description', a.description ?? extra.description),
         ...optional('mimeType', a.mimeType ?? extra.mimeType),
         ...optional('collectionFields', extra.collectionFields),
-        // The name-tree key and the folder it names (M42, ADR 0014). PDFium reports the file
+        // The name-tree key and the folder it names (M42, ADR 0016). PDFium reports the file
         // specification's own `/UF`, which is the clean name; the key carries the `<n>` prefix
         // that says which portfolio folder the file is in, and is what the writer matches on.
         ...optional('treeKey', extra.treeKey),
@@ -1445,7 +1478,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         if (c.padding) extra['padding'] = c.padding;
         if (c.align !== undefined) extra['align'] = c.align;
         if (c.rotate !== undefined) extra['rotate'] = c.rotate;
-        // The shape family's entries PDFium has no getter for (M31, ADR 0015).
+        // The shape family's entries PDFium has no getter for (M31, ADR 0016).
         if (c.lineEndings) extra['lineEndings'] = c.lineEndings;
         if (c.cloudy !== undefined) extra['cloudy'] = c.cloudy;
         if (c.dashArray) extra['dashArray'] = c.dashArray;
@@ -2086,7 +2119,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
 
   /**
    * Gives a Square, a Circle or an Ink the app's own appearance the moment it is written, before
-   * the page reloads (M31, ADR 0015).
+   * the page reloads (M31, ADR 0016).
    *
    * PDFium would otherwise build one itself as the page loads — and, for an Ink, *inflate* `/Rect`
    * by half the border width while it is at it, once per regeneration. The model never learns of
