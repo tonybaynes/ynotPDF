@@ -366,6 +366,13 @@ top of the window rather than Foxit's list of tiles down the left, because ynotP
 view was details. The operator judged that wrong for a portfolio, and it was: the default is
 now tiles with the list on the left (decision 10), on `fix/M42-default-view`.
 
+**Confirmed, 2026-09-09.** With both fixes merged the operator reopened the synthetic portfolio
+in Foxit PDF Editor: tiles down the left, the folder first, the `/D` file selected with its page
+in the preview. That closes the brief's one acceptance line this session could not check itself
+— a portfolio ynotPDF writes opens as a portfolio in Foxit, in the order and the layout it was
+saved with. Both faults reached the operator because every automated test asked what our own
+reader made of the bytes; only Foxit could say what Foxit made of them.
+
 **Cross-OS render hashes.** `portfolio.pdf` was added to the corpus. Its hash was generated on
 Windows and written to all three platform files: every other standard-font fixture has byte-equal
 hashes on all three, because PDFium runs as the same WASM everywhere.
