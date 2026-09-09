@@ -284,8 +284,82 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+Written before the code as [ADR 0014](../adr/0014-portfolio-model.md), which is the full
+argument; this is the short form.
+
+1. **The writer owns the portfolio, not the engine.** `WritePlan` gains one nullable
+   `portfolio` section and `FullRewriteWriter` rebuilds `/Collection`, `/Folders` and the
+   `/EmbeddedFiles` name tree from it. PDFium's attachment API re-embeds a file to change
+   anything about it and has no notion of folders, order or `/Collection` at all.
+2. **Byte-identity is a reference, not a comparison.** A file the reader did not replace is
+   planned as `keep`, and the writer reuses the embedded stream *object* the base document
+   holds — same `PDFRef`, same bytes, same `/Filter`, same `/Params`. Nothing decodes it, so a
+   signed PDF inside a portfolio still verifies. Two measurements taken before any code was
+   written say the pipeline can carry that: PDFium's `FPDF_SaveAsCopy` and pdf-lib's save each
+   leave an embedded stream byte-identical.
+3. **Folder membership is the name-tree key prefix**, `<ID>name` — what Acrobat 9 and Foxit
+   both write, and what the operator's own portfolio uses. A key with no prefix is a file at the
+   top level, which is also what an ordinary attachment looks like.
+4. **Order is a schema column.** The format has no order array: a viewer shows what its `/Sort`
+   column says. The reader's order is written into a custom number column, and the column is
+   whichever key the file already uses (`/Reorder`, or Foxit's `foxit:Order`) so a portfolio made
+   in Foxit keeps ordering on Foxit's own key rather than growing a second one beside it. A file
+   with none gets `ynot:Order`, hidden, with `/Sort` pointed at it.
+5. **The module folder is `src/renderer/modules/M42-portfolios/`**, not the `portfolio/` this
+   brief's header says: PLAN §7 and §12 both name `<Mid>-<slug>`, and every other module follows
+   it.
+6. **The portfolio lives in the document's custom bag**, so every structural edit is one
+   value swap and undo is exact by construction — one command class rather than fourteen. Bytes
+   of files added in this session go in `Document.blobs`, a side table `snapshot()` does not see,
+   because the bag is JSON and goes into the recovery record.
+7. **The cover sheet is drawn with pdf-lib** from `resources/portfolio/cover-template.json`,
+   not printed from HTML through Chromium. Printing gives richer layout but needs the main
+   process and a real window, so it could not be unit-tested and would not run in a batch action.
+   The template keeps the wording, the sizes and the columns out of the code.
+8. **M12's Attachments panel stops editing a portfolio's files.** Its add, delete and describe
+   commands go straight to the engine, which knows nothing about folders, order or column values,
+   so using them on a portfolio would go behind the model's back and the next save would rebuild
+   the name tree without the change. On a portfolio they stand down and the Portfolio tab does
+   the work; opening and saving a file out are untouched, and a build without M42 behaves exactly
+   as it did.
+9. **A portfolio now opens on its files.** The document area shows the grid and the cover sheet
+   is a tab away. M12's panel note said "the page behind this panel is the portfolio's cover
+   sheet", which this made untrue, so the note and the acceptance test that asserted it were both
+   updated rather than left to drift.
 
 ## Build log (fill in at merge)
 
-_Not started._
+Built 2026-09-09 on `mod/M42-portfolios`. ADR 0014 merged first as
+[#20](https://github.com/tonybaynes/ynotPDF/pull/20).
+
+**What shipped.** The shared model (`src/shared/portfolio.ts`); the parts of a `/Collection` the
+engine did not read yet — the `/Folders` tree, `/Sort`, `/Reorder` and each file's name-tree key,
+added to M12's own reader rather than beside it; the writer's portfolio section; and the module:
+service, grid, commands, cover sheet, merge-to-single-PDF, a contextual Portfolio ribbon tab, two
+creators on File ▸ New, a context menu, and settings for M130.
+
+**Round-trip fidelity, measured.** `test/unit/portfolio/writer.test.ts` opens the file in the
+real engine, edits one description, saves through the real writer and compares every embedded
+stream byte for byte — on the synthetic `portfolio.pdf` fixture and, when it is on the machine,
+on the operator's own `Sample Portfolio.pdf`. `/Params` (size, dates, checksum) and `/Subtype`
+come back unchanged too. **Still outstanding: the operator has not yet confirmed that Foxit opens
+the saved file as a portfolio** — that is the one acceptance line this session could not check
+itself.
+
+**Cross-OS render hashes.** `portfolio.pdf` was added to the corpus. Its hash was generated on
+Windows and written to all three platform files: every other standard-font fixture has byte-equal
+hashes on all three, because PDFium runs as the same WASM everywhere.
+
+**What is deliberately not here.** M120's batch registry does not exist yet, so "Build portfolio
+from files" is not registered as a batch op; the commands it will drive (`portfolio.new`,
+`portfolio.newFromFiles`, `portfolio.addFiles`, `portfolio.extractAll`) are in the palette with
+stable ids, which is all M120 will need. "Convert to a single PDF" is a plain pdf-lib copy until
+M41 lands, as the brief allows.
+
+**Files touched outside the module.** `src/shared/portfolio.ts` (new); `PdfEngine` (two optional
+members on `Attachment`, three on `PdfCollection`); `rawdoc.ts` and `PdfiumEngine` (reading them);
+`Writer.ts` (one nullable plan section, one phase); `FullRewriteWriter` (calling it);
+`model.ts` (one write intent); `Document` (a `blobs` side table); M21's plan builder;
+`src/shared/ipc.ts` + `src/main/{ipc,files}.ts` (two channels); `main.ts` (registering the
+manifest); M12's attachments panel and manifest (the note and the editing guard, decisions 8 and 9); `scripts/make-fixtures.ts` and the
+fixture corpus.

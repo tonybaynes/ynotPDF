@@ -18,7 +18,8 @@ import {
   ParseSpeeds,
   decodePDFRawStream,
 } from 'pdf-lib';
-import type { CollectionField, Layer, PdfCollection } from '../PdfEngine';
+import { parseTreeKey } from '@shared/portfolio';
+import type { CollectionField, CollectionFolder, Layer, PdfCollection } from '../PdfEngine';
 
 /**
  * The parts of one annotation dictionary PDFium's API cannot give back: `/C`, `/IC` (0xRRGGBB)
@@ -59,6 +60,10 @@ export interface RawInfo {
     readonly description?: string;
     readonly mimeType?: string;
     readonly collectionFields?: Readonly<Record<string, string>>;
+    /** The raw name-tree key, folder prefix included (M42, ADR 0014). */
+    readonly treeKey?: string;
+    /** Folder the key's `<n>` prefix names; 0 when it has none (M42, ADR 0014). */
+    readonly folderId?: number;
   }>;
   /** The catalogue's `/Collection`: the file is a PDF Portfolio (ADR 0011). */
   readonly collection: PdfCollection | null;
@@ -237,7 +242,12 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
   };
 
   // ---- embedded files (name tree walk, in order) ---------------------------------------------
-  const embeddedFiles: Array<{ description?: string; mimeType?: string }> = [];
+  const embeddedFiles: Array<{
+    description?: string;
+    mimeType?: string;
+    treeKey?: string;
+    folderId?: number;
+  }> = [];
   const walkNames = (node: PDFDict | undefined, depth: number): void => {
     if (!node || depth > 32) return;
     const kids = node.lookupMaybe(PDFName.of('Kids'), PDFArray);
@@ -248,6 +258,7 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
     const names = node.lookupMaybe(PDFName.of('Names'), PDFArray)?.asArray() ?? [];
     for (let i = 1; i < names.length; i += 2) {
       const spec = ctx.lookupMaybe(names[i], PDFDict);
+      const key = textOf(names[i - 1]);
       const description = textOf(spec?.lookup(PDFName.of('Desc')));
       const ef = spec?.lookupMaybe(PDFName.of('EF'), PDFDict);
       const file = ef ? ctx.lookup(ef.get(PDFName.of('F')) ?? ef.get(PDFName.of('UF'))) : undefined;
@@ -271,6 +282,8 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
         }
       }
       embeddedFiles.push({
+        ...optional('treeKey', key),
+        ...optional('folderId', key === undefined ? undefined : parseTreeKey(key).folderId),
         ...optional('description', description),
         ...optional('mimeType', subtype?.decodeText()),
         ...optional(
@@ -361,33 +374,107 @@ function readCollection(
     fields.length = 0;
   }
   fields.sort((a, b) => a.order - b.order || a.key.localeCompare(b.key));
-  let folderCount: number;
+  let folders: CollectionFolder[] = [];
   let initialFile: string | undefined;
   try {
-    const folders = dict.lookupMaybe(PDFName.of('Folders'), PDFDict);
-    folderCount = folders ? 1 + countFolders(ctx, folders, 0) : 0;
+    const root = dict.lookupMaybe(PDFName.of('Folders'), PDFDict);
+    if (root) folders = readFolders(root, null, 0);
     initialFile = textOf(dict.lookup(PDFName.of('D')));
   } catch {
-    folderCount = 0;
+    folders = [];
   }
   const view = dict.lookupMaybe(PDFName.of('View'), PDFName)?.decodeText() ?? 'D';
   return {
     view: COLLECTION_VIEWS[view] ?? 'custom',
     fields,
     ...optional('initialFile', initialFile),
-    folderCount,
+    folderCount: folders.length,
+    ...optional('folders', folders.length > 0 ? folders : undefined),
+    ...optional('sort', readSort(dict)),
+    ...optional('reorderKey', dict.lookupMaybe(PDFName.of('Reorder'), PDFName)?.decodeText()),
   };
 }
 
-/** `/Folders` is a linked tree of `/Child` and `/Next` nodes; we only need how many there are. */
-function countFolders(ctx: PDFDocument['context'], node: PDFDict, depth: number): number {
-  if (depth > 32) return 0;
-  let n = 0;
-  for (const key of ['Child', 'Next'] as const) {
-    const next = node.lookupMaybe(PDFName.of(key), PDFDict);
-    if (next) n += 1 + countFolders(ctx, next, depth + 1);
+/**
+ * `/Sort` (PDF 12.3.5): `/S` is the schema key, or an array of them when a viewer sorts on
+ * several — we take the first, because one column is what a grid header can show. `/A` is the
+ * direction and may be an array too; the first entry governs the first key.
+ */
+function readSort(dict: PDFDict): { key: string; ascending: boolean } | undefined {
+  const sort = dict.lookupMaybe(PDFName.of('Sort'), PDFDict);
+  if (!sort) return undefined;
+  const s = sort.lookup(PDFName.of('S'));
+  const key =
+    s instanceof PDFName
+      ? s.decodeText()
+      : s instanceof PDFArray
+        ? nameOf(s.asArray()[0])
+        : undefined;
+  if (key === undefined) return undefined;
+  const a = sort.lookup(PDFName.of('A'));
+  const first = a instanceof PDFArray ? a.asArray()[0] : a;
+  // `/A` absent means ascending (PDF 12.3.5 table 78).
+  return { key, ascending: first === undefined || String(first) !== 'false' };
+}
+
+function nameOf(value: unknown): string | undefined {
+  return value instanceof PDFName ? value.decodeText() : undefined;
+}
+
+/**
+ * `/Folders` is a linked tree: `/Child` is a node's first subfolder and `/Next` its next
+ * sibling. This flattens it, root first, so a caller never has to walk links again (M42,
+ * ADR 0014). A malformed file that links back on itself stops at the depth limit.
+ */
+function readFolders(node: PDFDict, parentId: number | null, depth: number): CollectionFolder[] {
+  if (depth > 32) return [];
+  const out: CollectionFolder[] = [];
+  let current: PDFDict | undefined = node;
+  const seen = new Set<PDFDict>();
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    const id = current.lookupMaybe(PDFName.of('ID'), PDFNumber)?.asNumber() ?? out.length;
+    out.push({
+      id,
+      name: textOf(current.lookup(PDFName.of('Name'))) ?? '',
+      parentId,
+      ...optional('description', textOf(current.lookup(PDFName.of('Desc')))),
+      ...optional('created', pdfDate(textOf(current.lookup(PDFName.of('CreationDate'))))),
+      ...optional('modified', pdfDate(textOf(current.lookup(PDFName.of('ModDate'))))),
+    });
+    const child = current.lookupMaybe(PDFName.of('Child'), PDFDict);
+    if (child) out.push(...readFolders(child, id, depth + 1));
+    current = current.lookupMaybe(PDFName.of('Next'), PDFDict);
   }
-  return n;
+  return out;
+}
+
+/**
+ * A PDF date string (`D:YYYYMMDDHHmmSSOHH'mm`) as ISO 8601, or the input when it is not one.
+ * Kept here rather than imported from the adapter so this file stays parser-only.
+ */
+function pdfDate(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const m =
+    /^D:(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?(?:(Z)|([+-])(\d{2})'?(\d{2})?)?/.exec(
+      value,
+    );
+  if (!m) return value;
+  const [
+    ,
+    year,
+    month = '01',
+    day = '01',
+    hour = '00',
+    minute = '00',
+    second = '00',
+    z,
+    sign,
+    oh,
+    om = '00',
+  ] = m;
+  const zone = z === 'Z' ? 'Z' : sign === undefined ? '' : `${sign}${oh ?? '00'}:${om}`;
+  return `${year ?? '0000'}-${month}-${day}T${hour}:${minute}:${second}${zone}`;
 }
 
 /** A boolean entry that may be a direct `PDFBool` or a reference to one. */

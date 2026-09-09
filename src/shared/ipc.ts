@@ -71,6 +71,25 @@ export interface FileProbe {
 export type FileKind = 'pdf' | 'certificate' | 'digital-id';
 
 /** Options for the Save As dialog (M21). */
+/** One file found by {@link IpcInvokeMap."file:readFolder"}. Metadata only — never bytes. */
+export interface FolderEntry {
+  /** Absolute path, for a later `file:read`. */
+  readonly path: string;
+  /** Path relative to the folder that was listed, with `/` separators. */
+  readonly relativePath: string;
+  readonly name: string;
+  readonly size: number;
+  /** ISO 8601. */
+  readonly modified: string;
+}
+
+export interface ReadFolderOptions {
+  /** Walk subfolders (default true). */
+  readonly recursive?: boolean;
+  /** Stop after this many files (default 5000), so a home directory cannot hang the app. */
+  readonly limit?: number;
+}
+
 export interface SaveDialogOptions {
   /** Pre-filled path or file name. */
   readonly defaultPath?: string;
@@ -286,6 +305,26 @@ export interface IpcInvokeMap {
     args: [kind: FileKind, options?: { title?: string; multiple?: boolean }];
     result: OpenedFile[];
   };
+  /**
+   * Lists a folder recursively, metadata only (M42, ADR 0014). "New portfolio from a folder"
+   * needs the tree before it needs any file; the bytes then come one at a time through
+   * `file:read`, so a large folder never becomes one enormous IPC message.
+   */
+  'file:readFolder': {
+    args: [path: string, options?: ReadFolderOptions];
+    result: FolderEntry[];
+  };
+  /**
+   * Writes one file under a base directory at a relative path, creating the directories on the
+   * way, and answers with the absolute path (M42, ADR 0014). "Extract all" keeps the portfolio's
+   * folder structure and writes one file at a time, which is what keeps the memory flat. Every
+   * segment is sanitised and a path that would escape the base directory is refused: these names
+   * come from inside a PDF, and a file specification is free to say `../../.bashrc`.
+   */
+  'file:writeInto': {
+    args: [dir: string, relativePath: string, bytes: Uint8Array];
+    result: string;
+  };
   /** Starts or stops watching a document for changes made outside the app (M21). */
   'file:watch': { args: [path: string, watching: boolean]; result: void };
   /** Mutes the watcher for a path while we write to it ourselves (M21). */
@@ -488,6 +527,8 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'file:probe',
   'file:saveAsDialog',
   'file:pickFile',
+  'file:readFolder',
+  'file:writeInto',
   'file:watch',
   'file:suspendWatch',
   'recovery:list',

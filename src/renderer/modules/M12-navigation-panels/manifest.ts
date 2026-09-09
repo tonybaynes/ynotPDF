@@ -68,6 +68,22 @@ const hasNav = (ctx: ServiceContext): boolean =>
 /** True when a document is open — every editing command is gated on this. */
 const hasDocument = (ctx: ServiceContext): boolean => hasNav(ctx) && nav(ctx).document !== null;
 
+/**
+ * A document whose embedded files this panel may *edit* (M42).
+ *
+ * A portfolio's files are structure — folder, order, column values — and M42 holds that
+ * structure in the document alongside the engine's list. Adding or deleting one from here would
+ * go behind its back, and the next portfolio save would rebuild the name tree without the
+ * change. So on a portfolio these commands stand down and the Portfolio tab does the work; a
+ * build without M42 has no portfolio service and nothing changes.
+ */
+const editableAttachments = (ctx: ServiceContext): boolean => {
+  if (!hasDocument(ctx)) return false;
+  const registry = ctx.service<Registry>('registry');
+  if (!registry.hasService('portfolio')) return true;
+  return !registry.service<{ isPortfolio: boolean }>('portfolio').isPortfolio;
+};
+
 /** The active document, or a clear error. Commands reaching this are gated on `when`. */
 function doc(ctx: ServiceContext): Document {
   const document = hasNav(ctx) ? nav(ctx).document : null;
@@ -616,7 +632,7 @@ const ATTACHMENT_COMMANDS: ReadonlyArray<CommandSpec> = [
     category: 'File',
     icon: 'paperclip',
     description: 'Embed one or more files in this document',
-    when: hasDocument,
+    when: editableAttachments,
     run: async (ctx) => {
       const service = nav(ctx);
       const document = doc(ctx);
@@ -639,7 +655,7 @@ const ATTACHMENT_COMMANDS: ReadonlyArray<CommandSpec> = [
     label: 'Delete Attachment',
     category: 'File',
     icon: 'trash-2',
-    when: hasDocument,
+    when: editableAttachments,
     run: async (ctx) => {
       const service = nav(ctx);
       const document = doc(ctx);
@@ -665,7 +681,7 @@ const ATTACHMENT_COMMANDS: ReadonlyArray<CommandSpec> = [
     label: 'Edit Attachment Description…',
     category: 'File',
     icon: 'square-pen',
-    when: hasDocument,
+    when: editableAttachments,
     run: async (ctx) => {
       const document = doc(ctx);
       const id = attachmentOf(ctx);
