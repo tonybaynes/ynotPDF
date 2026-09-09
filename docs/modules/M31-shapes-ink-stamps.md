@@ -372,6 +372,12 @@ is colourblind: black and red read as the same colour):**
 - **Node resolves `./content`, not `./content.ts`**, so a script under `scripts/` could not import
   the engine's own code; `scripts/lib/register-ts.mjs` is a ten-line resolve hook that tries the
   extension, used by `npm run stamps`.
+- **CI had no stamp PDFs.** `.gitignore` and the pre-commit hook refuse every `*.pdf` outside
+  `test/fixtures/`, so the 31 generated drawings were on this machine only and the catalogue test
+  failed on every runner. The rendering moved into `src/engine/appearance/stampPdf.ts`; the test
+  now renders every entry itself (one page, the drawing's size, identical bytes twice) and checks
+  a file on disk only when there is one. `npm run stamps` still writes the files for whoever wants
+  them; the app never reads them.
 
 ### Shared files touched (PLAN.md §12.3, all additive except where noted)
 
