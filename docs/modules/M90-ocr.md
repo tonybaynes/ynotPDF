@@ -93,6 +93,13 @@ Handwriting recognition (Parked).
 
 ## Libraries
 
+_Credit rule (operator): every open-source component this module adds
+must be creditable by M131's generated acknowledgements page — npm
+packages need only a licence in their metadata; binaries/WASM go in
+`resources/binaries.json` with `license`, `homepage`, `copyright`; anything
+vendored, adapted or copied (code, icons, fonts, data) goes in
+`resources/credits.json`. Permissive licences only._
+
 tesseract binaries (Apache-2.0) + tessdata_fast (Apache-2.0),
 tesseract.js (Apache-2.0).
 

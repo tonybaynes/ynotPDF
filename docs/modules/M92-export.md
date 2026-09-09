@@ -74,6 +74,13 @@ Office formats (M93).
 
 ## Libraries
 
+_Credit rule (operator): every open-source component this module adds
+must be creditable by M131's generated acknowledgements page — npm
+packages need only a licence in their metadata; binaries/WASM go in
+`resources/binaries.json` with `license`, `homepage`, `copyright`; anything
+vendored, adapted or copied (code, icons, fonts, data) goes in
+`resources/credits.json`. Permissive licences only._
+
 utif, pngjs, jpeg-js.
 
 ## Acceptance tests — the module is done when these pass on all three OSes

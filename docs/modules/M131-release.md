@@ -63,6 +63,28 @@ Foxit's installer/updater/help/about equivalents.
 - Help: `docs/help/**` markdown rendered in-app (opaque window) with
   search; F1 context → topic; About dialog with versions/licences
   (generated third-party notices file from `license-checker`).
+- **Open-source acknowledgements — operator requirement, in these words:**
+  *"It's great to have open-source libraries to draw on, but it is very
+  important to give credit to the hard work that went into it, and to
+  thank the contributors."* Build a **Help → "Open-source software"**
+  page (also reachable from About) that:
+  - opens with a short thank-you to the contributors of every project
+    listed, then lists **every** open-source component the shipped app
+    contains — name, version, licence, project URL, authors/copyright
+    line, and the full licence text on expand;
+  - is **generated at build time**, never hand-maintained, from three
+    sources merged: `package.json` production dependencies (via
+    `license-checker`, transitive included), `resources/binaries.json`
+    (PDFium, fonts, qpdf, Tesseract and any later native/WASM binary —
+    add `license`, `homepage`, `copyright` fields to that manifest), and
+    `resources/credits.json` for anything vendored or adapted by hand
+    (snippets, algorithms, icon sets such as Lucide, Electron and Chromium
+    themselves, Node.js). CI fails if a dependency lacks licence
+    metadata, so the list cannot silently go stale;
+  - groups by role (PDF engine, UI, fonts, OCR, build tools used only at
+    build time listed separately but still credited) and is searchable;
+  - also ships as `THIRD-PARTY-NOTICES.txt` beside the executable, and
+    the same text is included in the installers' licence step.
 - First run: theme choice (four swatches with names), identity, UI scale,
   set as default PDF app (OS API where available), tour of the ribbon.
 - Release checklist `docs/release.md`: version bump, changelog, tag, CI
@@ -100,6 +122,10 @@ electron-updater, electron-log (MIT).
   (manual test recorded in Build log).
 - File association opens a PDF from Explorer/Finder/Files.
 - About lists third-party licences; help opens to the right topic on F1.
+- Help → Open-source software: every entry in `package.json`
+  dependencies, `resources/binaries.json` and `resources/credits.json`
+  appears with licence text; remove a `license` field from a test entry
+  ⇒ the build fails naming it; the page opens with the thank-you.
 
 ---
 
