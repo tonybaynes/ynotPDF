@@ -594,6 +594,92 @@ export default defineModule({
         return result.merged.length;
       },
     },
+
+    // ---- developer ------------------------------------------------------------------------------
+    {
+      id: 'dev.portfolioState',
+      label: 'Portfolio state',
+      category: 'Developer',
+      hidden: true,
+      description: 'Internal: what the portfolio view is showing',
+      run: (ctx) => {
+        const s = service(ctx);
+        const portfolio = s?.portfolio ?? null;
+        const rows = [...document.querySelectorAll<HTMLElement>('.pf-host [data-row]')];
+        return {
+          isPortfolio: portfolio !== null,
+          pane: s?.state.pane ?? null,
+          view: portfolio?.view ?? null,
+          folderId: s?.state.folderId ?? null,
+          selection: s?.state.selection ?? [],
+          gridVisible: document.querySelector<HTMLElement>('.pf-host')?.hidden === false,
+          pageHostHidden: document.getElementById('doc-host')?.hidden ?? null,
+          columns: [...document.querySelectorAll<HTMLElement>('.pf-th .pf-sort')].map(
+            (b) => b.textContent ?? '',
+          ),
+          rows: rows.map((r) => ({
+            id: r.dataset['id'] ?? '',
+            text: r.textContent ?? '',
+            selected: r.getAttribute('aria-selected') === 'true',
+          })),
+          tiles: [...document.querySelectorAll<HTMLElement>('.pf-tile-picture img')].length,
+          folders: [...document.querySelectorAll<HTMLElement>('.pf-folder-button')].map(
+            (b) => b.querySelector('.pf-folder-name')?.textContent ?? '',
+          ),
+          files: (portfolio?.files ?? []).map((f) => ({
+            id: f.id,
+            name: f.name,
+            folderId: f.folderId,
+            description: f.description,
+            order: f.order,
+            fields: f.fields,
+          })),
+          schema: (portfolio?.schema ?? []).map((c) => ({
+            key: c.key,
+            label: c.label,
+            kind: c.kind,
+          })),
+          sort: portfolio?.sort ?? null,
+          initialFile: portfolio?.initialFile ?? null,
+          canSaveBack: s?.canSaveBack ?? false,
+          pages: s?.document?.state.pages.length ?? 0,
+        };
+      },
+    },
+    {
+      id: 'dev.portfolioSelect',
+      label: 'Select files in the portfolio',
+      category: 'Developer',
+      hidden: true,
+      description: 'Internal: selects files by name, so a test can act on them',
+      run: (ctx) => {
+        const s = service(ctx);
+        const wanted = ctx.args['names'];
+        const list = Array.isArray(wanted)
+          ? wanted.filter((v): v is string => typeof v === 'string')
+          : [];
+        const ids = (s?.portfolio?.files ?? [])
+          .filter((f) => list.includes(f.name))
+          .map((f) => f.id);
+        s?.setState({ selection: ids });
+        return ids;
+      },
+    },
+    {
+      id: 'dev.portfolioAddBytes',
+      label: 'Add a file to the portfolio from bytes',
+      category: 'Developer',
+      hidden: true,
+      description: 'Internal: the drop path without a file dialog',
+      run: async (ctx) => {
+        const s = service(ctx);
+        const name = argString(ctx, 'name') ?? 'added.txt';
+        const path = argString(ctx, 'path') ?? '';
+        const raw = ctx.args['bytes'];
+        const bytes = Array.isArray(raw) ? new Uint8Array(raw as number[]) : new Uint8Array();
+        return (await s?.addFiles([{ name, bytes, path }])) ?? 0;
+      },
+    },
   ],
 
   // ---- the ribbon ------------------------------------------------------------------------------

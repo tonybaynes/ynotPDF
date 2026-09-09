@@ -199,7 +199,9 @@ export function mountPortfolioView(
           b.classList.add('is-drop-target');
         }
       });
-      b.addEventListener('dragleave', () => { b.classList.remove('is-drop-target'); });
+      b.addEventListener('dragleave', () => {
+        b.classList.remove('is-drop-target');
+      });
       b.addEventListener('drop', (e) => {
         b.classList.remove('is-drop-target');
         const ids = readDraggedIds(e);
@@ -258,7 +260,7 @@ export function mountPortfolioView(
         sorted ? el('span.pf-sort-word', null, direction === 'ascending' ? 'A–Z' : 'Z–A') : null,
       );
       b.addEventListener('click', () => {
-        void service.setSort(column.key, sorted ? !(portfolio.sort?.ascending) : true);
+        void service.setSort(column.key, sorted ? !portfolio.sort?.ascending : true);
       });
       cell.append(b);
       header.append(cell);
@@ -356,7 +358,9 @@ export function mountPortfolioView(
       e.preventDefault();
       row.classList.add('is-drop-target');
     });
-    row.addEventListener('dragleave', () => { row.classList.remove('is-drop-target'); });
+    row.addEventListener('dragleave', () => {
+      row.classList.remove('is-drop-target');
+    });
     row.addEventListener('drop', (e) => {
       row.classList.remove('is-drop-target');
       const ids = readDraggedIds(e);
@@ -455,7 +459,9 @@ export function mountPortfolioView(
     e.dataTransfer.dropEffect = 'copy';
     host.classList.add('is-drop-target');
   };
-  const onDragLeave = (): void => { host.classList.remove('is-drop-target'); };
+  const onDragLeave = (): void => {
+    host.classList.remove('is-drop-target');
+  };
   const onDrop = (e: DragEvent): void => {
     host.classList.remove('is-drop-target');
     if (e.dataTransfer?.types.includes('Files') !== true) return;
@@ -496,7 +502,9 @@ export function mountPortfolioView(
               resolve();
             });
           },
-          () => { resolve(); },
+          () => {
+            resolve();
+          },
         );
       });
     const readDirectory = async (entry: FileSystemDirectoryEntry, path: string): Promise<void> => {
@@ -504,7 +512,9 @@ export function mountPortfolioView(
       // `readEntries` answers in batches and signals the end with an empty one.
       for (;;) {
         const batch = await new Promise<FileSystemEntry[]>((resolve) => {
-          reader.readEntries(resolve, () => { resolve([]); });
+          reader.readEntries(resolve, () => {
+            resolve([]);
+          });
         });
         if (batch.length === 0) break;
         for (const child of batch)

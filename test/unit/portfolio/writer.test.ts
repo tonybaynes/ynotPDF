@@ -81,7 +81,7 @@ async function read(bytes: Uint8Array): Promise<SavedPortfolio> {
       const ef = spec.lookupMaybe(PDFName.of('EF'), PDFDict);
       const stream = ef ? ctx.lookup(ef.get(PDFName.of('F'))) : undefined;
       const params: Record<string, string> = {};
-      let raw: Uint8Array<ArrayBufferLike> = new Uint8Array();
+      let raw: Uint8Array = new Uint8Array();
       let subtype: string | null = null;
       if (stream instanceof PDFRawStream) {
         raw = stream.contents;
