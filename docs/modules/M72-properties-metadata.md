@@ -239,8 +239,168 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **The Info dictionary and XMP are one edit, never two.** Foxit, Acrobat and the XMP
+  specification all treat them as two views of the same facts, and a file where they disagree is
+  a file whose title depends on which reader opened it. So one command
+  (`SetPropertiesCommand`) writes the model's metadata *and* re-derives the XMP packet from it,
+  and the dialog has no way to set one without the other. The raw-XMP view on the Advanced tab is
+  read-only for the same reason — a free-text XMP editor is the Parked half of this brief.
+- **XMP is patched, never regenerated.** `src/engine/xmp/` parses the existing packet with
+  fast-xml-parser (MIT) in `preserveOrder` mode, replaces only the properties we own, and writes
+  the rest back byte-for-byte in its original order — so a PDF/A `pdfaid:part`, an
+  `xmpMM:DocumentID`, an Illustrator packet or a rights-management block survives a title change.
+  A file with no packet gets a minimal one containing only what we know.
+- **Custom properties live in `pdfx:`** (`http://ns.adobe.com/pdfx/1.3/`), which is where the XMP
+  specification puts Info-dictionary keys that have no standard XMP property, and where Acrobat,
+  Foxit and Ghostscript-produced files all look for them. Inventing a `ynot:` namespace would
+  make our custom properties invisible to every other tool. Provenance: XMP Specification Part 2
+  and ISO 32000-1 §14.3.3; nothing was taken from a Foxit product.
+- **The engine gains two reads and nothing else.** `fonts()` and `initialView()`, both additive,
+  both implemented in the pdf-lib raw-document reader M10 already uses for layers and XMP —
+  PDFium exposes neither. `Metadata` gains four optional fields (`custom`, `trapped`, `lang`,
+  `baseUrl`). ADR 0017.
+- **Fonts are read from the font dictionaries, not from PDFium.** A font's name, type, embedding
+  and encoding are all in `/Font` resource dictionaries, and reading them is exact; PDFium's text
+  API can only tell us about fonts that actually drew a glyph. Subsetting is the six-uppercase
+  prefix ISO 32000-1 §9.6.4 defines, not a guess. Resources are walked page by page including
+  nested form XObjects, and the same font object seen twice is one row.
+- **Initial view is model state, not a module's private bag.** M20 already declared
+  `ViewSettings` ("How the file asks to be opened") and left it at defaults because nothing read
+  it. M72 fills it: the engine reads `/PageMode`, `/PageLayout`, `/OpenAction` and
+  `/ViewerPreferences` on open, `Document` carries them, `SetInitialViewCommand` changes them,
+  and M21's writer writes them back. That is one home for the setting rather than one per module.
+- **M72 applies the initial view itself, from the model.** The brief says M11 applies it on open;
+  doing that inside M11 would mean editing another module's folder, so M72 subscribes to
+  `Documents.onAttached` — the signal M21 already uses — and applies the layout, the magnification
+  and the opening page through M11's `ViewerService` when the viewer for a tab appears. A setting
+  (`properties.applyInitialView`, on) turns it off for a reader who would rather keep their own
+  view.
+- **The one thing it does not apply is `/PageMode`, and that is the operator's own rule.** M12
+  records it three times: the left pane opens on whatever `ui.leftPaneOnOpen` says, and
+  "bookmarks-on-open never overrides it, even for documents whose `/PageMode` is `/UseOutlines`".
+  This brief's acceptance test asks for the opposite ("Bookmarks panel" applied on open), and
+  where two briefs disagree the operator's stated requirement wins. So the page mode is read,
+  shown in the dialog, written back to the file exactly as set, and reported in words — "the
+  document asks to open with the bookmarks panel; which panel opens is your own setting" — and
+  the pane is left alone. The acceptance test checks the other two thirds (fit page, page 3) and
+  that the panel request survived the save.
+- **The window options are honoured as far as an app with tabs honestly can.** Hide toolbar, hide
+  menu bar and hide window UI are stored, shown and written back exactly as the file asks, and
+  applied to the ribbon and the panes; "fit window", "centre window" and "display document title"
+  are stored and written but not obeyed, because a tabbed multi-document window cannot resize
+  itself around one of its documents without throwing the others' layout away. The dialog says so
+  in words rather than pretending.
+- **Security and signatures are shown, not edited.** The Security tab mounts M70's own
+  `securityPropertiesPanel` — the element that module already exports for exactly this — with a
+  button that runs `protect.security`; the signature list is read from the model with a button
+  that opens the Signatures panel. When M70 is not in the build the tab says what the file itself
+  reports and nothing more.
+- **The plan gains one section, and it is sparse like the rest.** `WritePlan.view` carries page
+  mode, layout, open action, viewer preferences, `/Lang` and the base URL, and is non-null only
+  when the document carries the new `view` write intent; `PlannedMetadata` gains `custom` and
+  `trapped`. A document nobody has retitled still plans nothing at all. ADR 0017.
+- **A properties edit normalises the two dates to UTC.** The writer's `isoToPdfDate` writes
+  `D:…Z00'00'`, so a file whose `/CreationDate` said `+01:00` comes back saying `Z` — the same
+  instant, one hour different on the clock face and not at all in what a reader is shown, because
+  the dialog formats from the instant. Checked against the operator's own files, where it is the
+  only difference a title change makes besides the title.
+- **Dates are shown in the reader's locale and stored in UTC.** Created and modified are
+  `Intl.DateTimeFormat` in en-GB by default (PLAN §9); what goes into `/CreationDate` and
+  `xmp:CreateDate` is ISO 8601. Modified is set by the save, not by the dialog, so a reader who
+  opens Properties and presses Cancel changes nothing.
+- **Nothing in the dialog is colour-coded.** Every status is a word: "Embedded", "Embedded
+  subset", "Not embedded"; "Yes"/"No" for tagged and fast web view; "Protected"/"Not protected".
+  The tab strip is a real ARIA tablist with arrow-key movement, the tab panels are reachable by
+  Tab, and the whole dialog is opaque like every other.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-09 on `mod/M72-properties-metadata` (worktree `../ynotPDF-M72`).**
+
+### What shipped
+
+- **The Document Properties dialog** (`Ctrl+D`, the Properties slot in the File backstage — which
+  nothing had filled — the View and Protect ribbons, and the document's right-click menu). Six
+  tabs: Description, Custom, Security, Fonts, Initial View, Advanced. A real ARIA tablist with
+  arrow-key movement, every status a word beside an icon, nothing transparent, no colour literal.
+- **`src/engine/xmp/`** — a namespace-aware XMP reader and patcher. It resolves every tag through
+  the `xmlns:` declarations in scope rather than trusting a prefix, replaces both the element and
+  the compact attribute form of a property, and writes every other node back exactly as it was
+  read. A PDF/A identification block, an `xmpMM` history, an Illustrator packet, a rights
+  statement: all survive a title change, and patching the same packet twice produces the same
+  bytes. Parsed with fast-xml-parser (MIT) in `preserveOrder` mode; serialised by hand, because
+  that library's builder is deprecated in version 5 and re-indents what it writes.
+- **The information dictionary and XMP as one edit.** `SetPropertiesCommand` applies the patch to
+  the model and re-derives the packet from the result, so a file cannot be saved with the two
+  disagreeing. Custom properties are mirrored into `pdfx:`, where the XMP specification puts
+  information-dictionary entries and where Acrobat, Foxit and Ghostscript-produced files look
+  for them.
+- **`PdfEngine.fonts()`** — the fonts a document's page resources name, read from the `/Font`
+  dictionaries (including nested form XObjects and Type 3 glyph resources), with type, embedding,
+  the six-letter subset prefix, encoding and first page. Read from dictionaries rather than from
+  drawn glyphs, so a font the file declares and never uses is still listed.
+- **`PdfEngine.initialView()`** — `/PageMode`, `/PageLayout`, `/OpenAction` (resolved through a
+  `/GoTo` action or a named destination) and the `/ViewerPreferences` a reader can see.
+  `Metadata` gains custom entries, `/Trapped`, `/Lang` and the base URL. Both live in the pdf-lib
+  raw reader M10 already uses for layers and XMP, because PDFium exposes none of them.
+- **`ViewSettings` filled in at last.** M20 declared it — "how the file asks to be opened" — and
+  left it at defaults because nothing read it. It now comes from the engine on open, changes
+  through `SetInitialViewCommand`, and goes back to the file through the writer's new `view`
+  plan section (`/PageMode`, `/PageLayout`, `/OpenAction`, `/ViewerPreferences`, `/Lang`,
+  `/URI /Base`), which is nullable and sparse like every other section.
+- **Applying it on open** — layout, magnification and opening page, through M11's viewer, hung
+  off `Documents.onAttached`. Three settings govern it (`properties.applyInitialView`, on;
+  `applyWindowOptions`, off; `applyDisplayDocTitle`, on), and what the application will not do is
+  said in words rather than silently skipped.
+- **Two fixtures**, both small and generated: `fonts.pdf` (standard-14, a missing TrueType, an
+  embedded one, an embedded subset, a Type 0 over CIDFontType2 and a Type 3 — sharing one 1 KB
+  TrueType font built table by table in `make-fixtures.ts`, so nothing depends on the fetched
+  DejaVu faces) and `initial-view.pdf`.
+- **The round-trip harness gains `initialView` and `fonts`**, so from now on every module's save
+  is checked for keeping them, whether or not it has heard of M72.
+
+### Decisions worth knowing about
+
+- **`/PageMode` is stored, shown and written back — and never obeyed.** M12 carries the operator's
+  requirement, stated three times, that `ui.leftPaneOnOpen` decides which navigation panel opens
+  "even for documents whose `/PageMode` is `/UseOutlines`". This brief's acceptance test asks for
+  the opposite. Where two briefs disagree the operator's stated requirement wins, so the file's
+  request is read, written back exactly as set, and reported in words — "the document asks to open
+  with the bookmarks panel; which panel opens is your own setting" — while the pane is left alone.
+- **The XMP packet is patched, never regenerated**, and a superseded packet is now removed from
+  the file rather than left behind as an unreferenced object. It used to be left: a rewrite
+  registered a new stream and the old one still went out with the rest of the context, where any
+  reader scanning bytes for `<?xpacket` — which is how XMP is meant to be findable — could find
+  the stale one first. `rawdoc` now prefers the catalogue's `/Metadata` over its byte scan for the
+  same reason.
+- **Custom properties are a complete set, not a patch.** The model reads every custom entry the
+  file has, so replacing the set wholesale is exact — except that the writer refuses to delete an
+  entry whose value is not text, because the model never showed it and so cannot have been asked.
+- **A properties edit normalises the two dates to UTC.** `+01:00` comes back as `Z`: the same
+  instant, and the dialog formats from the instant, so nothing a reader sees changes. Checked
+  against the operator's own files, where it is the only difference a title change makes besides
+  the title itself.
+- **The window options are honest about what they do.** Hide toolbar, hide menu bar and hide
+  window UI are stored, written and applied when the reader allows it; fit window and centre
+  window are stored and written but not obeyed, because a window with several tabs in it belongs
+  to all of them. The dialog says so.
+
+### Fixed on the way past
+
+- **M70's stylesheet had never been linked** from `index.html`, so its Protect dialog and its
+  security panel have been drawing unstyled since that module landed. M72 shows the same panel on
+  its Security tab, which is how it came to light. One line.
+- **CI's Linux job was dying at its third step** — on `main` as well as this branch — because the
+  runner image carries Google's Chrome apt repository and that repository intermittently serves an
+  index whose hash does not match its own Release file. Every source file mentioning
+  `dl.google.com` is now removed before `apt-get update`, found by content because the image has
+  used both the `.list` and the deb822 `.sources` form.
+
+### Deferred, and why
+
+- **Editing XMP by hand.** The raw packet is on the Advanced tab, read-only. A free-text editor is
+  the Parked half of this brief, and an editable box beside fields that re-derive the packet would
+  be two ways to set one thing.
+- **Obeying "fit window" and "centre window".** See above: not a limitation, a decision.
+- **A signature list of its own.** The Security tab says how many signatures a document carries
+  and offers the Signatures panel when one exists; reading them properly is M81's.

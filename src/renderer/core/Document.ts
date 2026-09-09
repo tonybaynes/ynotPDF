@@ -43,6 +43,7 @@ import {
   toModelDestination,
   toModelLayer,
   toModelMetadata,
+  toViewSettings,
   type CustomBag,
   type ModelAnnotation,
   type ModelAttachment,
@@ -284,6 +285,12 @@ export class Document {
     });
 
     const meta = toModelMetadata(metadata);
+    // How the file asks to be opened (M72, ADR 0017). An engine that cannot say leaves the
+    // defaults, which is the same answer as a file that asks for nothing.
+    const view = await engine
+      .initialView(handle)
+      .then((v) => toViewSettings(v, pageIdAt))
+      .catch(() => DEFAULT_VIEW_SETTINGS);
     const title = meta.title ?? basename(path ?? name ?? 'Untitled');
     return new Document(
       engine,
@@ -301,7 +308,7 @@ export class Document {
         metadata: meta,
         security: { encrypted: metadata.encrypted, permissions },
         signatures,
-        view: DEFAULT_VIEW_SETTINGS,
+        view,
         custom: {},
         writeIntents: [],
         revision: 0,
@@ -759,6 +766,18 @@ export class Document {
   setMetadataRecord(patch: Partial<ModelMetadata>): void {
     this.store.set((s) => ({ metadata: { ...s.metadata, ...patch } }));
     this.events.emit({ type: 'metadata:changed' });
+  }
+
+  /**
+   * Merges a patch into the initial-view settings (M72, ADR 0017).
+   *
+   * Model-only, like the metadata setter beside it: PDFium has no setter for `/PageMode`,
+   * `/PageLayout`, `/OpenAction` or `/ViewerPreferences`, so a command that calls this also
+   * records the `view` write intent and M21's writer applies it.
+   */
+  setViewRecord(patch: Partial<ViewSettings>): void {
+    this.store.set((s) => ({ view: { ...s.view, ...patch } }));
+    this.events.emit({ type: 'view:changed' });
   }
 
   /** Sets a layer's visibility in the model. */

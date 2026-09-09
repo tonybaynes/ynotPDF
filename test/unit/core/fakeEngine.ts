@@ -15,6 +15,7 @@
  */
 
 import {
+  DEFAULT_INITIAL_VIEW,
   EngineError,
   NotImplementedError,
   type Annotation,
@@ -22,6 +23,8 @@ import {
   type AttachmentPatch,
   type DocHandle,
   type FormField,
+  type FontUsage,
+  type InitialView,
   type Layer,
   type Metadata,
   type NewAttachment,
@@ -114,6 +117,8 @@ export interface FakeDocumentSpec {
   readonly collection?: PdfCollection | null;
   readonly namedDestinations?: ReadonlyArray<NamedDestination>;
   readonly signatures?: ReadonlyArray<SignatureSummary>;
+  readonly fonts?: ReadonlyArray<FontUsage>;
+  readonly initialView?: InitialView;
   readonly metadata?: Partial<Metadata>;
   readonly encrypted?: boolean;
 }
@@ -128,6 +133,8 @@ interface FakeDoc {
   collection: PdfCollection | null;
   namedDestinations: NamedDestination[];
   signatures: SignatureSummary[];
+  fonts: FontUsage[];
+  initialView: InitialView;
   metadata: Metadata;
 }
 
@@ -183,6 +190,8 @@ export class FakeEngine implements PdfEngine {
       collection: spec.collection ?? null,
       namedDestinations: [...(spec.namedDestinations ?? [])],
       signatures: [...(spec.signatures ?? [])],
+      fonts: [...(spec.fonts ?? [])],
+      initialView: spec.initialView ?? DEFAULT_INITIAL_VIEW,
       metadata: {
         version: '1.7',
         encrypted: spec.encrypted ?? false,
@@ -326,6 +335,14 @@ export class FakeEngine implements PdfEngine {
 
   namedDestinations(doc: DocHandle): Promise<ReadonlyArray<NamedDestination>> {
     return Promise.resolve(this.doc(doc).namedDestinations);
+  }
+
+  fonts(doc: DocHandle): Promise<ReadonlyArray<FontUsage>> {
+    return Promise.resolve(this.doc(doc).fonts);
+  }
+
+  initialView(doc: DocHandle): Promise<InitialView> {
+    return Promise.resolve(this.doc(doc).initialView);
   }
 
   // ---- content -----------------------------------------------------------------------------

@@ -40,12 +40,13 @@ jobs:
       - name: Linux packaging prerequisites (rpm, AppImage FUSE)
         if: runner.os == 'Linux'
         run: |
-          # The runner image ships third-party package lists — Chrome, Edge — that this build has
-          # no use for and no control over, and `apt-get update` fails outright when any one of
-          # them serves a bad index, which Chrome's did on 2026-09-09. They are all in the legacy
-          # `.list` format; the Ubuntu archive itself is in `sources.list` (22.04) or
-          # `ubuntu.sources` (24.04), so removing them leaves everything we actually install.
-          sudo rm -f /etc/apt/sources.list.d/*.list
+          # The runner image ships Google's Chrome apt repository, which intermittently serves a
+          # package index whose hash does not match its own Release file. `apt-get update` then
+          # exits 100 and the whole job dies at step three — for a repository nothing here
+          # installs from. Every source file that mentions it goes first, by content rather than
+          # by name: the image has used both `google-chrome.list` and the deb822 `.sources` form.
+          sudo grep -rlF dl.google.com /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null |
+            sudo xargs -r rm -f
           sudo apt-get update
           sudo apt-get install -y rpm libfuse2 xvfb
 

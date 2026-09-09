@@ -1,0 +1,242 @@
+/*
+ * M72 — the Document Properties dialog.
+ *
+ * Tokens only, nothing transparent. Two rules worth stating here rather than leaving implicit:
+ *
+ * - **A status is a word with an icon beside it.** `.properties-word` is that pairing, and it
+ *   carries no colour of its own; the icon and the text are both `--fg`, so nothing in this
+ *   dialog depends on telling two hues apart.
+ * - **The tab strip is a strip of real buttons.** The selected one is filled with the accent
+ *   *and* carries a thicker border, because a fill alone is what a reader with low vision loses
+ *   against a panel that is already dark.
+ */
+
+.properties-dialog .dlg-body {
+  min-height: 26rem;
+}
+
+/* ---- the tab strip ---------------------------------------------------------------------------- */
+
+.properties-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-4);
+  border-bottom: var(--border-width) solid var(--border);
+  padding-bottom: var(--sp-2);
+}
+
+.properties-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--fg);
+  font-weight: var(--fw-body);
+  cursor: pointer;
+}
+
+.properties-tab svg {
+  color: var(--icon);
+}
+
+.properties-tab[aria-selected='true'] {
+  background: var(--accent);
+  color: var(--fg-on-accent);
+  border-color: var(--accent);
+  border-width: calc(var(--border-width) * 2);
+  font-weight: var(--fw-heading);
+}
+
+.properties-tab[aria-selected='true'] svg {
+  color: var(--fg-on-accent);
+}
+
+.properties-panels > [role='tabpanel'][hidden] {
+  display: none;
+}
+
+.properties-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  align-items: stretch;
+}
+
+/* A button in a panel is as wide as its own words, not as wide as the dialog. */
+.properties-panel > .btn {
+  align-self: flex-start;
+}
+
+/* ---- headings and prose ----------------------------------------------------------------------- */
+
+.properties-heading {
+  margin: var(--sp-4) 0 0;
+  font-size: var(--fs-4);
+  font-weight: var(--fw-heading);
+  color: var(--fg);
+}
+
+.properties-lead {
+  margin: 0;
+  color: var(--fg);
+}
+
+.properties-empty {
+  margin: 0;
+  padding: var(--sp-3);
+  border: var(--border-width) dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+}
+
+/* ---- the read-only facts ---------------------------------------------------------------------- */
+
+.properties-facts {
+  display: grid;
+  grid-template-columns: minmax(9rem, auto) 1fr;
+  gap: var(--sp-1) var(--sp-4);
+  margin: 0;
+}
+
+.properties-facts dt {
+  color: var(--fg-muted);
+  font-weight: var(--fw-body);
+}
+
+.properties-facts dd {
+  margin: 0;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+  /*
+   * The About dialog styles every `dialog dd` as monospace (M00). These are sentences — a file
+   * name, a date, a page size — not code, so they read in the interface font like everything
+   * else in this window.
+   */
+  font-family: var(--font-ui);
+}
+
+.properties-word {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--fg);
+}
+
+.properties-word svg {
+  color: var(--icon);
+  flex: 0 0 auto;
+}
+
+/* ---- custom properties ------------------------------------------------------------------------ */
+
+.properties-custom-head,
+.properties-custom-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.properties-custom-head {
+  color: var(--fg-muted);
+  font-weight: var(--fw-heading);
+}
+
+.properties-custom-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-height: 18rem;
+  overflow-y: auto;
+}
+
+/* ---- the fonts table -------------------------------------------------------------------------- */
+
+.properties-table-scroll {
+  max-height: 22rem;
+  overflow: auto;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+}
+
+.properties-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-panel);
+}
+
+.properties-table th,
+.properties-table td {
+  padding: var(--sp-2) var(--sp-3);
+  text-align: left;
+  border-bottom: var(--border-width) solid var(--border);
+  color: var(--fg);
+  vertical-align: top;
+}
+
+.properties-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-panel);
+  font-weight: var(--fw-heading);
+}
+
+.properties-table tbody tr:last-child th,
+.properties-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.properties-font-name {
+  font-weight: var(--fw-heading);
+  overflow-wrap: anywhere;
+}
+
+/* ---- checkboxes, notes and the XMP view ------------------------------------------------------- */
+
+.properties-check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.properties-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--fg);
+}
+
+.properties-note-icon svg {
+  color: var(--icon);
+}
+
+.properties-xmp {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2);
+  white-space: pre;
+  overflow: auto;
+  background: var(--bg-input);
+  color: var(--fg);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-2);
+}
+
+/* ---- the File backstage page ------------------------------------------------------------------ */
+
+.properties-backstage {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}

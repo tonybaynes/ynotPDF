@@ -21,13 +21,14 @@ import type {
   Attachment,
   Destination,
   FormFieldType,
+  InitialView,
   Layer,
   Metadata,
   OutlineItem,
   PageObject,
   Permissions,
 } from '@engine/PdfEngine';
-import type { PageBoxName, PageSize, PdfPoint, PdfRect, Rotation } from '@shared/pdf';
+import type { PageBoxName, PageIndex, PageSize, PdfPoint, PdfRect, Rotation } from '@shared/pdf';
 import type { ModelId } from './Ids';
 
 // ---- pages -------------------------------------------------------------------------------------
@@ -513,6 +514,17 @@ export interface ModelMetadata {
   readonly linearized: boolean;
   readonly hasForm: boolean;
   readonly hasXfa: boolean;
+  /**
+   * Information-dictionary entries that are not one of the standard keys (M72, ADR 0017), by
+   * the key as it is written in the file. Foxit calls these custom document properties.
+   */
+  readonly custom: Readonly<Record<string, string>>;
+  /** `/Trapped` (M72, ADR 0017). */
+  readonly trapped: 'True' | 'False' | 'Unknown' | null;
+  /** The catalogue's `/Lang`: the document's natural language, as a BCP 47 tag (M72). */
+  readonly lang: string | null;
+  /** The catalogue's `/URI /Base`, against which relative link URIs resolve (M72). */
+  readonly baseUrl: string | null;
 }
 
 /** What the file's security handler allows. Read-only in M20; M70 owns changing it. */
@@ -537,12 +549,34 @@ export interface SignatureSummary {
   readonly docMdpPermission: number | null;
 }
 
-/** How the file asks to be opened (`/OpenAction`, `/PageMode`, `/ViewerPreferences`). */
+/**
+ * How the file asks to be opened (`/OpenAction`, `/PageMode`, `/PageLayout`,
+ * `/ViewerPreferences`). Filled from the engine on open and written back by M21's writer
+ * (M72, ADR 0017); whether the application *obeys* it is M72's `applyInitialView` setting.
+ */
 export interface ViewSettings {
   readonly pageMode: 'none' | 'outlines' | 'thumbnails' | 'fullscreen' | 'attachments' | 'ocg';
   readonly initialPageId: ModelId | null;
   readonly initialZoom: number | null;
   readonly initialFit: Destination['fit'] | null;
+  /** `/PageLayout`; `default` means the file does not say and the reader's preference wins. */
+  readonly pageLayout:
+    | 'default'
+    | 'single'
+    | 'one-column'
+    | 'two-column-left'
+    | 'two-column-right'
+    | 'two-page-left'
+    | 'two-page-right';
+  readonly hideToolbar: boolean;
+  readonly hideMenubar: boolean;
+  readonly hideWindowUi: boolean;
+  readonly fitWindow: boolean;
+  readonly centreWindow: boolean;
+  readonly displayDocTitle: boolean;
+  readonly printScaling: 'app-default' | 'none';
+  /** Reading order of the *interface*, not of the text. */
+  readonly direction: 'l2r' | 'r2l';
 }
 
 export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
@@ -550,6 +584,15 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   initialPageId: null,
   initialZoom: null,
   initialFit: null,
+  pageLayout: 'default',
+  hideToolbar: false,
+  hideMenubar: false,
+  hideWindowUi: false,
+  fitWindow: false,
+  centreWindow: false,
+  displayDocTitle: false,
+  printScaling: 'app-default',
+  direction: 'l2r',
 };
 
 /**
@@ -573,6 +616,12 @@ export type WriteIntent =
   | 'attachments'
   | 'annotations'
   | 'fields'
+  /**
+   * The initial view or a document-level property was edited (M72, ADR 0017): `/PageMode`,
+   * `/PageLayout`, `/OpenAction`, `/ViewerPreferences`, `/Lang` or the base URL. PDFium has a
+   * setter for none of them, so the writer applies the whole section.
+   */
+  | 'view'
   /**
    * The PDF Portfolio structure was edited (M42, ADR 0014). The writer rebuilds `/Collection`,
    * `/Folders` and the `/EmbeddedFiles` name tree from the plan, reusing every embedded stream
@@ -602,6 +651,38 @@ export function toModelMetadata(m: Metadata): ModelMetadata {
     linearized: m.linearized,
     hasForm: m.hasForm,
     hasXfa: m.hasXfa,
+    custom: m.custom ?? {},
+    trapped: m.trapped ?? null,
+    lang: m.lang ?? null,
+    baseUrl: m.baseUrl ?? null,
+  };
+}
+
+/**
+ * The engine's reading of `/PageMode` and friends as model state (M72, ADR 0017). The open
+ * action's page index becomes a model page id, so a page that moves takes its initial view with
+ * it; a destination naming a page that is not there is dropped.
+ */
+export function toViewSettings(
+  view: InitialView,
+  pageIdAt: (index: PageIndex) => ModelId | null,
+): ViewSettings {
+  const dest = view.openAction;
+  const pageId = dest ? pageIdAt(dest.page) : null;
+  return {
+    pageMode: view.pageMode,
+    pageLayout: view.pageLayout,
+    initialPageId: pageId,
+    initialZoom: dest?.zoom ?? null,
+    initialFit: dest && pageId !== null ? dest.fit : null,
+    hideToolbar: view.hideToolbar,
+    hideMenubar: view.hideMenubar,
+    hideWindowUi: view.hideWindowUi,
+    fitWindow: view.fitWindow,
+    centreWindow: view.centreWindow,
+    displayDocTitle: view.displayDocTitle,
+    printScaling: view.printScaling,
+    direction: view.direction,
   };
 }
 

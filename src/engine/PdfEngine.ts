@@ -427,6 +427,87 @@ export interface PdfCollection {
   readonly reorderKey?: string;
 }
 
+/**
+ * How a document asks to be opened: `/PageMode`, `/PageLayout`, `/OpenAction` and the
+ * `/ViewerPreferences` a reader can actually see (M72, ADR 0017).
+ *
+ * Everything here is what the *file* says. Whether the application obeys it is the application's
+ * decision — `properties.applyInitialView` in M72 — and nothing in the engine assumes it will.
+ */
+export interface InitialView {
+  /** `/PageMode`. `none` is the default: no navigation panel open. */
+  readonly pageMode: 'none' | 'outlines' | 'thumbnails' | 'fullscreen' | 'attachments' | 'ocg';
+  /** `/PageLayout`. `default` means the file does not say, so the reader's preference wins. */
+  readonly pageLayout:
+    | 'default'
+    | 'single'
+    | 'one-column'
+    | 'two-column-left'
+    | 'two-column-right'
+    | 'two-page-left'
+    | 'two-page-right';
+  /** `/OpenAction` when it is a destination (a GoTo action is resolved to its destination). */
+  readonly openAction?: Destination;
+  /** `/ViewerPreferences /HideToolbar` and friends; absent entries default to false. */
+  readonly hideToolbar: boolean;
+  readonly hideMenubar: boolean;
+  readonly hideWindowUi: boolean;
+  readonly fitWindow: boolean;
+  readonly centreWindow: boolean;
+  readonly displayDocTitle: boolean;
+  /** `/PrintScaling`: `app-default` (the file says nothing or `/AppDefault`) or `none`. */
+  readonly printScaling: 'app-default' | 'none';
+  /** `/Direction`: reading order of the *interface*, not of the text. */
+  readonly direction: 'l2r' | 'r2l';
+}
+
+/** The neutral answer: the file asks for nothing in particular. */
+export const DEFAULT_INITIAL_VIEW: InitialView = {
+  pageMode: 'none',
+  pageLayout: 'default',
+  hideToolbar: false,
+  hideMenubar: false,
+  hideWindowUi: false,
+  fitWindow: false,
+  centreWindow: false,
+  displayDocTitle: false,
+  printScaling: 'app-default',
+  direction: 'l2r',
+};
+
+/**
+ * One font a document's page resources name (M72, ADR 0017).
+ *
+ * Read from the `/Font` dictionaries rather than from drawn glyphs, so a font that is declared
+ * but never used still appears — which is what makes the list comparable with `pdffonts`.
+ */
+export interface FontUsage {
+  /** `/BaseFont` with any subset prefix kept, e.g. `"ABCDEF+DejaVuSans"`. */
+  readonly name: string;
+  /** `/Subtype`; for a Type0 font, the descendant's subtype is in {@link descendantType}. */
+  readonly type:
+    | 'Type1'
+    | 'MMType1'
+    | 'TrueType'
+    | 'Type3'
+    | 'Type0'
+    | 'CIDFontType0'
+    | 'CIDFontType2'
+    | 'Unknown';
+  /** For a Type0 font, the `/DescendantFonts` entry's `/Subtype`. */
+  readonly descendantType?: 'CIDFontType0' | 'CIDFontType2';
+  /** True when the descriptor carries `/FontFile`, `/FontFile2` or `/FontFile3`. */
+  readonly embedded: boolean;
+  /** True when `/BaseFont` carries the six-uppercase-letter subset prefix (ISO 32000-1 §9.6.4). */
+  readonly subset: boolean;
+  /** `/Encoding` as a name (`WinAnsiEncoding`, `Identity-H`), or the `/BaseEncoding` of a dict. */
+  readonly encoding?: string;
+  /** True when the font carries a `/ToUnicode` CMap. */
+  readonly toUnicode: boolean;
+  /** 0-based index of the first page whose resources name it. */
+  readonly firstPage: PageIndex;
+}
+
 /** Document information dictionary + a few catalogue facts. */
 export interface Metadata {
   readonly title?: string;
@@ -451,6 +532,17 @@ export interface Metadata {
   readonly hasXfa: boolean;
   /** Page count, duplicated here for convenience. */
   readonly pageCount: number;
+  /**
+   * Information-dictionary entries that are not one of the six standard keys (M72, ADR 0017).
+   * Keys are as written in the file, without the leading slash.
+   */
+  readonly custom?: Readonly<Record<string, string>>;
+  /** `/Trapped`. Absent when the file does not say. */
+  readonly trapped?: 'True' | 'False' | 'Unknown';
+  /** The catalogue's `/Lang` — the document's natural language as a BCP 47 tag. */
+  readonly lang?: string;
+  /** The catalogue's `/URI /Base`, against which relative link URIs resolve. */
+  readonly baseUrl?: string;
 }
 
 /** Permissions from the standard security handler (PDF 7.6.3.2). All true when unencrypted. */
@@ -554,6 +646,13 @@ export interface PdfEngine {
   signatures(doc: DocHandle): Promise<ReadonlyArray<SignatureSummary>>;
   /** Named destinations from the catalogue's name tree (ADR 0007). */
   namedDestinations(doc: DocHandle): Promise<ReadonlyArray<NamedDestination>>;
+  /**
+   * Fonts named by the page resources, deduplicated by font object, in first-use order
+   * (M72, ADR 0017).
+   */
+  fonts(doc: DocHandle): Promise<ReadonlyArray<FontUsage>>;
+  /** How the file asks to be opened (M72, ADR 0017). */
+  initialView(doc: DocHandle): Promise<InitialView>;
 
   // ---- mutation (each corresponds to a `Command`) --------------------------------------------
 
@@ -723,6 +822,12 @@ export class NotImplementedEngine implements PdfEngine {
   namedDestinations(..._args: unknown[]): Promise<ReadonlyArray<NamedDestination>> {
     return Promise.reject(new NotImplementedError('namedDestinations'));
   }
+  fonts(..._args: unknown[]): Promise<ReadonlyArray<FontUsage>> {
+    return Promise.reject(new NotImplementedError('fonts'));
+  }
+  initialView(..._args: unknown[]): Promise<InitialView> {
+    return Promise.reject(new NotImplementedError('initialView'));
+  }
   setPageRotation(..._args: unknown[]): Promise<void> {
     return Promise.reject(new NotImplementedError('setPageRotation'));
   }
@@ -801,6 +906,8 @@ export const ENGINE_METHODS = [
   'links',
   'signatures',
   'namedDestinations',
+  'fonts',
+  'initialView',
   'setPageRotation',
   'deletePages',
   'insertBlankPages',

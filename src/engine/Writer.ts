@@ -124,6 +124,39 @@ export interface PlannedField {
   readonly value: string | null;
 }
 
+/**
+ * How the finished document asks to be opened, plus the two catalogue facts that sit beside it
+ * on Foxit's Advanced tab (M72, ADR 0017).
+ *
+ * Present-and-null removes the entry, exactly as {@link PlannedMetadata} does; a key the plan
+ * does not mention is left as the base has it. `openAction` indexes {@link WritePlan.pages}, so
+ * a document whose pages were reordered still opens at the page the reader chose.
+ */
+export interface PlannedView {
+  readonly pageMode?: 'none' | 'outlines' | 'thumbnails' | 'fullscreen' | 'attachments' | 'ocg';
+  readonly pageLayout?:
+    | 'default'
+    | 'single'
+    | 'one-column'
+    | 'two-column-left'
+    | 'two-column-right'
+    | 'two-page-left'
+    | 'two-page-right';
+  readonly openAction?: PlannedDestination | null;
+  readonly hideToolbar?: boolean;
+  readonly hideMenubar?: boolean;
+  readonly hideWindowUi?: boolean;
+  readonly fitWindow?: boolean;
+  readonly centreWindow?: boolean;
+  readonly displayDocTitle?: boolean;
+  readonly printScaling?: 'app-default' | 'none';
+  readonly direction?: 'l2r' | 'r2l';
+  /** The catalogue's `/Lang`. */
+  readonly lang?: string | null;
+  /** The catalogue's `/URI /Base`. */
+  readonly baseUrl?: string | null;
+}
+
 /** The information dictionary and XMP. Absent keys are left alone; `null` removes the entry. */
 export interface PlannedMetadata {
   readonly title?: string | null;
@@ -137,6 +170,18 @@ export interface PlannedMetadata {
   readonly modified?: string | null;
   /** Raw XMP packet. */
   readonly xmp?: string | null;
+  /**
+   * Custom information-dictionary entries by key — **the complete set** the finished document
+   * should have (M72, ADR 0017).
+   *
+   * A key mapped to `null` is removed, and so is any non-standard key the file has that this
+   * object does not mention *and* whose value is text the reader could have seen. That last
+   * condition is what stops a save from dropping an entry holding an array or a dictionary,
+   * which the model never showed and so could not have been asked to delete.
+   */
+  readonly custom?: Readonly<Record<string, string | null>>;
+  /** `/Trapped` (M72, ADR 0017). */
+  readonly trapped?: 'True' | 'False' | 'Unknown' | null;
 }
 
 /** A destination in the finished document. `page` indexes {@link WritePlan.pages}. */
@@ -326,6 +371,11 @@ export interface WritePlan {
    * this is ignored and nothing is touched; a repaired one gets its metadata put back.
    */
   readonly metadataFallback: PlannedMetadata | null;
+  /**
+   * The initial view and the document-level properties beside it (M72, ADR 0017):
+   * `/PageMode`, `/PageLayout`, `/OpenAction`, `/ViewerPreferences`, `/Lang` and the base URL.
+   */
+  readonly view: PlannedView | null;
   /** Replaces `/Outlines` wholesale. An empty array removes the outline. */
   readonly outline: ReadonlyArray<PlannedOutlineItem> | null;
   /** Replaces `/Names /Dests`. */
@@ -357,6 +407,7 @@ export function emptyWritePlan(pageCount: number): WritePlan {
     labels: false,
     metadata: null,
     metadataFallback: null,
+    view: null,
     outline: null,
     namedDestinations: null,
     layers: null,
@@ -372,6 +423,7 @@ export function planIsEmpty(plan: WritePlan): boolean {
     plan.pagesUnchanged &&
     !plan.labels &&
     plan.metadata === null &&
+    plan.view === null &&
     plan.outline === null &&
     plan.namedDestinations === null &&
     plan.layers === null &&
@@ -398,6 +450,7 @@ export const WRITE_PHASES = [
   'pages',
   'labels',
   'metadata',
+  'view',
   'outline',
   'destinations',
   'layers',

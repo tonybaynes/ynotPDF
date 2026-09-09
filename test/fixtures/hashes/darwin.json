@@ -179,6 +179,10 @@
     "render": ["000020a4d4000000"],
     "text": "Reduced test-case"
   },
+  "fonts.pdf": {
+    "render": ["d800000000000000"],
+    "text": "Fonts: one standard, one missing, three embedded, one Type 3."
+  },
   "form.pdf": {
     "render": ["e4e0e46400000000"],
     "text": "Name Subscribe Size Country Notes"
@@ -194,6 +198,10 @@
   "image.pdf": {
     "render": ["808080800c080000"],
     "text": "Embedded 64x64 PNG, scaled to 256 pt"
+  },
+  "initial-view.pdf": {
+    "render": ["c000000000000000", "c000000000000000", "c000000000000000"],
+    "text": "3 of 1 page view Initial"
   },
   "javascript.pdf": {
     "render": ["e080000000000000"],

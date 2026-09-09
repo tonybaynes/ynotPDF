@@ -38,8 +38,10 @@ import {
   type PdfCollection,
   type Destination,
   type DocHandle,
+  type FontUsage,
   type FormField,
   type FormFieldType,
+  type InitialView,
   type Layer,
   type Link,
   type Metadata,
@@ -215,7 +217,8 @@ function run<T>(fn: () => T): Promise<T> {
 
 export class PdfiumEngine implements PdfEngine, CancellableEngine {
   private readonly ffi: Ffi;
-  private readonly fonts: FontRegistry | null;
+  /** Renamed from `fonts` when `PdfEngine.fonts()` arrived (M72, ADR 0017). */
+  private readonly fontRegistry: FontRegistry | null;
   private readonly docs = new Map<number, OpenDoc>();
   private nextHandle = 1;
   private readonly renderSlice: number;
@@ -233,10 +236,10 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
     this.pageCacheSize = options.pageCacheSize ?? 8;
     this.ffi.call('FPDF_InitLibraryWithConfig', 0);
     if (options.fonts && options.substitutions && options.fonts.size > 0) {
-      this.fonts = new FontRegistry(this.ffi, options.substitutions, options.fonts);
-      this.fonts.install();
+      this.fontRegistry = new FontRegistry(this.ffi, options.substitutions, options.fonts);
+      this.fontRegistry.install();
     } else {
-      this.fonts = null;
+      this.fontRegistry = null;
     }
     // IFSDK_PAUSE { int version; FPDF_BOOL (*NeedToPauseNow)(IFSDK_PAUSE*); void* user; }
     this.pauseFn = addFunction(
@@ -259,7 +262,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
 
   /** Number of font files registered with PDFium (0 = built-in fonts only). */
   get fontCount(): number {
-    return this.fonts?.fileCount ?? 0;
+    return this.fontRegistry?.fileCount ?? 0;
   }
 
   /** Open document handles (diagnostics). */
@@ -271,7 +274,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
   destroy(): void {
     if (this.destroyed) return;
     for (const h of [...this.docs.keys()]) this.closeDoc(h);
-    this.fonts?.dispose();
+    this.fontRegistry?.dispose();
     if (this.pausePtr) this.ffi.free(this.pausePtr);
     if (this.pauseFn >= 0) removeFunction(this.ffi.m, this.pauseFn);
     this.ffi.call('FPDF_DestroyLibrary');
@@ -594,6 +597,9 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       hasForm: formType !== FORMTYPE.NONE,
       hasXfa: formType === FORMTYPE.XFA_FULL || formType === FORMTYPE.XFA_FOREGROUND,
       pageCount: ffi.call('FPDF_GetPageCount', d.doc),
+      // Custom Info keys, /Trapped, /Lang and the base URL: no PDFium getter reaches any of them
+      // (M72, ADR 0017), so they come from the same raw read as the XMP packet above.
+      ...raw.documentInfo,
     };
   }
 
@@ -2415,6 +2421,22 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       }
       return out;
     });
+  }
+
+  /**
+   * The fonts the page resources name (M72, ADR 0017).
+   *
+   * Read from the `/Font` dictionaries rather than through PDFium's text API, which can only
+   * report the font of a glyph that was actually drawn — a font declared and never used would be
+   * missing, and a Fonts tab that omits fonts is worse than none.
+   */
+  async fonts(doc: DocHandle): Promise<ReadonlyArray<FontUsage>> {
+    return (await this.rawInfo(this.doc(doc))).fonts;
+  }
+
+  /** How the file asks to be opened (M72, ADR 0017). PDFium exposes none of these entries. */
+  async initialView(doc: DocHandle): Promise<InitialView> {
+    return (await this.rawInfo(this.doc(doc))).initialView;
   }
 
   save(

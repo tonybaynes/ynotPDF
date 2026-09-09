@@ -44,6 +44,7 @@ import type {
   PlannedNamedDestination,
   PlannedOutlineItem,
   PlannedPage,
+  PlannedView,
   PlannedXObject,
   PlannedPortfolio,
   PlannedPortfolioFile,
@@ -95,6 +96,8 @@ export function buildWritePlan(doc: Document): PlanResult {
     labels: intents.has('page-labels'),
     metadata: intents.has('metadata') ? metadataFallback : null,
     metadataFallback,
+    // The initial view and the document-level properties beside it (M72, ADR 0017).
+    view: intents.has('view') ? plannedView(doc) : null,
     outline: intents.has('outline') ? plannedOutline(state.outline, state.destinations, doc) : null,
     // Named destinations are rebuilt only when M12 has edited them; when a page merely goes, the
     // writer prunes the references to it rather than rebuilding the name tree, so nothing else
@@ -340,6 +343,50 @@ function plannedMetadata(doc: Document): PlannedMetadata {
     created: m.created,
     modified: m.modified,
     xmp: m.xmp,
+    // The model read every custom entry the file had, so its set is the complete one and the
+    // writer may treat it as such — which is what makes deleting a property in M72's dialog
+    // actually delete it (ADR 0017).
+    custom: m.custom,
+    trapped: m.trapped,
+  };
+}
+
+/** `/PageMode`, `/PageLayout`, `/OpenAction`, `/ViewerPreferences`, `/Lang`, base URL (M72). */
+function plannedView(doc: Document): PlannedView {
+  const state = doc.state;
+  const view = state.view;
+  /*
+   * The open action is one entry expressing two choices — which page, and how much of it — and
+   * a reader may make either without the other. "Fit page" with no page named means the first
+   * page, and a page named with no magnification is `/XYZ` with no coordinates, which is the
+   * PDF way of saying "go there and leave the view as it is" (ISO 32000-1 12.3.2.2). Only a
+   * document that asks for neither has no open action at all.
+   */
+  const found =
+    view.initialPageId === null ? -1 : state.pages.findIndex((p) => p.id === view.initialPageId);
+  const page = found >= 0 ? found : view.initialFit === null ? -1 : 0;
+  const openAction: PlannedDestination | null =
+    page < 0
+      ? null
+      : {
+          page,
+          fit: view.initialFit ?? 'xyz',
+          zoom: view.initialFit === 'xyz' ? view.initialZoom : null,
+        };
+  return {
+    pageMode: view.pageMode,
+    pageLayout: view.pageLayout,
+    openAction,
+    hideToolbar: view.hideToolbar,
+    hideMenubar: view.hideMenubar,
+    hideWindowUi: view.hideWindowUi,
+    fitWindow: view.fitWindow,
+    centreWindow: view.centreWindow,
+    displayDocTitle: view.displayDocTitle,
+    printScaling: view.printScaling,
+    direction: view.direction,
+    lang: state.metadata.lang,
+    baseUrl: state.metadata.baseUrl,
   };
 }
 

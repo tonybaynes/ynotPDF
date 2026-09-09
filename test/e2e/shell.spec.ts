@@ -519,8 +519,10 @@ test('the backstage (palette-only) still lists slots, shows pages and closes wit
   await expect(app.page.locator('#backstage-open-file')).toBeVisible();
   await backstage.locator('[data-slot="new"]').click();
   await expect(backstage.locator('[data-creator="demo.blank"]')).toBeVisible();
+  // Properties is M72's slot now, as Print is M13's: the demo's own page is superseded, because
+  // the first module to fill a slot keeps it.
   await backstage.locator('[data-slot="properties"]').click();
-  await expect(app.page.locator('#demo-backstage-props')).toBeVisible();
+  await expect(app.page.locator('#properties-backstage')).toBeVisible();
   await app.page.keyboard.press('Escape');
   await expect(backstage).toBeHidden();
   // A command slot runs and closes. The demo's own command slot was Print, which M13 now owns,
@@ -546,8 +548,8 @@ test('the File tab is a horizontal ribbon: Open, Recent, New, the module slots a
   await item('file.new').click();
   await expect(menu.locator('[data-command="demo.create.blank"]')).toBeVisible();
   await app.page.keyboard.press('Escape');
-  // Unfilled slots are disabled and say so; the demo fills Print (command) and Properties (page),
-  // and M21 fills Save and Save As — which are enabled, because a document is open.
+  // Unfilled slots are disabled and say so; M13 fills Print (command), M72 fills Properties
+  // (a page), and M21 fills Save and Save As — which are enabled, because a document is open.
   await expect(item('file.slot.preferences')).toBeDisabled();
   await expect(item('file.slot.preferences')).toHaveAttribute('title', /not available yet/);
   // A filled command slot renders as that command's own button, so Save appears as `file.save`.
@@ -559,7 +561,7 @@ test('the File tab is a horizontal ribbon: Open, Recent, New, the module slots a
   await item('file.slot.properties').click();
   const page = app.page.locator('#file-page-properties');
   await expect(page).toBeVisible();
-  await expect(page.locator('#demo-backstage-props')).toBeVisible();
+  await expect(page.locator('#properties-backstage')).toBeVisible();
   await page.locator('[data-result="close"]').click();
   await expect(page).toBeHidden();
   await expect(item('app.quit')).toBeEnabled(); // Exit

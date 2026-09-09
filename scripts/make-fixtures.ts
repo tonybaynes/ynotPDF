@@ -39,6 +39,11 @@
  *   scanned.pdf            one full-page 150-dpi grayscale "scan" (for OCR later)
  *   --- M41 ---
  *   skewed.pdf             four pages: a "scan" drawn at +2.3°, −1.1° and +7.5°, plus a blank one
+ *   --- M72 ---
+ *   fonts.pdf              standard-14, missing TrueType, embedded, embedded subset,
+ *                          Type 0 (CID TrueType) and Type 3 fonts
+ *   initial-view.pdf       /PageMode, /PageLayout, /OpenAction, /ViewerPreferences,
+ *                          /Lang, base URL, custom Info entries, /Trapped, XMP
  *   --- M91 (test/fixtures/create/: inputs for "Create PDF from …") ---
  *   photo-landscape.jpg    300×200 baseline JPEG, JFIF density 72 dpi
  *   photo-exif-rotated.jpg 200×300 JPEG with EXIF Orientation 6 (rotate 90° CW), 150 dpi
@@ -62,10 +67,10 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { encode as encodeJpeg } from 'jpeg-js';
-import type { PDFDict } from 'pdf-lib';
 import {
   PDFArray,
   PDFBool,
+  PDFDict,
   PDFDocument,
   PDFHexString,
   PDFName,
@@ -2452,6 +2457,421 @@ function createFixtures(): void {
   unicodeTxt();
 }
 
+// ---- M72: fonts and initial view -------------------------------------------------------------
+
+/**
+ * A minimal but genuinely valid TrueType font, built here rather than taken from
+ * `resources/fonts/` (M72).
+ *
+ * The bundled DejaVu and Liberation faces are fetched at build time and are 300–700 KB each; a
+ * fixture that embedded one would be the largest file in the corpus and would only exist on a
+ * machine that had run `fetch-binaries`. This is 1 KB, deterministic, and carries the nine tables
+ * a TrueType font is required to have — so PDFium parses it, `/FontFile2` means what it says, and
+ * the Fonts tab's "Embedded" is a fact rather than a guess.
+ *
+ * One drawable glyph, a filled square, mapped from "A". Everything else is `.notdef`.
+ */
+function makeTrueTypeFont(): Buffer {
+  const u16 = (n: number): Buffer => {
+    const b = Buffer.alloc(2);
+    b.writeUInt16BE(n & 0xffff);
+    return b;
+  };
+  const i16 = (n: number): Buffer => {
+    const b = Buffer.alloc(2);
+    b.writeInt16BE(n);
+    return b;
+  };
+  const u32 = (n: number): Buffer => {
+    const b = Buffer.alloc(4);
+    b.writeUInt32BE(n >>> 0);
+    return b;
+  };
+
+  const UNITS = 1000;
+  const ADVANCE = 600;
+
+  // A square from (100, 0) to (700, 700): one contour, four on-curve points.
+  const glyph = Buffer.concat([
+    i16(1), // numberOfContours
+    i16(100),
+    i16(0),
+    i16(700),
+    i16(700), // bounding box
+    u16(3), // endPtsOfContours[0]
+    u16(0), // instructionLength
+    Buffer.from([0x01, 0x01, 0x01, 0x01]), // flags: on-curve, 16-bit deltas
+    Buffer.concat([i16(100), i16(600), i16(0), i16(-600)]), // x deltas
+    Buffer.concat([i16(0), i16(0), i16(700), i16(0)]), // y deltas
+  ]);
+  const glyf = Buffer.concat([
+    glyph,
+    Buffer.alloc(glyph.length % 4 === 0 ? 0 : 4 - (glyph.length % 4)),
+  ]);
+  // Short `loca` stores half-offsets, so every glyph must start on an even byte.
+  const loca = Buffer.concat([u16(0), u16(glyph.length / 2), u16(glyph.length / 2)]);
+
+  const head = Buffer.concat([
+    u32(0x0001_0000), // version
+    u32(0x0001_0000), // fontRevision
+    u32(0), // checkSumAdjustment — left zero; readers that verify it recompute
+    u32(0x5f0f_3cf5), // magicNumber
+    u16(0x000b), // flags
+    u16(UNITS),
+    u32(0),
+    u32(0), // created (LONGDATETIME, epoch)
+    u32(0),
+    u32(0), // modified
+    i16(0),
+    i16(0),
+    i16(700),
+    i16(700), // xMin yMin xMax yMax
+    u16(0), // macStyle
+    u16(8), // lowestRecPPEM
+    i16(2), // fontDirectionHint
+    i16(0), // indexToLocFormat: short
+    i16(0), // glyphDataFormat
+  ]);
+
+  const hhea = Buffer.concat([
+    u32(0x0001_0000),
+    i16(800), // ascender
+    i16(-200), // descender
+    i16(0), // lineGap
+    u16(ADVANCE), // advanceWidthMax
+    i16(0),
+    i16(0),
+    i16(700), // minLSB, minRSB, xMaxExtent
+    i16(1),
+    i16(0),
+    i16(0), // caret slope rise/run, caret offset
+    i16(0),
+    i16(0),
+    i16(0),
+    i16(0), // reserved
+    i16(0), // metricDataFormat
+    u16(2), // numberOfHMetrics
+  ]);
+
+  const maxp = Buffer.concat([
+    u32(0x0001_0000),
+    u16(2), // numGlyphs
+    u16(4), // maxPoints
+    u16(1), // maxContours
+    u16(0),
+    u16(0), // composite points / contours
+    u16(2), // maxZones
+    u16(0),
+    u16(0),
+    u16(0),
+    u16(0), // twilight points, storage, function defs, instruction defs
+    u16(0), // maxStackElements
+    u16(0), // maxSizeOfInstructions
+    u16(0),
+    u16(0), // component elements / depth
+  ]);
+
+  const hmtx = Buffer.concat([u16(ADVANCE), i16(0), u16(ADVANCE), i16(100)]);
+
+  // cmap: one format-4 subtable mapping U+0041 to glyph 1, Windows Unicode BMP.
+  const sub4 = Buffer.concat([
+    u16(4), // format
+    u16(32), // length
+    u16(0), // language
+    u16(4), // segCountX2
+    u16(4),
+    u16(1),
+    u16(0), // searchRange, entrySelector, rangeShift
+    u16(0x0041),
+    u16(0xffff), // endCode
+    u16(0), // reservedPad
+    u16(0x0041),
+    u16(0xffff), // startCode
+    u16(1 - 0x0041),
+    u16(1), // idDelta
+    u16(0),
+    u16(0), // idRangeOffset
+  ]);
+  const cmap = Buffer.concat([u16(0), u16(1), u16(3), u16(1), u32(12), sub4]);
+
+  // name: the four records a reader looks for, in Windows Unicode (UTF-16BE).
+  const NAME = 'YnotBox';
+  const strings: Array<{ id: number; text: string }> = [
+    { id: 1, text: NAME },
+    { id: 2, text: 'Regular' },
+    { id: 4, text: NAME },
+    { id: 6, text: NAME },
+  ];
+  const nameData: Buffer[] = [];
+  const records: Buffer[] = [];
+  let offset = 0;
+  for (const s of strings) {
+    const encoded = Buffer.from(s.text, 'utf16le').swap16();
+    records.push(
+      Buffer.concat([u16(3), u16(1), u16(0x0409), u16(s.id), u16(encoded.length), u16(offset)]),
+    );
+    nameData.push(encoded);
+    offset += encoded.length;
+  }
+  const name = Buffer.concat([
+    u16(0),
+    u16(strings.length),
+    u16(6 + records.length * 12),
+    ...records,
+    ...nameData,
+  ]);
+
+  // post version 3.0: no glyph names, which is legal and is what subsetters emit.
+  const post = Buffer.concat([
+    u32(0x0003_0000),
+    u32(0), // italicAngle
+    i16(-100),
+    i16(50), // underlinePosition, underlineThickness
+    u32(0), // isFixedPitch
+    u32(0),
+    u32(0),
+    u32(0),
+    u32(0), // memory usage hints
+  ]);
+
+  const tables: Array<{ tag: string; data: Buffer }> = [
+    { tag: 'cmap', data: cmap },
+    { tag: 'glyf', data: glyf },
+    { tag: 'head', data: head },
+    { tag: 'hhea', data: hhea },
+    { tag: 'hmtx', data: hmtx },
+    { tag: 'loca', data: loca },
+    { tag: 'maxp', data: maxp },
+    { tag: 'name', data: name },
+    { tag: 'post', data: post },
+  ].sort((a, b) => a.tag.localeCompare(b.tag));
+
+  const checksum = (data: Buffer): number => {
+    let sum = 0;
+    const padded = Buffer.concat([data, Buffer.alloc((4 - (data.length % 4)) % 4)]);
+    for (let i = 0; i < padded.length; i += 4) sum = (sum + padded.readUInt32BE(i)) >>> 0;
+    return sum;
+  };
+
+  const count = tables.length;
+  const entrySelector = Math.floor(Math.log2(count));
+  const searchRange = 16 * 2 ** entrySelector;
+  const header = Buffer.concat([
+    u32(0x0001_0000),
+    u16(count),
+    u16(searchRange),
+    u16(entrySelector),
+    u16(count * 16 - searchRange),
+  ]);
+
+  let position = header.length + count * 16;
+  const directory: Buffer[] = [];
+  const bodies: Buffer[] = [];
+  for (const table of tables) {
+    const padded = Buffer.concat([table.data, Buffer.alloc((4 - (table.data.length % 4)) % 4)]);
+    directory.push(
+      Buffer.concat([
+        Buffer.from(table.tag, 'latin1'),
+        u32(checksum(table.data)),
+        u32(position),
+        u32(table.data.length),
+      ]),
+    );
+    bodies.push(padded);
+    position += padded.length;
+  }
+  return Buffer.concat([header, ...directory, ...bodies]);
+}
+
+/**
+ * The font zoo (M72): every combination of type and embedding the Fonts tab has words for.
+ *
+ * Helvetica is a standard-14 Type 1 that no file needs to carry; "Arial" is a TrueType the file
+ * names and does not carry, which is the case that costs a reader their layout; the three
+ * embedded fonts share one `/FontFile2` stream, because they are the same font programme
+ * described three ways and duplicating a kilobyte to prove it would prove nothing. The Type 3
+ * font is embedded by construction: its glyphs *are* content streams.
+ */
+async function fonts(): Promise<void> {
+  const doc = await newDoc('Fonts sample');
+  const helvetica = await doc.embedFont(StandardFonts.Helvetica);
+  const page = doc.addPage(A4);
+  page.drawText('Fonts: one standard, one missing, three embedded, one Type 3.', {
+    x: 72,
+    y: 760,
+    size: 14,
+    font: helvetica,
+  });
+  const ctx = doc.context;
+
+  const program = makeTrueTypeFont();
+  const fontFile = ctx.register(
+    ctx.flateStream(program, { Length1: program.length, Subtype: PDFName.of('TrueType') }),
+  );
+
+  const descriptor = (baseFont: string, embedded: boolean): PDFRef => {
+    const d = ctx.obj({
+      Type: 'FontDescriptor',
+      FontName: PDFName.of(baseFont),
+      Flags: 32,
+      FontBBox: ctx.obj([0, 0, 700, 700]),
+      ItalicAngle: 0,
+      Ascent: 800,
+      Descent: -200,
+      CapHeight: 700,
+      StemV: 80,
+    });
+    if (embedded) d.set(PDFName.of('FontFile2'), fontFile);
+    return ctx.register(d);
+  };
+
+  const simpleTrueType = (baseFont: string, embedded: boolean): PDFRef =>
+    ctx.register(
+      ctx.obj({
+        Type: 'Font',
+        Subtype: 'TrueType',
+        BaseFont: PDFName.of(baseFont),
+        FirstChar: 65,
+        LastChar: 65,
+        Widths: ctx.obj([600]),
+        Encoding: 'WinAnsiEncoding',
+        FontDescriptor: descriptor(baseFont, embedded),
+      }),
+    );
+
+  // A Type 0 font over the same programme: Identity-H, CIDFontType2, two-byte codes.
+  const cidFont = ctx.register(
+    ctx.obj({
+      Type: 'Font',
+      Subtype: 'CIDFontType2',
+      BaseFont: PDFName.of('GHIJKL+YnotBox'),
+      CIDSystemInfo: ctx.obj({
+        Registry: PDFString.of('Adobe'),
+        Ordering: PDFString.of('Identity'),
+        Supplement: 0,
+      }),
+      FontDescriptor: descriptor('GHIJKL+YnotBox', true),
+      DW: 600,
+      CIDToGIDMap: 'Identity',
+    }),
+  );
+  const type0 = ctx.register(
+    ctx.obj({
+      Type: 'Font',
+      Subtype: 'Type0',
+      BaseFont: PDFName.of('GHIJKL+YnotBox'),
+      Encoding: 'Identity-H',
+      DescendantFonts: ctx.obj([cidFont]),
+    }),
+  );
+
+  // A Type 3 font: one glyph drawn as a content stream, so nothing is embedded and everything is.
+  const charProc = ctx.register(
+    ctx.flateStream(Buffer.from('600 0 0 0 600 600 d1\n0 0 600 600 re f\n')),
+  );
+  const type3 = ctx.register(
+    ctx.obj({
+      Type: 'Font',
+      Subtype: 'Type3',
+      Name: PDFName.of('YnotBlock'),
+      FontBBox: ctx.obj([0, 0, 600, 600]),
+      FontMatrix: ctx.obj([0.001, 0, 0, 0.001, 0, 0]),
+      CharProcs: ctx.obj({ block: charProc }),
+      Encoding: ctx.obj({
+        Type: 'Encoding',
+        Differences: ctx.obj([65, PDFName.of('block')]),
+      }),
+      FirstChar: 65,
+      LastChar: 65,
+      Widths: ctx.obj([600]),
+      Resources: ctx.obj({}),
+    }),
+  );
+
+  const resources = page.node.Resources();
+  const fontDict = resources?.lookup(PDFName.of('Font'), PDFDict);
+  fontDict?.set(PDFName.of('Embedded'), simpleTrueType('YnotBox', true));
+  fontDict?.set(PDFName.of('Subset'), simpleTrueType('ABCDEF+YnotBox', true));
+  fontDict?.set(PDFName.of('Missing'), simpleTrueType('Arial', false));
+  fontDict?.set(PDFName.of('Wide'), type0);
+  fontDict?.set(PDFName.of('Drawn'), type3);
+
+  // Draw with the embedded font as well, so the file is one a reader could actually have made.
+  page.pushOperators(
+    beginText(),
+    setFontAndSize('Embedded', 24),
+    moveText(72, 700),
+    // The code, not the text: a simple WinAnsi font takes one byte per glyph, and
+    // `PDFHexString.fromText` would write a UTF-16 pair the font has no mapping for.
+    showText(PDFHexString.of('41')),
+    endText(),
+  );
+
+  await save(doc, 'fonts.pdf');
+}
+
+/**
+ * How a document can ask to be opened (M72): `/PageMode`, `/PageLayout`, `/OpenAction`,
+ * `/ViewerPreferences`, `/Lang` and a base URL — plus custom information-dictionary entries,
+ * `/Trapped`, and an XMP packet that agrees with all of it.
+ *
+ * Written as raw dictionaries so a test that reads it is reading something our own writer did
+ * not produce.
+ */
+async function initialView(): Promise<void> {
+  const doc = await newDoc('Initial view sample');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  for (let i = 0; i < 3; i++) {
+    const page = doc.addPage(A4);
+    page.drawText(`Initial view page ${String(i + 1)} of 3`, { x: 72, y: 760, size: 16, font });
+  }
+  const ctx = doc.context;
+  const catalog = doc.catalog;
+  const pages = doc.getPages();
+  const third = pages[2];
+
+  catalog.set(PDFName.of('PageMode'), PDFName.of('UseOutlines'));
+  catalog.set(PDFName.of('PageLayout'), PDFName.of('TwoColumnLeft'));
+  if (third) {
+    const dest = ctx.obj([third.ref, PDFName.of('Fit')]);
+    const action = ctx.obj({ S: PDFName.of('GoTo') });
+    action.set(PDFName.of('D'), dest);
+    catalog.set(PDFName.of('OpenAction'), ctx.register(action));
+  }
+  const prefs = ctx.obj({});
+  prefs.set(PDFName.of('HideToolbar'), PDFBool.True);
+  prefs.set(PDFName.of('DisplayDocTitle'), PDFBool.True);
+  prefs.set(PDFName.of('PrintScaling'), PDFName.of('None'));
+  prefs.set(PDFName.of('Direction'), PDFName.of('R2L'));
+  catalog.set(PDFName.of('ViewerPreferences'), ctx.register(prefs));
+  catalog.set(PDFName.of('Lang'), PDFString.of('en-GB'));
+  const uri = ctx.obj({});
+  uri.set(PDFName.of('Base'), PDFString.of('https://example.invalid/docs/'));
+  catalog.set(PDFName.of('URI'), ctx.register(uri));
+
+  const info = ctx.lookup(ctx.trailerInfo.Info) as PDFDict | undefined;
+  info?.set(PDFName.of('Department'), PDFHexString.fromText('Accounts'));
+  info?.set(PDFName.of('Reference'), PDFHexString.fromText('INV-2026-0042'));
+  info?.set(PDFName.of('Trapped'), PDFName.of('False'));
+
+  const xmp =
+    '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>\n' +
+    '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n' +
+    '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">' +
+    '<dc:title><rdf:Alt><rdf:li xml:lang="x-default">Initial view sample</rdf:li></rdf:Alt></dc:title>' +
+    '</rdf:Description>\n' +
+    '<rdf:Description rdf:about="" xmlns:pdfx="http://ns.adobe.com/pdfx/1.3/">' +
+    '<pdfx:Department>Accounts</pdfx:Department><pdfx:Reference>INV-2026-0042</pdfx:Reference>' +
+    '</rdf:Description>\n' +
+    '</rdf:RDF></x:xmpmeta>\n<?xpacket end="w"?>';
+  catalog.set(
+    PDFName.of('Metadata'),
+    ctx.register(ctx.stream(Buffer.from(xmp, 'utf8'), { Type: 'Metadata', Subtype: 'XML' })),
+  );
+
+  await save(doc, 'initial-view.pdf');
+}
+
 const blankBytes = await blank();
 await multipage();
 const textBytes = await text();
@@ -2478,5 +2898,7 @@ damaged(blankBytes, textBytes);
 await hugePageCount();
 await scanned();
 await skewed();
+await fonts();
+await initialView();
 createFixtures();
 console.info('fixtures: done');

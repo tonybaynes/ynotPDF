@@ -45,6 +45,18 @@ interface Expectation {
   readonly objects?: ReadonlyArray<string>;
   readonly renderPages?: number;
   readonly annotationFlags?: Readonly<Record<string, Partial<AnnotationFlags>>>;
+  /**
+   * The fonts the document's resources name, in order (M72, ADR 0017), each as
+   * `"<name> <type> <embedded|missing> [subset] [encoding]"` — the words the Fonts tab shows.
+   */
+  readonly fonts?: ReadonlyArray<string>;
+  /** Fields of `initialView()` that must match; anything not named is not checked (M72). */
+  readonly initialView?: Readonly<Record<string, unknown>>;
+  /** Custom information-dictionary entries the file carries (M72). */
+  readonly custom?: Readonly<Record<string, string>>;
+  readonly trapped?: string;
+  readonly lang?: string;
+  readonly baseUrl?: string;
   readonly notes?: string;
 }
 
@@ -146,6 +158,25 @@ describe('engine corpus', () => {
           if (exp.labels)
             expect((await e.pageLabels(doc)).slice(0, exp.labels.length)).toEqual(exp.labels);
           if (exp.permissions) expect(await e.permissions(doc)).toMatchObject(exp.permissions);
+          if (exp.fonts) {
+            const fonts = await e.fonts(doc);
+            expect(
+              fonts.map((f) =>
+                [
+                  f.name,
+                  f.descendantType ?? f.type,
+                  f.embedded ? 'embedded' : 'missing',
+                  ...(f.subset ? ['subset'] : []),
+                  ...(f.encoding === undefined ? [] : [f.encoding]),
+                ].join(' '),
+              ),
+            ).toEqual(exp.fonts);
+          }
+          if (exp.initialView) expect(await e.initialView(doc)).toMatchObject(exp.initialView);
+          if (exp.custom) expect(meta.custom).toEqual(exp.custom);
+          if (exp.trapped !== undefined) expect(meta.trapped).toBe(exp.trapped);
+          if (exp.lang !== undefined) expect(meta.lang).toBe(exp.lang);
+          if (exp.baseUrl !== undefined) expect(meta.baseUrl).toBe(exp.baseUrl);
           if (exp.objects) {
             const kinds = (await e.pageObjects(doc, 0)).map((o) => o.kind);
             for (const k of exp.objects) expect(kinds).toContain(k);
