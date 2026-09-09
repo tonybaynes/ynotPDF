@@ -41,6 +41,8 @@ interface SavedFile {
   readonly name: string;
   readonly description: string | null;
   readonly fields: Record<string, string>;
+  /** The PDF object type each `/CI` value was stored as. */
+  readonly fieldTypes: Record<string, 'number' | 'string' | 'hex' | 'other'>;
   readonly raw: Uint8Array;
   readonly params: Record<string, string>;
   readonly subtype: string | null;
@@ -91,12 +93,26 @@ async function read(bytes: Uint8Array): Promise<SavedPortfolio> {
       }
       const ci = spec.lookupMaybe(PDFName.of('CI'), PDFDict);
       const fields: Record<string, string> = {};
-      for (const [k, v] of ci?.entries() ?? []) fields[k.decodeText()] = text(ctx.lookup(v)) ?? '';
+      const fieldTypes: SavedFile['fieldTypes'] = {};
+      for (const [k, v] of ci?.entries() ?? []) {
+        const value = ctx.lookup(v);
+        const name = k.decodeText();
+        fields[name] = value instanceof PDFNumber ? String(value.asNumber()) : (text(value) ?? '');
+        fieldTypes[name] =
+          value instanceof PDFNumber
+            ? 'number'
+            : value instanceof PDFHexString
+              ? 'hex'
+              : value instanceof PDFString
+                ? 'string'
+                : 'other';
+      }
       files.push({
         key,
         name: text(spec.lookup(PDFName.of('UF'))) ?? text(spec.lookup(PDFName.of('F'))) ?? '',
         description: text(spec.lookup(PDFName.of('Desc'))),
         fields,
+        fieldTypes,
         raw,
         params,
         subtype,
@@ -305,7 +321,10 @@ describe('the writer’s portfolio section', () => {
 
     expect(saved.view).toBe('D');
     expect(saved.sort).toEqual({ key: 'ynot:Order', ascending: true });
-    expect(saved.initialFile).toBe('instruction.pdf');
+    // `/D` has to be a key of the name tree, or a viewer cannot find the file it names.
+    expect(saved.initialFile).toBe(treeKey('instruction.pdf', 0));
+    expect(saved.files.map((f) => f.key)).toContain(saved.initialFile);
+    expect((await openPortfolio(result.bytes)).portfolio.initialFile).toBe('instruction.pdf');
     expect(saved.schema.find((c) => c.key === 'FileName')?.subtype).toBe('F');
     expect(saved.schema.find((c) => c.key === 'ynot:Order')?.visible).toBe(false);
   }, 60000);
@@ -325,6 +344,48 @@ describe('the writer’s portfolio section', () => {
       .map((f) => f.name);
     const expected = [...reversed.files].sort((a, b) => a.order - b.order).map((f) => f.name);
     expect(names).toEqual(expected);
+  }, 60000);
+
+  it('writes a number column as numbers and a date column as dates, which is what a viewer sorts on', async () => {
+    const original = fixture('portfolio.pdf');
+    const { portfolio, base, pages } = await openPortfolio(original);
+    const target = portfolio.files.find((f) => f.name === 'instruction.pdf');
+    expect(target).toBeDefined();
+    const due = '2026-03-04T00:00:00.000Z';
+    const edited: Portfolio = {
+      ...portfolio,
+      schema: [
+        ...portfolio.schema,
+        { key: 'ynot:Due', label: 'Due', kind: 'date', order: 50, visible: true },
+        { key: 'ynot:Ref', label: 'Ref', kind: 'number', order: 51, visible: true },
+      ],
+      files: portfolio.files.map((f) =>
+        f.id === target?.id
+          ? { ...f, fields: { ...f.fields, 'ynot:Due': due, 'ynot:Ref': '17', 'ynot:Odd': 'n/a' } }
+          : f,
+      ),
+    };
+    const result = await write(base, planFor(edited, pages));
+    expect(result.warnings).toEqual([]);
+
+    const saved = await read(result.bytes);
+    const file = saved.files.find((f) => f.name === 'instruction.pdf');
+    expect(file?.fieldTypes['ynot:Ref']).toBe('number');
+    expect(file?.fields['ynot:Ref']).toBe('17');
+    expect(file?.fieldTypes['ynot:Due']).toBe('string');
+    expect(file?.fields['ynot:Due']).toMatch(/^D:20260304/);
+    // A value that is not what its column wants is kept as text rather than lost.
+    expect(file?.fieldTypes['ynot:Odd']).toBe('hex');
+    // Every file's order is a number, not only the edited one's.
+    for (const each of saved.files) {
+      expect(each.fieldTypes['ynot:Order'], `${each.name} order`).toBe('number');
+    }
+
+    // Read back through the engine the date is ISO again, so the grid shows it as a date.
+    const reopened = (await openPortfolio(result.bytes)).portfolio;
+    const back = reopened.files.find((f) => f.name === 'instruction.pdf');
+    expect(Date.parse(back?.fields['ynot:Due'] ?? '')).toBe(Date.parse(due));
+    expect(back?.fields['ynot:Ref']).toBe('17');
   }, 60000);
 
   it('embeds a new file once, with its size, dates and checksum', async () => {
@@ -436,5 +497,27 @@ describe.skipIf(!existsSync(LOCAL))('the operator’s own portfolio', () => {
     // Still a portfolio, and still Foxit's own schema and folder.
     expect(saved.view).not.toBeNull();
     expect(saved.folders.length).toBeGreaterThan(0);
+  }, 120000);
+
+  it('keeps Foxit’s order column as numbers, so Foxit still shows the files in its order', async () => {
+    // The regression the operator saw in Foxit: it declares `foxit:Order` as a number column
+    // and ignores it once a save has turned the values into strings, so the files came back
+    // sorted by name instead of in the order the pack was built in.
+    const original = new Uint8Array(readFileSync(LOCAL));
+    const before = await read(original);
+    const orderKey = before.schema.find((c) => c.subtype === 'N')?.key;
+    if (orderKey === undefined) return; // this copy has no order column, so there is nothing to keep
+    const numeric = before.files.filter((f) => f.fieldTypes[orderKey] === 'number');
+    expect(numeric.length, 'Foxit wrote its order as numbers').toBe(before.files.length);
+
+    const { portfolio, base, pages } = await openPortfolio(original);
+    const result = await write(base, planFor(portfolio, pages));
+    const after = await read(result.bytes);
+    expect(after.sort?.key).toBe(orderKey);
+    for (const was of before.files) {
+      const now = after.files.find((f) => f.name === was.name);
+      expect(now?.fieldTypes[orderKey], `${was.name} order is still a number`).toBe('number');
+      expect(now?.fields[orderKey], `${was.name} keeps its place`).toBe(was.fields[orderKey]);
+    }
   }, 120000);
 });

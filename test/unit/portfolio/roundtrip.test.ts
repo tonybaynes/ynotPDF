@@ -102,6 +102,8 @@ describe('editing a portfolio', () => {
     const portfolio = current(doc);
     expect(portfolio.files).toHaveLength(5);
     expect(portfolio.folders.map((f) => f.name)).toEqual(['', 'Statements']);
+    // `/D` in the file is the key `<0>instruction.pdf`; the model holds the name.
+    expect(portfolio.initialFile).toBe('instruction.pdf');
     expect(names(portfolio)).toEqual([
       'readme.txt',
       'instruction.pdf',

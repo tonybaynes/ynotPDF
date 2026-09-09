@@ -22,6 +22,7 @@ import {
   PDFHexString,
   PDFName,
   PDFNumber,
+  type PDFObject,
   PDFRef,
   PDFString,
   type PDFContext,
@@ -110,9 +111,10 @@ export function writePortfolio(
 
   const kept = new Set<PDFRef>();
   const pairs: Array<{ key: string; ref: PDFRef }> = [];
+  const subtypes = new Map(planned.schema.map((c) => [c.key, c.subtype]));
 
   for (const file of planned.files) {
-    const built = buildSpec(ctx, file, byKey, byName, ctxOut);
+    const built = buildSpec(ctx, file, subtypes, byKey, byName, ctxOut);
     if (!built) continue;
     kept.add(built);
     pairs.push({ key: treeKey(file.name, file.folderId), ref: built });
@@ -184,6 +186,7 @@ export function compareKeys(a: string, b: string): number {
 function buildSpec(
   ctx: PDFContext,
   file: PlannedPortfolioFile,
+  subtypes: ReadonlyMap<string, string>,
   byKey: ReadonlyMap<string, EmbeddedEntry>,
   byName: ReadonlyMap<string, EmbeddedEntry>,
   out: PortfolioWriteContext,
@@ -226,7 +229,7 @@ function buildSpec(
     const ci = ctx.obj({});
     for (const key of keys) {
       const value = file.fields[key];
-      if (value !== undefined) ci.set(PDFName.of(key), PDFHexString.fromText(value));
+      if (value !== undefined) ci.set(PDFName.of(key), fieldObject(subtypes.get(key), value));
     }
     spec.set(PDFName.of('CI'), ctx.register(ci));
   }
@@ -240,6 +243,28 @@ function buildSpec(
     }
   }
   return ref;
+}
+
+/**
+ * A `/CI` value in the type its schema column declares (PDF 12.3.5 table 78): a number column
+ * holds a number, a date column a date string, anything else text. The model keeps every value
+ * as a string, so the type has to be put back here. It matters: Foxit sorts on its `foxit:Order`
+ * column as numbers and falls back to name order when the values are strings, which is how a
+ * save once quietly lost the operator's order.
+ *
+ * A value that does not fit its column ("n/a" in a number column) is written as text rather
+ * than dropped, so nothing the reader typed disappears.
+ */
+function fieldObject(subtype: string | undefined, value: string): PDFObject {
+  if (subtype === 'N') {
+    const n = Number(value);
+    if (value.trim() !== '' && Number.isFinite(n)) return PDFNumber.of(n);
+  }
+  if (subtype === 'D') {
+    const date = /^D:\d{4}/.test(value) ? value : toPdfDate(value);
+    if (date !== null) return PDFString.of(date);
+  }
+  return PDFHexString.fromText(value);
 }
 
 /** The embedded stream a file specification points at. */
@@ -360,8 +385,17 @@ function writeCollection(
   if (planned.reorderKey === null) collection.delete(PDFName.of('Reorder'));
   else collection.set(PDFName.of('Reorder'), PDFName.of(planned.reorderKey));
 
-  if (planned.initialFile === null) collection.delete(PDFName.of('D'));
-  else collection.set(PDFName.of('D'), PDFHexString.fromText(planned.initialFile));
+  // `/D` names an entry of the name tree, so it is the file's key — folder prefix and all — in
+  // the same string form the tree uses, not the bare name the model holds (PDF 12.3.5 table 77).
+  const initial =
+    planned.initialFile === null
+      ? undefined
+      : planned.files.find((f) => f.name === planned.initialFile);
+  if (initial === undefined) collection.delete(PDFName.of('D'));
+  else {
+    const key = treeKey(initial.name, initial.folderId);
+    collection.set(PDFName.of('D'), PDFHexString.fromText(key));
+  }
 
   writeFolders(doc, collection, planned, out);
 }
