@@ -129,7 +129,7 @@ WAVE 4
       needs: M12 M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M42-portfolios.md and carry out the "Your task" section in full.
 
-[ ] M31  Annotations — shapes, ink & eraser, stamps, file attachments
+[✔] M31  Annotations — shapes, ink & eraser, stamps, file attachments
       model:  Opus
       needs: M30
       prompt: Read D:\Projects\ynotPDF\docs\modules\M31-shapes-ink-stamps.md and carry out the "Your task" section in full.
