@@ -139,7 +139,7 @@ WAVE 4
       needs: M30
       prompt: Read D:\Projects\ynotPDF\docs\modules\M32-comments-panel.md and carry out the "Your task" section in full.
 
-[ ] M41  Merge, split, extract to files, crop, deskew & flatten
+[✔] M41  Merge, split, extract to files, crop, deskew & flatten
       model:  Opus
       needs: M40
       prompt: Read D:\Projects\ynotPDF\docs\modules\M41-merge-split-crop.md and carry out the "Your task" section in full.

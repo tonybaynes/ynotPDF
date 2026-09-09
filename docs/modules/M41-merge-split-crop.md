@@ -385,4 +385,95 @@ needs.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Shipped, 2026-09-09.** Branch `mod/M41-merge-split-crop`, PR #30.
+
+**What is there.**
+
+- **Combine** (Convert ▸ Combine, `Mod+Shift+M`). Add files or drop them on the
+  window; reorder by drag or by `Alt+↑`/`Alt+↓`; a page range and a first-page
+  thumbnail per file; one bookmark per file with that file's own outline nested
+  under it; page-size normalisation that re-boxes and centres rather than
+  scaling; output to a new tab or straight to a file. Non-PDF inputs go through
+  M91's converters, so images, text, HTML and Markdown combine too.
+- **Split** (Organize ▸ Split). By page count, by measured file size, at every
+  top-level bookmark, or by ranges one file per line; a name pattern with eight
+  tokens; keep-or-drop for bookmarks, comments and form fields; a live summary
+  naming the first three files before anything is written.
+- **Crop.** A tool (`Mod+Shift+C`) that drags a rectangle on the page with eight
+  handles, arrow-key nudging and Enter to apply, and a dialog with margins in
+  the reader's own unit, a live preview of the rectangle over the page, a choice
+  of which of the five boxes to write, "change the page size to match", and
+  **Remove white margins**, which measures where the ink actually is.
+- **Flatten** (Organize ▸ Flatten). Comments and form fields, baked or removed,
+  over a page range. What the file left undrawn is drawn with the same
+  generators M21's writer uses, so a flatten and a save cannot disagree about
+  what a highlight looks like.
+- **Straighten** (Organize ▸ Straighten Pages). A per-page table with the angle,
+  the confidence in words and a tick; a before-and-after preview; a ±5° fine-tune
+  slider; and a one-click "Straighten Every Page" that skips what it cannot
+  measure and names it. Detection is ~35 ms a page.
+- **Batch hooks for M120.** Every operation is a pure function over bytes in
+  `src/engine/ops/`, with an options object and an `AbortSignal`. M120 registers
+  them by name; nothing needs a document or a window.
+- **The preference M130 renders and M91 reads**, `scan.autoDeskew`, is declared
+  here in this module's settings schema.
+
+**What the operator should know.**
+
+- Straightening or flattening a page **replaces** it, so the page keeps its
+  place but becomes a new page inside the app. Bookmarks and named destinations
+  follow it; a comment on it survives; undo puts everything back exactly. There
+  is one undo entry per run, however many pages it touched.
+- Cropping never re-encodes anything and leaves the paper size alone unless you
+  tick "change the page size to match", so a crop can always be taken back — in
+  ynotPDF or in any other reader.
+- **Deskew was measured against your own files** (`test/fixtures/local/`) and it
+  reads every one of them as straight, which they are: they are all born-digital
+  rather than scanned. That is also what found the one real bug in the detector —
+  see below. **I have no genuinely crooked scan to try**, so the last check is
+  yours: straighten one of the scans you actually work with and look at the
+  before-and-after preview. If it looks wrong, the page and the angle it reported
+  are all I need.
+
+**What was deferred, and why.**
+
+- **Regenerating a form field's appearance before flattening it** is M61's job
+  and M61 is not built. The hook is `FlattenOptions.appearances`; without it, a
+  widget the file never drew is kept and reported rather than silently lost.
+- **Office inputs to Combine** wait for M93, as the brief says. Everything M91
+  converts already works.
+- **A ratio constraint on the crop drag** is in the tool (`CropToolHost.ratio`)
+  but nothing offers it in the UI yet: the dialog is where a ratio belongs and it
+  is already the tallest of the five. It is one select away when it is wanted.
+
+**Three bugs the tests found, and one the operator's files found.**
+
+- pdf-lib's `lookupMaybe` *throws* on a type mismatch rather than answering
+  nothing, so reading a `/Dest` that is a name — one of its three legal
+  spellings — crashed the outline reader. Every lookup in `src/engine/ops/` now
+  goes through `pick`.
+- Flattening a form left its fields behind: the widgets went with the pages they
+  were baked into, but a field is a catalogue entry. Fixed in the model
+  (`DropFieldsCommand`) and in the file (M21's writer now prunes `/AcroForm` of
+  fields no surviving page reaches, which fixes the same latent bug for M40's
+  page delete).
+- The detector reported the angle with the wrong sign.
+- **The textbook criterion was wrong for your files.** Scoring the projection
+  profile by its *variance* is what every paper on this does, and it declares a
+  perfectly straight boarding pass to lean by fifteen degrees, because a barcode
+  is a denser thing to concentrate than a page of writing. Scoring the sum of
+  squared *differences between adjacent rows* measures how abruptly the profile
+  rises and falls — which is what a line of text is and a solid block is not —
+  and reads all of your files correctly. `test/unit/ops/local.test.ts` runs the
+  whole module over them and skips itself on any machine that has not got them.
+
+**Contract change:** [ADR 0017](../adr/0017-page-boxes-from-the-engine.md) adds
+`PdfEngine.pageBoxes`, so the crop dialog can say which of the five boxes a page
+actually carries instead of showing the CropBox under a Trim label.
+`PageBoxName` moved to `@shared/pdf` and `@core/model` re-exports it, so no
+existing import changed.
+
+**New fixture:** `skewed.pdf` — one grey "scan" drawn through a rotation about
+the page centre at +2.3°, −1.1° and +7.5°, plus a blank page and a highlight
+over a word. The skew is in the content stream, so the angle is exact and all
+three pages share one image XObject, which is how "no re-encoding" is provable.
