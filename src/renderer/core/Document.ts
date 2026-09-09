@@ -140,6 +140,17 @@ export class Document {
   readonly ids: IdAllocator;
   /** Model id ↔ engine key. Commands rebind it after engine calls that renumber. */
   readonly idTable: IdTable;
+  /**
+   * Bytes a module has to carry from a command to the writer, keyed by whatever the module
+   * chooses (M42, ADR 0014).
+   *
+   * The custom bag next to it is JSON — it goes into `snapshot()` and into the recovery file —
+   * so a megabyte of file content cannot live there. A portfolio's newly added files are the
+   * first use: the command puts the bytes here, the write plan hands them to the writer, and
+   * neither the snapshot nor the recovery record ever sees them. Not part of the model state:
+   * nothing subscribes to it and undoing does not empty it, because a redo needs the bytes back.
+   */
+  readonly blobs = new Map<string, Uint8Array>();
 
   /** Milliseconds of inactivity after which the next edit starts a new undo entry. */
   mergeIdleMs = 600;

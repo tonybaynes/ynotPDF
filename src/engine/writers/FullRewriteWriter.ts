@@ -50,6 +50,7 @@ import {
   type WriteResult,
   type Writer,
 } from '../Writer';
+import { writePortfolio } from './portfolio';
 import { defaultAppearanceService, type AppearanceService } from '../appearance';
 import { isNonEmbeddedFont, type AppearanceFont, type AppearanceStream } from '../appearance/types';
 import type { DictValue } from '../appearance/dict';
@@ -163,6 +164,25 @@ export class FullRewriteWriter implements Writer {
       writeAttachments(doc, plan.attachments, state);
       state.applied('attachments');
       state.phase('attachments', 1);
+      await state.checkpoint();
+    }
+
+    // ---- portfolio ----------------------------------------------------------------------------
+    // The whole `/Collection`, `/Folders` and `/EmbeddedFiles` structure, rebuilt from the plan
+    // (M42, ADR 0014). Every file the reader did not replace keeps the stream object the base
+    // already held, so its bytes are the ones the file was opened with.
+    if (plan.portfolio) {
+      state.phase('portfolio', 0);
+      if (
+        writePortfolio(doc, plan.portfolio, {
+          warn: (m) => {
+            state.warn(m);
+          },
+        })
+      ) {
+        state.applied('portfolio');
+      }
+      state.phase('portfolio', 1);
       await state.checkpoint();
     }
 

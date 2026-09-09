@@ -22,6 +22,7 @@ derived from fixed dates, ids and labelled pseudo-random seeds). Expected facts 
 | `outline.pdf`     | 3 pages, nested bookmarks (chapter → section) with XYZ destinations               |
 | `layers.pdf`      | Optional content: `Base` (on) and `Overlay` (off) with BDC/EMC marked content     |
 | `attachments.pdf` | Two embedded files (`note.txt`, `people.csv`) in the EmbeddedFiles name tree      |
+| `portfolio.pdf`   | A PDF Portfolio: `/Collection`, `/Folders` (root + "Statements"), five embedded files |
 
 ## Synthetic files added by M10
 

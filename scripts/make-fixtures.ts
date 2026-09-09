@@ -13,6 +13,9 @@
  *   outline.pdf            3 pages with nested bookmarks
  *   layers.pdf             optional content groups "Base" (on) and "Overlay" (off)
  *   attachments.pdf        two embedded files (txt, csv)
+ *   --- M42 ---
+ *   portfolio.pdf          a PDF Portfolio: /Collection + /Folders, 3 files at the root and
+ *                          a folder holding 2 more, schema with a custom order column
  *   --- M10 ---
  *   encrypted-aes128.pdf   AESV2 / R4 (user "ynot", owner "owner")
  *   encrypted-aes256.pdf   AESV3 / R6 (user "ynot", owner "owner")
@@ -58,6 +61,7 @@ import { encode as encodeJpeg } from 'jpeg-js';
 import type { PDFDict } from 'pdf-lib';
 import {
   PDFArray,
+  PDFBool,
   PDFDocument,
   PDFHexString,
   PDFName,
@@ -789,6 +793,193 @@ async function attachments(): Promise<void> {
     modificationDate: FIXED_DATE,
   });
   await save(doc, 'attachments.pdf');
+}
+
+// ---- M42: portfolio ------------------------------------------------------------------------
+/**
+ * A PDF Portfolio, written the way Foxit and Acrobat write one (M42, ADR 0014): a `/Collection`
+ * in the catalogue, a `/Folders` linked tree, and `/EmbeddedFiles` keys of the form `<ID>name`
+ * that say which folder each file is in. Five files — three at the root, two in "Statements" —
+ * so CI can exercise folders, order and extraction without the operator's own file.
+ *
+ * Written with raw dictionaries rather than through our own writer, so a test that reads it is
+ * reading something the reader did not produce.
+ */
+async function portfolio(): Promise<void> {
+  const doc = await newDoc('Portfolio sample');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const cover = doc.addPage(A4);
+  cover.drawText('Portfolio cover sheet', { x: 72, y: 760, size: 20, font });
+  cover.drawText('This document is a PDF Portfolio containing five files.', {
+    x: 72,
+    y: 730,
+    size: 12,
+    font,
+  });
+  const ctx = doc.context;
+
+  const p2 = (n: number, width = 2): string => String(n).padStart(width, '0');
+  const stamp =
+    `D:${p2(FIXED_DATE.getUTCFullYear(), 4)}${p2(FIXED_DATE.getUTCMonth() + 1)}` +
+    `${p2(FIXED_DATE.getUTCDate())}${p2(FIXED_DATE.getUTCHours())}` +
+    `${p2(FIXED_DATE.getUTCMinutes())}${p2(FIXED_DATE.getUTCSeconds())}Z`;
+
+  interface PortfolioEntry {
+    readonly name: string;
+    readonly folderId: number;
+    readonly body: Buffer;
+    readonly mime: string;
+    readonly description: string;
+    readonly order: number;
+  }
+  const entries: PortfolioEntry[] = [
+    {
+      name: 'readme.txt',
+      folderId: 0,
+      body: Buffer.from('Read me first.\n'),
+      mime: 'text/plain',
+      description: 'What this pack is for',
+      order: 0,
+    },
+    {
+      name: 'instruction.pdf',
+      folderId: 0,
+      body: Buffer.from(await embeddedInstruction()),
+      mime: 'application/pdf',
+      description: 'The signed instruction',
+      order: 1,
+    },
+    {
+      name: 'people.csv',
+      folderId: 0,
+      body: Buffer.from('id,name\n1,Ada\n2,Grace\n'),
+      mime: 'text/csv',
+      description: 'Who is involved',
+      order: 2,
+    },
+    {
+      name: 'january.txt',
+      folderId: 1,
+      body: Buffer.from('January statement.\n'),
+      mime: 'text/plain',
+      description: 'January',
+      order: 3,
+    },
+    {
+      name: 'february.txt',
+      folderId: 1,
+      body: Buffer.from('February statement.\n'),
+      mime: 'text/plain',
+      description: 'February',
+      order: 4,
+    },
+  ];
+
+  const pairs: Array<[string, PDFRef]> = [];
+  for (const entry of entries) {
+    const params = ctx.obj({});
+    params.set(PDFName.of('Size'), PDFNumber.of(entry.body.length));
+    params.set(PDFName.of('CreationDate'), PDFString.of(stamp));
+    params.set(PDFName.of('ModDate'), PDFString.of(stamp));
+    params.set(
+      PDFName.of('CheckSum'),
+      PDFHexString.of(md5(entry.body).toString('hex').toUpperCase()),
+    );
+    const stream = ctx.flateStream(entry.body, { Type: 'EmbeddedFile' });
+    stream.dict.set(PDFName.of('Subtype'), PDFName.of(entry.mime));
+    stream.dict.set(PDFName.of('Params'), ctx.register(params));
+    const streamRef = ctx.register(stream);
+
+    const ef = ctx.obj({});
+    ef.set(PDFName.of('F'), streamRef);
+    ef.set(PDFName.of('UF'), streamRef);
+    const ci = ctx.obj({});
+    ci.set(PDFName.of('ynot:Order'), PDFString.of(String(entry.order)));
+    const spec = ctx.obj({});
+    spec.set(PDFName.of('Type'), PDFName.of('Filespec'));
+    spec.set(PDFName.of('F'), PDFString.of(entry.name));
+    spec.set(PDFName.of('UF'), PDFString.of(entry.name));
+    spec.set(PDFName.of('Desc'), PDFString.of(entry.description));
+    spec.set(PDFName.of('EF'), ctx.register(ef));
+    spec.set(PDFName.of('CI'), ctx.register(ci));
+    pairs.push([`<${String(entry.folderId)}>${entry.name}`, ctx.register(spec)]);
+  }
+
+  pairs.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  const namesArray = PDFArray.withContext(ctx);
+  for (const [key, ref] of pairs) {
+    namesArray.push(PDFString.of(key));
+    namesArray.push(ref);
+  }
+  const embedded = ctx.obj({});
+  embedded.set(PDFName.of('Names'), namesArray);
+  const names = ctx.obj({});
+  names.set(PDFName.of('EmbeddedFiles'), ctx.register(embedded));
+  doc.catalog.set(PDFName.of('Names'), ctx.register(names));
+
+  // `/Folders`: a root with one child, "Statements".
+  const root = ctx.obj({});
+  const child = ctx.obj({});
+  const rootRef = ctx.register(root);
+  const childRef = ctx.register(child);
+  root.set(PDFName.of('Type'), PDFName.of('Folder'));
+  root.set(PDFName.of('ID'), PDFNumber.of(0));
+  root.set(PDFName.of('Name'), PDFString.of(''));
+  root.set(PDFName.of('CreationDate'), PDFString.of(stamp));
+  root.set(PDFName.of('Child'), childRef);
+  child.set(PDFName.of('Type'), PDFName.of('Folder'));
+  child.set(PDFName.of('ID'), PDFNumber.of(1));
+  child.set(PDFName.of('Name'), PDFString.of('Statements'));
+  child.set(PDFName.of('Desc'), PDFString.of('Monthly statements'));
+  child.set(PDFName.of('CreationDate'), PDFString.of(stamp));
+  child.set(PDFName.of('Parent'), rootRef);
+
+  const schema = ctx.obj({});
+  const addField = (
+    key: string,
+    label: string,
+    subtype: string,
+    order: number,
+    visible: boolean,
+  ): void => {
+    const dict = ctx.obj({});
+    dict.set(PDFName.of('Type'), PDFName.of('CollectionField'));
+    dict.set(PDFName.of('Subtype'), PDFName.of(subtype));
+    dict.set(PDFName.of('N'), PDFString.of(label));
+    dict.set(PDFName.of('O'), PDFNumber.of(order));
+    dict.set(PDFName.of('V'), visible ? PDFBool.True : PDFBool.False);
+    schema.set(PDFName.of(key), ctx.register(dict));
+  };
+  addField('FileName', 'Name', 'F', 0, true);
+  addField('Description', 'Description', 'Desc', 1, true);
+  addField('CreationDate', 'Created', 'CreationDate', 2, true);
+  addField('ModDate', 'Modified', 'ModDate', 3, true);
+  addField('Size', 'Size', 'Size', 4, true);
+  addField('ynot:Order', 'Order', 'N', 90, false);
+
+  const sort = ctx.obj({});
+  sort.set(PDFName.of('S'), PDFName.of('ynot:Order'));
+  sort.set(PDFName.of('A'), PDFBool.True);
+
+  const collection = ctx.obj({});
+  collection.set(PDFName.of('Type'), PDFName.of('Collection'));
+  collection.set(PDFName.of('View'), PDFName.of('D'));
+  collection.set(PDFName.of('Schema'), ctx.register(schema));
+  collection.set(PDFName.of('Sort'), ctx.register(sort));
+  collection.set(PDFName.of('Reorder'), PDFName.of('ynot:Order'));
+  collection.set(PDFName.of('D'), PDFString.of('instruction.pdf'));
+  collection.set(PDFName.of('Folders'), rootRef);
+  doc.catalog.set(PDFName.of('Collection'), ctx.register(collection));
+
+  await save(doc, 'portfolio.pdf');
+}
+
+/** A one-page PDF embedded in the portfolio, so it holds a real PDF as well as text files. */
+async function embeddedInstruction(): Promise<Uint8Array> {
+  const doc = await newDoc('Embedded instruction');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  doc.addPage(A5).drawText('Instruction', { x: 40, y: 500, size: 18, font });
+  return await doc.save({ useObjectStreams: false });
 }
 
 // ---- M10: rotated --------------------------------------------------------------------------
@@ -1877,6 +2068,7 @@ encrypted();
 await outline();
 await layers();
 await attachments();
+await portfolio();
 await rotated();
 await mixedBoxes();
 await pageLabels();
