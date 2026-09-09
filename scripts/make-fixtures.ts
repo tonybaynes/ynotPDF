@@ -964,7 +964,12 @@ async function portfolio(): Promise<void> {
 
   const collection = ctx.obj({});
   collection.set(PDFName.of('Type'), PDFName.of('Collection'));
-  collection.set(PDFName.of('View'), PDFName.of('D'));
+  // Tile view with the list down the left, as Foxit writes its own portfolios.
+  collection.set(PDFName.of('View'), PDFName.of('T'));
+  const split = ctx.obj({});
+  split.set(PDFName.of('Direction'), PDFName.of('V'));
+  split.set(PDFName.of('Position'), PDFNumber.of(30));
+  collection.set(PDFName.of('Split'), ctx.register(split));
   collection.set(PDFName.of('Schema'), ctx.register(schema));
   collection.set(PDFName.of('Sort'), ctx.register(sort));
   collection.set(PDFName.of('Reorder'), PDFName.of('ynot:Order'));

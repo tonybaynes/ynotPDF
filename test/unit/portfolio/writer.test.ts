@@ -53,6 +53,8 @@ interface SavedPortfolio {
   readonly view: string | null;
   readonly sort: { key: string; ascending: boolean } | null;
   readonly initialFile: string | null;
+  /** `/Split` — where the file list goes and how much room it has. */
+  readonly split: { direction: string; position: number } | null;
   readonly folders: Array<{ id: number; name: string; parentId: number | null }>;
   readonly schema: Array<{ key: string; label: string; subtype: string; visible: boolean }>;
 }
@@ -154,6 +156,14 @@ async function read(bytes: Uint8Array): Promise<SavedPortfolio> {
   }
   const sortDict = collection?.lookupMaybe(PDFName.of('Sort'), PDFDict);
   const sortKey = sortDict?.lookupMaybe(PDFName.of('S'), PDFName)?.decodeText();
+  const splitDict = collection?.lookupMaybe(PDFName.of('Split'), PDFDict);
+  const split =
+    splitDict === undefined
+      ? null
+      : {
+          direction: splitDict.lookupMaybe(PDFName.of('Direction'), PDFName)?.decodeText() ?? '',
+          position: splitDict.lookupMaybe(PDFName.of('Position'), PDFNumber)?.asNumber() ?? -1,
+        };
 
   return {
     files,
@@ -163,6 +173,7 @@ async function read(bytes: Uint8Array): Promise<SavedPortfolio> {
         ? null
         : { key: sortKey, ascending: sortDict?.lookup(PDFName.of('A')) !== PDFBool.False },
     initialFile: text(collection?.lookup(PDFName.of('D')) ?? null),
+    split,
     folders,
     schema,
   };
@@ -319,7 +330,8 @@ describe('the writer’s portfolio section', () => {
     const result = await write(base, planFor(portfolio, pages));
     const saved = await read(result.bytes);
 
-    expect(saved.view).toBe('D');
+    expect(saved.view).toBe('T');
+    expect(saved.split).toEqual({ direction: 'V', position: 30 });
     expect(saved.sort).toEqual({ key: 'ynot:Order', ascending: true });
     // `/D` has to be a key of the name tree, or a viewer cannot find the file it names.
     expect(saved.initialFile).toBe(treeKey('instruction.pdf', 0));
@@ -386,6 +398,41 @@ describe('the writer’s portfolio section', () => {
     const back = reopened.files.find((f) => f.name === 'instruction.pdf');
     expect(Date.parse(back?.fields['ynot:Due'] ?? '')).toBe(Date.parse(due));
     expect(back?.fields['ynot:Ref']).toBe('17');
+  }, 60000);
+
+  it('puts the file list down the left for tiles, as Foxit does, unless the file says otherwise', async () => {
+    // A tile portfolio with no `/Split` of its own — the fixture with the entry removed.
+    const doc = await PDFDocument.load(fixture('portfolio.pdf'), { updateMetadata: false });
+    const collection = doc.catalog.lookupMaybe(PDFName.of('Collection'), PDFDict);
+    expect(collection).toBeDefined();
+    collection?.delete(PDFName.of('Split'));
+    const bare = await doc.save({ useObjectStreams: false });
+    expect((await read(bare)).split).toBeNull();
+
+    const { portfolio, base, pages } = await openPortfolio(bare);
+    expect(portfolio.view).toBe('tile');
+    const written = await write(base, planFor(portfolio, pages));
+    expect((await read(written.bytes)).split).toEqual({ direction: 'V', position: 30 });
+
+    // A producer's own split is left alone — here the fixture's, widened.
+    const doc2 = await PDFDocument.load(fixture('portfolio.pdf'), { updateMetadata: false });
+    const split = doc2.catalog
+      .lookupMaybe(PDFName.of('Collection'), PDFDict)
+      ?.lookupMaybe(PDFName.of('Split'), PDFDict);
+    split?.set(PDFName.of('Position'), PDFNumber.of(45));
+    const widened = await doc2.save({ useObjectStreams: false });
+    const again = await openPortfolio(widened);
+    const kept = await write(again.base, planFor(again.portfolio, again.pages));
+    expect((await read(kept.bytes)).split).toEqual({ direction: 'V', position: 45 });
+
+    // Details view asks for no split of its own; a viewer lays the table out as it likes.
+    const details = await openPortfolio(bare);
+    const table = await write(
+      details.base,
+      planFor({ ...details.portfolio, view: 'details' }, details.pages),
+    );
+    expect((await read(table.bytes)).view).toBe('D');
+    expect((await read(table.bytes)).split).toBeNull();
   }, 60000);
 
   it('embeds a new file once, with its size, dates and checksum', async () => {
@@ -494,9 +541,10 @@ describe.skipIf(!existsSync(LOCAL))('the operator’s own portfolio', () => {
     expect(saved.files.find((f) => f.name === first?.name)?.description).toBe(
       'Checked by the operator',
     );
-    // Still a portfolio, and still Foxit's own schema and folder.
+    // Still a portfolio, and still Foxit's own schema, folder and layout.
     expect(saved.view).not.toBeNull();
     expect(saved.folders.length).toBeGreaterThan(0);
+    expect(saved.split).toEqual((await read(original)).split);
   }, 120000);
 
   it('keeps Foxit’s order column as numbers, so Foxit still shows the files in its order', async () => {

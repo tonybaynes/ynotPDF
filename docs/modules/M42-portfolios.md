@@ -331,6 +331,12 @@ argument; this is the short form.
    is a tab away. M12's panel note said "the page behind this panel is the portfolio's cover
    sheet", which this made untrue, so the note and the acceptance test that asserted it were both
    updated rather than left to drift.
+10. **A portfolio opens as tiles with the file list down the left** (`/View /T`,
+   `/Split /Direction /V /Position 30`): that is what Foxit writes for a new portfolio and how
+   the operator's own packs open, and a details table on top read as "not a portfolio" to the
+   operator (2026-09-09). Details stays as the M130 preference. A tile portfolio with no
+   `/Split` of its own is given that one on save; a split a producer wrote is kept. Provenance:
+   the operator's `Sample Portfolio.pdf` and ISO 32000-2 table 77.
 
 ## Build log (fill in at merge)
 
@@ -355,8 +361,10 @@ with all three files. The same check showed two faults the byte-level tests coul
 came back sorted by name because the writer had turned Foxit's numeric `foxit:Order` values into
 strings, and `/D` was written as a bare file name rather than a name-tree key. Both were fixed on
 `fix/M42-portfolio-order` the same day, with writer tests — one of them on the operator's file.
-A synthetic portfolio saved by ynotPDF also opens in Foxit; it shows the details layout because
-its `/View` says so, which is the fixture's choice and not a fault.
+A synthetic portfolio saved by ynotPDF also opened in Foxit, but as a details table across the
+top of the window rather than Foxit's list of tiles down the left, because ynotPDF's default
+view was details. The operator judged that wrong for a portfolio, and it was: the default is
+now tiles with the list on the left (decision 10), on `fix/M42-default-view`.
 
 **Cross-OS render hashes.** `portfolio.pdf` was added to the corpus. Its hash was generated on
 Windows and written to all three platform files: every other standard-font fixture has byte-equal

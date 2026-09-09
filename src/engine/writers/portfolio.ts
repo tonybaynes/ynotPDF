@@ -360,6 +360,15 @@ function writeCollection(
   }
   collection.set(PDFName.of('Type'), PDFName.of('Collection'));
   collection.set(PDFName.of('View'), PDFName.of(VIEW_NAMES[planned.view]));
+  // `/Split` (ISO 32000-2 table 77) says where a viewer puts the file list. Foxit writes it down
+  // the left, 30% wide, for its tile view, and that is how the operator's packs open; a tile
+  // portfolio with no split of its own gets the same. One a producer wrote is left as it is.
+  if (planned.view === 'tile' && !collection.has(PDFName.of('Split'))) {
+    const split = ctx.obj({});
+    split.set(PDFName.of('Direction'), PDFName.of('V'));
+    split.set(PDFName.of('Position'), PDFNumber.of(30));
+    collection.set(PDFName.of('Split'), ctx.register(split));
+  }
 
   const schema = ctx.obj({});
   for (const column of planned.schema) {

@@ -62,11 +62,20 @@ test.afterAll(async () => {
 const state = (): Promise<PortfolioState> =>
   app.run('dev.portfolioState') as Promise<PortfolioState>;
 
-/** Opens a fixture by bytes and waits for the portfolio grid. */
-async function openPortfolio(name = 'portfolio.pdf', path = join(FIXTURES, name)): Promise<void> {
+/**
+ * Opens a fixture by bytes and waits for the portfolio grid. A portfolio opens in tiles, as
+ * Foxit's do; most of these tests read the details table, so that is what they get unless they
+ * ask to keep the file's own view.
+ */
+async function openPortfolio(
+  name = 'portfolio.pdf',
+  path = join(FIXTURES, name),
+  view: 'details' | 'tile' | null = 'details',
+): Promise<void> {
   const bytes = Array.from(readFileSync(path));
   await app.run('file.openBytes', { file: { path: `C:/fixtures/${name}`, name, bytes } });
   await app.page.waitForSelector('.pf-host:not([hidden])');
+  if (view !== null) await app.run('portfolio.setView', { value: view });
   await app.page.waitForTimeout(200);
 }
 
@@ -208,6 +217,11 @@ test.describe('the details view', () => {
 
 test.describe('the tiles view', () => {
   test.afterEach(closeAll);
+
+  test('is how a portfolio opens, as it is in Foxit', async () => {
+    await openPortfolio('portfolio.pdf', undefined, null);
+    expect((await state()).view).toBe('tile');
+  });
 
   test('draws the first page of an embedded PDF', async () => {
     await openPortfolio();
@@ -407,7 +421,7 @@ test.describe('new portfolios', () => {
     expect(s.isPortfolio).toBe(true);
     expect(s.files).toHaveLength(0);
     expect(s.pages).toBe(1);
-    expect(s.view).toBe('details');
+    expect(s.view).toBe('tile');
     await expect(app.page.locator('.pf-empty')).toBeVisible();
   });
 

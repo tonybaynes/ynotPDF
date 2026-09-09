@@ -154,7 +154,9 @@ export function orderColumn(key: string = ORDER_KEY): PortfolioColumn {
 /** A new, empty portfolio: the standard columns, one root folder, no files. */
 export function emptyPortfolio(): Portfolio {
   return {
-    view: 'details',
+    // Tiles, with the file list down the left: how Foxit writes a new portfolio, and how the
+    // operator expects one to open. Details is a preference (M130), not the default.
+    view: 'tile',
     schema: [...STANDARD_COLUMNS, orderColumn()],
     sort: { key: ORDER_KEY, ascending: true },
     initialFile: null,

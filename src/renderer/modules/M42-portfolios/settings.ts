@@ -15,8 +15,8 @@ export const DEFAULT_VIEWS: ReadonlyArray<{
   readonly value: PortfolioView;
   readonly label: string;
 }> = [
-  { value: 'details', label: 'Details (a table of columns)' },
   { value: 'tile', label: 'Tiles (a picture of each file)' },
+  { value: 'details', label: 'Details (a table of columns)' },
 ];
 
 export interface PortfolioSettings {
@@ -29,7 +29,7 @@ export interface PortfolioSettings {
 }
 
 export const DEFAULT_PORTFOLIO_SETTINGS: PortfolioSettings = {
-  defaultView: 'details',
+  defaultView: 'tile',
   coverSheetOnNew: true,
   tileThumbnails: true,
 };
