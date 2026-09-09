@@ -122,12 +122,28 @@ export function installThumbnailDrag(options: ThumbnailDragOptions): ThumbnailDr
   let scroller: HTMLElement | null = null;
   let autoscroll: number | null = null;
   let lastTarget: DropTarget | null = null;
+  /** The last place the pointer was, so auto-scroll can re-aim without a move event. */
+  let lastPoint: { x: number; y: number; copy: boolean } | null = null;
 
   const cellsOnScreen = (): DragCell[] =>
     [...document.querySelectorAll<HTMLElement>('.thumb-cell')].map((cell) => ({
       page: Number(cell.dataset['page'] ?? '0'),
       rect: cell.getBoundingClientRect(),
     }));
+
+  /**
+   * Re-reads where the drop would land and repaints the marker, from the last known pointer
+   * position. Called on every move and on every auto-scroll frame.
+   */
+  const refreshTarget = (): void => {
+    if (!lastPoint) return;
+    const under = document.elementFromPoint(lastPoint.x, lastPoint.y);
+    if (under?.closest('.thumb-scroll')) {
+      const index = insertionIndexFor(cellsOnScreen(), lastPoint, options.pageCount());
+      lastTarget = { kind: 'grid', index, copy: lastPoint.copy };
+      showMarker(index);
+    }
+  };
 
   const stopAutoscroll = (): void => {
     if (autoscroll !== null) cancelAnimationFrame(autoscroll);
@@ -144,6 +160,7 @@ export function installThumbnailDrag(options: ThumbnailDragOptions): ThumbnailDr
     start = null;
     pages = [];
     lastTarget = null;
+    lastPoint = null;
     document.body.classList.remove('is-page-dragging');
   };
 
@@ -168,6 +185,11 @@ export function installThumbnailDrag(options: ThumbnailDragOptions): ThumbnailDr
     const step = (): void => {
       if (!scroller || !dragging) return;
       scroller.scrollTop += delta;
+      // The cells under the pointer are different ones now, and the marker was measured
+      // against cells that have scrolled away. Without this the reader watches a hundred
+      // pages go by with no idea where the drop would land — which is the one case pointer
+      // events were chosen over a drag image to support.
+      refreshTarget();
       autoscroll = requestAnimationFrame(step);
     };
     autoscroll = requestAnimationFrame(step);
@@ -234,7 +256,8 @@ export function installThumbnailDrag(options: ThumbnailDragOptions): ThumbnailDr
   };
 
   const onPointerMove = (event: PointerEvent): void => {
-    if (!start) return;
+    if (start?.pointerId !== event.pointerId) return;
+    lastPoint = { x: event.clientX, y: event.clientY, copy: event.ctrlKey || event.metaKey };
     if (!dragging) {
       const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y);
       if (moved < DRAG_THRESHOLD_PX) return;
@@ -260,6 +283,10 @@ export function installThumbnailDrag(options: ThumbnailDragOptions): ThumbnailDr
   };
 
   const onPointerUp = (event: PointerEvent): void => {
+    // Only the pointer that started the drag ends it. A second finger touching and lifting —
+    // a palm, or the start of a pinch — would otherwise drop the pages wherever *it* was; so
+    // would releasing the right mouse button mid-drag, which also opens a context menu.
+    if (start !== null && event.pointerId !== start.pointerId) return;
     if (!dragging) {
       start = null;
       return;

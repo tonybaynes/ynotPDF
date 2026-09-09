@@ -45,7 +45,7 @@ import {
 } from './dialogs';
 import { danglingBookmarks } from './commands';
 import { installThumbnailDrag, type ThumbnailDragController } from './dnd';
-import { DEFAULT_LABEL_SPEC } from './labels';
+import { DEFAULT_LABEL_SPEC, LABEL_STYLES, type LabelStyle } from './labels';
 import { countPages, formatRange } from './range';
 import { ORGANISE_SETTINGS_SCHEMA } from './settings';
 
@@ -153,6 +153,9 @@ const INSERT_COMMANDS: ReadonlyArray<CommandSpec> = [
       if (chosen.length === 0) return null;
       const where = target(ctx);
       let inserted = 0;
+      // Where the *next* file goes. Recomputing this from `where` every time round would
+      // put every file at the same index, so three chosen files would arrive back to front.
+      let nextAt: number | null = numberArg(ctx.args, 'at') ?? null;
       for (const file of chosen) {
         const bytes = await service.pdfBytesOf(file);
         const source = await doc.engine.open(new Uint8Array(bytes), { name: file.name });
@@ -161,9 +164,12 @@ const INSERT_COMMANDS: ReadonlyArray<CommandSpec> = [
         let keepBookmarks = service.settings.keepBookmarksOnInsert;
         try {
           const count = await doc.engine.pageCount(source);
-          if (ctx.args['range'] !== undefined || ctx.args['sourcePages'] !== undefined) {
-            pages =
-              numbersArg(ctx.args, 'sourcePages') ?? Array.from({ length: count }, (_, i) => i);
+          // Only `sourcePages` says which pages of the *file* to take. `range` means what it
+          // means everywhere else in this module — where in **this** document to put them —
+          // so it must not also suppress the picker and quietly bring in all five hundred.
+          const wanted = numbersArg(ctx.args, 'sourcePages');
+          if (wanted !== undefined) {
+            pages = wanted;
           } else {
             const answer = await askInsertFromFile(service.dialogs, {
               name: file.name,
@@ -180,22 +186,26 @@ const INSERT_COMMANDS: ReadonlyArray<CommandSpec> = [
         } finally {
           await doc.engine.close(source).catch(() => undefined);
         }
-        const at = numberArg(ctx.args, 'at') ?? service.insertIndex(position, where, doc);
-        const ids = await service.withProgress(
-          { title: `Inserting from ${file.name}`, pages: pages.length },
-          async (report, signal) =>
-            await service.insertFrom({
-              bytes,
-              pages,
-              at,
-              keepBookmarks,
-              name: file.name,
-              label: `Insert ${countPages(pages.length)}`,
-              report,
-              signal,
-            }),
+        const at = nextAt ?? service.insertIndex(position, where, doc);
+        const ids = await service.cancellable(() =>
+          service.withProgress(
+            { title: `Inserting from ${file.name}`, pages: pages.length },
+            async (report, signal) =>
+              await service.insertFrom({
+                bytes,
+                pages,
+                at,
+                keepBookmarks,
+                name: file.name,
+                label: `Insert ${countPages(pages.length)}`,
+                report,
+                signal,
+              }),
+          ),
         );
+        if (ids === null) break;
         inserted += ids.length;
+        nextAt = at + ids.length;
       }
       return service.record({ inserted });
     },
@@ -231,19 +241,22 @@ const INSERT_COMMANDS: ReadonlyArray<CommandSpec> = [
       }
       const bytes = await service.pdfBytesOf(file);
       const at = service.insertIndex(service.settings.insertPosition, target(ctx), doc);
-      const ids = await service.withProgress(
-        { title: 'Inserting from the clipboard' },
-        async (report, signal) =>
-          await service.insertFrom({
-            bytes,
-            at,
-            keepBookmarks: false,
-            name: file.name,
-            label: 'Insert from the clipboard',
-            report,
-            signal,
-          }),
+      const ids = await service.cancellable(() =>
+        service.withProgress(
+          { title: 'Inserting from the clipboard' },
+          async (report, signal) =>
+            await service.insertFrom({
+              bytes,
+              at,
+              keepBookmarks: false,
+              name: file.name,
+              label: 'Insert from the clipboard',
+              report,
+              signal,
+            }),
+        ),
       );
+      if (ids === null) return null;
       return service.record({ inserted: ids.length, at });
     },
   },
@@ -293,6 +306,20 @@ function numberArg(args: Readonly<Record<string, unknown>>, key: string): number
 function stringArg(args: Readonly<Record<string, unknown>>, key: string): string | undefined {
   const value = args[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * A numbering style the dialog actually offers.
+ *
+ * `numeral()` is an exhaustive switch with no default, so a style it has never heard of
+ * returns `undefined` and every page in the range ends up labelled with the literal string
+ * "undefined" — as a real, undoable change. A plausible typo (`roman` for `romanLower`) is
+ * enough to do it, so the value is checked against the list rather than cast to it.
+ */
+function labelStyleArg(args: Readonly<Record<string, unknown>>): LabelStyle {
+  const given = stringArg(args, 'style');
+  const known = LABEL_STYLES.find((option) => option.value === given);
+  return known?.value ?? DEFAULT_LABEL_SPEC.style;
 }
 
 function numbersArg(args: Readonly<Record<string, unknown>>, key: string): number[] | undefined {
@@ -368,9 +395,13 @@ const PAGE_COMMANDS: ReadonlyArray<CommandSpec> = [
       if (!answer) return null;
       const chosen = service.targetOf(answer.pages, doc);
       if (chosen.ids.length === 0) return null;
-      const outcome = await extractTo(service, chosen, answer, ctx.args);
-      if (outcome === null) return null;
-      if (answer.deleteAfter) await service.deletePages(chosen);
+      const outcome = await service.cancellable(() => extractTo(service, chosen, answer, ctx.args));
+      if (outcome === null || outcome === undefined) return null;
+      // `doc`, named explicitly. Extracting into a new tab *activates* that tab, so asking
+      // for the active document here would delete from the extract rather than from its
+      // source — and the extract holds exactly these pages, so it would refuse and then
+      // report that they had gone.
+      if (answer.deleteAfter) await service.deletePages(chosen, doc);
       return service.record({ ...outcome, deletedAfter: answer.deleteAfter });
     },
   },
@@ -413,18 +444,24 @@ const PAGE_COMMANDS: ReadonlyArray<CommandSpec> = [
       if (!answer) return null;
       const chosenTarget = service.targetOf(answer.target, doc);
       if (chosenTarget.ids.length === 0) return null;
-      const inserted = await service.withProgress(
-        { title: `Replacing ${countPages(chosenTarget.ids.length)}`, pages: answer.source.length },
-        async (report, signal) =>
-          await service.replace({
-            target: chosenTarget,
-            bytes,
-            pages: answer.source,
-            name: file.name,
-            report,
-            signal,
-          }),
+      const inserted = await service.cancellable(() =>
+        service.withProgress(
+          {
+            title: `Replacing ${countPages(chosenTarget.ids.length)}`,
+            pages: answer.source.length,
+          },
+          async (report, signal) =>
+            await service.replace({
+              target: chosenTarget,
+              bytes,
+              pages: answer.source,
+              name: file.name,
+              report,
+              signal,
+            }),
+        ),
       );
+      if (inserted === null) return null;
       return service.record({ replaced: chosenTarget.ids.length, inserted });
     },
   },
@@ -441,10 +478,13 @@ const PAGE_COMMANDS: ReadonlyArray<CommandSpec> = [
       const where = target(ctx);
       if (where.ids.length === 0) return service.record({ duplicated: 0 });
       const at = (where.indexes[where.indexes.length - 1] ?? 0) + 1;
-      const ids = await service.withProgress(
-        { title: `Duplicating ${countPages(where.ids.length)}`, pages: where.ids.length },
-        async () => await service.duplicate(where, at),
+      const ids = await service.cancellable(() =>
+        service.withProgress(
+          { title: `Duplicating ${countPages(where.ids.length)}`, pages: where.ids.length },
+          async () => await service.duplicate(where, at),
+        ),
       );
+      if (ids === null) return null;
       return service.record({ duplicated: ids.length, at });
     },
   },
@@ -543,10 +583,13 @@ const PAGE_COMMANDS: ReadonlyArray<CommandSpec> = [
           tabs: others.map((t) => ({ id: t.id, title: t.title })),
         }));
       if (tabId === null) return null;
-      const copied = await service.withProgress(
-        { title: `Copying ${countPages(where.ids.length)}`, pages: where.ids.length },
-        async () => await service.copyToDocument(where, tabId),
+      const copied = await service.cancellable(() =>
+        service.withProgress(
+          { title: `Copying ${countPages(where.ids.length)}`, pages: where.ids.length },
+          async () => await service.copyToDocument(where, tabId),
+        ),
       );
+      if (copied === null) return null;
       service.toasts.show({
         kind: 'success',
         text: `Copied ${countPages(copied)} into ${service.documents.get(tabId)?.title ?? 'the other document'}.`,
@@ -798,7 +841,7 @@ const LABEL_COMMANDS: ReadonlyArray<CommandSpec> = [
             })
           : {
               pages: where.indexes,
-              style: (stringArg(ctx.args, 'style') ?? 'decimal') as typeof DEFAULT_LABEL_SPEC.style,
+              style: labelStyleArg(ctx.args),
               prefix: stringArg(ctx.args, 'prefix') ?? '',
               start: numberArg(ctx.args, 'start') ?? 1,
             };
@@ -1134,8 +1177,15 @@ export default defineModule({
 
   activate(ctx) {
     const registry = ctx.service<Registry>('registry');
-    if (registry.hasService(ORGANISE_SERVICE)) return undefined;
     if (!registry.hasService('shellServices')) return undefined;
+    // `Registry.dispose()` runs the disposers but leaves the services registered, so a
+    // dispose-then-activate cycle arrives here with the service still in place. Bailing out
+    // would leave `live` and `drag` null for the rest of the session: the commands would go on
+    // working, because they resolve the service by name, while the drag and the status field
+    // silently did not.
+    const existing = registry.hasService(ORGANISE_SERVICE)
+      ? registry.service<OrganiseService>(ORGANISE_SERVICE)
+      : null;
     registerIcon('between-horizontal-start', BetweenHorizontalStart);
     registerIcon('file-output', FileOutput);
     registerIcon('replace', Replace);
@@ -1144,10 +1194,14 @@ export default defineModule({
     registerIcon('copy', Copy);
     registerOrganiseCodecs();
     const shell = registry.service<ShellServices>('shellServices');
-    const service = new OrganiseService({ registry, shell });
+    const service = existing ?? new OrganiseService({ registry, shell });
     live = service;
-    registry.provide(ORGANISE_SERVICE, service);
-    void service.load();
+    if (existing === null) {
+      registry.provide(ORGANISE_SERVICE, service);
+      void service.load();
+    }
+    // Never two controllers on one window: the second would move every dragged page twice.
+    drag?.dispose();
 
     // The drag controller is installed once, for the whole window: M12's grid builds and drops
     // cells as it scrolls, so anything bound to a cell would not survive its own auto-scroll.

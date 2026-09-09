@@ -319,6 +319,8 @@ export class OrganiseService {
     // A holder rather than a `let`: the dialog is created inside a callback the timer owns, and a
     // plain local would still be narrowed to `null` where it is closed.
     const held: { dialog: ProgressHandle | null } = { dialog: null };
+    // Set before the dialog is closed by us, so its own close event is not read as a cancel.
+    let finished = false;
     let latest = 0;
     let latestText = options.text ?? '';
     const show = (): void => {
@@ -333,6 +335,12 @@ export class OrganiseService {
       void dialog.onCancel.then(() => {
         controller.abort();
       });
+      // `onCancel` only fires for the Cancel *button*. Escape closes the dialog by another
+      // path entirely, and without this the reader would watch the dialog vanish while the
+      // work carried on and wrote the file anyway. Any close that is not ours is a cancel.
+      dialog.element.addEventListener('close', () => {
+        if (!finished) controller.abort();
+      });
     };
     // A big job shows its dialog at once; a small one only if it turns out to be slow.
     const big = (options.pages ?? 0) > PROGRESS_PAGE_THRESHOLD;
@@ -346,6 +354,7 @@ export class OrganiseService {
     try {
       return await work(report, controller.signal);
     } finally {
+      finished = true;
       if (timer) clearTimeout(timer);
       held.dialog?.close();
     }
@@ -435,8 +444,11 @@ export class OrganiseService {
    * A document cannot lose its last page: a PDF with no pages is not a PDF, and the honest
    * answer to "delete all of them" is to say so rather than to produce a file no reader opens.
    */
-  async deletePages(target: PageTarget): Promise<number> {
-    const doc = this.require();
+  async deletePages(target: PageTarget, on?: Document): Promise<number> {
+    // The caller may name the document. Extract-to-a-new-tab *activates* that new tab before
+    // the "delete them afterwards" step runs, so re-resolving the active document here would
+    // delete from the extract instead of from the document the pages came out of.
+    const doc = on ?? this.require();
     if (target.ids.length === 0) return 0;
     if (target.ids.length >= doc.pageCount) {
       await this.dialogs.error(
@@ -783,6 +795,22 @@ export class OrganiseService {
   /** Turns a cancellation into "nothing happened" and lets every other failure through. */
   static cancelled(error: unknown): boolean {
     return error instanceof SliceCancelled;
+  }
+
+  /**
+   * Runs work that the reader may cancel, answering `null` when they did.
+   *
+   * A cancellation is not a failure, and it must not reach the shell’s error toast: pressing
+   * Cancel and then being told "The operation was cancelled" in a red box is the app arguing
+   * with the reader about something they just asked for. Every other failure still propagates.
+   */
+  async cancellable<T>(work: () => Promise<T>): Promise<T | null> {
+    try {
+      return await work();
+    } catch (error) {
+      if (OrganiseService.cancelled(error)) return null;
+      throw error;
+    }
   }
 }
 

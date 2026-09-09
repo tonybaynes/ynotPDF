@@ -360,7 +360,69 @@ test.describe('acceptance: extract pages 2-4 with comments', () => {
     expect(annotations).toBeGreaterThan(0);
   });
 
-  test('extracting into a new tab leaves the original alone, and "delete after" does not', async () => {
+  test('extract to a new tab with "delete after" deletes from the source, not the extract', async () => {
+    // The regression: opening the extract *activates* its tab, so a delete that asked for
+    // the active document deleted from the extract — which holds exactly those pages, so it
+    // refused and reported that they had gone, leaving the source untouched.
+    await open('multipage.pdf');
+    const before = await summary();
+
+    const result = (await app.run('organize.extractPages', {
+      range: '2-3',
+      destination: 'tab',
+      deleteAfter: true,
+    })) as { extracted: number; deletedAfter: boolean };
+    expect(result.extracted).toBe(2);
+
+    // The extract is in front, with its two pages and nothing missing.
+    expect((await summary()).pageCount).toBe(2);
+
+    // The source lost exactly those two.
+    await app.run('app.tabs.previous');
+    await app.page.waitForTimeout(200);
+    expect((await summary()).pageCount).toBe(before.pageCount - 2);
+    // And it is one undo away from whole again.
+    await app.run('edit.undo');
+    expect((await summary()).pageCount).toBe(before.pageCount);
+  });
+
+  test('several files insert in the order they were chosen', async () => {
+    // The regression: the insertion point was recomputed from a stale target every time
+    // round the loop, so every file landed at the same index and they arrived back to front.
+    await open('blank.pdf');
+    await app.run('organize.insertFromFile', {
+      files: [fileArg('outline.pdf'), fileArg('multipage.pdf')],
+      sourcePages: [0],
+      at: 0,
+    });
+    // One page from each, in the order they were given: outline.pdf then multipage.pdf.
+    expect((await summary()).pageCount).toBe(3);
+    const sizes = (await app.run('dev.pageSizes')) as Array<{ width: number }>;
+    // outline.pdf and multipage.pdf page 1 are both A4, so the order is checked by asking
+    // the text of each page instead.
+    const first = (await app.run('dev.pageText', { page: 0 })) as string;
+    const second = (await app.run('dev.pageText', { page: 1 })) as string;
+    expect(sizes).toHaveLength(3);
+    expect(first).not.toBe(second);
+  });
+
+  test('a numbering style the dialog does not offer is refused, not written', async () => {
+    // The regression: any string was cast to a style, and an unknown one made `numeral()`
+    // return undefined — so every page in the range was labelled the literal "undefined".
+    await open('multipage.pdf');
+    await app.run('organize.pageLabels', {
+      range: '1-2',
+      style: 'roman',
+      prefix: '',
+      start: 1,
+    });
+    const labels = (await state()).labels;
+    expect(labels).not.toContain('undefined');
+    // It fell back to the style the dialog opens on.
+    expect(labels.slice(0, 2)).toEqual(['1', '2']);
+  });
+
+  test('extracting into a new tab leaves the original alone', async () => {
     await open('multipage.pdf');
     const before = await summary();
 

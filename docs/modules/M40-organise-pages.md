@@ -427,6 +427,41 @@ tests with the coverage gates, 251 Playwright tests.
   on the telephone. A "Numbered A-1" field sits beside the shell's "Page 3 of 6", and hides itself
   for a document that has no numbering rather than saying "Numbered 3".
 
+### A review pass over the finished branch, and what it found
+
+Nine more, all real, all fixed here and all with a test:
+
+- **Extract → “Open in a new tab” with “delete afterwards” deleted from the wrong document —
+  and could never succeed.** Opening the extract *activates* its tab, so the delete step asked
+  for the active document and got the extract, which holds exactly those pages; the guard then
+  refused it as “a document must keep at least one page” while the source kept them all and the
+  command reported success. Those are the dialog’s default settings, so it fired every time.
+  `deletePages` now takes the document it is to act on.
+- **Escape closed the progress dialog and the work carried on.** `onCancel` only fires for the
+  Cancel *button*; Escape goes another way entirely. A reader who pressed Escape on a 500-page
+  extract watched the dialog vanish and then got a Save dialog for a file they had abandoned.
+  Any close that is not ours now aborts.
+- **Cancelling produced a red error toast** saying “The operation was cancelled”. Pressing Cancel
+  and being argued with about it is not an error; `cancellable()` turns it into nothing happening.
+- **Choosing several files at once inserted them back to front**, because the insertion point was
+  recomputed from a stale target each time round the loop. It advances by what the last file
+  actually inserted now.
+- **`range` was doing two jobs in Insert-from-file**: it means “where in *this* document”
+  everywhere else, but its mere presence also skipped the page picker and brought in every page
+  of the file. Only `sourcePages` chooses the source’s pages now.
+- **Any string was accepted as a numbering style**, and an unknown one made `numeral()` return
+  `undefined`, so `roman` instead of `romanLower` labelled every page in the range with the
+  literal word “undefined” — as a real, undoable change. It is checked against the list.
+- **Any pointer’s release ended a drag.** A second finger touching and lifting, or the right
+  mouse button, dropped the pages wherever *that* pointer was. Only the pointer that started the
+  drag ends it; the `pointerId` the controller was already storing is finally read.
+- **Auto-scroll never re-aimed.** Holding the pointer still at the edge scrolled a hundred pages
+  past while the insertion marker stayed with cells that had left the screen, so the reader had
+  no idea where the drop would land — the one case pointer events were chosen to support.
+- **A dispose-then-activate cycle left the module half-dead**: the commands kept working, because
+  they resolve the service by name, while the drag and the status field silently did not.
+  Re-activation re-binds instead of bailing out.
+
 ### Shared files touched (PLAN.md §12.3)
 
 - `src/engine/PdfEngine.ts` — additive: `createDocument()`, the name in `ENGINE_METHODS`, and the
