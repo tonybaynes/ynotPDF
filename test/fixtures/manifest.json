@@ -190,6 +190,39 @@
     "huge-page-count.pdf": { "pages": 1000, "size": [200, 280], "text": "1", "renderPages": 1 },
     "scanned.pdf": { "pages": 1, "text": "", "objects": ["image"] },
 
+    "fonts.pdf": {
+      "pages": 1,
+      "text": "Fonts: one standard, one missing, three embedded, one Type 3.",
+      "fonts": [
+        "Helvetica Type1 missing WinAnsiEncoding",
+        "YnotBox TrueType embedded WinAnsiEncoding",
+        "ABCDEF+YnotBox TrueType embedded subset WinAnsiEncoding",
+        "Arial TrueType missing WinAnsiEncoding",
+        "GHIJKL+YnotBox CIDFontType2 embedded subset Identity-H",
+        "YnotBlock Type3 embedded Custom"
+      ],
+      "notes": "M72 Fonts tab: standard-14, missing TrueType, embedded, embedded subset, Type 0 over CIDFontType2, and a Type 3 whose glyphs are content streams"
+    },
+    "initial-view.pdf": {
+      "pages": 3,
+      "text": "Initial",
+      "initialView": {
+        "pageMode": "outlines",
+        "pageLayout": "two-column-left",
+        "openAction": { "page": 2, "fit": "fit" },
+        "hideToolbar": true,
+        "displayDocTitle": true,
+        "printScaling": "none",
+        "direction": "r2l"
+      },
+      "custom": { "Department": "Accounts", "Reference": "INV-2026-0042" },
+      "trapped": "False",
+      "lang": "en-GB",
+      "baseUrl": "https://example.invalid/docs/",
+      "xmpContains": "pdfx:Department",
+      "notes": "M72 initial view: /PageMode, /PageLayout, /OpenAction to page 3, /ViewerPreferences, /Lang, base URL, custom Info entries and an XMP packet that agrees. PDFium returns the page-0 runs in visual right-to-left order because the file sets /Direction /R2L, which is why the text expectation is one word"
+    },
+
     "external/issue15893_reduced.pdf": {
       "pages": 1,
       "password": "test",

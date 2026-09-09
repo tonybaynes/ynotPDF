@@ -3,7 +3,7 @@
  *
  * Opens two documents in the real engine and reports every way they differ: page count, sizes,
  * rotation, boxes, text, annotations, form fields, the outline, named destinations, layers,
- * attachments and metadata. A save that changes nothing should produce zero differences, and a
+ * attachments, metadata, the initial view and the fonts. A save that changes nothing should produce zero differences, and a
  * save that changes one thing should produce exactly that one.
  *
  * This is the shared harness the brief asks for: **every later module adds cases to it** rather
@@ -13,11 +13,14 @@
  * Not a test file itself (no `.test.ts`), so vitest imports it rather than running it.
  */
 
+import { DEFAULT_INITIAL_VIEW } from '@engine/PdfEngine';
 import type {
   Annotation,
   Attachment,
   DocHandle,
+  FontUsage,
   FormField,
+  InitialView,
   Layer,
   Metadata,
   NamedDestination,
@@ -65,6 +68,10 @@ export interface DocumentDescription {
   readonly layers: ReadonlyArray<Record<string, unknown>>;
   readonly attachments: ReadonlyArray<Record<string, unknown>>;
   readonly metadata: Record<string, unknown>;
+  /** How the file asks to be opened (M72, ADR 0017). */
+  readonly initialView: Record<string, unknown>;
+  /** The fonts the page resources name, in first-use order (M72, ADR 0017). */
+  readonly fonts: ReadonlyArray<Record<string, unknown>>;
 }
 
 const DEFAULT_TOLERANCE = 0.01;
@@ -129,8 +136,33 @@ export async function describeDocument(
     describeAttachment,
   );
   const metadata = describeMetadata(await engine.metadata(handle));
+  const initialView = describeInitialView(
+    await engine.initialView(handle).catch(() => DEFAULT_INITIAL_VIEW),
+  );
+  /*
+   * Sorted by name, not left in first-use order. A rewrite renumbers objects and rebuilds each
+   * page's resource dictionary, so the order fonts are *encountered* in is not a property of the
+   * document — only the set of them is, and comparing the order would report a difference that
+   * nobody made.
+   */
+  const fonts = (await engine.fonts(handle).catch(() => [] as ReadonlyArray<FontUsage>))
+    .map(describeFont)
+    // By everything, not by name: a document may name the same font twice with two encodings,
+    // and sorting on the name alone would leave those two in whatever order they were read.
+    .sort((x, y) => JSON.stringify(x).localeCompare(JSON.stringify(y)));
 
-  return { pageCount, pages, fields, outline, destinations, layers, attachments, metadata };
+  return {
+    pageCount,
+    pages,
+    fields,
+    outline,
+    destinations,
+    layers,
+    attachments,
+    metadata,
+    initialView,
+    fonts,
+  };
 }
 
 /** Opens both files and diffs them. An empty array means they are the same document. */
@@ -211,6 +243,8 @@ export function diffDescriptions(
   walk('layers', a.layers, b.layers, 'layers');
   walk('attachments', a.attachments, b.attachments, 'attachments');
   walk('metadata', a.metadata, b.metadata, 'metadata');
+  walk('initialView', a.initialView, b.initialView, 'initialView');
+  walk('fonts', a.fonts, b.fonts, 'fonts');
   return differences;
 }
 
@@ -326,6 +360,41 @@ function describeMetadata(m: Metadata): Record<string, unknown> {
     encrypted: m.encrypted,
     // `linearized` deliberately absent: a rewrite is never linearised, and M100 owns that.
     xmp: m.xmp === undefined ? null : m.xmp.replace(/\s+/g, ' ').trim(),
+    // M72, ADR 0017. Custom entries are compared as a record, so one added or removed shows up
+    // as its own path rather than as "the metadata differs".
+    custom: m.custom ?? {},
+    trapped: m.trapped ?? null,
+    lang: m.lang ?? null,
+    baseUrl: m.baseUrl ?? null,
+  };
+}
+
+/** How the file asks to be opened (M72, ADR 0017). */
+function describeInitialView(view: InitialView): Record<string, unknown> {
+  return {
+    pageMode: view.pageMode,
+    pageLayout: view.pageLayout,
+    openAction: view.openAction ? { ...view.openAction } : null,
+    hideToolbar: view.hideToolbar,
+    hideMenubar: view.hideMenubar,
+    hideWindowUi: view.hideWindowUi,
+    fitWindow: view.fitWindow,
+    centreWindow: view.centreWindow,
+    displayDocTitle: view.displayDocTitle,
+    printScaling: view.printScaling,
+    direction: view.direction,
+  };
+}
+
+/** One font, as the words that matter: what it is, and whether the file carries it. */
+function describeFont(font: FontUsage): Record<string, unknown> {
+  return {
+    name: font.name,
+    type: font.type,
+    descendantType: font.descendantType ?? null,
+    embedded: font.embedded,
+    subset: font.subset,
+    encoding: font.encoding ?? null,
   };
 }
 

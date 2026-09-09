@@ -29,6 +29,7 @@ import documentManifest from '@modules/M20-document-model/manifest';
 import saveManifest from '@modules/M21-save/manifest';
 import organiseManifest from '@modules/M40-organise-pages/manifest';
 import securityManifest from '@modules/M70-encryption/manifest';
+import propertiesManifest from '@modules/M72-properties-metadata/manifest';
 import createManifest from '@modules/M91-create-pdf/manifest';
 import { ThemeManager } from '@theme/ThemeManager';
 
@@ -76,6 +77,7 @@ registry.register(drawingManifest);
 registry.register(commentsManifest);
 registry.register(organiseManifest);
 registry.register(securityManifest);
+registry.register(propertiesManifest);
 registry.register(createManifest);
 registry.register(portfolioManifest);
 
