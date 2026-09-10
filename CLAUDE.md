@@ -23,6 +23,9 @@ brief. Otherwise pick the next unchecked module whose dependencies are ☑.
 - Never commit real customer PDFs, binaries, or secrets.
 - Own branch + worktree per module (`mod/<Mid>-<name>`); write only in your
   module's folders; shared-file edits minimal, additive, and called out.
+  **After the merge, remove the worktree and the local branch**
+  (`git worktree remove ../ynotPDF-<Mid>` then `git branch -d mod/<Mid>-<name>`) —
+  a finished module leaves no folder behind (operator, 2026-09-10).
 - Installing build toolchains (Rust, C++, emsdk) is pre-approved — record it
   in `docs/adr/` and `README.md`. **Never Docker**, build or runtime: the
   installer must be self-contained.
