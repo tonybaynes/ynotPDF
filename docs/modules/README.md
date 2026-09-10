@@ -20,6 +20,7 @@ One self-contained brief per module. Tell a conversation:
 | 3 | [M13 Text selection, find, copy, snapshot & print](./M13-select-find-print.md) | Core | M11 |
 | 3 | [M30 Annotations — text markup, notes, typewriter, text box, callout](./M30-markup-annotations.md) | Core | M21, M11, M13 |
 | 3 | [M40 Organise pages — insert, delete, extract, replace, rotate, move, labels](./M40-organise-pages.md) | Core | M21, M12 |
+| 4 | [M04 UI-journey and layout test harness](./M04-ui-journey-tests.md) | Core | M02, M11, M12, M13, M30 |
 | 4 | [M42 PDF Portfolios — create, edit, cover sheet, extract](./M42-portfolios.md) | Core | M12, M21 |
 | 4 | [M31 Annotations — shapes, ink & eraser, stamps, file attachments](./M31-shapes-ink-stamps.md) | Core | M30 |
 | 4 | [M32 Comments panel, replies & status, FDF/XFDF, summarise](./M32-comments-panel.md) | Core | M30 |
