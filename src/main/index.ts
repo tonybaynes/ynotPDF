@@ -162,12 +162,10 @@ app.on('activate', () => {
 });
 
 async function boot(): Promise<void> {
-  const win = createMainWindow(windowOptions());
+  createMainWindow(windowOptions());
   buildMenu(recent);
-  win.webContents.on('did-finish-load', () => {
-    rendererReady = true;
-    for (const p of pendingOpens.splice(0)) void openPathInRenderer(p);
-  });
+  // Anything main is holding for the renderer is flushed when the renderer says it is ready
+  // (`app:ready`), not when the document finishes loading. See `onRendererReady`.
   await Promise.resolve();
 }
 
@@ -181,6 +179,17 @@ if (gotLock) {
     recovery = new RecoveryStore(app.getPath('userData'));
     registerIpcHandlers(recent, settings, {
       onOpenPath: openPathInRenderer,
+      onRendererReady: () => {
+        // A PDF from the command line or a file association waits here.
+        //
+        // This used to hang off `did-finish-load`, which fires when the *document* has loaded —
+        // while the renderer's entry module still has a theme to read, a shell to mount and its
+        // IPC listeners to install, all behind `await`s. The push landed before anything was
+        // listening and the app opened empty: intermittently, which is why it survived (M04,
+        // 2026-09-10). The renderer now says so itself, once, at the end of its boot.
+        rendererReady = true;
+        for (const p of pendingOpens.splice(0)) void openPathInRenderer(p);
+      },
       rebuildMenu: () => {
         buildMenu(recent);
       },
