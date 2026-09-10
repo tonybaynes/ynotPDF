@@ -440,6 +440,18 @@ anything. Both stop where the app does — the folder picker after them is the O
   failing. Seeding macOS and Linux is one command on each
   (`npx playwright test test/e2e/visual.spec.ts --update-snapshots=all`) and a commit.
 
+  "Per platform" turned out not to be enough on its own: two *Windows* machines do not draw text
+  identically, and the ribbon — almost all text — differed by 3 % of its pixels between this
+  machine and the GitHub runner. The tolerance is set from that measurement rather than from
+  taste: `threshold: 0.35` so antialiasing does not count a pixel as different at all, and
+  `maxDiffPixelRatio: 0.15` for the rest. A layout collapse moves a third of the picture.
+- **The full window matrix does not run on macOS.** GitHub's macOS runners have a 1024x768
+  screen and macOS clamps a window to it, so 1280x800 comes back as 1280x645. A size the machine
+  cannot give is recorded in the test's annotations as *not tested* and skipped, rather than
+  quietly measured at some other size — and the short window, which is where defect 1 lived and
+  which fits everywhere, is required. Windows and Linux cover the two larger sizes; Linux's Xvfb
+  screen was raised to 1920x1080 so the largest is real there.
+
 ### Shape of the work
 
 - `test/e2e/layout.ts` — four assertions, each naming the element and both numbers, and
