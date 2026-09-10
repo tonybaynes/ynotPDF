@@ -11,7 +11,16 @@
  * reader saw on screen, and that is worse than a regenerated stream.
  */
 
-import { PDFDict, PDFName, PDFPageLeaf, PDFRef, type PDFDocument } from 'pdf-lib';
+import {
+  PDFArray,
+  PDFDict,
+  PDFName,
+  PDFObjectParser,
+  PDFPageLeaf,
+  PDFRef,
+  type PDFDocument,
+  type PDFObject,
+} from 'pdf-lib';
 import type { PdfMatrix } from '@shared/pdf';
 import {
   applyEdits,
@@ -68,6 +77,38 @@ function addXObject(doc: PDFDocument, leaf: PDFPageLeaf, ref: PDFRef): string {
   return name;
 }
 
+/** Every indirect reference inside an object, for checking they still resolve. */
+function refsIn(value: PDFObject, into: PDFRef[] = []): PDFRef[] {
+  if (value instanceof PDFRef) into.push(value);
+  else if (value instanceof PDFDict) for (const [, v] of value.entries()) refsIn(v, into);
+  else if (value instanceof PDFArray) for (const v of value.asArray()) refsIn(v, into);
+  return into;
+}
+
+/**
+ * Puts the page's original `/Resources` back, parsed from the serialisation the renderer
+ * captured. The indirect references in it name objects that PDFium's save and pdf-lib's both
+ * keep under their original numbers — but that is checked, not assumed: a reference that
+ * resolves to nothing means the file was rewritten in between, and the page is left alone.
+ */
+function restoreResources(doc: PDFDocument, leaf: PDFPageLeaf, serialised: string): boolean {
+  let parsed: PDFObject;
+  try {
+    parsed = PDFObjectParser.forBytes(
+      new TextEncoder().encode(serialised),
+      doc.context,
+    ).parseObject();
+  } catch {
+    return false;
+  }
+  if (!(parsed instanceof PDFDict)) return false;
+  for (const ref of refsIn(parsed)) {
+    if (doc.context.lookup(ref) === undefined) return false;
+  }
+  leaf.set(PDFName.of('Resources'), parsed);
+  return true;
+}
+
 /**
  * Replays the planned edits onto the page's original content and installs the result as the
  * page's only content stream. Returns whether the page was written.
@@ -92,6 +133,13 @@ export async function writePageObjects(
   if (!objectKindsAgree(scan.objects, planned.kinds)) {
     context.warn(
       `Page ${pageNumber}: its objects no longer match the recorded list, so the edits were left as the engine wrote them`,
+    );
+    return false;
+  }
+
+  if (planned.resources && !restoreResources(doc, leaf, planned.resources)) {
+    context.warn(
+      `Page ${pageNumber}: its original resources no longer resolve, so the edits were left as the engine wrote them`,
     );
     return false;
   }

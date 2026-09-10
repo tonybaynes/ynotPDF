@@ -41,6 +41,7 @@ import {
   type TextRun,
   type Link,
   type ObjectPath,
+  type PageContent,
 } from '@engine/PdfEngine';
 import type {
   ObjectStyle,
@@ -638,7 +639,7 @@ export class FakeEngine implements PdfEngine {
   }
 
   /** A synthetic stream whose scan agrees with the object kinds, for the writer's guard. */
-  pageContent(doc: DocHandle, page: PageIndex): Promise<Uint8Array> {
+  pageContent(doc: DocHandle, page: PageIndex): Promise<PageContent> {
     this.note('pageContent');
     const ops = this.page(doc, page).objects.map((o) => {
       switch (o.kind) {
@@ -652,7 +653,7 @@ export class FakeEngine implements PdfEngine {
           return '/X Do';
       }
     });
-    return Promise.resolve(new TextEncoder().encode(ops.join('\n')));
+    return Promise.resolve({ content: new TextEncoder().encode(ops.join('\n')), resources: '' });
   }
 
   transformObject(doc: DocHandle, page: PageIndex, index: number, delta: PdfMatrix): Promise<void> {

@@ -50,6 +50,7 @@ import {
   type ObjectPath,
   type ObjectStyle,
   type OpenOptions,
+  type PageContent,
   type OutlineItem,
   type PageObject,
   type PageObjectKind,
@@ -2482,7 +2483,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
 
   // ---- page objects (M50, ADR 0018) ------------------------------------------------------------
 
-  async pageContent(doc: DocHandle, page: PageIndex): Promise<Uint8Array> {
+  async pageContent(doc: DocHandle, page: PageIndex): Promise<PageContent> {
     const d = this.doc(doc);
     const count = this.ffi.call('FPDF_GetPageCount', d.doc);
     if (!Number.isInteger(page) || page < 0 || page >= count) {

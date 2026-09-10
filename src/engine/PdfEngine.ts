@@ -36,6 +36,17 @@ export interface PathPoint {
   readonly close: boolean;
 }
 
+/**
+ * A page's original content and resources (M50, ADR 0018). The resources travel with the
+ * content because `FPDFPage_GenerateContent` renames every resource it writes and drops the
+ * original names, so a restored stream needs its own `/Resources` put back beside it.
+ */
+export interface PageContent {
+  readonly content: Uint8Array;
+  /** The `/Resources` dictionary in PDF syntax (pdf-lib's serialisation), or `''` for none. */
+  readonly resources: string;
+}
+
 /** A path object's geometry and how it is painted, for hit-testing (M50, ADR 0018). */
 export interface ObjectPath {
   readonly points: ReadonlyArray<PathPoint>;
@@ -742,7 +753,7 @@ export interface PdfEngine {
    * concatenated. The renderer captures this before the first object edit on a page so the writer
    * can replay the edits onto the original operators (ADR 0018 §3).
    */
-  pageContent(doc: DocHandle, page: PageIndex): Promise<Uint8Array>;
+  pageContent(doc: DocHandle, page: PageIndex): Promise<PageContent>;
   /** Moves object `index` by `delta` in page space (post-multiplied onto its matrix). */
   transformObject(doc: DocHandle, page: PageIndex, index: number, delta: PdfMatrix): Promise<void>;
   /** Replaces object `index`'s matrix. Refused for an object whose matrix is not invertible. */
@@ -869,7 +880,7 @@ export class NotImplementedEngine implements PdfEngine {
   pageObjects(..._args: unknown[]): Promise<ReadonlyArray<PageObject>> {
     return Promise.reject(new NotImplementedError('pageObjects'));
   }
-  pageContent(..._args: unknown[]): Promise<Uint8Array> {
+  pageContent(..._args: unknown[]): Promise<PageContent> {
     return Promise.reject(new NotImplementedError('pageContent'));
   }
   transformObject(..._args: unknown[]): Promise<void> {

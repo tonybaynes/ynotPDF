@@ -36,7 +36,8 @@ function device(
 describe('pageContent', () => {
   it('hands back the decoded content stream of a page', async () => {
     await withDoc('image.pdf', async (doc) => {
-      const content = await pdfium.pageContent(doc, 0);
+      const { content, resources } = await pdfium.pageContent(doc, 0);
+      expect(resources).toContain('/XObject');
       const text = new TextDecoder('latin1').decode(content);
       expect(text).toContain(' Do');
       expect(text).toContain(' Tj');

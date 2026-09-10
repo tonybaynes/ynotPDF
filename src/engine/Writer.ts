@@ -80,6 +80,11 @@ export type PlannedObjectEdit =
 export interface PlannedObjects {
   /** Base64 of the original decoded content stream. */
   readonly original: string;
+  /**
+   * The original `/Resources` in PDF syntax (`PdfEngine.pageContent`), put back beside the
+   * stream because PDFium's regeneration renamed every resource; `''` leaves them alone.
+   */
+  readonly resources: string;
   readonly kinds: ReadonlyArray<string>;
   readonly textMatrices: Readonly<Record<string, PdfMatrix>>;
   readonly edits: ReadonlyArray<PlannedObjectEdit>;

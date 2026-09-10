@@ -22,7 +22,7 @@ import type { Registry } from '@core/Registry';
 import type { Document } from '@core/Document';
 import type { ModelId } from '@core/Ids';
 import type { Store } from '@core/Store';
-import type { ObjectPath, PageObject } from '@engine/PdfEngine';
+import type { ObjectPath, PageObject, TextRun } from '@engine/PdfEngine';
 import { invert, multiply, translation } from '@engine/content/matrix';
 import { hasBridge, invoke } from '@shared/ipc';
 import type { ObjectStyle, PdfMatrix, PdfPoint, PdfRect } from '@shared/pdf';
@@ -94,6 +94,10 @@ interface TabState {
   page: number | null;
   hover: string | null;
   readonly disposers: Array<() => void>;
+  /** Pages being re-read right now, so the read's own `page:changed` does not start another. */
+  readonly loading: Set<number>;
+  /** Pages that changed again while being read, to be read once more afterwards. */
+  readonly dirty: Set<number>;
 }
 
 /** A selectable unit: a text block or one non-text object. */
@@ -248,12 +252,22 @@ export class ObjectService {
       page: null,
       hover: null,
       disposers: [],
+      loading: new Set(),
+      dirty: new Set(),
     };
     state.disposers.push(
       document.events.on('page:changed', (e) => {
         if (e.what !== 'objects') return;
         const page = document.pageIndex(e.pageId);
         if (page < 0) return;
+        // `Document.loadObjects` raises this same event (with the objects filled in); a command
+        // raises it with `objects: null`. While a read is in flight, only the latter is news —
+        // remember it rather than start another read from inside the first.
+        if (state.loading.has(page)) {
+          if (document.state.pages[page]?.objects === null) state.dirty.add(page);
+          return;
+        }
+        if (document.state.pages[page]?.objects !== null && state.pages.has(page)) return;
         void this.reloadPage(state, document, page);
       }),
       document.events.on('page:removed', () => {
@@ -297,10 +311,17 @@ export class ObjectService {
     const index = modelPage ? document.enginePage(modelPage.id) : undefined;
     if (!modelPage || index === undefined) return null;
     const previous = state.pages.get(page);
-    const objects = await document.loadObjects(modelPage.id);
-    const runs = objects.some((o) => o.kind === 'text')
-      ? await document.engine.textRuns(document.handle, index)
-      : [];
+    state.loading.add(page);
+    let objects: ReadonlyArray<PageObject>;
+    let runs: ReadonlyArray<TextRun>;
+    try {
+      objects = await document.loadObjects(modelPage.id);
+      runs = objects.some((o) => o.kind === 'text')
+        ? await document.engine.textRuns(document.handle, index)
+        : [];
+    } finally {
+      state.loading.delete(page);
+    }
     if (this.disposed || !this.tabs.has(state.tabId)) return null;
     const objectsState = readObjectsState(document.custom(OBJECTS_NAMESPACE));
     const data: PageData = {
@@ -328,6 +349,7 @@ export class ObjectService {
       }
     }
     this.notify();
+    if (state.dirty.delete(page)) return await this.reloadPage(state, document, page);
     return data;
   }
 

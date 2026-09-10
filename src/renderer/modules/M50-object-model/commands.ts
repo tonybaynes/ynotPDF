@@ -83,7 +83,8 @@ abstract class ObjectCommand implements DocumentCommand {
     const textMatrices: Record<string, PdfMatrix> = {};
     for (const o of objects) if (o.kind === 'text') textMatrices[String(o.index)] = o.matrix;
     const state: PageEditState = {
-      original: toBase64(content),
+      original: toBase64(content.content),
+      resources: content.resources,
       kinds: objects.map((o) => o.kind),
       textMatrices,
       live: objects.map((o, i): LiveObject => ({ kind: 'base', id: baseId(i), index: i })),
@@ -513,13 +514,13 @@ export class SetGroupsCommand implements DocumentCommand {
     this.previous =
       readObjectsState(this.doc.custom(OBJECTS_NAMESPACE)).groups[this.pageId] ?? null;
     this.write(this.groups);
-    this.doc.replacePage(this.pageId, (p) => p, 'objects');
+    this.doc.replacePage(this.pageId, (p) => ({ ...p, objects: null }), 'objects');
     return Promise.resolve();
   }
 
   undo(): Promise<void> {
     this.write(this.previous);
-    this.doc.replacePage(this.pageId, (p) => p, 'objects');
+    this.doc.replacePage(this.pageId, (p) => ({ ...p, objects: null }), 'objects');
     return Promise.resolve();
   }
 

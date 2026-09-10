@@ -23,6 +23,7 @@ import { openFake } from '../core/helpers';
 
 const state = (live: LiveObject[], extra: Partial<PageEditState> = {}): PageEditState => ({
   original: toBase64(new TextEncoder().encode('q Q')),
+  resources: '',
   kinds: ['path', 'text', 'image'],
   textMatrices: { '1': [1, 0, 0, 1, 10, 20] },
   live,

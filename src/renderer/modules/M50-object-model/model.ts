@@ -46,6 +46,8 @@ export type LiveObject =
 
 export interface PageEditState {
   readonly original: string;
+  /** The original `/Resources` in PDF syntax, restored beside the stream (ADR 0018). */
+  readonly resources: string;
   readonly kinds: ReadonlyArray<string>;
   readonly textMatrices: Readonly<Record<string, PdfMatrix>>;
   readonly live: ReadonlyArray<LiveObject>;
@@ -132,6 +134,7 @@ function asPageState(v: unknown): PageEditState | null {
   const live = r['live'].map(asLive).filter((o): o is LiveObject => o !== null);
   return {
     original: r['original'],
+    resources: typeof r['resources'] === 'string' ? r['resources'] : '',
     kinds: r['kinds'].filter((k): k is string => typeof k === 'string'),
     textMatrices,
     live,
@@ -228,6 +231,7 @@ export function plannedObjectsFor(doc: Document, pageId: ModelId): PlannedObject
   if (!state || isReordered(state.live)) return undefined;
   return {
     original: state.original,
+    resources: state.resources,
     kinds: state.kinds,
     textMatrices: state.textMatrices,
     edits: plannedEdits(state),
