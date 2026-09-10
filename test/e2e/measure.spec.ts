@@ -363,6 +363,26 @@ test.describe('snap picks the nearest vertex within tolerance', () => {
     await app.run('measure.snapKind', { kind: 'midpoints', on: true });
   });
 
+  test('a measurement already drawn is something the next one can snap to', async () => {
+    await openPath(stage('measure.pdf', 'snap-annots.pdf'));
+    await app.run('measure.snap', { on: false });
+    // Somewhere with nothing of the page's own near it.
+    const away = [
+      { x: 400, y: 700 },
+      { x: 520, y: 700 },
+    ];
+    await app.run('measure.distance', { page: 0, vertices: away });
+    await app.run('measure.snap', { on: true });
+    await app.page.waitForTimeout(400);
+    const found = await until(
+      () => probeSnap({ page: 0, x: 522, y: 702, scale: 1 }),
+      (probe) => probe.snapped !== null,
+    );
+    expect(found.snapped?.kind).toBe('endpoints');
+    expect(found.point.x).toBeCloseTo(520, 3);
+    expect(found.point.y).toBeCloseTo(700, 3);
+  });
+
   test('nothing snaps when the pointer is too far away, or when snapping is off', async () => {
     await openPath(stage('measure.pdf', 'snap-off.pdf'));
     await until(

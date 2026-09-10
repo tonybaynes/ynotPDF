@@ -271,10 +271,14 @@ is colourblind: black and red read as the same colour):**
   It is **optional** on `PdfEngine` and guarded by `ffi.has`, so a wasm build without those
   exports — and the fake engine in the model tests — simply have no paths; snapping then falls
   back to page-object bounding boxes, which still gives corners and edge midpoints (ADR 0018).
-- **Snap candidates are computed once per page and cached by document revision.** Endpoints,
+- **A page's own geometry is cached for the life of the document; the annotations are not.** Endpoints,
   segment midpoints, segment/segment intersections and the nearest point on a path, each with its
-  own toggle, plus the vertices of annotations already on the page. Intersections are the
-  expensive one, so they are computed only for segments within a window of the pointer. The
+  own toggle. Drawing bumps the document's revision on every gesture, and re-reading a CAD page's
+  few thousand paths between two pointer moves is exactly the wrong moment — while the page's
+  *content*, which is what the engine call reads, has not changed at all. The annotations on the
+  page are gathered fresh on every look instead (a walk over one page's model list), so a second
+  distance can start exactly where the first one ended. Intersections are the expensive kind, so
+  they are computed only for segments within a window of the pointer. The
   indicator is a fully opaque marker in the annotation layer — a square for an endpoint, a
   triangle for a midpoint, a cross for an intersection, a circle for a point on a path — and the
   status line says which in words, because four shapes alone are not enough to tell them apart.
@@ -374,6 +378,10 @@ is colourblind: black and red read as the same colour):**
 - **A boolean mapping did not need an `encode`.** `dictEntries` only treats `null`, `''` and an
   `empty()` value as removals, so `false` reaches the coercion intact — which is what "a caption
   turned off has to be _said_" requires. The encode was deleted as duplication.
+- **Caching the snap geometry by the document's revision was the wrong key.** Every measurement
+  drawn bumps it, so the next pointer move re-read the whole page from the engine — on a drawing
+  with thousands of paths, mid-gesture. The page's content is now cached for the life of the open
+  document and the annotations are gathered on each look, which is both faster and more correct.
 - **`Intl` will happily print `-0.0`.** A tiny negative rounded to the shown precision reads as a
   mistake; `formatMeasureNumber` snaps anything under half the last digit to zero.
 
@@ -402,8 +410,8 @@ is colourblind: black and red read as the same colour):**
 
 Green on Windows locally: lint (eslint, prettier, the colour/opacity rules, `tsc` on both
 projects), the unit suite with the coverage gates (11 new files, 161 tests in
-`test/unit/measure/`), and the Playwright suite (`test/e2e/measure.spec.ts`, 16 tests, one per
-acceptance line, plus every earlier module's spec — 369 in all).
+`test/unit/measure/`), and the Playwright suite (`test/e2e/measure.spec.ts`, 17 tests, one per
+acceptance line, plus every earlier module's spec — 370 in all).
 
 **The hands-on check the conventions ask for, recorded.** `test/unit/measure/real-files.test.ts`
 measures a distance, a perimeter and an area on the first page of each of the operator's own files

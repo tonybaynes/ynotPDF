@@ -107,10 +107,17 @@ export interface LiveMeasurement {
 
 export type MeasureListener = () => void;
 
-/** One page's snap geometry, kept until the document changes. */
+/**
+ * One page's *content* geometry for snapping, kept for the life of the open document.
+ *
+ * Deliberately not keyed by the document's revision. Drawing a measurement bumps that on every
+ * gesture, and re-reading a CAD page's few thousand paths from the engine between two pointer
+ * moves is exactly the wrong moment to do it — while the page's own content, which is all this
+ * holds, has not changed at all. What *has* changed is the annotations, and those are gathered
+ * fresh on every read (they are a walk over one page's model list, which costs nothing).
+ */
 interface SnapCache {
   readonly documentId: string;
-  readonly revision: number;
   readonly paths: SnapPath[];
 }
 
@@ -535,27 +542,42 @@ export class MeasureService {
     this.snapValue = null;
   }
 
-  /** A page's snap geometry, or null while it is still being fetched. */
+  /**
+   * A page's snap geometry, or null while the page's content is still being fetched.
+   *
+   * Synchronous, because it runs on every pointer move: the page's content is read in the
+   * background the first time a page is asked for and kept, and the annotations on it are added
+   * fresh each call so a second distance can start exactly where the first one ended.
+   */
   snapPaths(page: number): SnapPath[] | null {
     const document = this.annotations.activeDocument();
     if (!document) return null;
     const cached = this.snapCache.get(page);
-    if (cached?.documentId === document.id && cached.revision === document.state.revision) {
-      return cached.paths;
-    }
-    if (!this.pending.has(page)) {
+    if (cached?.documentId !== document.id && !this.pending.has(page)) {
       this.pending.add(page);
       void this.loadSnapPaths(document, page).finally(() => this.pending.delete(page));
     }
-    return cached?.documentId === document.id ? cached.paths : null;
+    if (cached?.documentId !== document.id) return null;
+    return [...cached.paths, ...this.annotationPaths(document, page)];
+  }
+
+  /** The geometry of the annotations already on a page — measurements, shapes and ink. */
+  private annotationPaths(document: Document, page: number): SnapPath[] {
+    const modelPage = document.state.pages[page];
+    if (!modelPage) return [];
+    const out: SnapPath[] = [];
+    for (const a of document.annotations(modelPage.id)) {
+      if (a.flags.hidden || a.flags.noView) continue;
+      if (a.family === 'shape' && a.vertices.length >= 2) out.push(a.vertices);
+      if (a.family === 'ink')
+        for (const stroke of a.paths) if (stroke.length >= 2) out.push(stroke);
+    }
+    return out;
   }
 
   /**
-   * Reads a page's geometry for snapping: the engine's path outlines when it has them, else the
+   * Reads a page's *content* geometry: the engine's path outlines when it has them, else the
    * bounding box of every object it lists, which still gives corners and edge midpoints.
-   *
-   * The measurements already on the page go in as well, so a second distance can start exactly
-   * where the first one ended.
    */
   private async loadSnapPaths(document: Document, page: number): Promise<void> {
     const paths: SnapPath[] = [];
@@ -578,19 +600,7 @@ export class MeasureService {
     } catch {
       // A backend that cannot read the page still lets the reader measure, unsnapped.
     }
-    const modelPage = document.state.pages[page];
-    if (modelPage) {
-      for (const a of document.annotations(modelPage.id)) {
-        if (a.family === 'shape' && a.vertices.length >= 2) paths.push([...a.vertices]);
-        if (a.family === 'ink')
-          for (const stroke of a.paths) if (stroke.length >= 2) paths.push([...stroke]);
-      }
-    }
-    this.snapCache.set(page, {
-      documentId: document.id,
-      revision: document.state.revision,
-      paths,
-    });
+    this.snapCache.set(page, { documentId: document.id, paths });
     this.notify();
   }
 
