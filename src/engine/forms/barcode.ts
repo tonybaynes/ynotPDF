@@ -14,10 +14,18 @@
 import { toSVG } from 'bwip-js/generic';
 import type { BarcodeSpec, BarcodeSymbology } from './model';
 
-/** One closed polygon of the symbol, in the symbol's own coordinates (origin top-left, y down). */
+/** One closed sub-path of the symbol, in the symbol's own coordinates (origin top-left, y down). */
 export type BarcodePolygon = ReadonlyArray<{ readonly x: number; readonly y: number }>;
 
-/** A rendered barcode: its natural size and the dark polygons that make it up. */
+/**
+ * A rendered barcode: its natural size and the sub-paths that make it up.
+ *
+ * **They are sub-paths of one path, not separate shapes.** A QR finder pattern is a filled square
+ * with a white ring inside it, and the ring is a sub-path wound the other way: fill each one on
+ * its own and every finder comes out solid, which no decoder will look at twice. Both drawers —
+ * the content stream and the widget layer's `<path>` — emit all of them and fill once, under the
+ * non-zero winding rule that PDF's `f` and SVG's default `fill-rule` both use.
+ */
 export interface BarcodeSymbol {
   readonly width: number;
   readonly height: number;

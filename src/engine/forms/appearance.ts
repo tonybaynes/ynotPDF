@@ -52,6 +52,9 @@ export interface WidgetAppearanceInput {
   readonly ignoreValue?: boolean;
 }
 
+/** WinAnsiEncoding's bullet. */
+const BULLET = '\u0095';
+
 /** The inset from the border to the text, in points. Acrobat's is 1; so is ours. */
 export const TEXT_PADDING = 1;
 
@@ -335,7 +338,9 @@ function drawText(
   value: string,
 ): void {
   const design = input.design;
-  const shown = isPassword(design) ? '•'.repeat(Array.from(value).length) : value;
+  // The bullet is WinAnsi byte 0x95: the appearance stream is Latin-1, so the code point has to
+  // be the encoded one rather than U+2022, which would reach the file as a question mark.
+  const shown = isPassword(design) ? BULLET.repeat(Array.from(value).length) : value;
   if (isComb(design)) {
     drawComb(b, input, box, da, shown);
     return;
@@ -574,7 +579,9 @@ function drawBarcode(
   const originX = box.x0 + (box.x1 - box.x0 - fitted.width) / 2;
   const originY = box.y0 + (box.y1 - box.y0 - fitted.height) / 2;
   // The symbol's own y runs downwards; the flip is folded into the placement rather than into a
-  // `cm`, so the path numbers in the file read the same way as the ones on screen.
+  // `cm`, so the path numbers in the file read the same way as the ones on screen. Every sub-path
+  // goes into **one** path and is filled once: the white ring inside a QR finder is a sub-path
+  // wound the other way, and filling each separately would draw three solid squares instead.
   b.fillColor(0x000000);
   for (const polygon of symbol.polygons) {
     const [head, ...rest] = polygon;

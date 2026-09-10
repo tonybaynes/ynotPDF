@@ -299,7 +299,38 @@ function describeField(f: FormField): Record<string, unknown> {
     required: f.required,
     tooltip: f.tooltip ?? null,
     options: (f.options ?? []).map((o) => ({ value: o.value, label: o.label })),
-    widgets: f.widgets.map((w) => ({ page: w.page, rect: rect(w.rect) })),
+    widgets: f.widgets.map((w) => ({
+      page: w.page,
+      rect: rect(w.rect),
+      // The designer's half of a widget (M60, ADR 0019): the border, the fill, the check glyph
+      // and the export value. A save that quietly dropped `/MK` would look identical without it.
+      appearance: w.appearance
+        ? {
+            borderColor: colour(w.appearance.borderColor),
+            fillColor: colour(w.appearance.fillColor),
+            borderWidth: w.appearance.borderWidth,
+            borderStyle: w.appearance.borderStyle,
+            checkStyle: w.appearance.checkStyle,
+            exportValue: w.appearance.exportValue,
+            hidden: w.appearance.hidden,
+            noPrint: w.appearance.noPrint,
+          }
+        : null,
+    })),
+    // `/Ff` in full, the `/DA` parts and the role — what makes a reopened form editable (M60).
+    design: f.design
+      ? {
+          role: f.design.role,
+          flags: f.design.flags,
+          align: f.design.align,
+          maxLength: f.design.maxLength,
+          fontSize: f.design.fontSize,
+          textColor: colour(f.design.textColor),
+          dateFormat: f.design.dateFormat,
+          barcode: f.design.barcode,
+          actions: f.design.actions.map((a) => ({ trigger: a.trigger, type: a.type })),
+        }
+      : null,
   };
 }
 

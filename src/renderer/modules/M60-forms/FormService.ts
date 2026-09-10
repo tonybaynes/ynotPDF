@@ -464,7 +464,7 @@ export class FormService {
     const command = this.isDesigned(document, field)
       ? new FormValueCommand(document, field.id, value)
       : new SetFieldValueCommand(document, field.id, value);
-    await document.undo.push(command);
+    await document.apply(command);
     this.refreshAll();
   }
 
@@ -506,7 +506,7 @@ export class FormService {
       this.shell.toasts.show({ kind: 'info', text: 'Every field is already at its default.' });
       return;
     }
-    await document.undo.push(new CompositeCommand('form.reset', 'Reset form', commands));
+    await document.apply(new CompositeCommand('form.reset', 'Reset form', commands));
     this.refreshAll();
   }
 
@@ -601,7 +601,7 @@ export class FormService {
       design,
     };
     this.markCreated(field.id);
-    await document.undo.push(
+    await document.apply(
       new AddFieldCommand(document, field, `Add ${FIELD_ROLE_LABELS[role].toLowerCase()}`),
     );
     state.page = page;
@@ -631,7 +631,7 @@ export class FormService {
   async updateField(field: ModelField, label: string): Promise<void> {
     const document = this.activeDocument();
     if (!document) return;
-    await document.undo.push(new UpdateFieldCommand(document, field, label));
+    await document.apply(new UpdateFieldCommand(document, field, label));
     this.refreshAll();
   }
 
@@ -727,7 +727,7 @@ export class FormService {
       });
     }
     const commands = [...byField.values()].map((f) => new UpdateFieldCommand(document, f, label));
-    await document.undo.push(
+    await document.apply(
       commands.length === 1 && commands[0]
         ? commands[0]
         : new CompositeCommand('form.transform', label, commands),
@@ -813,7 +813,7 @@ export class FormService {
     const selection = this.selectionInfo();
     if (!document || selection.fields.length === 0) return;
     const commands = selection.fields.map((f) => new RemoveFieldCommand(document, f.id));
-    await document.undo.push(
+    await document.apply(
       commands.length === 1 && commands[0]
         ? commands[0]
         : new CompositeCommand('form.delete', 'Delete fields', commands),
@@ -865,7 +865,7 @@ export class FormService {
       }
     }
     if (commands.length === 0) return 0;
-    await document.undo.push(new CompositeCommand('form.duplicate', 'Duplicate fields', commands));
+    await document.apply(new CompositeCommand('form.duplicate', 'Duplicate fields', commands));
     this.refreshAll();
     return commands.length;
   }
@@ -979,7 +979,7 @@ export class FormService {
       );
     }
     if (commands.length === 0) return 0;
-    await document.undo.push(new CompositeCommand('form.paste', 'Paste fields', commands));
+    await document.apply(new CompositeCommand('form.paste', 'Paste fields', commands));
     state.page = page;
     this.refreshAll();
     this.applySelection(state, keys);
@@ -1013,9 +1013,7 @@ export class FormService {
         ? tabOrderWith(document, modelPage.id, manualOrderFor(document, modelPage.id))
         : tabOrderWith(document, modelPage.id, []),
     };
-    await document.undo.push(
-      new SetCustomCommand(document, FORMS_NAMESPACE, value, 'Set tab order'),
-    );
+    await document.apply(new SetCustomCommand(document, FORMS_NAMESPACE, value, 'Set tab order'));
     this.refreshAll();
   }
 
@@ -1028,9 +1026,7 @@ export class FormService {
       tabModes: tabModesWith(document, modelPage.id, 'manual'),
       tabOrder: tabOrderWith(document, modelPage.id, keys),
     };
-    await document.undo.push(
-      new SetCustomCommand(document, FORMS_NAMESPACE, value, 'Set tab order'),
-    );
+    await document.apply(new SetCustomCommand(document, FORMS_NAMESPACE, value, 'Set tab order'));
     this.refreshAll();
   }
 

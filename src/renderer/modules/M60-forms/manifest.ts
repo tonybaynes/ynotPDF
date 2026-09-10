@@ -233,7 +233,6 @@ export default defineModule({
       label: 'Fill In Form',
       category: 'Form',
       icon: 'text-cursor-input',
-      shortcut: 'Mod+Shift+F',
       description: 'Type into the form fields on the page',
       when: open,
       run: (ctx) => {
@@ -625,10 +624,13 @@ export default defineModule({
     },
   ],
 
-  shortcuts: [
-    { key: 'Escape', command: 'form.deselect', scope: 'editor' },
-    { key: 'Mod+A', command: 'form.selectAll', scope: 'editor' },
-  ],
+  /*
+   * No shortcuts of its own. Every key this module would have wanted is already spoken for:
+   * Ctrl+A selects text (M13), Escape closes what is open (M02), Ctrl+Shift+F is Advanced Search
+   * (M13). Taking one of them would break a key the reader already knows for the sake of a key
+   * they do not. Escape and the arrow keys still work over a selected field — `FormController`
+   * handles them while a form tool is active, which is scoped to the tool rather than to the app.
+   */
 
   ribbon: [
     {

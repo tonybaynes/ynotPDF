@@ -23,6 +23,7 @@ import commentsManifest from '@modules/M32-comments-panel/manifest';
 import measuringManifest from '@modules/M33-measuring-tools/manifest';
 import documentOpsManifest from '@modules/M41-merge-split-crop/manifest';
 import objectManifest from '@modules/M50-object-model/manifest';
+import formsManifest from '@modules/M60-forms/manifest';
 import organiseManifest from '@modules/M40-organise-pages/manifest';
 import portfolioManifest from '@modules/M42-portfolios/manifest';
 import securityManifest from '@modules/M70-encryption/manifest';
@@ -64,6 +65,7 @@ const MANIFESTS: ReadonlyArray<ModuleManifest> = [
   createManifest,
   portfolioManifest,
   objectManifest,
+  formsManifest,
   preferencesManifest,
 ];
 
