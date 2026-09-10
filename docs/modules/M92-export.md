@@ -347,6 +347,10 @@ on both projects), 3 607 unit tests with the coverage gates, and 459 Playwright 
   actually be written (the pixel size of a page, the number of files). The page-range field, the
   checkbox and the select are **M41's** `fields.ts`, so there is one page-range dialect in the app
   rather than two.
+- **Two progress passes, not one.** The encoding runs under M40's progress dialog, and so does
+  the writing: a five-hundred-page export is five hundred IPC round trips after the work is done,
+  and it used to spend those seconds with nothing on screen. Both appear only if the job turns out
+  to be slow, both can be cancelled, and a cancelled write says how many files it got to.
 - **Docs**: ADR 0019, `docs/shortcuts.md`, a module README.
 
 **The engine change, and the bug the acceptance test found.** `pageImages` (ADR 0019) is one new
