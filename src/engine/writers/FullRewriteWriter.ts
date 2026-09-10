@@ -57,6 +57,15 @@ import { writePortfolio } from './portfolio';
 import { writeForm } from './forms';
 import { daFontKey } from '../forms/da';
 import { writePageObjects } from './objects';
+import { writePageDecorations } from './decorations';
+import {
+  embedXObjectSource,
+  fontDict,
+  formXObject,
+  fromBase64,
+  resourcesDict,
+  type EmbeddedXObjects,
+} from './resources';
 import { defaultAppearanceService, type AppearanceService } from '../appearance';
 import { pageLabelNums } from '../pageLabels';
 import { num } from '../appearance/content';
@@ -235,6 +244,7 @@ export class FullRewriteWriter implements Writer {
     // ---- page objects (M50, ADR 0018) ---------------------------------------------------------
     // The original content stream with the session's edits replayed, in place of the one the
     // engine regenerated, so operators PDFium does not model survive the save.
+    const objectsApplied = new Set<number>();
     const withObjects = plan.pages
       .map((p, i) => ({ page: p, ref: finalPages.refs[i], number: i + 1 }))
       .filter((entry) => entry.page.objects !== undefined);
@@ -249,6 +259,8 @@ export class FullRewriteWriter implements Writer {
               state.warn(m);
             },
           });
+          // The decoration applier must not restore a page this one has already restored.
+          if (ok) objectsApplied.add(number);
           written = written || ok;
         }
         done++;
@@ -256,6 +268,37 @@ export class FullRewriteWriter implements Writer {
         await state.checkpoint();
       }
       if (written) state.applied('objects');
+    }
+
+    // ---- decorations (M53, ADR 0020) ----------------------------------------------------------
+    // Headers, footers, Bates numbers, watermarks and backgrounds. The page's own streams are
+    // never edited: the applier puts the original back, strips every marked span it finds, and
+    // appends a new `/Contents` element.
+    const withDecorations = plan.pages
+      .map((p, i) => ({ page: p, ref: finalPages.refs[i], number: i + 1 }))
+      .filter((entry) => entry.page.decorations !== undefined);
+    if (withDecorations.length > 0) {
+      state.phase('decorations', 0);
+      let done = 0;
+      let written = false;
+      for (const { page, ref, number } of withDecorations) {
+        if (ref && page.decorations) {
+          const ok = await writePageDecorations(doc, ref, page.decorations, number, {
+            objectsApplied: objectsApplied.has(number),
+            xobjects,
+            context: {
+              warn: (m) => {
+                state.warn(m);
+              },
+            },
+          });
+          written = written || ok;
+        }
+        done++;
+        state.phase('decorations', done / withDecorations.length);
+        await state.checkpoint();
+      }
+      if (written) state.applied('decorations');
     }
 
     // ---- the designed form (M60, ADR 0019) ----------------------------------------------------
@@ -371,9 +414,6 @@ export class FullRewriteWriter implements Writer {
 
 // ---- shared XObjects (M31, ADR 0015) -------------------------------------------------------------
 
-/** Key → the embedded object, plus its natural box for a form the appearance refers to. */
-type EmbeddedXObjects = ReadonlyMap<string, PDFRef>;
-
 /**
  * Embeds every planned XObject once, keyed. A form is a stream of our own content; an image
  * goes through pdf-lib's PNG/JPEG embedders; a PDF page through `embedPdf`, which copies the
@@ -399,60 +439,22 @@ async function embedXObjects(
       const stream = appearances.generate(a.appearance.input);
       for (const key of Object.values(stream?.resources.xobjects ?? {})) named.add(key);
     }
+    // A watermark made from a picture or a file names its source the same way (M53, ADR 0020).
+    for (const item of page.decorations?.items ?? []) {
+      for (const key of Object.values(item.resources.xobjects ?? {})) named.add(key);
+    }
   }
   for (const [key, source] of Object.entries(sources)) {
     if (!named.has(key)) continue;
     try {
-      out.set(key, await embedOne(doc, source));
+      out.set(key, await embedXObjectSource(doc, source));
     } catch (error) {
       state.warn(
-        `A stamp's picture could not be embedded (${error instanceof Error ? error.message : String(error)})`,
+        `A picture could not be embedded (${error instanceof Error ? error.message : String(error)})`,
       );
     }
   }
   return out;
-}
-
-async function embedOne(doc: PDFDocument, source: PlannedXObject): Promise<PDFRef> {
-  const ctx = doc.context;
-  switch (source.kind) {
-    case 'form': {
-      const stream = ctx.flateStream(source.content, {
-        Type: 'XObject',
-        Subtype: 'Form',
-        FormType: 1,
-      });
-      const b = source.bbox;
-      stream.dict.set(PDFName.of('BBox'), ctx.obj([b.x0, b.y0, b.x1, b.y1]));
-      stream.dict.set(PDFName.of('Matrix'), ctx.obj([1, 0, 0, 1, 0, 0]));
-      stream.dict.set(
-        PDFName.of('Resources'),
-        resourcesDict(ctx, source.resources ?? { extGState: {}, fonts: {} }, new Map()),
-      );
-      return ctx.register(stream);
-    }
-    case 'image': {
-      const image = await doc.embedPng(fromBase64(source.data));
-      /*
-       * An image XObject draws into the unit square; wrapping it in a form of the picture's own
-       * size lets every placement use the same "fit this box into the rect" matrix a catalogue
-       * stamp uses, and keeps the image itself embedded exactly once.
-       */
-      const form = ctx.flateStream(
-        `q ${num(source.width)} 0 0 ${num(source.height)} 0 0 cm /Im1 Do Q`,
-        { Type: 'XObject', Subtype: 'Form', FormType: 1 },
-      );
-      form.dict.set(PDFName.of('BBox'), ctx.obj([0, 0, source.width, source.height]));
-      form.dict.set(PDFName.of('Matrix'), ctx.obj([1, 0, 0, 1, 0, 0]));
-      const resources = ctx.obj({});
-      const images = ctx.obj({});
-      images.set(PDFName.of('Im1'), image.ref);
-      resources.set(PDFName.of('XObject'), images);
-      resources.set(PDFName.of('ProcSet'), ctx.obj([PDFName.of('PDF'), PDFName.of('ImageC')]));
-      form.dict.set(PDFName.of('Resources'), resources);
-      return ctx.register(form);
-    }
-  }
 }
 
 /** Whether every XObject a stream names was embedded; the missing ones are reported. */
@@ -468,14 +470,6 @@ function xobjectsResolve(
     }
   }
   return true;
-}
-
-function fromBase64(data: string): Uint8Array {
-  const clean = data.includes(',') ? data.slice(data.indexOf(',') + 1) : data;
-  const bin = atob(clean);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
 }
 
 // ---- progress, cancellation and warnings -----------------------------------------------------
@@ -1841,47 +1835,6 @@ function flattenPoints(points: ReadonlyArray<PdfPoint>): number[] {
 }
 
 /** The `/Resources` dictionary an appearance stream's content needs. */
-function resourcesDict(
-  ctx: PDFContext,
-  spec: AppearanceResources,
-  xobjects: EmbeddedXObjects,
-): PDFDict {
-  const resources = ctx.obj({});
-  resources.set(PDFName.of('ProcSet'), ctx.obj([PDFName.of('PDF'), PDFName.of('Text')]));
-  const gsNames = Object.entries(spec.extGState);
-  if (gsNames.length > 0) {
-    const gs = ctx.obj({});
-    for (const [name, g] of gsNames) {
-      const state = ctx.obj({});
-      state.set(PDFName.of('Type'), PDFName.of('ExtGState'));
-      if (g.fillAlpha !== undefined) state.set(PDFName.of('ca'), PDFNumber.of(g.fillAlpha));
-      if (g.strokeAlpha !== undefined) state.set(PDFName.of('CA'), PDFNumber.of(g.strokeAlpha));
-      if (g.blendMode !== undefined) state.set(PDFName.of('BM'), PDFName.of(g.blendMode));
-      gs.set(PDFName.of(name), state);
-    }
-    resources.set(PDFName.of('ExtGState'), gs);
-  }
-  const fontNames = Object.entries(spec.fonts);
-  if (fontNames.length > 0) {
-    const fonts = ctx.obj({});
-    for (const [name, font] of fontNames) {
-      fonts.set(PDFName.of(name), ctx.register(fontDict(ctx, font)));
-    }
-    resources.set(PDFName.of('Font'), fonts);
-  }
-  const xobjectNames = Object.entries(spec.xobjects ?? {});
-  if (xobjectNames.length > 0) {
-    const forms = ctx.obj({});
-    for (const [name, key] of xobjectNames) {
-      const ref = xobjects.get(key);
-      // Every stream reaching here was checked by `xobjectsResolve`; the guard is for the types.
-      if (ref) forms.set(PDFName.of(name), ref);
-    }
-    resources.set(PDFName.of('XObject'), forms);
-  }
-  return resources;
-}
-
 /**
  * Writes a generated stream as the annotation's `/AP /N`.
  *
@@ -1896,18 +1849,13 @@ function attachAppearance(
   xobjects: EmbeddedXObjects,
   state?: string,
 ): void {
-  const resources = resourcesDict(ctx, stream.resources, xobjects);
-  const bbox = stream.bbox;
-  const form = ctx.flateStream(stream.content, {
-    Type: 'XObject',
-    Subtype: 'Form',
-    FormType: 1,
+  const formRef = formXObject(ctx, {
+    content: stream.content,
+    bbox: stream.bbox,
+    ...(stream.matrix ? { matrix: stream.matrix } : {}),
+    resources: stream.resources,
+    xobjects,
   });
-  form.dict.set(PDFName.of('BBox'), ctx.obj([bbox.x0, bbox.y0, bbox.x1, bbox.y1]));
-  form.dict.set(PDFName.of('Matrix'), ctx.obj([...(stream.matrix ?? [1, 0, 0, 1, 0, 0])]));
-  form.dict.set(PDFName.of('Resources'), resources);
-
-  const formRef = ctx.register(form);
   const existing = dict.lookupMaybe(PDFName.of('AP'), PDFDict);
   const ap = state !== undefined && existing ? existing : ctx.obj({});
   if (state === undefined) {
@@ -1921,37 +1869,6 @@ function attachAppearance(
   normal.set(PDFName.of(state), formRef);
   ap.set(PDFName.of('N'), normal);
   dict.set(PDFName.of('AP'), ap);
-}
-
-/**
- * A font resource for an appearance stream: one of the standard 14 as a Type1, or a family the
- * reader chose from the system list as a non-embedded TrueType (M30, ADR 0013). Nothing is
- * embedded — there is no subsetter here before M51 — so a viewer resolves the name through its
- * own substitution table, which for PDFium (ours and Chrome's) is the bundled Liberation/DejaVu
- * set.
- */
-function fontDict(ctx: PDFContext, font: AppearanceFont): PDFDict {
-  const dict = ctx.obj({});
-  dict.set(PDFName.of('Type'), PDFName.of('Font'));
-  if (isNonEmbeddedFont(font)) {
-    dict.set(PDFName.of('Subtype'), PDFName.of('TrueType'));
-    dict.set(PDFName.of('BaseFont'), PDFName.of(pdfNameOf(font.baseFont)));
-    dict.set(PDFName.of('Encoding'), PDFName.of('WinAnsiEncoding'));
-    return dict;
-  }
-  dict.set(PDFName.of('Subtype'), PDFName.of('Type1'));
-  dict.set(PDFName.of('BaseFont'), PDFName.of(font));
-  // Symbol and ZapfDingbats carry their own built-in encoding and must not be re-encoded.
-  if (font !== 'Symbol' && font !== 'ZapfDingbats') {
-    dict.set(PDFName.of('Encoding'), PDFName.of('WinAnsiEncoding'));
-  }
-  return dict;
-}
-
-/** A family name as a PDF name: no delimiters, no whitespace, never empty. */
-function pdfNameOf(family: string): string {
-  const cleaned = family.replace(/[^A-Za-z0-9+.-]/g, '');
-  return cleaned === '' ? 'Helvetica' : cleaned;
 }
 
 // ---- form fields -----------------------------------------------------------------------------

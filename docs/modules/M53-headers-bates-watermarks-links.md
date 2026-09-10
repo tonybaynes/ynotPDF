@@ -291,8 +291,10 @@ help, **ours** = our own choice.
    footer each have left, centre and right; the macros are `<<1>>`, `<<1 of n>>`,
    `<<Bates>>`, `<<FileName>>`, `<<FullPath>>`, `<<Title>>`, `<<Author>>`,
    `<<Subject>>`, `<<Date>>`, `<<Time>>` and `<<d:…>>` for an explicit date pattern.
-   Page-number macros take an optional start and prefix (`<<1,start=5>>`). The list
-   lives in `resources/presets/macros.json` so it can grow without a release.
+   Where the numbering starts is a field of the spec, not a spelling of the macro, so
+   the dialog can show it. The catalogue lives in `resources/presets/macros.json` so it
+   can grow without a release; a token the data names and the code has no expander for
+   is left on the page as written rather than guessed at.
    *(Foxit's own header/footer offers page-number and date macros and six zones; the
    spelling and the escape rules are ours.)*
 7. **Bates numbering is a decoration like any other**, with prefix, suffix, digit count

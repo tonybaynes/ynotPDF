@@ -46,6 +46,56 @@ export interface PlannedPage {
    * that page keeps what PDFium wrote.
    */
   readonly objects?: PlannedObjects;
+  /**
+   * Headers, footers, Bates numbers, watermarks and backgrounds for this page (M53, ADR 0020).
+   * Applied after {@link PlannedPage.objects}, and never by editing an existing stream.
+   */
+  readonly decorations?: PlannedDecorations;
+}
+
+/**
+ * What the decoration applier does to one page (M53, ADR 0020 §3), in order: put the original
+ * content back, strip every `/YNOTDec` span the page carries whoever wrote it, then append a new
+ * `/Contents` element holding `items`.
+ *
+ * `original` is the page's content and `/Resources` as they were before the first decoration
+ * went on — the same capture M50 makes, for the same reason: PDFium regenerates the stream of
+ * any page it draws an object on. It is absent when the page has no decorations of its own to
+ * undo (a file opened with decorations already in it), and ignored when {@link PlannedPage.objects}
+ * has already restored the page.
+ */
+export interface PlannedDecorations {
+  readonly original?: { readonly content: string; readonly resources: string };
+  /** Everything that should end up on the page. An empty list is "take them all off". */
+  readonly items: ReadonlyArray<PlannedDecoration>;
+  /**
+   * Squeeze the page's own content into this fraction of itself, centred, so a header cannot
+   * sit on top of it. Absent, 0 and 1 all mean "leave the page alone".
+   */
+  readonly shrink?: number;
+}
+
+/**
+ * One decoration drawn on one page. Structurally `DecorationDraw` from
+ * `src/engine/decorations/types.ts`, restated here so `Writer.ts` keeps its place as the
+ * contract every writer implements without importing a feature's own types.
+ */
+export interface PlannedDecoration {
+  /** The marker's `Id`, stable for the life of the decoration. */
+  readonly id: string;
+  /** The marker's `Kind`. */
+  readonly kind: string;
+  readonly bbox: PdfRect;
+  readonly matrix: PdfMatrix;
+  readonly content: string;
+  readonly resources: AppearanceResources;
+  /** Under the page's own content rather than over it. */
+  readonly behind: boolean;
+  /** `/Print` and `/View` on the marked content. */
+  readonly print: boolean;
+  readonly screen: boolean;
+  /** The decoration's settings as JSON, carried in the marker so a reopened file is editable. */
+  readonly spec: string;
 }
 
 /** One page-object edit, in the terms of `src/engine/content/edit.ts` (M50, ADR 0018). */
@@ -125,6 +175,15 @@ export interface PlannedAnnotation {
   readonly properties?: PlannedAnnotationProperties;
   /** Draw an `/AP`. `replace` overwrites one the file already has. */
   readonly appearance?: { readonly input: AppearanceInput; readonly replace: boolean };
+  /**
+   * `/Dest` — where a Link annotation goes inside this document (M53, ADR 0020 §5).
+   *
+   * A destination's first element is a *reference to a page*, which {@link
+   * PlannedAnnotationProperties.entries} cannot express: it carries values, not references. It
+   * indexes {@link WritePlan.pages}, so a link still points at the right page after a reorder.
+   * `null` removes the entry — a link that became a URL instead.
+   */
+  readonly dest?: PlannedDestination | null;
 }
 
 /** Annotation dictionary entries, in model terms. `null` removes the entry. */
@@ -416,6 +475,20 @@ export type PlannedXObject =
       /** The picture's size in pixels, which is also its natural box in points. */
       readonly width: number;
       readonly height: number;
+    }
+  | {
+      /**
+       * One page of another PDF, as base64 (M53, ADR 0020 §4). A watermark or a background made
+       * from a file is this: `embedPdf` brings the page's own resources with it, so the drawing
+       * looks the same in the decorated document as it did in the one it came from.
+       */
+      readonly kind: 'pdf';
+      readonly data: string;
+      /** 0-based page index inside that PDF. */
+      readonly page: number;
+      /** The page's size in points, so a caller can lay it out before it is embedded. */
+      readonly width: number;
+      readonly height: number;
     };
 
 /**
@@ -602,7 +675,12 @@ export function planIsEmpty(plan: WritePlan): boolean {
     plan.attachments === null &&
     plan.portfolio === null &&
     (plan.form ?? null) === null &&
-    plan.pages.every((p) => p.boxes === undefined && (p.annotations?.length ?? 0) === 0)
+    plan.pages.every(
+      (p) =>
+        p.boxes === undefined &&
+        (p.annotations?.length ?? 0) === 0 &&
+        p.decorations === undefined,
+    )
   );
 }
 
@@ -630,6 +708,7 @@ export const WRITE_PHASES = [
   'portfolio',
   'annotations',
   'objects',
+  'decorations',
   'form',
   'fields',
   'serialise',
