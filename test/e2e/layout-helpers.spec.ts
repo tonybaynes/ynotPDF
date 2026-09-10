@@ -134,3 +134,11 @@ test('a deliberate clip is declared with data-allow-clip, and then it is not a d
     el.removeAttribute('data-allow-clip');
   });
 });
+
+test('expectReadable can be asked for the translucency half alone', async () => {
+  // Over the document, the colours belong to whoever made the file. The modal rule still does.
+  const said = await withFault('#statusbar #status-message { color: #3a3a3a; }', () =>
+    expectReadable(app.page.locator('#statusbar'), { contrast: false }),
+  );
+  expect(said).toBe('no failure');
+});

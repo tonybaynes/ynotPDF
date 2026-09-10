@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { launchApp, type App } from './harness';
+import { expectReadable } from './layout';
 
 const FIXTURES = join(process.cwd(), 'test', 'fixtures');
 
@@ -739,39 +740,15 @@ test.describe('nothing the module draws is translucent', () => {
     await app.run('annot.edit', { id: (await annotations()).find((a) => a.icon)?.id });
     await app.page.waitForTimeout(300);
 
-    const offenders = await app.page.evaluate(() => {
-      const bad: string[] = [];
-      const alpha = (value: string): number | null => {
-        const m = /\(([^)]*)\)/.exec(value);
-        if (!m) return null;
-        const parts = (m[1] ?? '').split(/[,/]/).map((p) => p.trim());
-        if (parts.length < 4) return null;
-        const last = parts[parts.length - 1] ?? '1';
-        const n = last.endsWith('%') ? Number.parseFloat(last) / 100 : Number.parseFloat(last);
-        return Number.isNaN(n) ? null : n;
-      };
-      const roots = document.querySelectorAll(
-        '.layer-annot, .layer-annot *, .annot-popup, .annot-popup *, .annot-editor, #annot-props, #annot-props *',
-      );
-      for (const el of roots) {
-        const style = getComputedStyle(el);
-        if (Number.parseFloat(style.opacity) < 1) bad.push(`${el.className}: opacity`);
-        if (style.backdropFilter && style.backdropFilter !== 'none') {
-          bad.push(`${el.className}: backdrop-filter`);
-        }
-        for (const prop of ['color', 'backgroundColor', 'borderTopColor', 'fill', 'stroke']) {
-          const value = style.getPropertyValue(
-            prop.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`),
-          );
-          const a = alpha(value);
-          // A fully transparent value is "none", not translucency: an SVG `fill: none` computes
-          // to `rgba(0, 0, 0, 0)` and paints nothing at all.
-          if (a !== null && a > 0 && a < 1) bad.push(`${el.className}: ${prop} ${value}`);
-        }
-      }
-      return bad;
-    });
-    expect(offenders).toEqual([]);
+    // M04's shared check rather than a fourth copy of the walk. The annotation layer's own SVG
+    // is exempt from the contrast half: its colours are the *document's*, chosen by whoever made
+    // the annotation, and are not this app's to police.
+    for (const scope of ['.annot-popup', '.annot-editor', '#annot-props']) {
+      const region = app.page.locator(scope);
+      if ((await region.count()) === 0) continue;
+      await expectReadable(region.first());
+    }
+    await expectReadable(app.page.locator('.layer-annot').first(), { contrast: false });
     // And no annotation the app made carries a `/CA` either.
     for (const a of await annotations()) expect(a.opacity === null || a.opacity === 1).toBe(true);
   });

@@ -89,6 +89,7 @@ test('M02 — the command palette is opened, typed into, and runs what was chose
   // M00's About dialog is kept and reused rather than rebuilt, so it goes away rather than out.
   await j.clickDialogButton('#about-dialog', 'Close');
   await expect(app.page.locator('#about-dialog')).toBeHidden();
+  await expectWindowSound(app.page);
 });
 
 // ---- M01 -------------------------------------------------------------------------------------
@@ -115,6 +116,7 @@ test('M01 — the theme is changed from the status bar, and every theme stays re
     await expectNothingClipped(app.page.locator('body'));
   }
   expect(seen.size, 'the four themes should all be reachable from the ribbon').toBe(4);
+  await expectWindowSound(app.page);
 });
 
 // ---- M20 -------------------------------------------------------------------------------------
@@ -184,4 +186,5 @@ test('M00/M03/M10 — About names the build, its architecture and the engine beh
   await expectReadable(dialog);
   await j.clickDialogButton('#about-dialog', 'Close');
   await expect(dialog).toBeHidden();
+  await expectWindowSound(app.page);
 });

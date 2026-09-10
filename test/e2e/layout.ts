@@ -39,6 +39,14 @@ export interface ClipOptions {
 export interface ReadableOptions extends ClipOptions {
   /** Contrast floor. The project rule is 4.5:1 for text (PLAN.md §3.2). */
   readonly minContrast?: number;
+  /**
+   * Check the contrast of the text as well as the translucency (default true).
+   *
+   * Turn it off over the *document*: the colours of an annotation, and of the page under it,
+   * were chosen by whoever made the file and are not this app's to police. The translucency half
+   * still applies there, because that half is about what this app draws over them.
+   */
+  readonly contrast?: boolean;
 }
 
 /** One offending element, as the browser side reports it. */
@@ -317,7 +325,7 @@ export async function expectNoOverlap(a: Locator, b: Locator): Promise<void> {
  */
 export async function expectReadable(scope: Locator, options: ReadableOptions = {}): Promise<void> {
   const offences = await scope.evaluate(
-    (root, { minContrast, allowClip, ignore }) => {
+    (root, { minContrast, checkContrast, allowClip, ignore }) => {
       const out: Offence[] = [];
       const describe = (el: Element): string => {
         const id = el.id ? `#${el.id}` : '';
@@ -416,6 +424,7 @@ export async function expectReadable(scope: Locator, options: ReadableOptions = 
       }
 
       // ---- contrast -----------------------------------------------------------------------------
+      if (!checkContrast) return out;
       const backgroundOf = (el: Element): [number, number, number] | null => {
         for (let p: Element | null = el; p; p = p.parentElement) {
           const s = getComputedStyle(p);
@@ -463,6 +472,7 @@ export async function expectReadable(scope: Locator, options: ReadableOptions = 
     },
     {
       minContrast: options.minContrast ?? 4.5,
+      checkContrast: options.contrast ?? true,
       allowClip: ALLOW_CLIP,
       ignore: options.ignore ?? [],
     },

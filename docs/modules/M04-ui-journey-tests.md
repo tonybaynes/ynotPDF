@@ -437,7 +437,14 @@ The point of the module, and the reason the diff touches product code at all.
   `test/e2e/layout-helpers.spec.ts`, which gives each of them the fault it exists for and checks
   what it says. A check that never fires is worth nothing.
 - `test/e2e/journey.ts` — the helpers, each hit-testing before it clicks.
-- `test/e2e/journeys/` — 22 journeys over the 22 merged modules, plus `coverage.spec.ts`.
+- `test/e2e/journeys/` — 22 journeys over the 22 merged modules, each ending with the whole
+  window checked, plus `coverage.spec.ts`: a merged module must have a journey named after it, a
+  journey must not drive its own action through `app.run`, and a journey must end with
+  `expectWindowSound`. All three are read off the files, so none of them can quietly lapse.
+- `annotations`, `comments`, `drawing` and `preferences` each carried their own copy of the
+  "nothing is translucent" walk from `CLAUDE.md`. All four call `expectReadable` now, and three
+  of them gained the contrast half with it; the annotation layer takes `{ contrast: false }`,
+  because the colours in it are the document's and not this app's to police.
 - `test/e2e/startup.spec.ts` — 11 tests: a fresh profile with no demo module, a document on the
   command line, all four `ui.leftPaneOnOpen` values, and a relaunch after a crash.
 - `test/e2e/scale-matrix.spec.ts` — 100/150/200 % across 1280x800, 1920x1080 and 1280x600.

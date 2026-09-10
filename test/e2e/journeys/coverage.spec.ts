@@ -89,3 +89,22 @@ test('no journey drives the action under test through app.run', () => {
       'with a reason.',
   ).toEqual([]);
 });
+
+test('every journey ends with the whole window checked', () => {
+  // "Each journey ends with `expectNothingClipped` on the whole window" — the brief's own line,
+  // and the cheapest assertion in the suite. `expectWindowSound` is that plus the window bounds.
+  const missing: string[] = [];
+  for (const name of readdirSync(JOURNEYS)) {
+    if (!name.endsWith('.spec.ts') || name === 'coverage.spec.ts') continue;
+    const source = readFileSync(join(JOURNEYS, name), 'utf8');
+    for (const block of source.split(/^test\(/m).slice(1)) {
+      const body = block.split(/^\}\);$/m)[0] ?? '';
+      if (body.includes('expectWindowSound')) continue;
+      missing.push(`${name}: ${/^\s*'([^']*)'/.exec(body)?.[1] ?? '?'}`);
+    }
+  }
+  expect(
+    missing,
+    `these journeys do not end with expectWindowSound(page):\n${missing.join('\n')}`,
+  ).toEqual([]);
+});
