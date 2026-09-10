@@ -78,6 +78,19 @@ async function openPath(path: string): Promise<void> {
   await app.page.waitForTimeout(300);
 }
 
+/**
+ * Waits for the widget layer to have painted at least `count` fields.
+ *
+ * The layer paints on an animation frame, and an off-screen e2e window gets those when the
+ * compositor feels like it — on a loaded Linux runner that is well past any fixed wait. Polling
+ * for the condition is the only honest way to ask "are the fields there yet".
+ */
+async function waitForWidgets(count = 1): Promise<void> {
+  await expect
+    .poll(() => app.page.locator('.layer-widget .form-widget').count(), { timeout: 15_000 })
+    .toBeGreaterThanOrEqual(count);
+}
+
 /** Closes every tab, answering M21's "Save?" for each. */
 async function closeAll(): Promise<void> {
   await app.run('form.deselect').catch(() => undefined);
@@ -178,8 +191,7 @@ test.describe('M60 — forms', () => {
 
   test('the widget layer draws a real, labelled control for every field', async () => {
     await openPath(stage('forms-all.pdf', 'controls.pdf'));
-    const widgets = app.page.locator('.layer-widget .form-widget');
-    expect(await widgets.count()).toBeGreaterThan(8);
+    await waitForWidgets(9);
     // Every control has an accessible name and is a real form element, not a painted box.
     const kinds = await app.page.$$eval('.layer-widget .form-control', (els) =>
       els.map((el) => ({
@@ -392,9 +404,9 @@ test.describe('M60 — forms', () => {
   test('the Fields panel lists the form as a tree and jumps to a field', async () => {
     await openPath(stage('forms-all.pdf', 'panel.pdf'));
     await app.run('panel.nav.fields');
-    await app.page.waitForTimeout(250);
-    const rows = app.page.locator('.fields-tree .fields-row');
-    expect(await rows.count()).toBeGreaterThan(8);
+    await expect
+      .poll(() => app.page.locator('.fields-tree .fields-row').count(), { timeout: 15_000 })
+      .toBeGreaterThan(8);
     // The dotted names build a tree: "fields" is a group node above its children.
     const group = app.page.locator('.fields-row.synthetic', { hasText: 'fields' });
     expect(await group.count()).toBeGreaterThan(0);
@@ -419,9 +431,8 @@ test.describe('M60 — forms', () => {
       page: 0,
       rect: { x0: 100, y0: 600, x1: 300, y1: 624 },
     });
-    await app.page.waitForTimeout(200);
     const panel = app.page.locator('.field-props');
-    await expect(panel).toBeVisible();
+    await expect(panel).toBeVisible({ timeout: 15_000 });
     // The General tab's Required box is a real checkbox with a label.
     const required = app.page
       .locator('.field-props-check', { hasText: 'Required' })
@@ -452,7 +463,7 @@ test.describe('M60 — forms', () => {
 
     // On screen the widget draws the symbol itself, as an inline SVG path.
     const svg = app.page.locator('.form-widget[data-kind="barcode"] .form-barcode path');
-    expect(await svg.count()).toBe(1);
+    await expect(svg).toHaveCount(1, { timeout: 15_000 });
     const drawn = await svg.getAttribute('d');
     expect((drawn ?? '').length).toBeGreaterThan(100);
 
@@ -474,7 +485,7 @@ test.describe('M60 — forms', () => {
   test('axe-core: fill mode has no missing-label violations', async () => {
     await openPath(stage('forms-all.pdf', 'axe.pdf'));
     await app.run('form.fill');
-    await app.page.waitForTimeout(300);
+    await waitForWidgets(9);
     // Evaluated rather than injected as a <script>: the app's own Content Security Policy
     // forbids an inline script, and rightly so.
     await app.page.evaluate(AXE_SOURCE);
@@ -512,7 +523,7 @@ test.describe('M60 — forms', () => {
   test('every field is reachable from the keyboard, in tab order', async () => {
     await openPath(stage('forms-all.pdf', 'keyboard.pdf'));
     await app.run('form.fill');
-    await app.page.waitForTimeout(200);
+    await waitForWidgets(9);
     const visited: string[] = [];
     for (let i = 0; i < 4; i++) {
       const moved = (await app.run('form.nextField')) as boolean;
@@ -528,6 +539,7 @@ test.describe('M60 — forms', () => {
 
   test('highlight and the required outline are toggles, and required says so in words', async () => {
     await openPath(stage('forms-all.pdf', 'highlight.pdf'));
+    await waitForWidgets(9);
     const layer = app.page.locator('.layer-widget').first();
     await expect(layer).toHaveClass(/form-highlight/);
     await app.run('form.highlight');
@@ -539,7 +551,9 @@ test.describe('M60 — forms', () => {
 
     // The required field carries the word as well as the outline.
     await app.run('panel.nav.fields');
-    await app.page.waitForTimeout(250);
+    await expect
+      .poll(() => app.page.locator('.fields-flag').count(), { timeout: 15_000 })
+      .toBeGreaterThan(1);
     const flags = await app.page.$$eval('.fields-flag', (els) =>
       els.map((el) => el.textContent ?? ''),
     );
@@ -559,7 +573,7 @@ test.describe('M60 — forms', () => {
       await app.page.waitForTimeout(40);
     }
     await app.run('form.showTabOrder');
-    await app.page.waitForTimeout(250);
+    await expect(app.page.locator('.form-tab-number text')).toHaveCount(3, { timeout: 15_000 });
     const numbers = await app.page.$$eval('.form-tab-number text', (els) =>
       els.map((el) => el.textContent ?? ''),
     );

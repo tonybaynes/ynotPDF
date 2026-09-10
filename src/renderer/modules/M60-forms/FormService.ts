@@ -55,6 +55,7 @@ import {
 } from './commands';
 import {
   FORMS_NAMESPACE,
+  allWidgets,
   manualOrderFor,
   normaliseRect,
   orderWidgets,
@@ -88,6 +89,8 @@ interface TabState {
   selection: string[];
   page: number | null;
   showTabOrder: boolean;
+  /** Page indexes the layer currently holds widgets for, so an emptied page can be cleared. */
+  painted: ReadonlySet<number>;
   readonly disposers: Array<() => void>;
 }
 
@@ -232,6 +235,7 @@ export class FormService {
       selection: [],
       page: null,
       showTabOrder: false,
+      painted: new Set(),
       disposers: [],
     };
     state.disposers.push(
@@ -287,18 +291,44 @@ export class FormService {
     this.viewerService()?.setFormsVisible(!hasFields);
     state.layer.setMode(hasFields || this.modeValue === 'design' ? this.modeValue : 'off');
     state.layer.setHighlight(this.settingsValue.highlightFields);
+
+    /*
+     * Only the pages that carry a widget are touched — and, once, the pages that carried one
+     * before. A document of a thousand pages and no form is the common case, and walking every
+     * page of it on every store change is a thousand allocations for nothing.
+     */
+    const byPage = new Map<ModelId, WidgetRef[]>();
+    for (const ref of allWidgets(document)) {
+      const list = byPage.get(ref.widget.pageId) ?? [];
+      list.push(ref);
+      byPage.set(ref.widget.pageId, list);
+    }
+    const touched = new Set<number>();
     document.state.pages.forEach((page, index) => {
-      const refs = widgetsOnPage(document, page.id);
+      const refs = byPage.get(page.id);
+      if (!refs) return;
+      touched.add(index);
+      const ordered = orderWidgets(
+        refs,
+        tabModeFor(document, page.id),
+        manualOrderFor(document, page.id),
+      );
       state.layer.setWidgets(
         index,
-        refs.map((ref) => toLayerWidget(ref, index)),
+        ordered.map((ref) => toLayerWidget(ref, index)),
       );
       state.layer.setSelection(index, state.selection);
       state.layer.setTabNumbers(
         index,
-        state.showTabOrder ? new Map(refs.map((r, i) => [r.key, i])) : null,
+        state.showTabOrder ? new Map(ordered.map((r, i) => [r.key, i])) : null,
       );
     });
+    for (const index of state.painted) {
+      if (touched.has(index)) continue;
+      state.layer.setWidgets(index, []);
+      state.layer.setTabNumbers(index, null);
+    }
+    state.painted = touched;
     this.notify();
   }
 
