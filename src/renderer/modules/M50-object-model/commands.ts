@@ -461,7 +461,8 @@ export class SetObjectStyleCommand extends ObjectCommand {
       this.pageId,
       this.objectId,
       { ...this.style, ...next.style },
-      this.previous,
+      // The earliest value of each field is what undo has to put back.
+      { ...next.previous, ...this.previous },
       { before: this.before ?? null, after: next.after ?? null },
     );
   }
