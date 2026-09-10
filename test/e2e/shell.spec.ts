@@ -548,10 +548,16 @@ test('the File tab is a horizontal ribbon: Open, Recent, New, the module slots a
   await item('file.new').click();
   await expect(menu.locator('[data-command="demo.create.blank"]')).toBeVisible();
   await app.page.keyboard.press('Escape');
-  // Unfilled slots are disabled and say so; M13 fills Print (command), M72 fills Properties
-  // (a page), and M21 fills Save and Save As — which are enabled, because a document is open.
-  await expect(item('file.slot.preferences')).toBeDisabled();
-  await expect(item('file.slot.preferences')).toHaveAttribute('title', /not available yet/);
+  /*
+   * Every slot is filled now that M130 has landed: M13 fills Print (a command), M72 Properties
+   * (a page), M21 Save and Save As, M130 Preferences. A filled command slot renders as that
+   * command's own button, so there is no `file.slot.preferences` placeholder left to be
+   * disabled — the "not available yet" state that used to be checked here has nothing left to
+   * show it on. `test/unit/preferences/manifest.test.ts` keeps that wording under test against
+   * `fileTabGroups` directly, so the behaviour is not lost with the slot that demonstrated it.
+   */
+  await expect(app.page.locator('#ribbon-body [data-item="file.slot.preferences"]')).toHaveCount(0);
+  await expect(item('app.preferences')).toBeEnabled();
   // A filled command slot renders as that command's own button, so Save appears as `file.save`.
   await expect(item('file.save')).toBeVisible();
   await expect(item('file.saveAs')).toBeVisible();

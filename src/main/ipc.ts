@@ -252,6 +252,14 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       recentChanged();
       return list;
     },
+    'settings:all': () => settings.all(),
+    'settings:setMany': (_e, values) => {
+      settings.setMany(values);
+    },
+    'settings:reset': (_e, prefixes) => {
+      settings.reset(prefixes);
+    },
+    'settings:path': () => settings.path,
     'settings:get': (_e, key) => settings.get(key),
     'settings:set': (_e, key, value) => {
       settings.set(key, value);

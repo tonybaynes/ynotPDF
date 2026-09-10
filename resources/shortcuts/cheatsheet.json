@@ -1,0 +1,25 @@
+{
+  "$comment": "Layout of the printable keyboard-shortcut sheet (M130). Wording, sizes, margins and column count are data rather than code, per PLAN.md 4.4. `{date}` and `{count}` are filled in; `page.size` uses the preset ids in resources/page-sizes.json; margins are millimetres and every other size is points.",
+  "version": 1,
+  "page": {
+    "size": "A4",
+    "orientation": "portrait",
+    "margins": { "top": 18, "right": 15, "bottom": 18, "left": 15 }
+  },
+  "title": "ynotPDF keyboard shortcuts",
+  "subtitle": "{count} commands, {bound} with a key. Prepared {date}.",
+  "titleSize": 18,
+  "subtitleSize": 9,
+  "categorySize": 11,
+  "rowSize": 9,
+  "rowGap": 3.5,
+  "categoryGapBefore": 10,
+  "categoryGapAfter": 5,
+  "columns": 2,
+  "columnGap": 22,
+  "keyColumnWidth": 108,
+  "rule": true,
+  "footer": "ynotPDF  •  page {page} of {pages}",
+  "footerSize": 8,
+  "unboundNote": "Commands with no key are listed too, so you can see what is free to bind."
+}

@@ -127,6 +127,15 @@ export class Registry {
     return this.services.has(name);
   }
 
+  /**
+   * Every registered service name (M130, ADR 0018). M130 walks these after a settings change and
+   * calls `load()` on each service that has one, which is how a preference applies without a
+   * restart. Sorted so the order is the same on every machine and in every test.
+   */
+  serviceNames(): ReadonlyArray<string> {
+    return Array.from(this.services.keys()).sort();
+  }
+
   // ---- commands ----------------------------------------------------------------------------
 
   has(id: string): boolean {
@@ -218,6 +227,19 @@ export class Registry {
   bindShortcut(spec: ShortcutSpec): void {
     this.shortcuts.set(normalizeKey(spec.key), spec);
     this.notify();
+  }
+
+  /**
+   * Removes the binding for a key (M130, ADR 0018). Rebinding a command has to leave its old key
+   * free, and "last binding wins" cannot express that. Returns what was bound, or `undefined`.
+   */
+  unbindShortcut(key: string): ShortcutSpec | undefined {
+    const normalised = normalizeKey(key);
+    const previous = this.shortcuts.get(normalised);
+    if (previous === undefined) return undefined;
+    this.shortcuts.delete(normalised);
+    this.notify();
+    return previous;
   }
 
   /** Looks up the shortcut spec for a normalised key, e.g. `"Mod+Shift+P"`. */

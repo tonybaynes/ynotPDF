@@ -244,8 +244,164 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **Contract additions are additive and recorded in
+  [ADR 0018](../adr/0018-preferences-contracts.md).** `SettingSpec` gains the four types the
+  brief asks for that M00 did not define — `colour` (a theme token, never a literal), `path`
+  (a file or folder), `list` (an ordered list of strings) and `unit` on `number` — plus optional
+  `description`, `keywords`, `advanced` and `live` on every type; `SettingsSchema` gains optional
+  `title`, `icon` and `order` so a module can name its own page. `Registry` gains
+  `unbindShortcut()` and `serviceNames()`. Four settings IPC channels are added (`settings:all`,
+  `settings:setMany`, `settings:reset`, `settings:path`) because get/set one key at a time cannot
+  export, import or reset. Everything already merged compiles and renders unchanged.
+- **Preferences is generated, never hand-listed.** One page per *module* (not per namespace —
+  M02 and M12 both write `ui.*`), labelled with the manifest's `name` unless its schema overrides
+  it, ordered and iconed from `resources/preferences.json`. A module merged tomorrow gets its page
+  for free; M41's `scan.autoDeskew` will appear on a Scan page with no code change here.
+- **Live apply rides an existing convention rather than a new hook.** Every module service already
+  exposes `load()` that re-reads its settings and applies them (M11, M12, M13, M21, M30, M31, M32,
+  M40, M42, M70, M72, M91 all do). After a write M130 calls `load()` on every registered service
+  that has one, applies `theme.*` through M01's `ThemeManager` and the shell's `ui.*` keys through
+  the `UiState` store, then tells its own listeners. No other module's folder is touched.
+- **Search is over title + description + keywords + the key itself, plus a synonym table in
+  `resources/preferences.json`.** "tile cache" finds `viewer.cache.megabytes` because the synonym
+  table says so — the operator's words, not the module author's, and data rather than code.
+- **Shortcuts are stored as overrides, not as a full table** (`shortcuts.bindings`, a map of
+  command id → key or `null` for "unbound"). A module that changes its own default binding is
+  then still obeyed for every command the reader has not touched, and Reset is deleting a key.
+  Rebinding unbinds the old key first (`Registry.unbindShortcut`), which is why that method exists.
+- **Conflicts are words, never a colour.** "Ctrl+F is already **Find**" with a warning icon, an
+  Assign anyway / Cancel choice, and the displaced command shown as unbound afterwards.
+- **The cheat sheet is drawn with pdf-lib and the standard fonts** (same approach as M42's cover
+  sheet), paginated, two columns, grouped by category, and opens as an unsaved document — the way
+  M32's comment summary already arrives.
+- **Ribbon/QAT customisation is a filter over the group list, not a fork of the ribbon.** M130
+  registers a `ribbonCustomisation` service; `Ribbon.ts` asks for it (one small additive edit) and
+  applies hidden/reordered groups and items before the pure model runs. The manifests stay the
+  source of truth; the customisation is a diff on top, stored under `ui.ribbon.custom`, and Reset
+  deletes it.
+- **Units: `app.units` is the app-wide preference and `viewer.rulers.units` follows it.** M11
+  already owns the ruler key and reads it in `load()`; writing both keeps one visible answer in
+  Preferences without a second source of truth. A `units` service exposes it to M33/M41 later.
+- **UI font comes from the fonts already bundled** (Liberation, DejaVu — OFL, fetched by
+  `fetch-binaries` and credited under M10), loaded the way M10 loads them: `import.meta.glob`
+  with `?inline` so a build without fetched fonts silently keeps the system stack. Options live in
+  `resources/ui-fonts.json`; the choice sets `--font-ui`. No new package, no new binary.
+- **i18n is a framework plus a proof, not a translation.** `t(key, fallback)` reads a catalogue;
+  `scripts/extract-i18n.ts` walks the source for `t('…', '…')` call sites and writes
+  `resources/i18n/en-GB.json` from the fallbacks, then generates `en-US.json` by applying the
+  spelling table in `resources/i18n/spelling-en-US.json`. en-US is therefore a real catalogue that
+  the script can regenerate, not a special case in the lookup. M130's own UI is the first consumer;
+  `t()` falls back to en-GB and then to the literal, so a module that has not adopted it still reads.
+- **Settings are versioned in `src/shared/settings.ts`** — one `SCHEMA_VERSION`, an ordered list of
+  migrations, run in main when the store opens, and applied again to any imported JSON so an
+  exported file from an older build imports cleanly.
+- **A settings value that is an object must not have dots in its own keys.** Found while building:
+  `electron-store` treats a dotted key as a path, so reading the whole file back spreads an object
+  across one key per field — and a map keyed by a command id or a ribbon group id comes back
+  nested and unrecognisable. Both of M130's composite settings are therefore stored as arrays of
+  entries. The rule is on `flatten` in `src/shared/settings.ts`; `valueAt` and `dropTree` handle
+  the legitimate nested case.
+- **The UI scale keeps M01's command.** M01 already registers `view.uiScale.set`; M130's slider
+  writes `ui.scale` and the theme applier hands it to the `ThemeManager`. One command, one owner.
+- **M01's schema and its storage disagree**, and the alias table is the patch, not the fix: M01
+  declares `theme.scale` and `theme.nightMode` while its `ThemeManager` reads `ui.scale` and
+  `view.nightMode`. Preferences writes both sides so the setting the reader changes is the one the
+  app obeys. M01 should tidy this when it is next opened; the alias line can go with it.
+- **i18n covers M130's own interface, and nothing else yet.** `t()` needs a literal key at the call
+  site so the extractor can find it, which rules out translating another module's setting titles
+  from here. Each module adopts `t()` when it is next touched; until then a switched language
+  respells M130's own text and leaves the rest in en-GB, which reads correctly either way.
+- **Provenance.** The category list (General, Documents, Page Display, Commenting, Identity,
+  Languages, Units, Security…), "Customize Ribbon / Quick Access Toolbar" and a shortcut editor
+  with a printable list are Foxit's *feature set*, learned as a user; every word, layout, icon and
+  behaviour here is ours. The `Mod`-key and key-tip conventions are Windows/macOS platform
+  conventions, not Foxit's.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Shipped (2026-09-10):**
+
+- **Contracts** — [ADR 0018](../adr/0018-preferences-contracts.md), all additive:
+  `SettingSpec` gains the `colour` (theme token), `path` and `list` types, `unit` on `number`, and
+  `description` / `keywords` / `section` / `advanced` / `live` on every type; `SettingsSchema` gains
+  `title` / `icon` / `order`; `Registry.unbindShortcut()` and `Registry.serviceNames()`; IPC
+  `settings:all`, `settings:setMany`, `settings:reset`, `settings:path`; a `ribbonCustomisation`
+  service the ribbon asks for; and the `load()` reload convention every module service already met.
+  Everything merged before this compiles and renders unchanged.
+- **`src/shared/settings.ts`** (new): the schema version and its migration list, the flat/nested
+  pair the dotted store needs (`flatten`, `unflatten`, `valueAt`, `dropTree`), and the exported
+  file's envelope with its validation. Pure — unit-tested without Electron, and run over an
+  imported file so an export from an older build imports cleanly.
+- **Main**: `Settings` gains `all()`, `setMany()`, `reset(prefixes)` and `path`, and runs the
+  migrations when the store opens.
+- **Preferences dialog** (`PreferencesDialog.ts`, `controls.ts`, `model.ts`): one opaque window,
+  pages generated from every module's `SettingsSchema`, sections within a page, search across
+  title / description / keywords / key / enum labels plus a synonym table, live apply with no OK
+  button, a "changed" badge in words with a per-setting reset, per-page reset, advanced settings
+  behind a tick box, and a control for each of the seven types.
+- **Shortcut editor**: every command with its key, recording a chord with `keyFromEvent` so what is
+  stored is what the dispatcher matches, conflict resolution in words that unbinds the displaced
+  command, per-command and global reset, import, and a printable PDF sheet drawn with pdf-lib from
+  `resources/shortcuts/cheatsheet.json` (two columns, paginated, every command listed — including
+  the unbound ones, because "what is still free" is the other half of the question).
+- **Ribbon and toolbar**: a keyboard-operable tree of tabs → groups → buttons with a tick box and
+  Move up / Move down on each row, a quick-access-toolbar editor, and Reset. Stored as a diff over
+  the manifests, so a button added by a later module appears without touching the customisation.
+- **Identity, language, units, interface font**: `identity.*` (name, initials, email, organisation)
+  written where M30 reads it; `app.units` mirrored into `viewer.rulers.units` so there is one
+  visible answer; the interface font chosen from the Liberation and DejaVu faces the installer
+  already carries; the UI scale driven through M01's own command.
+- **i18n**: `t(key, english)`, `resources/i18n/en-GB.json` extracted from the call sites by
+  `scripts/extract-i18n.ts`, `en-US.json` generated from it by the spelling table, a language
+  switch that redraws, and `--check` wired into `npm run lint` so the catalogues cannot drift.
+- **Data, not code**: `resources/preferences.json` (page order, icons, labels, key aliases, search
+  synonyms), `resources/ui-fonts.json`, `resources/shortcuts/cheatsheet.json`, `resources/i18n/**`.
+- **Tests**: 7 new unit files, 189 tests (page model and search against the *real* manifests, the
+  settings contract and hub, the shortcut rules and the cheat sheet, the customisation algebra,
+  i18n and the extractor, units and fonts, the manifest and the two Registry additions) — 3008 unit
+  tests green. `test/e2e/preferences.spec.ts` adds 34 Playwright tests covering every acceptance
+  line; 361 e2e green locally.
+
+**Three real bugs the tests found, all fixed:**
+
+- **An object-valued setting was being destroyed by the store's dotted paths.** Reading the file
+  back flattens a stored object into one key per field, so a map keyed by a command id
+  (`edit.find`) or a ribbon group id (`home.clipboard`) came back nested and unrecognisable — the
+  reader's shortcuts and ribbon customisation vanished on the next start. Both are now stored as
+  arrays of entries; `valueAt` rebuilds a legitimately nested object and `dropTree` deletes one
+  whole. The rule is written on `flatten` for the next module author.
+- **The appliers were re-applying a stale cache.** M130 is not the only writer of `settings.json`;
+  applying the whole snapshot on every write pushed an old value back over what another module had
+  just set from its own toolbar. An applier is now given the set of keys that actually changed and
+  acts only on those, and the dialog re-reads the file when it opens.
+- **`view.uiScale.set` already existed** (M01's), so registering it here threw at boot. Caught by
+  the manifest test that registers the whole application; M130 uses M01's command instead.
+
+**Deferred, and why:**
+
+- **The migration list is empty.** Nothing in the store has been renamed yet, so shipping an
+  invented migration would be worse than none. The mechanism ships now — running it, and testing
+  it against real steps — because adding it to a store already on a thousand machines costs a
+  great deal more than adding it to an empty one, and an importer needs it before the first rename.
+- **i18n covers M130's own interface only.** `t()` needs a literal key so the extractor can find
+  it, which rules out translating another module's setting titles from here. Each module adopts
+  `t()` when it is next touched; a switched language respells M130's text today and leaves the
+  rest in en-GB, which reads correctly either way.
+- **Export writes through the native save dialog**, which an e2e run cannot answer, so the e2e
+  suite drives the import side with the text directly. The envelope both sides share is unit-tested
+  round-trip.
+
+**Shared-file edits, all additive and small**: `src/shared/module.ts` (the setting types),
+`src/shared/ipc.ts` (four settings channels), `src/shared/settings.ts` (new),
+`src/main/{settings,ipc}.ts`, `src/renderer/core/Registry.ts` (`unbindShortcut`, `serviceNames`),
+`src/renderer/app/ribbon/Ribbon.ts` (the customisation hook), `src/renderer/app/services.ts`
+(`SERVICE.settings`), `src/renderer/main.ts` (register M130 last, so it sees every binding),
+`package.json` (`npm run i18n`, `--check` in lint), `vitest.config.ts` (coverage), and
+`test/e2e/shell.spec.ts` — M130 fills the last empty File-tab slot, so the assertion that an
+unfilled slot says "not available yet" moved to `test/unit/preferences/manifest.test.ts` rather
+than being dropped.
+
+**One thing for M01 when it is next opened**: its schema declares `theme.scale` and
+`theme.nightMode` while its `ThemeManager` reads `ui.scale` and `view.nightMode`. Preferences
+writes both sides through the alias table in `resources/preferences.json`; tidying M01 lets those
+two alias lines go.
