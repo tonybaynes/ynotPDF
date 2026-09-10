@@ -1,0 +1,45 @@
+/*
+ * M92 — the export dialogs.
+ *
+ * Almost nothing: the dialogs are built from M02's `field`, `form-grid` and footer, and from
+ * M41's range and checkbox rows, all of which are already themed. What is here is the summary
+ * line each dialog carries and the two-column grid's spacing. No colour literal anywhere — every
+ * colour is a theme token, and every surface is opaque.
+ */
+
+.export-summary {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--fg);
+  font-weight: var(--fw-body);
+}
+
+.export-note {
+  margin: 0 0 1rem;
+  color: var(--fg);
+  font-style: italic;
+}
+
+.export-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  margin-top: 0.5rem;
+}
+
+.export-number {
+  width: 8ch;
+}
+
+/* A hidden row must take no space at all: `[hidden]` loses to `display: grid` on `.field`. */
+#export-images-dialog .field[hidden],
+#export-text-dialog .field[hidden],
+#export-html-dialog .field[hidden],
+#export-images-dialog .ops-check[hidden],
+#export-images-dialog .ops-check-block[hidden],
+#export-text-dialog .ops-check-block[hidden] {
+  display: none;
+}

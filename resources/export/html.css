@@ -1,0 +1,84 @@
+/*
+ * The stylesheet every exported HTML file carries (M92).
+ *
+ * It is data, not code (PLAN.md section 4.4): an exported document has left the application and
+ * has no ynotPDF theme behind it, so it declares its own tokens here and every rule uses `var()`.
+ * Change these five values and every future export looks different, with no rebuild.
+ *
+ * These are the *document's* colours, not the interface's — the app's contrast rules govern the
+ * app's chrome, and a page that has been exported is paper. The colours inside it are whatever
+ * the PDF stored, and are written out inline as it stored them.
+ */
+
+:root {
+  --page-bg: #ffffff;
+  --page-edge: #b0b0b8;
+  --paper-ground: #6e6e78;
+  --ink: #101014;
+  --muted: #4a4a52;
+  --page-gap: 24px;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--paper-ground);
+  color: var(--ink);
+  font-family: Georgia, 'Times New Roman', serif;
+  line-height: 1.4;
+}
+.doc {
+  padding: var(--page-gap) 0;
+}
+.page {
+  position: relative;
+  margin: 0 auto var(--page-gap);
+  background: var(--page-bg);
+  border: 1px solid var(--page-edge);
+  overflow: hidden;
+}
+.page-flow {
+  max-width: 46rem;
+  padding: 3rem 3.5rem;
+  border: 1px solid var(--page-edge);
+}
+.line {
+  position: absolute;
+  white-space: pre;
+  transform-origin: 0 0;
+}
+.pic {
+  position: absolute;
+}
+.pic img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.page-label {
+  max-width: 46rem;
+  margin: 0 auto 0.5rem;
+  color: var(--muted);
+  font:
+    600 0.8rem/1.4 system-ui,
+    sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+p {
+  margin: 0 0 0.8em;
+}
+@media print {
+  body {
+    background: var(--page-bg);
+  }
+  .page {
+    border: 0;
+    margin: 0;
+    page-break-after: always;
+  }
+  .page-label {
+    display: none;
+  }
+}
