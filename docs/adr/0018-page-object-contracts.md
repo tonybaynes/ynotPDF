@@ -40,7 +40,10 @@ and M71:
   span of its own operators and the CTM in force at its start. The order matches
   PDFium's `pageObjects()` enumeration; a corpus test asserts that, kind by kind.
 - `edit.ts` applies edits to the op list: `transform` wraps an object's span in
-  `q … cm … Q`, `remove` drops it, `insert` splices new ops at an object boundary.
+  `q … cm … Q` (a text object gets an explicit `Tm` instead, with the operators after
+  it repaired from PDFium's recorded matrices), `style` adds colour, width and dash
+  operators inside the same wrapper, `remove` drops the span, `insert` appends on top
+  after closing any `q` the producer left open.
 
 ### 2. Engine mutations (additive to `PdfEngine`)
 
@@ -93,13 +96,17 @@ the z-order change puts the page back on the first row.
 
 ### 4. Writer contracts (additive)
 
-- `PlannedPage.objects?: PlannedObjectEdit[]` — the edits to replay, plus `objectKinds`,
-  the kind sequence PDFium reported when the edit was made. The applier compares that
-  against its own scan of the page and refuses (with a warning, not a wrong write) if
-  they disagree, so an index can never land on the wrong object.
-- `PlannedXObject` gains `{ kind: 'pdf', data }` — a base64 one-page PDF embedded with
-  pdf-lib's `embedPdf`. That is how a pasted object becomes a form XObject in the
-  target file.
+- `PlannedPage.objects?: PlannedObjects` — the original content (base64) and
+  `/Resources` (PDF syntax), the kind sequence PDFium reported when the edit was
+  made, the page-space matrix of every text object as first read, and the edits to
+  replay (`transform`, `remove`, `style`, `insert`). The applier compares the kinds
+  against its own scan of the original and refuses (with a warning, not a wrong write)
+  if they disagree, so an index can never land on the wrong object.
+- An `insert` carries a base64 one-page PDF, which the writer embeds with pdf-lib's
+  `embedPdf` and draws with a `q … cm /YnObjN Do Q` appended on top. That is how a
+  pasted object becomes a form XObject in the target file — the same thing the live
+  view made of it through `FPDF_NewXObjectFromPage`.
+- A new `objects` write phase, for progress.
 
 ### 5. Model contracts (additive)
 
@@ -116,7 +123,7 @@ the z-order change puts the page back on the first row.
   conjugated into the object's own frame (`C⁻¹ · D · C`), which is what "move it 10 pt
   down the page" means when the object sits under a rotation.
 - A clip set _outside_ an object's span does not move with it. That is the PDF
-  semantic and what PDFium and Foxit both do; the properties panel says so.
+  semantic and what PDFium and Foxit both do.
 - Pages whose z-order changed lose operators PDFium does not model. M80's incremental
   writer does not fix that; extending `edit.ts` with a reorder that reconstructs
   graphics state does, and is the natural next step for M52.
