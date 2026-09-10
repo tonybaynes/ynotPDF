@@ -16,14 +16,7 @@ import { ContentBuilder } from '../appearance/content';
 import { textWidth } from '../appearance/metrics';
 import type { StandardFontName } from '../appearance/types';
 import { batesNumber, expandMacros } from './macros';
-import {
-  displaySize,
-  displayToPage,
-  isHeaderZone,
-  placement,
-  zoneBaseline,
-  zoneX,
-} from './layout';
+import { displaySize, displayToPage, isHeaderZone, placement, zoneBaseline, zoneX } from './layout';
 import { multiply } from '../content/matrix';
 import { toWinAnsi } from './text';
 import {
@@ -67,11 +60,7 @@ export interface DrawResult {
 }
 
 /** Draws whichever family the spec belongs to. */
-export function drawDecoration(
-  id: string,
-  spec: DecorationSpec,
-  context: DrawContext,
-): DrawResult {
+export function drawDecoration(id: string, spec: DecorationSpec, context: DrawContext): DrawResult {
   switch (spec.kind) {
     case 'header-footer':
       return drawHeaderFooter(id, spec, context);
@@ -88,11 +77,7 @@ function pageBox(context: DrawContext): PdfRect {
   return { x0: 0, y0: 0, x1: size.width, y1: size.height };
 }
 
-function drawHeaderFooter(
-  id: string,
-  spec: HeaderFooterSpec,
-  context: DrawContext,
-): DrawResult {
+function drawHeaderFooter(id: string, spec: HeaderFooterSpec, context: DrawContext): DrawResult {
   const size = displaySize(context.page.box, context.page.rotation);
   const builder = new ContentBuilder();
   const dropped: string[] = [];

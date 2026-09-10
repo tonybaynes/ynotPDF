@@ -204,13 +204,13 @@ export function expandMacros(
   if (text === '') return '';
   const start = options.startNumber ?? 1;
   const number = start + page.ordinal - 1;
-  const total = options.totalOverride && options.totalOverride > 0
-    ? options.totalOverride
-    : page.rangeCount;
+  const total =
+    options.totalOverride && options.totalOverride > 0 ? options.totalOverride : page.rangeCount;
   const doc = page.document;
   return text.replace(MACRO, (whole, body: string) => {
     const trimmed = body.trim();
-    if (trimmed.toLowerCase().startsWith('d:')) return formatDate(dateOf(doc), body.trim().slice(2));
+    if (trimmed.toLowerCase().startsWith('d:'))
+      return formatDate(dateOf(doc), body.trim().slice(2));
     const entry = MACROS.find((m) => m.token === `<<${body}>>` || m.token === `<<${trimmed}>>`);
     const type = entry?.type ?? impliedType(trimmed);
     switch (type) {

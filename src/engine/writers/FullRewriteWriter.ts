@@ -45,7 +45,6 @@ import {
   type PlannedOutlineItem,
   type PlannedPage,
   type PlannedView,
-  type PlannedXObject,
   type WritePhase,
   type WritePlan,
   type WriteProgressCallback,
@@ -58,23 +57,10 @@ import { writeForm } from './forms';
 import { daFontKey } from '../forms/da';
 import { writePageObjects } from './objects';
 import { writePageDecorations } from './decorations';
-import {
-  embedXObjectSource,
-  fontDict,
-  formXObject,
-  fromBase64,
-  resourcesDict,
-  type EmbeddedXObjects,
-} from './resources';
+import { embedXObjectSource, fontDict, formXObject, type EmbeddedXObjects } from './resources';
 import { defaultAppearanceService, type AppearanceService } from '../appearance';
 import { pageLabelNums } from '../pageLabels';
-import { num } from '../appearance/content';
-import {
-  isNonEmbeddedFont,
-  type AppearanceFont,
-  type AppearanceResources,
-  type AppearanceStream,
-} from '../appearance/types';
+import type { AppearanceFont, AppearanceResources, AppearanceStream } from '../appearance/types';
 import type { DictValue } from '../appearance/dict';
 import { yieldMacrotask } from '../yield';
 
@@ -283,7 +269,7 @@ export class FullRewriteWriter implements Writer {
       let written = false;
       for (const { page, ref, number } of withDecorations) {
         if (ref && page.decorations) {
-          const ok = await writePageDecorations(doc, ref, page.decorations, number, {
+          const ok = writePageDecorations(doc, ref, page.decorations, number, {
             objectsApplied: objectsApplied.has(number),
             xobjects,
             context: {

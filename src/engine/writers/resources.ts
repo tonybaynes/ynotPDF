@@ -12,7 +12,14 @@
  * PDFium (ours and Chrome's) resolves through the bundled substitutes.
  */
 
-import { PDFName, PDFNumber, type PDFContext, type PDFDict, type PDFDocument, type PDFRef } from 'pdf-lib';
+import {
+  PDFName,
+  PDFNumber,
+  type PDFContext,
+  type PDFDict,
+  type PDFDocument,
+  type PDFRef,
+} from 'pdf-lib';
 import type { PdfRect } from '@shared/pdf';
 import { num } from '../appearance/content';
 import {
@@ -128,10 +135,7 @@ export function formXObject(
   const b = options.bbox;
   form.dict.set(PDFName.of('BBox'), ctx.obj([b.x0, b.y0, b.x1, b.y1]));
   form.dict.set(PDFName.of('Matrix'), ctx.obj([...(options.matrix ?? [1, 0, 0, 1, 0, 0])]));
-  form.dict.set(
-    PDFName.of('Resources'),
-    resourcesDict(ctx, options.resources, options.xobjects),
-  );
+  form.dict.set(PDFName.of('Resources'), resourcesDict(ctx, options.resources, options.xobjects));
   for (const [key, value] of Object.entries(options.entries ?? {})) {
     form.dict.set(PDFName.of(key), value);
   }

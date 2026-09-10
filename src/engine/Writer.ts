@@ -677,9 +677,7 @@ export function planIsEmpty(plan: WritePlan): boolean {
     (plan.form ?? null) === null &&
     plan.pages.every(
       (p) =>
-        p.boxes === undefined &&
-        (p.annotations?.length ?? 0) === 0 &&
-        p.decorations === undefined,
+        p.boxes === undefined && (p.annotations?.length ?? 0) === 0 && p.decorations === undefined,
     )
   );
 }

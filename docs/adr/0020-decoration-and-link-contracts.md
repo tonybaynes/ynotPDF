@@ -23,7 +23,7 @@ Three things follow from that and are what this ADR settles.
    pages.
 3. **A link is an annotation PDFium refuses to create.** `FPDFPage_CreateAnnot` makes
    ten subtypes and Link is not one of them, so links take M30's "the writer inserts
-   it" path (ADR 0013) — but a link's destination is a *reference to a page object*,
+   it" path (ADR 0013) — but a link's destination is a _reference to a page object_,
    which nothing in the plan could express.
 
 ## Decision
@@ -51,7 +51,7 @@ takes:
   writer can find and remove the span without PDFium.
 
 A key on the XObject's dictionary would have been lost the moment PDFium rebuilt the
-XObject; a private `/PieceInfo` on the page cannot say *which* object.
+XObject; a private `/PieceInfo` on the page cannot say _which_ object.
 
 `Spec` carries the decoration's settings as JSON. That is what makes "Update" possible
 in a file this application did not open before: the dialog opens on what the last
@@ -119,7 +119,7 @@ once per key like the others (ADR 0015).
 ### 5. `PlannedAnnotation` gains `dest`
 
 A link's `/Dest` (or the `/D` of its `/A /GoTo`) is an array whose first element is a
-*reference to a page*. `PlannedAnnotationProperties.entries` is values, not references,
+_reference to a page_. `PlannedAnnotationProperties.entries` is values, not references,
 so a link could not be planned. `PlannedAnnotation.dest: PlannedDestination | null`
 reuses the destination shape the outline and the name tree already use — it indexes
 `WritePlan.pages`, so a link still points at the right page after a reorder.

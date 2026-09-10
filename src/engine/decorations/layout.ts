@@ -72,9 +72,7 @@ export function zoneBaseline(
   margins: Margins,
   size: number,
 ): number {
-  return isHeaderZone(zone)
-    ? page.height - margins.top - size * 0.8
-    : margins.bottom + size * 0.22;
+  return isHeaderZone(zone) ? page.height - margins.top - size * 0.8 : margins.bottom + size * 0.22;
 }
 
 /** The x a line of `width` starts at, for a zone's alignment. */
@@ -190,12 +188,5 @@ export function shrinkMatrix(box: PdfRect, fraction: number): PdfMatrix | null {
   const h = rectHeight(box);
   const cx = box.x0 + w / 2;
   const cy = box.y0 + h / 2;
-  return [
-    fraction,
-    0,
-    0,
-    fraction,
-    cx - fraction * cx,
-    cy - fraction * cy,
-  ];
+  return [fraction, 0, 0, fraction, cx - fraction * cx, cy - fraction * cy];
 }

@@ -38,11 +38,7 @@ import { parse, scanObjects, serialise } from '../content';
 import type { ContentOp } from '../content/parser';
 import { DECORATION_MARK, MARK_ID, MARK_KIND, MARK_SPEC } from '../decorations/types';
 import type { PlannedDecoration, PlannedDecorations } from '../Writer';
-import {
-  formXObject,
-  fromBase64,
-  type EmbeddedXObjects,
-} from './resources';
+import { formXObject, fromBase64, type EmbeddedXObjects } from './resources';
 
 export interface DecorationWriteContext {
   warn(message: string): void;
@@ -155,7 +151,7 @@ export function stripDecorations(source: Uint8Array): Uint8Array | null {
 /** The tag name of a `BDC`/`BMC` op, or null. */
 function markTag(op: ContentOp): string | null {
   const first = op.operands[0];
-  return first && first.kind === 'name' ? first.value : null;
+  return first?.kind === 'name' ? first.value : null;
 }
 
 /**
@@ -215,7 +211,7 @@ function decorationOps(item: PlannedDecoration, name: string): string {
  * `objectsApplied` says the page-object applier has already put the original content back, so
  * this one must not do it a second time — it would throw away M50's replayed edits.
  */
-export async function writePageDecorations(
+export function writePageDecorations(
   doc: PDFDocument,
   pageRef: PDFRef,
   planned: PlannedDecorations,
@@ -225,11 +221,13 @@ export async function writePageDecorations(
     readonly xobjects: EmbeddedXObjects;
     readonly context: DecorationWriteContext;
   },
-): Promise<boolean> {
+): boolean {
   const ctx = doc.context;
   const leaf = ctx.lookup(pageRef);
   if (!(leaf instanceof PDFPageLeaf)) {
-    options.context.warn(`Page ${String(pageNumber)}: not a page, so its decorations were left off`);
+    options.context.warn(
+      `Page ${String(pageNumber)}: not a page, so its decorations were left off`,
+    );
     return false;
   }
 

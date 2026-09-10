@@ -33,12 +33,7 @@ import { embedXObjectSource, formXObject } from '../writers/resources';
 import type { Ffi } from './ffi';
 
 /** The kinds a marker may name; anything else read back is reported as `unknown`. */
-const KINDS: ReadonlyArray<DecorationKind> = [
-  'header-footer',
-  'bates',
-  'watermark',
-  'background',
-];
+const KINDS: ReadonlyArray<DecorationKind> = ['header-footer', 'bates', 'watermark', 'background'];
 
 /**
  * A one-page PDF whose page is the decoration, sized to its `/BBox`.
@@ -94,9 +89,7 @@ function markString(ffi: Ffi, mark: number, key: string): string | null {
     const buf = s.alloc(size);
     if (!ffi.call('FPDFPageObjMark_GetParamStringValue', mark, keyPtr, buf, size, out)) return null;
     const got = ffi.u32(out, 0);
-    return new TextDecoder('utf-16le').decode(
-      ffi.m.HEAPU8.slice(buf, buf + Math.max(0, got - 2)),
-    );
+    return new TextDecoder('utf-16le').decode(ffi.m.HEAPU8.slice(buf, buf + Math.max(0, got - 2)));
   });
 }
 
@@ -137,9 +130,7 @@ export function readDecorations(ffi: Ffi, page: number, pageIndex: number): Foun
     out.push({
       page: pageIndex,
       id: markString(ffi, mark, MARK_ID) ?? '',
-      kind: (KINDS as ReadonlyArray<string>).includes(kind)
-        ? (kind as DecorationKind)
-        : 'unknown',
+      kind: (KINDS as ReadonlyArray<string>).includes(kind) ? (kind as DecorationKind) : 'unknown',
       index: i,
       spec: markString(ffi, mark, MARK_SPEC),
       foreign: false,
