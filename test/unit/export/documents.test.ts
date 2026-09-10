@@ -147,7 +147,7 @@ describe('HTML export', () => {
     // The heading's baseline is at y = 760 with a 24 pt box, so its top is 841.89 − 784 = 57.89.
     expect(html).toContain('left:72pt;top:57.89pt');
     expect(html).toContain('Quarterly report');
-    expect(html).toContain('font-family:"Helvetica", sans-serif');
+    expect(html).toContain("font-family:'Helvetica', sans-serif");
   });
 
   it('joins a paragraph back into one flowing block, dropping the typesetter’s line breaks', () => {
@@ -220,9 +220,46 @@ describe('HTML export', () => {
   it('turns a PDF content colour into a hex literal and a font name into a stack', () => {
     expect(hexColour(0x1a2b3c)).toBe('#1a2b3c');
     expect(hexColour(0)).toBe('#000000');
-    expect(fontStack('ABCDEF+Courier-Bold')).toBe('"Courier", monospace');
-    expect(fontStack('Times-Roman')).toBe('"Times", serif');
+    expect(fontStack('ABCDEF+Courier-Bold')).toBe("'Courier', monospace");
+    expect(fontStack('Times-Roman')).toBe("'Times', serif");
     expect(fontStack('')).toBe('serif');
+  });
+
+  /**
+   * A font stack quoted with double quotes closes the `style="..."` attribute it sits in and
+   * turns the rest of the line into stray markup. It looked fine in a reading-order test, because
+   * the words were still there — they were just no longer in a positioned box.
+   */
+  it('never puts a double quote inside an attribute value', () => {
+    for (const layout of ['positioned', 'flowing'] as const) {
+      const html = new TextDecoder().decode(
+        exportHtml(PAGES, { documentName: 'report', layout }).files[0]?.bytes,
+      );
+      const body = html.slice(html.indexOf('<body>'));
+      for (const attribute of body.matchAll(/\s(?:style|alt|aria-label)="([^"]*)"/g)) {
+        expect(attribute[1], attribute[0]).not.toContain('"');
+      }
+      // A tag name is followed by a space or the bracket; nothing may open inside a tag.
+      for (const tag of body.matchAll(/<(?:div|section|p|img)[ >]([^>]*)>/g)) {
+        expect(tag[1], tag[0]).not.toContain('<');
+      }
+    }
+  });
+
+  it('names a rotation the way a person would, not as 330 degrees the other way', () => {
+    const rotated = page(0, [
+      {
+        ...run('Sideways', 200, 400),
+        angle: Math.PI / 6,
+        matrix: [0.866, 0.5, -0.5, 0.866, 200, 400],
+      },
+    ]);
+    const html = new TextDecoder().decode(
+      exportHtml([rotated], { documentName: 'r' }).files[0]?.bytes,
+    );
+    const match = /rotate\((-?\d+)deg\)/.exec(html);
+    expect(match, 'the line is rotated').not.toBeNull();
+    expect(Math.abs(Number(match?.[1] ?? 0))).toBeLessThanOrEqual(180);
   });
 });
 

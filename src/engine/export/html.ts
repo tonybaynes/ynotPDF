@@ -14,9 +14,10 @@
  *
  * **The stylesheet is token-based, and they are the export's tokens, not the app's.** A file that
  * has left the application has no ynotPDF theme behind it, so it declares its own `--page-bg`,
- * `--ink` and the rest on `:root` and every rule uses `var()`; a reader who wants it to look
- * different edits five lines at the top. The app's colour rules govern the app's chrome — the
- * colours *inside* a document are the document's own, and are written out as the PDF stored them.
+ * `--ink` and the rest on `:root` and every rule uses `var()`. The stylesheet itself is **data** —
+ * `resources/export/html.css` (PLAN.md section 4.4) — so those five values can change without a
+ * rebuild. The app's colour rules govern the app's chrome; the colours *inside* a document are the
+ * document's own, and are written out as the PDF stored them.
  *
  * Pictures are embedded as `data:` URIs rather than written beside the file, because a single
  * `.html` that opens anywhere is worth more than a folder that has to travel with it. There is a
@@ -57,13 +58,35 @@ export function escapeHtml(text: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * The same, for a value going into a **double-quoted attribute**.
+ *
+ * The apostrophe is left alone on purpose: it is safe inside `"..."` and it is what
+ * {@link fontStack} quotes a family name with, so escaping it would fill every `style` attribute
+ * with `&#39;` for no gain. Everything that could actually close the attribute or start a tag —
+ * `&`, `<`, `>`, `"` — still goes.
+ */
+export function escapeAttribute(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 /** `0x1a2b3c` → `#1a2b3c`. PDF content colour, not interface colour. */
 export function hexColour(rgb: number): string {
   // ynot-allow-color: this is a colour from inside the PDF, written into an exported document.
   return `#${(rgb & 0xffffff).toString(16).padStart(6, '0')}`;
 }
 
-/** A CSS font stack from a PDF base font name, with a generic family to fall back on. */
+/**
+ * A CSS font stack from a PDF base font name, with a generic family to fall back on.
+ *
+ * The family name is quoted with **single** quotes, not double: every one of these ends up inside
+ * a `style="..."` attribute, and a double quote there closes the attribute and turns the rest of
+ * the line into stray markup. Single quotes are equally valid CSS and survive the trip.
+ */
 export function fontStack(fontName: string): string {
   const base = fontName.replace(/^[A-Z]{6}\+/, '').replace(/[-,].*$/, '');
   const lower = base.toLowerCase();
@@ -72,7 +95,7 @@ export function fontStack(fontName: string): string {
     : /helvetica|arial|sans|verdana|tahoma|calibri|segoe/.test(lower)
       ? 'sans-serif'
       : 'serif';
-  return base === '' ? generic : `"${base}", ${generic}`;
+  return base === '' ? generic : `'${base}', ${generic}`;
 }
 
 /** The `<style>` block an exported file carries. Exported so a test can assert on it. */
@@ -106,9 +129,15 @@ function picturesHtml(page: ExportPage, budget: Budget): string {
     budget.left -= image.bytes.length;
     const box = cssBox(image.rect, page.height);
     const alt = image.alt === undefined ? '' : escapeHtml(image.alt);
-    out += `      <div class="pic" style="${box}"><img alt="${alt}" src="data:${image.mediaType};base64,${base64(image.bytes)}" /></div>\n`;
+    out += `      <div class="pic" style="${escapeAttribute(box)}"><img alt="${alt}" src="data:${image.mediaType};base64,${base64(image.bytes)}" /></div>\n`;
   }
   return out;
+}
+
+/** Any angle brought into (−180, 180], so a rotation reads as the turn a person would name. */
+function normaliseDegrees(degrees: number): number {
+  const wrapped = ((Math.round(degrees) % 360) + 360) % 360;
+  return wrapped > 180 ? wrapped - 360 : wrapped;
 }
 
 /** A page-space rectangle as `left/top/width/height` in points, y flipped to the top-left origin. */
@@ -138,10 +167,9 @@ function lineHtml(page: ExportPage, lineIndex: number, keepStyles: boolean): str
     if (style.italic) parts.push('font-style:italic');
     if (style.color !== 0) parts.push(`color:${hexColour(style.color)}`);
   }
-  if (Math.abs(line.angle) > 0.01) {
-    parts.push(`transform:rotate(${String(Math.round((-line.angle * 180) / Math.PI))}deg)`);
-  }
-  return `      <div class="line" style="${parts.join(';')}">${escapeHtml(text)}</div>\n`;
+  const degrees = normaliseDegrees((-line.angle * 180) / Math.PI);
+  if (Math.abs(degrees) > 0.5) parts.push(`transform:rotate(${String(degrees)}deg)`);
+  return `      <div class="line" style="${escapeAttribute(parts.join(';'))}">${escapeHtml(text)}</div>\n`;
 }
 
 /** A page's paragraphs as flowing `<p>` elements. */
@@ -161,11 +189,12 @@ function flowHtml(text: PageTextLike, keepStyles: boolean): string {
     const body = text.text.slice(paragraph.start, paragraph.end).replace(/\n/g, ' ').trim();
     if (body === '') continue;
     const style = styleAt(text, paragraph.start);
-    const css = keepStyles
-      ? ` style="font-family:${fontStack(style.fontName)}${style.bold ? ';font-weight:700' : ''}${
+    const declarations = keepStyles
+      ? `font-family:${fontStack(style.fontName)}${style.bold ? ';font-weight:700' : ''}${
           style.italic ? ';font-style:italic' : ''
-        }${style.color === 0 ? '' : `;color:${hexColour(style.color)}`}"`
+        }${style.color === 0 ? '' : `;color:${hexColour(style.color)}`}`
       : '';
+    const css = declarations === '' ? '' : ` style="${escapeAttribute(declarations)}"`;
     out += `      <p${css}>${escapeHtml(body)}</p>\n`;
   }
   return out;
@@ -183,7 +212,9 @@ function pageHtml(
   if ((options.layout ?? 'positioned') === 'flowing') {
     return `${heading}    <section class="page page-flow" aria-label="Page ${escapeHtml(label)}">\n${flowHtml(page.text, keepStyles)}    </section>\n`;
   }
-  const size = `width:${String(Math.round(page.width * 100) / 100)}pt;height:${String(Math.round(page.height * 100) / 100)}pt`;
+  const size = escapeAttribute(
+    `width:${String(Math.round(page.width * 100) / 100)}pt;height:${String(Math.round(page.height * 100) / 100)}pt`,
+  );
   let body = '';
   if (options.embedImages !== false) body += picturesHtml(page, budget);
   for (let i = 0; i < page.text.lines.length; i++) body += lineHtml(page, i, keepStyles);

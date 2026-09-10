@@ -158,24 +158,32 @@ function tiffFrames(path: string): Array<{ width: number; height: number }> {
   return frames;
 }
 
+/** Runs one expression against a file loaded in a real Chromium window. */
+async function inChrome(path: string, expression: string): Promise<unknown> {
+  const url = pathToFileURL(path).href;
+  return await app.electron.evaluate(
+    async ({ BrowserWindow }, { target, script }) => {
+      const win = new BrowserWindow({
+        show: false,
+        width: 1000,
+        height: 1400,
+        webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+      });
+      try {
+        await win.loadURL(target);
+        return (await win.webContents.executeJavaScript(script)) as unknown;
+      } finally {
+        win.destroy();
+      }
+    },
+    { target: url, script: expression },
+  );
+}
+
 /** Loads a file in a real Chromium window and reads back what it says. */
 async function readInChrome(path: string): Promise<string> {
-  const url = pathToFileURL(path).href;
-  return await app.electron.evaluate(async ({ BrowserWindow }, target) => {
-    const win = new BrowserWindow({
-      show: false,
-      width: 1000,
-      height: 1400,
-      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
-    });
-    try {
-      await win.loadURL(target);
-      const text: unknown = await win.webContents.executeJavaScript('document.body.innerText');
-      return typeof text === 'string' ? text : '';
-    } finally {
-      win.destroy();
-    }
-  }, url);
+  const text = await inChrome(path, 'document.body.innerText');
+  return typeof text === 'string' ? text : '';
 }
 
 test.describe('the commands are all reachable', () => {
@@ -429,6 +437,53 @@ test.describe('export text, HTML and RTF', () => {
     const plain = readFileSync(join(textDir, 'text.txt'), 'utf8');
     const words = (s: string): string[] => s.split(/\s+/u).filter((w) => w.length > 2);
     expect(words(shown)).toEqual(words(plain));
+  });
+
+  /**
+   * Chromium's *computed* view of the file, not its text. A font stack quoted with double quotes
+   * closes the `style="..."` attribute it sits in, and the words are still all there and still in
+   * order — they are just no longer in a positioned box, in the right font, at the right size.
+   * Only asking the browser what it *computed* catches that; the raw markup is checked in
+   * `test/unit/export/documents.test.ts`.
+   */
+  test('Chromium computes the positions and fonts the export wrote', async () => {
+    await open('text.pdf');
+    const dir = outDir('html-computed');
+    await app.run('convert.exportHtml', { directory: dir, layout: 'positioned' });
+    const computed = (await inChrome(
+      join(dir, 'text.html'),
+      `(() => {
+        const lines = [...document.querySelectorAll('.line')];
+        const first = lines[0];
+        const style = first ? getComputedStyle(first) : null;
+        return {
+          lines: lines.length,
+          position: style?.position ?? '',
+          left: style ? Math.round(parseFloat(style.left)) : -1,
+          top: style ? Math.round(parseFloat(style.top)) : -1,
+          fontFamily: style?.fontFamily ?? '',
+          fontSize: style?.fontSize ?? '',
+          pageWidth: Math.round(document.querySelector('.page')?.getBoundingClientRect().width ?? 0),
+        };
+      })()`,
+    )) as {
+      lines: number;
+      position: string;
+      left: number;
+      top: number;
+      fontFamily: string;
+      fontSize: string;
+      pageWidth: number;
+    };
+    expect(computed.lines).toBeGreaterThan(3);
+    expect(computed.position).toBe('absolute');
+    expect(computed.left).toBeGreaterThan(0);
+    expect(computed.top).toBeGreaterThan(0);
+    expect(computed.fontFamily).toContain('Helvetica');
+    expect(computed.fontSize).toBe('32px'); // 24 pt
+    // A4 is 595.28 pt wide; a CSS point is 4/3 of a CSS pixel.
+    expect(computed.pageWidth).toBeGreaterThan(780);
+    expect(computed.pageWidth).toBeLessThan(800);
   });
 
   test('flowing HTML joins a wrapped paragraph back into one block', async () => {
