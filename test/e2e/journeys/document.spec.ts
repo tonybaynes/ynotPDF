@@ -196,3 +196,34 @@ test('M50 — an object on the page is picked up by clicking it with the object 
 
   await expectWindowSound(app.page);
 });
+
+// ---- M92 -------------------------------------------------------------------------------------
+
+test('M92 — Export is found on the Convert tab, and its dialog offers what it should', async () => {
+  const j = journey(app);
+  await j.openDocument(stage('text.pdf', 'export.pdf'));
+
+  // Two clicks, which is what the reader makes: the Export dropdown, then the kind of export.
+  await j.clickRibbon('convert', 'Export');
+  await j.clickMenuItem('Export text…');
+
+  const dialog = app.page.locator('#export-text-dialog');
+  await expect(dialog, 'choosing "Export text…" did not open its dialog').toBeVisible({
+    timeout: 15_000,
+  });
+  await expectNothingClipped(dialog);
+  await expectReadable(dialog);
+  // The reader chooses a range and an encoding here; where the file goes is the OS's dialog,
+  // which is not ours to drive, so the journey stops at the last thing this app owns.
+  const pages = dialog.getByRole('textbox', { name: 'Pages' });
+  await expect(pages).toBeVisible();
+  await pages.fill('1');
+  const encoding = dialog.getByRole('combobox', { name: 'Encoding' }).first();
+  await expect(encoding).toBeVisible();
+  await encoding.selectOption({ index: 1 });
+  await expect(dialog, 'the dialog should say what it will write').toContainText(/page|text/i);
+  await j.clickDialogButton('#export-text-dialog', 'Cancel');
+  await expect(dialog).toBeHidden();
+
+  await expectWindowSound(app.page);
+});

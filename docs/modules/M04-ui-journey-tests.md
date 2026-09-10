@@ -420,6 +420,15 @@ The point of the module, and the reason the diff touches product code at all.
    deskew dialog's rotated preview, and the tab strip's seam. `data-allow-clip` carries the
    reason, so the next reader knows which of the two it is looking at.
 
+### The rule caught its first gap before the branch even merged
+
+M92 (Export) landed on `main` while this branch was open. Merging it in turned
+`coverage.spec.ts` red — *"these modules are merged but no journey names them: M92"* — which is
+the whole point of reading the ticks out of `PLAN.md` rather than keeping a list by hand. M92 has
+a journey now: the Export dropdown on the Convert tab, "Export text…" from its menu, and the
+dialog checked and answered. The journey stops where the app does; the folder picker after it is
+the OS's.
+
 ### Not covered, and why
 
 - **Filling a form field.** The brief's minimum journey list includes it and it cannot be written
@@ -437,7 +446,7 @@ The point of the module, and the reason the diff touches product code at all.
   `test/e2e/layout-helpers.spec.ts`, which gives each of them the fault it exists for and checks
   what it says. A check that never fires is worth nothing.
 - `test/e2e/journey.ts` — the helpers, each hit-testing before it clicks.
-- `test/e2e/journeys/` — 22 journeys over the 22 merged modules, each ending with the whole
+- `test/e2e/journeys/` — 23 journeys over the 23 merged modules, each ending with the whole
   window checked, plus `coverage.spec.ts`: a merged module must have a journey named after it, a
   journey must not drive its own action through `app.run`, and a journey must end with
   `expectWindowSound`. All three are read off the files, so none of them can quietly lapse.

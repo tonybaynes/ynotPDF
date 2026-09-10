@@ -117,6 +117,11 @@ export interface Journey {
   pageBox(index?: number): Promise<{ x: number; y: number; width: number; height: number }>;
   /** Presses a dialog's footer button by its visible label. */
   clickDialogButton(dialog: string, label: string): Promise<void>;
+  /**
+   * Chooses an item, by its visible label, from the menu a ribbon dropdown or split button has
+   * just opened. Two clicks, which is what the reader makes.
+   */
+  clickMenuItem(label: string): Promise<void>;
 }
 
 export function journey(app: App): Journey {
@@ -388,6 +393,12 @@ export function journey(app: App): Journey {
     return true;
   };
 
+  const clickMenuItem = async (label: string): Promise<void> => {
+    const item = page.locator('.menu[role="menu"] .menu-item').filter({ hasText: label }).first();
+    await expect(item, `no "${label}" in the open menu`).toBeVisible();
+    await clickHere(item);
+  };
+
   const clickDialogButton = async (dialog: string, label: string): Promise<void> => {
     // `.dlg-footer` is M02's dialog service; `.actions` is M00's hand-built About box.
     const button = page
@@ -412,6 +423,7 @@ export function journey(app: App): Journey {
     page: pageLocator,
     pageBox,
     clickDialogButton,
+    clickMenuItem,
   };
 }
 
