@@ -12,7 +12,9 @@
       "pages": 5,
       "size": [595.28, 841.89],
       "text": "Page 1 of 5",
-      "pageSizes": { "4": [841.89, 595.28, 90] },
+      "pageSizes": {
+        "4": [841.89, 595.28, 90]
+      },
       "notes": "mixed sizes, /Rotate 90 on page 5"
     },
     "text.pdf": {
@@ -21,7 +23,11 @@
       "exactText": "Heading in Helvetica 24 pt",
       "notes": "Helvetica / Times / Courier, rotated run"
     },
-    "image.pdf": { "pages": 1, "text": "Embedded 64x64 PNG", "notes": "embedded PNG drawn twice" },
+    "image.pdf": {
+      "pages": 1,
+      "text": "Embedded 64x64 PNG",
+      "notes": "embedded PNG drawn twice"
+    },
     "form.pdf": {
       "pages": 1,
       "annotations": 8,
@@ -59,12 +65,27 @@
       "pages": 1,
       "encrypted": true,
       "text": "Opens without a password",
-      "permissions": { "print": false, "copy": false, "modify": false },
+      "permissions": {
+        "print": false,
+        "copy": false,
+        "modify": false
+      },
       "notes": "empty user password; owner `owner`; restricted permissions"
     },
-    "outline.pdf": { "pages": 3, "outline": 3, "text": "Chapter 1" },
-    "layers.pdf": { "pages": 1, "layers": 2, "text": "Layer: Base" },
-    "attachments.pdf": { "pages": 1, "attachments": 2 },
+    "outline.pdf": {
+      "pages": 3,
+      "outline": 3,
+      "text": "Chapter 1"
+    },
+    "layers.pdf": {
+      "pages": 1,
+      "layers": 2,
+      "text": "Layer: Base"
+    },
+    "attachments.pdf": {
+      "pages": 1,
+      "attachments": 2
+    },
     "portfolio.pdf": {
       "pages": 1,
       "attachments": 5,
@@ -83,11 +104,23 @@
     "mixed-boxes.pdf": {
       "pages": 4,
       "size": [500, 700],
-      "pageSizes": { "1": [400, 400, 0], "2": [500, 700, 0], "3": [595.28, 841.89, 0] },
+      "pageSizes": {
+        "1": [400, 400, 0],
+        "2": [500, 700, 0],
+        "3": [595.28, 841.89, 0]
+      },
       "text": "CropBox origin (50, 100)"
     },
-    "page-labels.pdf": { "pages": 6, "labels": ["i", "ii", "A-5", "A-6", "a", "b"] },
-    "links.pdf": { "pages": 2, "annotations": 3, "links": 3, "text": "Visit example.com" },
+    "page-labels.pdf": {
+      "pages": 6,
+      "labels": ["i", "ii", "A-5", "A-6", "a", "b"]
+    },
+    "links.pdf": {
+      "pages": 2,
+      "annotations": 3,
+      "links": 3,
+      "text": "Visit example.com"
+    },
     "forms-all.pdf": {
       "pages": 1,
       "annotations": 13,
@@ -185,10 +218,24 @@
       "size": [595.28, 841.89],
       "notes": "wrong startxref: PDFium rebuilds the table"
     },
-    "truncated.pdf": { "error": "corrupt", "notes": "text.pdf cut at 70 %: not recoverable" },
-    "corrupt.pdf": { "error": "corrupt" },
-    "huge-page-count.pdf": { "pages": 1000, "size": [200, 280], "text": "1", "renderPages": 1 },
-    "scanned.pdf": { "pages": 1, "text": "", "objects": ["image"] },
+    "truncated.pdf": {
+      "error": "corrupt",
+      "notes": "text.pdf cut at 70 %: not recoverable"
+    },
+    "corrupt.pdf": {
+      "error": "corrupt"
+    },
+    "huge-page-count.pdf": {
+      "pages": 1000,
+      "size": [200, 280],
+      "text": "1",
+      "renderPages": 1
+    },
+    "scanned.pdf": {
+      "pages": 1,
+      "text": "",
+      "objects": ["image"]
+    },
     "measure.pdf": {
       "pages": 1,
       "size": [595.28, 841.89],
@@ -207,7 +254,6 @@
       "renderPages": 4,
       "notes": "M41: one grey scan drawn at +2.3, -1.1 and +7.5 degrees, then a blank page"
     },
-
     "fonts.pdf": {
       "pages": 1,
       "text": "Fonts: one standard, one missing, three embedded, one Type 3.",
@@ -227,27 +273,36 @@
       "initialView": {
         "pageMode": "outlines",
         "pageLayout": "two-column-left",
-        "openAction": { "page": 2, "fit": "fit" },
+        "openAction": {
+          "page": 2,
+          "fit": "fit"
+        },
         "hideToolbar": true,
         "displayDocTitle": true,
         "printScaling": "none",
         "direction": "r2l"
       },
-      "custom": { "Department": "Accounts", "Reference": "INV-2026-0042" },
+      "custom": {
+        "Department": "Accounts",
+        "Reference": "INV-2026-0042"
+      },
       "trapped": "False",
       "lang": "en-GB",
       "baseUrl": "https://example.invalid/docs/",
       "xmpContains": "pdfx:Department",
       "notes": "M72 initial view: /PageMode, /PageLayout, /OpenAction to page 3, /ViewerPreferences, /Lang, base URL, custom Info entries and an XMP packet that agrees. PDFium returns the page-0 runs in visual right-to-left order because the file sets /Direction /R2L, which is why the text expectation is one word"
     },
-
     "external/issue15893_reduced.pdf": {
       "pages": 1,
       "password": "test",
       "encrypted": true,
       "text": "Issue 15893"
     },
-    "external/issue3371.pdf": { "pages": 1, "password": "ELXRTQWS", "encrypted": true },
+    "external/issue3371.pdf": {
+      "pages": 1,
+      "password": "ELXRTQWS",
+      "encrypted": true
+    },
     "external/bug1782186.pdf": {
       "password": "Hello",
       "error": "wrong-password",
@@ -264,8 +319,14 @@
       "encrypted": true,
       "notes": "owner password only"
     },
-    "external/annotation-highlight.pdf": { "pages": 1, "subtypes": ["Highlight", "Popup"] },
-    "external/annotation-line.pdf": { "pages": 1, "subtypes": ["Line", "Popup"] },
+    "external/annotation-highlight.pdf": {
+      "pages": 1,
+      "subtypes": ["Highlight", "Popup"]
+    },
+    "external/annotation-line.pdf": {
+      "pages": 1,
+      "subtypes": ["Line", "Popup"]
+    },
     "external/annotation-square-circle.pdf": {
       "pages": 1,
       "subtypes": ["Circle", "Popup", "Square"]
@@ -275,30 +336,62 @@
       "attachments": 1,
       "subtypes": ["FileAttachment"]
     },
-    "external/annotation-text-widget.pdf": { "pages": 1, "fields": 7, "hasForm": true },
-    "external/annotation-choice-widget.pdf": { "pages": 1, "fields": 5, "hasForm": true },
-    "external/annotation-button-widget.pdf": { "pages": 1, "fields": 6, "hasForm": true },
+    "external/annotation-text-widget.pdf": {
+      "pages": 1,
+      "fields": 7,
+      "hasForm": true
+    },
+    "external/annotation-choice-widget.pdf": {
+      "pages": 1,
+      "fields": 5,
+      "hasForm": true
+    },
+    "external/annotation-button-widget.pdf": {
+      "pages": 1,
+      "fields": 6,
+      "hasForm": true
+    },
     "external/annotation-polyline-polygon.pdf": {
       "pages": 1,
       "subtypes": ["Polygon", "PolyLine", "Popup"]
     },
-    "external/annotation-caret-ink.pdf": { "pages": 1, "subtypes": ["Caret", "Ink", "Popup"] },
-    "external/annotation-freetext.pdf": { "pages": 1, "subtypes": ["FreeText"] },
-    "external/annotation-stamp.pdf": { "pages": 1, "subtypes": ["Popup", "Stamp"] },
+    "external/annotation-caret-ink.pdf": {
+      "pages": 1,
+      "subtypes": ["Caret", "Ink", "Popup"]
+    },
+    "external/annotation-freetext.pdf": {
+      "pages": 1,
+      "subtypes": ["FreeText"]
+    },
+    "external/annotation-stamp.pdf": {
+      "pages": 1,
+      "subtypes": ["Popup", "Stamp"]
+    },
     "external/annotation-link-text-popup.pdf": {
       "pages": 1,
       "links": 1,
       "subtypes": ["Link", "Popup", "Text"]
     },
-    "external/rotation.pdf": { "pages": 2 },
-    "external/rotated.pdf": { "pages": 1, "text": "Rotated text" },
+    "external/rotation.pdf": {
+      "pages": 2
+    },
+    "external/rotated.pdf": {
+      "pages": 1,
+      "text": "Rotated text"
+    },
     "external/xref_command_missing.pdf": {
       "pages": 1,
       "text": "Reduced test-case",
       "notes": "broken xref, reconstructed"
     },
-    "external/helloworld-bad.pdf": { "pages": 1, "text": "Hello, world!" },
-    "external/pdfjsbad1586.pdf": { "pages": 1, "text": "pdf.js test" },
+    "external/helloworld-bad.pdf": {
+      "pages": 1,
+      "text": "Hello, world!"
+    },
+    "external/pdfjsbad1586.pdf": {
+      "pages": 1,
+      "text": "pdf.js test"
+    },
     "external/boundingBox_invalid.pdf": {
       "pages": 3,
       "size": [612, 792],
@@ -309,20 +402,61 @@
       "text": "日",
       "notes": "vertical Japanese; CJK glyphs need a CJK font (none bundled)"
     },
-    "external/noembed-jis7.pdf": { "pages": 1, "text": "ABC" },
-    "external/ArabicCIDTrueType.pdf": { "pages": 1, "text": "الخطوط" },
-    "external/ccitt_EndOfBlock_false.pdf": { "pages": 1, "objects": ["image"] },
-    "external/jbig2_symbol_offset.pdf": { "pages": 1 },
-    "external/jpx_smaskindata.pdf": { "pages": 1 },
-    "external/alphatrans.pdf": { "pages": 1, "links": 1, "xmpContains": "x:xmpmeta" },
-    "external/xfa_issue14315.pdf": { "pages": 1, "hasXfa": true },
-    "external/issue14130.pdf": { "pages": 1, "hasXfa": true },
-    "external/mesh_shading_empty.pdf": { "pages": 1 },
+    "external/noembed-jis7.pdf": {
+      "pages": 1,
+      "text": "ABC"
+    },
+    "external/ArabicCIDTrueType.pdf": {
+      "pages": 1,
+      "text": "الخطوط"
+    },
+    "external/ccitt_EndOfBlock_false.pdf": {
+      "pages": 1,
+      "objects": ["image"]
+    },
+    "external/jbig2_symbol_offset.pdf": {
+      "pages": 1
+    },
+    "external/jpx_smaskindata.pdf": {
+      "pages": 1
+    },
+    "external/alphatrans.pdf": {
+      "pages": 1,
+      "links": 1,
+      "xmpContains": "x:xmpmeta"
+    },
+    "external/xfa_issue14315.pdf": {
+      "pages": 1,
+      "hasXfa": true
+    },
+    "external/issue14130.pdf": {
+      "pages": 1,
+      "hasXfa": true
+    },
+    "external/mesh_shading_empty.pdf": {
+      "pages": 1
+    },
     "external/annotation_hidden_print.pdf": {
       "pages": 1,
       "subtypes": ["Ink", "Popup"],
-      "annotationFlags": { "0": { "hidden": true, "print": true } }
+      "annotationFlags": {
+        "0": {
+          "hidden": true,
+          "print": true
+        }
+      }
     },
-    "external/multiline.pdf": { "pages": 1, "fields": 1 }
+    "external/multiline.pdf": {
+      "pages": 1,
+      "fields": 1
+    },
+    "bloated.pdf": {
+      "pages": 3,
+      "size": [595.28, 841.89],
+      "text": "Page 1 of 3",
+      "objects": ["image", "text"],
+      "renderPages": 3,
+      "notes": "M100: one 233-dpi photograph embedded three times over, a thumbnail on every page and private application data — all of it removable"
+    }
   }
 }
