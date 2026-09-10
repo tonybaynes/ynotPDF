@@ -223,6 +223,20 @@ export default defineConfig({
         'src/renderer/modules/M32-comments-panel/dialogs.ts',
         'src/renderer/modules/M32-comments-panel/manifest.ts',
         'src/renderer/modules/M32-comments-panel/summarise.ts',
+        /*
+         * M33's DOM and shell half, for the same reason again: the four tools, the properties
+         * sections, the calibration dialog, the Measurements panel and the service that wires
+         * them together all need a document and a running viewer, and are proved by Playwright in
+         * `test/e2e/measure.spec.ts`. Everything they are built out of — the geometry, the
+         * snapper, the scale record, the results, the overlay's rules, the provider's patches,
+         * the settings and the whole of `engine/appearance/measure.ts` — is pure and gated below.
+         */
+        'src/renderer/modules/M33-measuring-tools/MeasureService.ts',
+        'src/renderer/modules/M33-measuring-tools/manifest.ts',
+        'src/renderer/modules/M33-measuring-tools/panel.ts',
+        'src/renderer/modules/M33-measuring-tools/CalibrateDialog.ts',
+        'src/renderer/modules/M33-measuring-tools/ResultsPanel.ts',
+        'src/renderer/modules/M33-measuring-tools/tools.ts',
       ],
       reporter: ['text', 'lcov'],
       thresholds: {
@@ -476,6 +490,45 @@ export default defineConfig({
           statements: 85,
         },
         'src/renderer/modules/M31-shapes-ink-stamps/commands.ts': {
+          lines: 85,
+          functions: 85,
+          statements: 85,
+        },
+        // M33's pure half: the arithmetic every measurement rests on, and the rules that
+        // decide what is drawn and what the reader can grab. A wrong factor is a wrong number on
+        // every page, so `measure.ts` and the geometry are held highest.
+        'src/engine/appearance/measure.ts': { lines: 90, functions: 90, statements: 90 },
+        'src/renderer/modules/M33-measuring-tools/geometry.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M33-measuring-tools/snap.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M33-measuring-tools/scale.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M33-measuring-tools/results.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M33-measuring-tools/overlay.ts': {
+          lines: 85,
+          functions: 85,
+          statements: 85,
+        },
+        'src/renderer/modules/M33-measuring-tools/provider.ts': {
+          lines: 85,
+          functions: 85,
+          statements: 85,
+        },
+        'src/renderer/modules/M33-measuring-tools/settings.ts': {
           lines: 85,
           functions: 85,
           statements: 85,

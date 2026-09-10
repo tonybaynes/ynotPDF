@@ -199,15 +199,12 @@ export const ANNOTATION_DICT_MAPPINGS: ReadonlyArray<DictMapping> = [
   { key: 'leaderLength', pdfKey: 'LL', kind: 'number', engineWritable: false },
   { key: 'leaderExtend', pdfKey: 'LLE', kind: 'number', engineWritable: false },
   { key: 'leaderOffset', pdfKey: 'LLO', kind: 'number', engineWritable: false },
-  {
-    key: 'caption',
-    pdfKey: 'Cap',
-    kind: 'bool',
-    engineWritable: false,
-    // `false` is a value, not an absence: a caption turned off has to be said, or the file's own
-    // `/Cap true` would outlive the reader clearing it.
-    encode: (value) => (typeof value === 'boolean' ? { kind: 'bool', value } : null),
-  },
+  /*
+   * `false` is a value here, not an absence: a caption turned off has to be *said*, or the file's
+   * own `/Cap true` would outlive the reader clearing it. `dictEntries` only treats `null`, an
+   * empty string and an `empty()` value as removals, so a boolean reaches the coercion intact.
+   */
+  { key: 'caption', pdfKey: 'Cap', kind: 'bool', engineWritable: false },
   { key: 'captionPosition', pdfKey: 'CP', kind: 'name', engineWritable: true },
   { key: 'captionOffset', pdfKey: 'CO', kind: 'numbers', engineWritable: false },
 ];

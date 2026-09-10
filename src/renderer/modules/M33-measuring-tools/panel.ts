@@ -53,6 +53,16 @@ type Patch = (
   label?: string,
 ) => void;
 
+/**
+ * The provider's `panel` hook, bound to the service. Here rather than in `provider.ts` because
+ * everything it reaches needs a DOM, and this is the file that has one.
+ */
+export function measurePanel(
+  service: MeasureService,
+): (a: ModelAnnotation, refresh: () => void) => HTMLElement[] {
+  return (a, refresh) => mountMeasureSections(service, a, refresh);
+}
+
 /** The sections, in order, for one measurement. */
 export function mountMeasureSections(
   service: MeasureService,

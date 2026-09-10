@@ -39,6 +39,9 @@
  *   scanned.pdf            one full-page 150-dpi grayscale "scan" (for OCR later)
  *   --- M41 ---
  *   skewed.pdf             four pages: a "scan" drawn at +2.3°, −1.1° and +7.5°, plus a blank one
+ *   --- M33 ---
+ *   measure.pdf            A4 with exact geometry to measure and snap to: a 100 mm line, a
+ *                          50x20 mm rectangle, a right-angled triangle and two crossing lines
  *   --- M72 ---
  *   fonts.pdf              standard-14, missing TrueType, embedded, embedded subset,
  *                          Type 0 (CID TrueType) and Type 3 fonts
@@ -2457,6 +2460,91 @@ function createFixtures(): void {
   unicodeTxt();
 }
 
+// ---- M33: geometry to measure ------------------------------------------------------------------
+/**
+ * `measure.pdf` — an A4 page whose geometry is exact, so a measuring test has something to be
+ * right about.
+ *
+ * Everything is placed in millimetres and converted once, and every number is a whole number of
+ * millimetres, so an assertion can be written in the units a reader would use:
+ *
+ * - a **100 mm horizontal line** from (20, 250) to (120, 250) — the acceptance test's line;
+ * - a **50 x 20 mm rectangle** with its bottom-left at (20, 200), so its area is 1000 mm²;
+ * - a **right-angled triangle** (30, 120) → (90, 120) → (30, 165), for a perimeter of
+ *   60 + 45 + 75 = 180 mm and an area of 1350 mm²;
+ * - **two lines that cross** at exactly (150, 100), for the intersection snap.
+ *
+ * They are drawn as stroked paths rather than as annotations, because what M33 snaps to is page
+ * content. Each is its own path object so `pageObjectPaths` reports them separately.
+ */
+const MM = 72 / 25.4;
+
+async function measure(): Promise<void> {
+  const doc = await newDoc('Measuring geometry (synthetic)');
+  const page = doc.addPage(A4);
+  const at = (mm: number): number => mm * MM;
+  page.drawRectangle({ x: 0, y: 0, width: A4[0], height: A4[1], color: rgb(1, 1, 1) });
+  const stroke = rgb(0.1, 0.1, 0.1);
+  const thickness = 0.75;
+
+  // The 100 mm line.
+  page.drawLine({
+    start: { x: at(20), y: at(250) },
+    end: { x: at(120), y: at(250) },
+    thickness,
+    color: stroke,
+  });
+  // The 50 x 20 mm rectangle: 1000 mm2.
+  page.drawRectangle({
+    x: at(20),
+    y: at(200),
+    width: at(50),
+    height: at(20),
+    borderWidth: thickness,
+    borderColor: stroke,
+  });
+  // A 3-4-5 triangle at 15 mm to the unit: 60, 45, 75 mm sides, 1350 mm2.
+  const triangle: Array<[number, number]> = [
+    [30, 120],
+    [90, 120],
+    [30, 165],
+  ];
+  for (let i = 0; i < triangle.length; i++) {
+    const a = triangle[i];
+    const b = triangle[(i + 1) % triangle.length];
+    if (!a || !b) continue;
+    page.drawLine({
+      start: { x: at(a[0]), y: at(a[1]) },
+      end: { x: at(b[0]), y: at(b[1]) },
+      thickness,
+      color: stroke,
+    });
+  }
+  // Two lines crossing at exactly (150, 100) mm.
+  page.drawLine({
+    start: { x: at(120), y: at(100) },
+    end: { x: at(180), y: at(100) },
+    thickness,
+    color: stroke,
+  });
+  page.drawLine({
+    start: { x: at(150), y: at(70) },
+    end: { x: at(150), y: at(130) },
+    thickness,
+    color: stroke,
+  });
+
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  page.drawText('Measuring geometry: 100 mm line, 50x20 mm box, 3-4-5 triangle, a crossing', {
+    x: at(20),
+    y: at(275),
+    size: 9,
+    font,
+    color: rgb(0.1, 0.1, 0.1),
+  });
+  await save(doc, 'measure.pdf');
+}
+
 // ---- M72: fonts and initial view -------------------------------------------------------------
 
 /**
@@ -2898,6 +2986,7 @@ damaged(blankBytes, textBytes);
 await hugePageCount();
 await scanned();
 await skewed();
+await measure();
 await fonts();
 await initialView();
 createFixtures();

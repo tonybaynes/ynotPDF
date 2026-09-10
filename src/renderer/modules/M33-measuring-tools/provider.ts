@@ -19,7 +19,7 @@ import type { AnnotationProvider } from '@modules/M30-markup-annotations/Annotat
 import { offsetPoints, offsetRect, scalePoints } from './geometry';
 import type { MeasureService } from './MeasureService';
 import { isMeasureAnnotation, toLayerAnnotation } from './overlay';
-import { describeMeasurement, mountMeasureSections } from './panel';
+import { describeMeasurement, measurePanel } from './panel';
 import { MEASURE_TOOL_IDS } from './tools';
 
 /** The `/Rect` a measurement needs: what the shape needs, grown to hold the leaders and caption. */
@@ -78,7 +78,7 @@ export function measureProvider(service: MeasureService): AnnotationProvider {
     resizePatch: resizeMeasurement,
     handlePatch: dragMeasurementVertex,
     afterChange: (a) => service.afterChange(a),
-    panel: (a, refresh) => mountMeasureSections(service, a, refresh),
+    panel: measurePanel(service),
     describe: describeMeasurement,
   };
 }

@@ -827,6 +827,9 @@ export class NotImplementedEngine implements PdfEngine {
   pageObjects(..._args: unknown[]): Promise<ReadonlyArray<PageObject>> {
     return Promise.reject(new NotImplementedError('pageObjects'));
   }
+  pageObjectPaths(..._args: unknown[]): Promise<ReadonlyArray<PageObjectPath>> {
+    return Promise.reject(new NotImplementedError('pageObjectPaths'));
+  }
   annotations(..._args: unknown[]): Promise<ReadonlyArray<Annotation>> {
     return Promise.reject(new NotImplementedError('annotations'));
   }
