@@ -85,9 +85,17 @@ export interface ProgressHandle {
 
 const openDialogs = new Set<HTMLDialogElement>();
 
-/** All open dialog elements (tests, opacity walks). */
+/**
+ * All open dialog elements (tests, opacity walks).
+ *
+ * Only the ones still in the document. A dialog closed through the element's own `close()` is
+ * taken out of the DOM by the asynchronous `close` event, and reopening the same id before that
+ * lands drops the old element without it ever reaching {@link openDialogs}'s `delete`. It would
+ * then sit here as a ghost — and a caller that looks a dialog up by id finds the *ghost* first,
+ * closes that, and leaves the real one open (2026-09-10).
+ */
 export function openDialogElements(): HTMLDialogElement[] {
-  return Array.from(openDialogs);
+  return Array.from(openDialogs).filter((dialog) => dialog.isConnected);
 }
 
 export class Dialogs {
@@ -100,7 +108,10 @@ export class Dialogs {
         const handle = (existing as HTMLDialogElement & { __handle?: DialogHandle }).__handle;
         if (handle) return handle;
       }
-      // A closed dialog whose `close` event has not run yet must not share the id.
+      // A closed dialog whose `close` event has not run yet must not share the id — and it must
+      // leave the open set with it, rather than staying behind as a ghost that the next lookup
+      // by id would find first.
+      if (existing instanceof HTMLDialogElement) openDialogs.delete(existing);
       existing?.remove();
     }
     const modal = options.modal !== false;
