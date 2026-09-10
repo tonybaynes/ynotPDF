@@ -228,8 +228,202 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **Everything that decides what a file contains is pure, and lives in `src/engine/export/`.**
+  Bytes and pixels in, bytes out — no DOM, no engine handle, no Electron — exactly the shape
+  M41's ops and M91's converters already have (`OpContext` = a progress callback and an
+  `AbortSignal`). That is what lets one implementation serve the dialogs, M120's batch runner and
+  M121's command line, and it is what makes an encoder testable in Node against a picture the
+  test drew itself.
+- **The renderer supplies pixels; the exporter never asks for them.** `exportPagesToImages` takes
+  a `renderPage(index, dpi)` callback, so the pure code is the same whether the pixels came from
+  PDFium in the app or from an array in a test. The module's side of that callback is the engine's
+  `render()` plus M41's `renderRaster` trick for pulling RGBA out of an `ImageBitmap`.
+- **Our own PNG, TIFF and BMP writers; the platform's JPEG.** The brief suggested `pngjs` and
+  `utif`; neither survived contact:
+  - `pngjs` is a Node stream API around `Buffer` and `zlib`, which is not what a Worker has.
+    PNG is a header, a `pHYs` chunk, filtered scanlines and one deflate stream, and `pako` is
+    already a dependency (M91 installs it for utif), so `codecs/png.ts` is in-house. It is also
+    the only way to get the two things the dialog offers: a real DPI in the file, and a chosen
+    compression level.
+  - **`utif` cannot write a multi-page TIFF** — verified, not assumed: `UTIF.encode(ifds)` writes
+    the IFD chain into a fixed 20 000-byte buffer and `UTIF.encodeImage` glues one image's pixels
+    on at a hard-coded strip offset of 1000, so a second page has nowhere to put its strips. The
+    design note asked for that check; the answer is an in-house writer (`codecs/tiff.ts`), which
+    also buys 1-bit and 8-bit frames and Deflate/PackBits compression. `utif` stays where M91
+    left it, decoding.
+  - JPEG is `jpeg-js` (BSD-3, the brief's own choice) rather than a fourth in-house encoder,
+    promoted from a dev dependency to a real one. It returns a `Buffer` when it can see a CJS
+    `module`, which a bundled Worker can, so `codecs/installBuffer.ts` gives it a five-line
+    `Buffer.from` the same way M91's `installPako.ts` gives utif its inflate. The JFIF density is
+    patched afterwards, as `scripts/make-fixtures.ts` already does, so a 150 dpi JPEG says so.
+- **Colour is a pipeline over RGBA, not a codec setting.** Greyscale (Rec. 601 luma) and
+  monochrome (threshold, or Floyd–Steinberg) are one pure step in `pixels.ts` that every format
+  shares, so "150 dpi, greyscale" means the same thing in PNG, TIFF and BMP.
+- **The text model is M13's, and the engine layer does not import it.** `view/TextLayer.ts` is
+  already the reading order, the lines and the paragraphs (M13's design decision, shared on
+  purpose), and the text, HTML and RTF exporters work from exactly that. But `src/engine/`
+  importing `src/renderer/view/` would invert the layering, so `export/textModel.ts` declares the
+  *structural* shape it needs (`text`, `chars`, `lines`, `paragraphs`, `runs`) and `PageText`
+  satisfies it without either side importing the other. The module builds the models with
+  `buildPageText` and hands them over.
+- **A second RTF writer, and it is not a duplicate of M13's.** M13's writes a clipboard
+  *fragment*: a flat run of styled characters, because that is what "Copy with formatting" is.
+  A document needs paragraph structure, page breaks, a default font and a header — so
+  `export/rtf.ts` is the document writer. Both escape RTF the same way, which is 30 lines; the
+  alternative was the engine layer importing a module's file, which is worse than the repetition.
+- **Export changes nothing, so no `Command` is written.** The rule is that every *document change*
+  is undoable; an export reads a document and writes files beside it. Every user action is still a
+  registered command with a palette entry, and every one of them can be driven entirely from its
+  arguments so the e2e suite runs it with no dialog in the way (M41's convention).
+- **No new IPC.** M42 already added `file:writeInto` (write one file under a base directory,
+  sanitised, creating directories) and `dialog:pickFolder`; M21 added `file:saveAsDialog`. Per-page
+  export writes one file at a time through `file:writeInto`, which is what keeps the memory flat
+  when a 500-page document becomes 500 PNGs.
+- **One new engine method, `pageImages`, and it is optional (ADR 0019).** "Export all images with
+  the original format when DCT/JPX" cannot be done from a render: it needs the image XObject's own
+  stream. PDFium's `FPDFImageObj_GetImageDataRaw` gives it, and the raw bytes are a usable JPEG or
+  JPEG 2000 file **only** when the stream has exactly one filter — otherwise the decoded pixels
+  are the honest answer, and `FPDFImageObj_GetRenderedBitmap` provides them with the soft mask
+  already applied. So the method returns `encoding: 'jpeg' | 'jp2' | 'rgba'` and the exporter
+  decides the extension from that, never from a guess.
+- **The exporter runs in its own Worker, and the engine stays where it is.** Encoding a 300 dpi A4
+  page is 8 MP of filtering and deflating per page; on the main thread that is a frozen window and
+  a Cancel button that cannot be pressed. The pixels come from the *engine* worker, cross to the
+  renderer as an `ImageBitmap`, and are transferred on to the *export* worker as RGBA — the same
+  two-worker split M41 uses, for the same reason (PDFium is not re-entrant and must not be asked
+  to render while it is being driven by something else).
+- **HTML has two modes because they answer two questions.** *Positioned* places every line at its
+  own PDF coordinates in a `position: absolute` box inside a page-sized `<div>` — what the page
+  looked like. *Flowing* keeps the paragraph grouping and drops the geometry — what the page
+  said, and what survives being read on a phone. Foxit's "single page / paginated" is the third
+  axis (one file or one per page) and is independent of both.
+- **The generated stylesheet is token-based, but they are the export's tokens, not the app's.**
+  A file that leaves the app has no ynotPDF theme behind it, so the HTML declares its own
+  `--page-bg`, `--ink`, `--muted` on `:root` and every rule uses `var()`. The app's accessibility
+  rules govern the app's chrome; a document's colours are the document's, and are carried across
+  as the PDF stored them.
+- **Images inside exported HTML are embedded, not written beside it.** A single `.html` that opens
+  anywhere is worth more than a folder that must travel with it; the pictures are `data:` URIs of
+  the same PNG encoder the image export uses. There is a size ceiling on it, and a warning when
+  the ceiling is hit.
+- **Ranges are M40's dialect.** `parseRange` already understands `1-3, 7, odd, even, current,
+  selected`, and a second page-range grammar in the same app would be a bug waiting to be
+  reported. Progress and cancelling are M40's `withProgress`, which only shows a dialog if the
+  work turns out to be slow.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-10 on `mod/M92-export` (worktree `../ynotPDF-M92`).** Green locally on Windows and
+in CI on all three OSes: lint (eslint, prettier, the colour/opacity rules, the i18n check, `tsc`
+on both projects), 3 607 unit tests with the coverage gates, and 459 Playwright tests.
+
+**Shipped:**
+
+- **`src/engine/export/` — the whole module's decisions, pure.** `types.ts` (the conventions),
+  `pixels.ts` (flatten, grey, mono), `codecs/` (PNG, JPEG, TIFF, BMP), `naming.ts`, `images.ts`,
+  `embedded.ts`, `textModel.ts`, `text.ts`, `html.ts`, `rtf.ts`. Pixels arrive through a
+  `RenderPage` callback the caller supplies, so the same functions serve the dialogs, a unit test
+  that draws its own pages, M120's batch runner and M121's command line.
+- **Export to image**: format, resolution, colour (colour / greyscale / 1-bit), page range, one
+  file per page with a name pattern or one multi-page TIFF, JPEG quality, PNG and TIFF compression
+  level, TIFF compression method, and whether comments and form fields are drawn. Runs in its own
+  Worker with a progress dialog and a Cancel button that works.
+- **Four writers.** PNG (adaptive filtering, `pHYs`, colour types 0 at 1 and 8 bits and 2 at 8),
+  TIFF (multi-page, 1 / 8 / 24-bit, None / PackBits / Deflate, resolution in inches), BMP (24 / 8 /
+  1-bit, bottom-up, padded rows, `biXPelsPerMeter`) and JPEG (`jpeg-js` with the JFIF density
+  patched in). Every one is round-tripped through an independent decoder in the unit tests.
+- **Export all images**: the picture that is _in_ the file. A stream whose only filter is
+  `DCTDecode` or `JPXDecode` is written out byte for byte as `.jpg` / `.jp2`; anything else is
+  read at its own resolution and written as PNG. The same picture drawn on many pages is written
+  once, and it says how many it merged.
+- **Text**: M13's reading order, five page separators, UTF-8 / UTF-16LE / UTF-16BE, LF or CRLF, an
+  optional BOM, optional blank-line stripping.
+- **HTML**: positioned (every line at its PDF coordinates in a page-sized box) or flowing (M13's
+  paragraphs, reflowable), one file or one per page, pictures embedded as `data:` URIs under a
+  size ceiling, and a token-based stylesheet that lives in `resources/export/html.css` as data.
+- **RTF**: a document writer — paragraphs, page breaks, paper size, font table, colour table,
+  sizes, bold and italic, and pure ASCII by construction so any reader opens it.
+- **Five dialogs**, each opaque, keyboard-reachable and carrying a live line saying what will
+  actually be written (the pixel size of a page, the number of files). The page-range field, the
+  checkbox and the select are **M41's** `fields.ts`, so there is one page-range dialect in the app
+  rather than two.
+- **Two progress passes, not one.** The encoding runs under M40's progress dialog, and so does
+  the writing: a five-hundred-page export is five hundred IPC round trips after the work is done,
+  and it used to spend those seconds with nothing on screen. Both appear only if the job turns out
+  to be slow, both can be cancelled, and a cancelled write says how many files it got to.
+- **Docs**: ADR 0019, `docs/shortcuts.md`, a module README.
+
+**The engine change, and the bug the acceptance test found.** `pageImages` (ADR 0019) is one new
+optional `PdfEngine` method. Its first cut answered with `FPDFImageObj_GetRenderedBitmap`, which
+renders an image at the size the _page draws it_ — so `image.pdf`'s one 64×64 PNG, drawn once at
+256 pt and once at 128 pt rotated, came back as two different pictures and was exported twice. The
+adapter now reads the stream's own samples (`FPDFImageObj_GetImageDataDecoded`) at the image's own
+resolution for the three lossless layouts that need no colour conversion — 24-bit DeviceRGB, 8-bit
+and 1-bit DeviceGray — and falls back to the rendered bitmap for everything else. That is what
+"export all images" means, and it is what makes the de-duplication work at all.
+
+**Other bugs the tests found, all real:**
+
+- The JFIF density was being written two bytes early, over the version field. The write and the
+  read were wrong in the same way, so they round-tripped happily; the test that asserted a _fresh_
+  `jpeg-js` file declares no resolution is what caught it.
+- Vitest hands back an **empty string** for a `?raw` CSS import unless `css: true` is set. The
+  exported HTML would have shipped with an empty `<style>` block and no test could have told —
+  the assertion that the stylesheet declares `--page-bg` failed the moment the stylesheet moved
+  into `resources/`.
+- Every dialog called `handle.setEnabled` from inside its own `content` callback, which the dialog
+  service runs _before_ `open()` returns — a temporal-dead-zone `ReferenceError` on the first
+  paint. They use the handle the callback is given instead.
+- The first acceptance test asserted A4 for all three pages of `multipage.pdf`, which is mixed
+  sizes on purpose; page 3 is US Letter. It now asks the engine for each page's own size, which is
+  what "page size × dpi" actually means.
+- **Every `style="..."` attribute in the exported HTML was closing early.** `fontStack` quoted a
+  family name with double quotes, which ends the attribute and turns the rest of the line into
+  stray markup. The reading-order test could not see it — the words were all still there and still
+  in order, just no longer in a positioned box — and neither could looking at the file, until the
+  markup was read line by line. Font names are single-quoted now, every attribute value goes
+  through an attribute-specific escape, and two tests were added that would have caught it: one
+  reads the raw markup for a quote inside an attribute value, and one asks a real Chromium what it
+  *computed* for the first line (`position`, `left`, `top`, `font-family`, `font-size`).
+- A rotated line was written as `rotate(-330deg)`. It renders identically to `rotate(30deg)`, but
+  it is not what anyone means; the angle is normalised into (−180°, 180°] now.
+
+**The manual checks the brief asks for, recorded.**
+
+- _"HTML opens in Chrome with the same reading order"_ — done objectively rather than by eye:
+  `test/e2e/export.spec.ts` loads the exported file into a real Chromium `BrowserWindow` in the
+  running app and compares `document.body.innerText`, word for word, with the plain-text export of
+  the same pages. They are identical.
+- _"RTF opens in WordPad"_ — the file is loaded into a `System.Windows.Forms.RichTextBox`, the
+  RichEdit control WordPad is built on, from PowerShell on Windows 11; it parses, and its text
+  carries the document's words. The test runs on the Windows CI runner and skips elsewhere.
+
+**Shared files touched (minimal, additive, per ADR 0019):** `src/engine/PdfEngine.ts` (one optional
+method, its types, its `ENGINE_METHODS` entry and a `NotImplementedEngine` stub),
+`src/engine/pdfium/PdfiumEngine.ts` and `constants.ts` (the adapter for it), `src/renderer/main.ts`
+and `src/renderer/index.html` (register the module, link its stylesheet), `vitest.config.ts`
+(coverage include, excludes, gates and `css: true`), `package.json` (`jpeg-js` from a dev
+dependency to a real one), `docs/shortcuts.md` and `PLAN.md` §0. **No IPC channel was added and no
+`Command` is written** — an export reads a document and writes files beside it.
+
+**Deferred, and why:**
+
+- **Office formats** — M93's, explicitly out of scope.
+- **CCITT Group 4 for bilevel TIFF.** It would beat Deflate on a page of text by about a factor of
+  two and it is a whole encoder of its own. Deflate and PackBits are there, and both are read
+  everywhere.
+- **Greyscale and bilevel JPEG.** `jpeg-js` encodes 4:2:0 colour only, so a greyscale JPEG is grey
+  pixels in three channels. The dialog says so in words rather than pretending otherwise; PNG and
+  TIFF keep grey at one channel and mono at one bit.
+- **Indexed, CMYK and ICCBased images come out of "export all images" as a render** rather than as
+  their stored samples, because reading those needs the colour space as well as the stream. They
+  are still the right picture in the common case. Named here so the next person knows where the
+  line is.
+- **`/SMask` is not applied** to a stored picture. The transparency a page applies when it draws a
+  picture belongs to the drawing, not to the picture — and applying it would make the same logo on
+  two hundred pages two hundred different files again.
+- **A File ▸ Export backstage page.** `BackstageSlot` is a fixed list in M02's contract (ADR 0004);
+  adding one would be a contract change for a second route to five commands that are already on
+  the Convert tab, in the palette and on a shortcut.
+- **Exporting a _selection_ rather than pages.** M13 owns the text selection and already copies it
+  as text and RTF; "export the selection to a file" would be a third path to the same bytes.

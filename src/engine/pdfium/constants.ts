@@ -41,6 +41,12 @@ export const BITMAP = { GRAY: 1, BGR: 2, BGRX: 3, BGRA: 4 } as const;
 /** `FPDF_SaveAsCopy` flags. */
 export const SAVE = { INCREMENTAL: 1, NO_INCREMENTAL: 2, REMOVE_SECURITY: 3 } as const;
 
+/**
+ * `FPDF_COLORSPACE_*`, as `FPDF_IMAGEOBJ_METADATA.colorspace` reports it (M92, ADR 0019). Only
+ * the two the export reads samples from directly are named; the rest fall back to a render.
+ */
+export const COLORSPACE = { DEVICEGRAY: 1, DEVICERGB: 2, DEVICECMYK: 3, INDEXED: 10 } as const;
+
 /** `FPDFPageObj_GetType`. */
 export const PAGEOBJ = { UNKNOWN: 0, TEXT: 1, PATH: 2, IMAGE: 3, SHADING: 4, FORM: 5 } as const;
 
