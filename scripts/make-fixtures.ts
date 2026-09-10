@@ -39,6 +39,9 @@
  *   scanned.pdf            one full-page 150-dpi grayscale "scan" (for OCR later)
  *   --- M41 ---
  *   skewed.pdf             four pages: a "scan" drawn at +2.3°, −1.1° and +7.5°, plus a blank one
+ *   --- M100 ---
+ *   bloated.pdf            3 pages; one 233-dpi photograph embedded three times over, page
+ *                          thumbnails and private application data — all of it removable
  *   --- M33 ---
  *   measure.pdf            A4 with exact geometry to measure and snap to: a 100 mm line, a
  *                          50x20 mm rectangle, a right-angled triangle and two crossing lines
@@ -2960,6 +2963,81 @@ async function initialView(): Promise<void> {
   await save(doc, 'initial-view.pdf');
 }
 
+// ---- M100: a deliberately wasteful document ---------------------------------------------------
+/**
+ * `bloated.pdf` — everything an optimiser is for, in one file.
+ *
+ * Three A4 pages of Helvetica text, and on each of them the **same** photograph embedded as its
+ * own separate image object at a resolution far above the size it is drawn: 240 px across a
+ * 74 pt square, which is 233 dpi. Each page also carries a `/Thumb` no reader needs, and the
+ * catalogue carries a block of private application data. Nothing here is contrived — it is what a
+ * document looks like after it has been through a word processor and a scanner and a merge.
+ *
+ * What M100's Standard preset should make of it: three copies of one picture become one, that one
+ * is downsampled to 150 dpi and re-encoded as JPEG, the thumbnails and the private data go, and
+ * the whole file is repacked. The page count, the page sizes and the text are untouched, which is
+ * what the acceptance test checks alongside the size.
+ */
+async function bloated(): Promise<void> {
+  const doc = await newDoc('A wasteful document');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const para =
+    'This document was made to be badly made. The picture below is stored at far more detail ' +
+    'than it is shown at, it is stored three times over, and every page carries a thumbnail no ' +
+    'reader has needed since 1996.';
+
+  // Photograph-like: two smooth colour ramps, a soft highlight, and a little grain — the sort of
+  // content that flate handles poorly and JPEG handles very well indeed.
+  const png = makePng(240, 240, (x, y) => {
+    const dx = x - 145;
+    const dy = y - 90;
+    const glow = Math.max(0, 120 - Math.hypot(dx, dy)) * 0.9;
+    const grain = ((x * 31 + y * 17) % 11) - 5;
+    return [
+      clamp(60 + x * 0.6 + glow + grain),
+      clamp(90 + y * 0.45 + glow * 0.6 + grain),
+      clamp(150 - x * 0.25 + y * 0.2 + grain),
+    ];
+  });
+  // A thumbnail: 8-bit grey, small, and pure waste in a file a reader will scroll anyway.
+  const thumbPng = makePng(60, 85, (x, y) => ((x + y) % 32 < 16 ? 200 : 120), true);
+
+  for (let i = 0; i < 3; i++) {
+    const page = doc.addPage(A4);
+    page.drawText(`Page ${String(i + 1)} of 3`, { x: 72, y: A4[1] - 90, size: 20, font });
+    page.drawText(para, {
+      x: 72,
+      y: A4[1] - 130,
+      size: 11,
+      font,
+      maxWidth: A4[0] - 144,
+      lineHeight: 15,
+    });
+    // Embedded once per page on purpose: three identical XObjects, which is what "remove
+    // duplicates" is for.
+    const image = await doc.embedPng(png);
+    page.drawImage(image, { x: 72, y: 200, width: 74, height: 74 });
+    const thumb = await doc.embedPng(thumbPng);
+    page.node.set(PDFName.of('Thumb'), thumb.ref);
+  }
+
+  doc.catalog.set(
+    PDFName.of('PieceInfo'),
+    doc.context.obj({
+      MakeFixtures: {
+        LastModified: PDFString.fromDate(FIXED_DATE),
+        Private: { note: PDFString.of('private application data nothing else can read') },
+      },
+    }),
+  );
+
+  await save(doc, 'bloated.pdf');
+}
+
+function clamp(n: number): number {
+  return Math.max(0, Math.min(255, Math.round(n)));
+}
+
 const blankBytes = await blank();
 await multipage();
 const textBytes = await text();
@@ -2986,6 +3064,7 @@ damaged(blankBytes, textBytes);
 await hugePageCount();
 await scanned();
 await skewed();
+await bloated();
 await measure();
 await fonts();
 await initialView();
