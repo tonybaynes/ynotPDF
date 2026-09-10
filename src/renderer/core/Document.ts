@@ -749,6 +749,43 @@ export class Document {
     this.store.set((s) => ({ annotations: without(s.annotations, pageId) }));
   }
 
+  /**
+   * Adds a field at the end of the list (M60, ADR 0019). The parent named by `field.parentId`
+   * gains it as a child, which is what makes a dotted name a tree.
+   */
+  addFieldRecord(field: ModelField): void {
+    this.insertFieldRecord(field, this.state.fields.length);
+  }
+
+  /**
+   * Puts a field at `index`, parent link included. `putFieldRecord`'s twin for a field that was
+   * never in the document, so an undo of "add" and an undo of "delete" are the same code.
+   */
+  insertFieldRecord(field: ModelField, index: number): void {
+    this.store.set((s) => {
+      const fields = s.fields.map((f) =>
+        f.id === field.parentId && !f.childIds.includes(field.id)
+          ? { ...f, childIds: [...f.childIds, field.id] }
+          : f,
+      );
+      fields.splice(Math.max(0, Math.min(index, fields.length)), 0, field);
+      return { fields };
+    });
+    this.events.emit({ type: 'field:changed', fieldId: field.id, name: field.name });
+  }
+
+  /**
+   * Replaces a field wholesale (M60, ADR 0019).
+   *
+   * A designer edit changes several entries at once — a name and its widgets, a role and its
+   * flags — and a patch per entry would make an undo of one of them put back a field that never
+   * existed. The command holds the whole before and after instead.
+   */
+  updateFieldRecord(field: ModelField): void {
+    this.store.set((s) => ({ fields: s.fields.map((f) => (f.id === field.id ? field : f)) }));
+    this.events.emit({ type: 'field:changed', fieldId: field.id, name: field.name });
+  }
+
   /** Sets a field's value in the model. */
   setFieldValueRecord(fieldId: ModelId, value: string): void {
     let name = '';
@@ -1203,9 +1240,17 @@ function buildFieldTree(
     const node = ensure(f.name, false);
     const widgets: ModelWidget[] = f.widgets.flatMap((w) => {
       const pageId = pageIdAt(w.page);
-      return pageId === null
-        ? []
-        : [{ id: ids.next('widget'), pageId, rect: w.rect, annotationId: null }];
+      if (pageId === null) return [];
+      return [
+        {
+          id: ids.next('widget'),
+          pageId,
+          rect: w.rect,
+          annotationId: null,
+          // The designer's half of a widget, when the adapter could read it (M60, ADR 0019).
+          ...(w.appearance ? { appearance: w.appearance } : {}),
+        },
+      ];
     });
     byName.set(f.name, {
       ...(byName.get(f.name) ?? node),
@@ -1218,6 +1263,7 @@ function buildFieldTree(
       tooltip: f.tooltip ?? null,
       widgets,
       synthetic: false,
+      ...(f.design ? { design: f.design } : {}),
     });
   }
   return order.flatMap((n) => {

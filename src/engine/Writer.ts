@@ -243,10 +243,16 @@ export interface PlannedFieldAction {
   readonly value: string;
 }
 
-/** One widget annotation of a planned field. Its position in the list is its tab position. */
+/** One widget annotation of a planned field. */
 export interface PlannedFormWidget {
   /** Index into {@link WritePlan.pages}. */
   readonly page: number;
+  /**
+   * Where this widget sits in its page's tab order. The writer appends each page's widgets to
+   * `/Annots` in this order, which is what a manual tab order *is* — `/Tabs` names a rule for the
+   * other three modes, and a viewer that ignores `/Tabs` still tabs correctly.
+   */
+  readonly tabIndex: number;
   readonly rect: PdfRect;
   /** `/F`, the annotation flag bit field. */
   readonly flags: number;

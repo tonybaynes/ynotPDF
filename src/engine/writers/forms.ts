@@ -119,7 +119,7 @@ export function writeForm(
     return entry;
   };
 
-  const perPage = new Map<number, PDFRef[]>();
+  const perPage = new Map<number, Array<{ ref: PDFRef; tabIndex: number }>>();
   let wrote = 0;
 
   for (const field of form.fields) {
@@ -149,7 +149,7 @@ export function writeForm(
     const widgetRefs = writeWidgets(ctx, field, dict, ref, pageRefAt, context);
     for (const widget of widgetRefs) {
       const list = perPage.get(widget.page) ?? [];
-      list.push(widget.ref);
+      list.push({ ref: widget.ref, tabIndex: widget.tabIndex });
       perPage.set(widget.page, list);
     }
     wrote++;
@@ -176,7 +176,7 @@ export function writeForm(
     const page = pages[index];
     if (!page) return;
     const annots = page.node.Annots() ?? ctx.obj([]);
-    for (const ref of refs) annots.push(ref);
+    for (const entry of [...refs].sort((a, b) => a.tabIndex - b.tabIndex)) annots.push(entry.ref);
     page.node.set(PDFName.of('Annots'), annots);
   });
 
@@ -362,6 +362,7 @@ function pdfName(value: string): string {
 
 interface WrittenWidget {
   readonly page: number;
+  readonly tabIndex: number;
   readonly ref: PDFRef;
 }
 
@@ -450,7 +451,7 @@ function writeWidgets(
     }
 
     if (!merged) kids.push(ref);
-    out.push({ page: widget.page, ref });
+    out.push({ page: widget.page, tabIndex: widget.tabIndex, ref });
   }
   if (!merged) fieldDict.set(PDFName.of('Kids'), ctx.obj([...kids]));
   return out;

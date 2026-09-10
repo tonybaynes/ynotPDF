@@ -571,12 +571,25 @@ export class ViewerService {
     for (const viewer of this.viewers.values()) viewer.setFlags(this.flags());
   }
 
+  /**
+   * Whether the raster draws form-field widgets. A view flag only, set by M60 while its widget
+   * layer is mounted (ADR 0019): the layer draws every field itself as a real control, and PDFium
+   * drawing them too would put two renderers on one page. Print and export are unaffected.
+   */
+  private formsVisible = true;
+
+  setFormsVisible(visible: boolean): void {
+    if (this.formsVisible === visible) return;
+    this.formsVisible = visible;
+    for (const viewer of this.viewers.values()) viewer.setFlags(this.flags());
+  }
+
   /** The render flags built from the settings plus M01's live Night Mode state. */
   flags(): RenderFlags {
     const s = this.settingsValue;
     return {
       annotations: this.annotationsVisible,
-      forms: true,
+      forms: this.formsVisible,
       grayscale: s.grayscale,
       smoothText: s.smoothText,
       smoothImages: s.smoothImages,

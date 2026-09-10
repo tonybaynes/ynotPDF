@@ -14,6 +14,13 @@
  * Geometry is PDF points, origin bottom-left of the unrotated page, as everywhere else.
  */
 
+import {
+  defaultFieldDesign,
+  defaultWidgetAppearance,
+  roleOfType,
+  type FieldDesign,
+  type WidgetAppearance,
+} from '@engine/forms/model';
 import type {
   Annotation,
   AnnotationFlags,
@@ -30,6 +37,8 @@ import type {
 } from '@engine/PdfEngine';
 import type { PageBoxName, PageIndex, PageSize, PdfPoint, PdfRect, Rotation } from '@shared/pdf';
 import type { ModelId } from './Ids';
+
+export type { FieldDesign, WidgetAppearance } from '@engine/forms/model';
 
 // ---- pages -------------------------------------------------------------------------------------
 
@@ -410,6 +419,12 @@ export interface ModelWidget {
   readonly rect: PdfRect;
   /** The Widget annotation this widget is drawn by, when the page has been loaded. */
   readonly annotationId: ModelId | null;
+  /**
+   * `/MK`, `/BS`, `/AS`, `/H` and `/F` — everything the designer edits about this one appearance
+   * (M60, ADR 0019). Optional, so nothing that built a widget before M60 has to change;
+   * `widgetAppearanceOf` fills the default where a backend gave none.
+   */
+  readonly appearance?: WidgetAppearance;
 }
 
 /**
@@ -435,6 +450,25 @@ export interface ModelField {
   readonly widgets: ReadonlyArray<ModelWidget>;
   /** True for a node the tree invented to hold children (no dictionary of its own). */
   readonly synthetic: boolean;
+  /**
+   * The whole field dictionary a designer edits (M60, ADR 0019): `/Ff`, `/DA`, `/Q`, `/MaxLen`,
+   * `/Opt` with export values, `/TI`, `/AA` and the field's role. Optional for the same reason
+   * `ModelWidget.appearance` is; `fieldDesignOf` fills a default from the field's type.
+   */
+  readonly design?: FieldDesign;
+}
+
+/** The design a field has, or the default for its type when the backend reported none (M60). */
+export function fieldDesignOf(field: ModelField): FieldDesign {
+  return field.design ?? defaultFieldDesign(roleOfType(field.type));
+}
+
+/** The appearance a widget has, or the role's default when the backend reported none (M60). */
+export function widgetAppearanceOf(
+  widget: ModelWidget,
+  design: FieldDesign,
+): WidgetAppearance {
+  return widget.appearance ?? defaultWidgetAppearance(design.role);
 }
 
 // ---- outline, destinations, layers, attachments ------------------------------------------------
@@ -616,6 +650,12 @@ export type WriteIntent =
   | 'attachments'
   | 'annotations'
   | 'fields'
+  /**
+   * A form's *structure* changed — a field was added, deleted, renamed, moved or restyled (M60,
+   * ADR 0019). `'fields'` still means only a value changed; this one turns on `WritePlan.form`,
+   * and the writer rebuilds `/AcroForm` and every widget annotation from the model.
+   */
+  | 'form'
   /**
    * The initial view or a document-level property was edited (M72, ADR 0017): `/PageMode`,
    * `/PageLayout`, `/OpenAction`, `/ViewerPreferences`, `/Lang` or the base URL. PDFium has a
