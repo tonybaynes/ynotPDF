@@ -1,7 +1,7 @@
 # electron-builder configuration - M00 baseline. M131 adds signing, notarisation and auto-update.
 appId: com.ynotpdf.app
 productName: ynotPDF
-copyright: Copyright 2026 Tony Baynes
+copyright: © 2026 Ynot Apps
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 directories:
   output: release
