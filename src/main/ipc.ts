@@ -20,7 +20,6 @@ import type { FileKind, IpcHandlers, IpcInvokeChannel, SaveDialogOptions } from 
 import type { PrintJobs } from './print';
 import type { FolderSearches } from './search';
 import { hostArch, targetArch } from './arch';
-import { appVersion } from './version';
 import { readFileForRenderer, readFolder, writeBytes, writeInto, writeTempFile } from './files';
 import { systemFontFamilies } from './fonts';
 import { probeFile, writeAtomic } from './fs/atomic';
@@ -33,6 +32,7 @@ import { loadCertificates } from '../engine/security/pubsec/certificates';
 import { toBase64 } from '../engine/security/pubsec/crypto';
 import type { SecurityIntent } from '../engine/security/types';
 import { security } from './security';
+import { optimiseTasks } from './optimise';
 import { readClipboard } from './webpdf/clipboard';
 import { decodeWithNativeImage } from './webpdf/decodeImage';
 import type { WebPdfPrinter } from './webpdf/WebPdfPrinter';
@@ -40,6 +40,8 @@ import { allWindows, broadcast, getMainWindow } from './window';
 
 export interface IpcDeps {
   onOpenPath(path: string): Promise<void>;
+  /** The renderer has finished booting and is listening (M04). */
+  onRendererReady(win: BrowserWindow | null): void;
   rebuildMenu(): void;
   /** Opens another app window, optionally loading `path` into it once ready (M02). */
   openWindow(path: string | undefined, from: BrowserWindow | null): void;
@@ -218,6 +220,22 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
         certificateBase64: toBase64(cert.der),
       })),
     'security:version': () => security().version(),
+
+    // ---- optimise and repair (M100, ADR 0019) --------------------------------------------------
+    'optimise:structure': async (_e, bytes, options) => {
+      const result = await optimiseTasks().structure(bytes, options);
+      return { bytes: result.bytes, warnings: [...result.warnings] };
+    },
+    'optimise:linearise': async (_e, bytes) => {
+      const result = await optimiseTasks().linearise(bytes);
+      return { bytes: result.bytes, warnings: [...result.warnings] };
+    },
+    'optimise:check': (_e, bytes) => optimiseTasks().check(bytes),
+    'optimise:repair': async (_e, bytes) => {
+      const result = await optimiseTasks().repair(bytes);
+      return { bytes: result.bytes, repaired: result.repaired, warnings: [...result.warnings] };
+    },
+
     'file:watch': (e, path, watching) => {
       const win = windowOf(e);
       if (!win) return;
@@ -272,9 +290,12 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     'theme:setNative': (_e, scheme) => {
       nativeTheme.themeSource = scheme;
     },
+    'app:ready': (e) => {
+      deps.onRendererReady(windowOf(e));
+    },
     'app:info': () => ({
       name: app.getName(),
-      version: appVersion(),
+      version: app.getVersion(),
       electron: process.versions.electron ?? '',
       chrome: process.versions.chrome ?? '',
       node: process.versions.node,

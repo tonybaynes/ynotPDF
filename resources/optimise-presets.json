@@ -1,0 +1,142 @@
+{
+  "$comment": "Optimise presets (M100). Data, not code: PLAN.md §4.4 — anything that can vary lives here. `lossless: true` promises that no image sample and no font program is touched, which the acceptance test checks by rendering before and after and requiring an identical hash. Image `targetDpi: 0` disables downsampling for that class; `thresholdDpi` is the resolution below which an image is left alone even when it is above the target. Codecs: keep | jpeg | flate | ccitt (JPEG 2000 and JBIG2 are out of scope, per the M100 brief).",
+  "version": 1,
+  "presets": [
+    {
+      "id": "lossless",
+      "name": "Lossless",
+      "description": "Repacks the file without touching a single pixel or letter. Always safe.",
+      "lossless": true,
+      "options": {
+        "images": {
+          "colour": { "targetDpi": 0, "thresholdDpi": 0, "codec": "keep", "quality": 100 },
+          "grey": { "targetDpi": 0, "thresholdDpi": 0, "codec": "keep", "quality": 100 },
+          "mono": { "targetDpi": 0, "thresholdDpi": 0, "codec": "keep", "quality": 100 },
+          "neverGrow": true
+        },
+        "fonts": { "subset": false, "unembedStandard": false },
+        "discard": {
+          "thumbnails": false,
+          "alternateImages": false,
+          "metadata": false,
+          "bookmarks": false,
+          "links": false,
+          "comments": false,
+          "forms": false,
+          "embeddedFiles": false,
+          "javascript": false,
+          "privateData": false
+        },
+        "structure": {
+          "objectStreams": true,
+          "recompressStreams": true,
+          "removeUnused": true,
+          "linearise": false
+        },
+        "dedupe": { "images": true, "fonts": true, "xobjects": true }
+      }
+    },
+    {
+      "id": "standard",
+      "name": "Standard",
+      "description": "Good for reading and printing at home or in the office. Photographs go to 150 dpi.",
+      "lossless": false,
+      "options": {
+        "images": {
+          "colour": { "targetDpi": 150, "thresholdDpi": 190, "codec": "jpeg", "quality": 80 },
+          "grey": { "targetDpi": 150, "thresholdDpi": 190, "codec": "jpeg", "quality": 80 },
+          "mono": { "targetDpi": 300, "thresholdDpi": 380, "codec": "ccitt", "quality": 100 },
+          "neverGrow": true
+        },
+        "fonts": { "subset": true, "unembedStandard": false },
+        "discard": {
+          "thumbnails": true,
+          "alternateImages": true,
+          "metadata": false,
+          "bookmarks": false,
+          "links": false,
+          "comments": false,
+          "forms": false,
+          "embeddedFiles": false,
+          "javascript": false,
+          "privateData": true
+        },
+        "structure": {
+          "objectStreams": true,
+          "recompressStreams": true,
+          "removeUnused": true,
+          "linearise": false
+        },
+        "dedupe": { "images": true, "fonts": true, "xobjects": true }
+      }
+    },
+    {
+      "id": "small",
+      "name": "Small — for email",
+      "description": "Readable on screen and printable at a pinch. Photographs go to 110 dpi.",
+      "lossless": false,
+      "options": {
+        "images": {
+          "colour": { "targetDpi": 110, "thresholdDpi": 130, "codec": "jpeg", "quality": 65 },
+          "grey": { "targetDpi": 110, "thresholdDpi": 130, "codec": "jpeg", "quality": 65 },
+          "mono": { "targetDpi": 200, "thresholdDpi": 250, "codec": "ccitt", "quality": 100 },
+          "neverGrow": true
+        },
+        "fonts": { "subset": true, "unembedStandard": true },
+        "discard": {
+          "thumbnails": true,
+          "alternateImages": true,
+          "metadata": false,
+          "bookmarks": false,
+          "links": false,
+          "comments": false,
+          "forms": false,
+          "embeddedFiles": false,
+          "javascript": true,
+          "privateData": true
+        },
+        "structure": {
+          "objectStreams": true,
+          "recompressStreams": true,
+          "removeUnused": true,
+          "linearise": true
+        },
+        "dedupe": { "images": true, "fonts": true, "xobjects": true }
+      }
+    },
+    {
+      "id": "smallest",
+      "name": "Smallest — screen only",
+      "description": "As small as this can go. Pictures will look soft, and attachments are dropped.",
+      "lossless": false,
+      "options": {
+        "images": {
+          "colour": { "targetDpi": 72, "thresholdDpi": 85, "codec": "jpeg", "quality": 45 },
+          "grey": { "targetDpi": 72, "thresholdDpi": 85, "codec": "jpeg", "quality": 45 },
+          "mono": { "targetDpi": 150, "thresholdDpi": 180, "codec": "ccitt", "quality": 100 },
+          "neverGrow": true
+        },
+        "fonts": { "subset": true, "unembedStandard": true },
+        "discard": {
+          "thumbnails": true,
+          "alternateImages": true,
+          "metadata": false,
+          "bookmarks": false,
+          "links": false,
+          "comments": false,
+          "forms": false,
+          "embeddedFiles": true,
+          "javascript": true,
+          "privateData": true
+        },
+        "structure": {
+          "objectStreams": true,
+          "recompressStreams": true,
+          "removeUnused": true,
+          "linearise": true
+        },
+        "dedupe": { "images": true, "fonts": true, "xobjects": true }
+      }
+    }
+  ]
+}

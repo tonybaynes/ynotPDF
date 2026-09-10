@@ -28,7 +28,7 @@ commit. Sub-conversations working in parallel follow **§12**.
 | 3 | M13 Text selection, find, copy, snapshot & print | [M13-select-find-print.md](docs/modules/M13-select-find-print.md) | ☑ |
 | 3 | M30 Annotations — text markup, notes, typewriter, text box, callout | [M30-markup-annotations.md](docs/modules/M30-markup-annotations.md) | ☑ |
 | 3 | M40 Organise pages — insert, delete, extract, replace, rotate, move, labels | [M40-organise-pages.md](docs/modules/M40-organise-pages.md) | ☑ |
-| 4 | M04 UI-journey and layout test harness | [M04-ui-journey-tests.md](docs/modules/M04-ui-journey-tests.md) | ☐ |
+| 4 | M04 UI-journey and layout test harness | [M04-ui-journey-tests.md](docs/modules/M04-ui-journey-tests.md) | ☑ |
 | 4 | M42 PDF Portfolios — create, edit, cover sheet, extract | [M42-portfolios.md](docs/modules/M42-portfolios.md) | ☑ |
 | 4 | M31 Annotations — shapes, ink & eraser, stamps, file attachments | [M31-shapes-ink-stamps.md](docs/modules/M31-shapes-ink-stamps.md) | ☑ |
 | 4 | M32 Comments panel, replies & status, FDF/XFDF, summarise | [M32-comments-panel.md](docs/modules/M32-comments-panel.md) | ☑ |
@@ -39,8 +39,8 @@ commit. Sub-conversations working in parallel follow **§12**.
 | 5 | M33 Measuring tools — distance, perimeter, area, calibration | [M33-measuring-tools.md](docs/modules/M33-measuring-tools.md) | ☑ |
 | 5 | M50 Page-object model — select, move, resize, align, arrange | [M50-object-model.md](docs/modules/M50-object-model.md) | ☑ |
 | 5 | M60 Form fill & AcroForm field designer | [M60-forms.md](docs/modules/M60-forms.md) | ☑ |
-| 5 | M92 Export to images, text, HTML & RTF | [M92-export.md](docs/modules/M92-export.md) | ☐ |
-| 5 | M100 Optimise (reduce size), linearise, repair, remove duplicates | [M100-optimise-repair.md](docs/modules/M100-optimise-repair.md) | ☐ |
+| 5 | M92 Export to images, text, HTML & RTF | [M92-export.md](docs/modules/M92-export.md) | ☑ |
+| 5 | M100 Optimise (reduce size), linearise, repair, remove duplicates | [M100-optimise-repair.md](docs/modules/M100-optimise-repair.md) | ☑ |
 | 6 | M53 Header/footer, Bates numbering, watermark, background & links | [M53-headers-bates-watermarks-links.md](docs/modules/M53-headers-bates-watermarks-links.md) | ☐ |
 | 6 | M61 Field logic — validation, formatting, calculation, actions; data import/export; flatten | [M61-form-logic-data.md](docs/modules/M61-form-logic-data.md) | ☐ |
 | 6 | M82 Handwritten signatures & initials | [M82-handwritten-signatures.md](docs/modules/M82-handwritten-signatures.md) | ☐ |

@@ -19,6 +19,26 @@ import { broadcast, createMainWindow, getMainWindow, sendTo } from './window';
 import { cleanTempFiles, readFileForRenderer } from './files';
 
 const E2E = process.env['YNOT_E2E'] === '1';
+/** An e2e window is parked off-screen and transparent unless the operator asked to watch it. */
+const E2E_HIDDEN = E2E && process.env['YNOT_E2E_VISIBLE'] !== '1';
+
+/*
+ * A test window is off-screen (on Windows and macOS — see `window.ts`) and never focused, and
+ * Chromium's instinct with a window like that is to background its renderer: timers coalesced,
+ * animation frames throttled. Playwright drives a *running* application, so a test run keeps
+ * them.
+ *
+ * These are the two switches Playwright and Puppeteer pass to every Chromium they launch, for
+ * this exact reason; Electron does not get them for free, because we launch an application rather
+ * than a browser. They are not what fixed the Linux frame rate — that was the window's position,
+ * and `window.ts` tells that story — but they are the right thing to say either way.
+ *
+ * `test/e2e/app.spec.ts` has the guard that fails loudly if any of this ever comes undone.
+ */
+if (E2E_HIDDEN) {
+  app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+  app.commandLine.appendSwitch('disable-renderer-backgrounding');
+}
 
 // Files handed to us before the window is ready (argv on Windows/Linux, open-file on macOS).
 const pendingOpens: string[] = [];
@@ -162,12 +182,10 @@ app.on('activate', () => {
 });
 
 async function boot(): Promise<void> {
-  const win = createMainWindow(windowOptions());
+  createMainWindow(windowOptions());
   buildMenu(recent);
-  win.webContents.on('did-finish-load', () => {
-    rendererReady = true;
-    for (const p of pendingOpens.splice(0)) void openPathInRenderer(p);
-  });
+  // Anything main is holding for the renderer is flushed when the renderer says it is ready
+  // (`app:ready`), not when the document finishes loading. See `onRendererReady`.
   await Promise.resolve();
 }
 
@@ -181,6 +199,17 @@ if (gotLock) {
     recovery = new RecoveryStore(app.getPath('userData'));
     registerIpcHandlers(recent, settings, {
       onOpenPath: openPathInRenderer,
+      onRendererReady: () => {
+        // A PDF from the command line or a file association waits here.
+        //
+        // This used to hang off `did-finish-load`, which fires when the *document* has loaded —
+        // while the renderer's entry module still has a theme to read, a shell to mount and its
+        // IPC listeners to install, all behind `await`s. The push landed before anything was
+        // listening and the app opened empty: intermittently, which is why it survived (M04,
+        // 2026-09-10). The renderer now says so itself, once, at the end of its boot.
+        rendererReady = true;
+        for (const p of pendingOpens.splice(0)) void openPathInRenderer(p);
+      },
       rebuildMenu: () => {
         buildMenu(recent);
       },

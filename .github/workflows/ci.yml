@@ -73,6 +73,14 @@ jobs:
       - name: Lint (eslint, prettier, colour/opacity rules, tsc)
         run: npm run lint
 
+      # M04, advisory: warn when a new e2e spec drives the app only through its command API.
+      # A warning, never a failure — a spec that legitimately has no journey in it (an engine
+      # test, an arithmetic test) must not be blocked, and a rule that blocks gets deleted.
+      - name: Journey helpers (advisory)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: node scripts/check-journeys.ts
+
       - name: Unit tests (vitest, coverage gate)
         run: npm test
 
@@ -90,7 +98,10 @@ jobs:
 
       - name: End-to-end (Playwright, Linux under xvfb)
         if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" npx playwright test
+        # 1920x1080: M04's scale/window matrix resizes the window to that, and asserts it got
+        # what it asked for — a virtual screen smaller than the size under test would
+        # otherwise mean the matrix quietly tested one size three times.
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npx playwright test
 
       - name: End-to-end (Playwright)
         if: runner.os != 'Linux'

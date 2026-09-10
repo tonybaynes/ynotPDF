@@ -15,7 +15,7 @@
  * colour; and the filter popover is a real popup with a focus trap, fully opaque.
  */
 
-import { append, button, clear, el } from '@app/dom';
+import { append, button, clear, el, uiScaleFactor } from '@app/dom';
 import { icon } from '@app/icons';
 import { openPopup } from '@app/popup';
 import type { ModelId } from '@core/Ids';
@@ -204,6 +204,7 @@ export function mountCommentsPanel(
       width: usableWidth(),
       fontSize: FONT_SIZE,
       expanded,
+      scale: uiScaleFactor(),
     });
     spacer.style.height = `${String(Math.max(0, metrics.total))}px`;
     const range = visibleRange(scroller.scrollTop, scroller.clientHeight || 400, metrics);
@@ -213,7 +214,15 @@ export function mountCommentsPanel(
       if (!row) continue;
       const element = renderRow(row);
       element.style.top = `${String(metrics.offsets[i] ?? 0)}px`;
-      element.style.height = `${String(metrics.heights[i] ?? heightOf(row, { width: usableWidth(), fontSize: FONT_SIZE, expanded }))}px`;
+      element.style.height = `${String(
+        metrics.heights[i] ??
+          heightOf(row, {
+            width: usableWidth(),
+            fontSize: FONT_SIZE,
+            expanded,
+            scale: uiScaleFactor(),
+          }),
+      )}px`;
       list.append(element);
     }
     setRoving();
@@ -266,6 +275,9 @@ export function mountCommentsPanel(
       'data-row': isReply ? 'reply' : 'comment',
       'data-id': row.id,
       'data-kind': isReply ? 'reply' : 'comment',
+      // A collapsed row clips to three lines on purpose (see `metrics.ts`) — clicking it opens
+      // the whole comment. Declared so M04's layout assertions read it as design, not a defect.
+      'data-allow-clip': 'the row clamps to three lines; selecting it shows the whole comment',
       role: 'option',
       'aria-selected': String(selected),
       ...(selected ? { 'data-selected': 'true' } : {}),
@@ -714,6 +726,7 @@ export function mountCommentsPanel(
       width: usableWidth(),
       fontSize: FONT_SIZE,
       expanded,
+      scale: uiScaleFactor(),
     });
     const top = metrics.offsets[index] ?? 0;
     const height = metrics.heights[index] ?? 0;

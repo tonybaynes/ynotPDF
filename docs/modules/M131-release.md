@@ -101,11 +101,6 @@ App stores (MS Store / Mac App Store) — later if wanted.
 
 ## Design notes & constraints
 
-- **The brand facts live in `src/shared/brand.ts`** — product name, company
-  (**Ynot Apps**), website (**ynot-apps.com**), copyright line. The About
-  dialog, installers (`electron-builder.yml` copyright/publisherName) and
-  `package.json` already read from or match it. Help, first-run and the
-  download page must use it too; never retype any of them.
 - **Windows on ARM (M03):** ship NSIS + MSI for both `x64` and `arm64`;
   the auto-update feed must serve the matching architecture
   (electron-updater does this from the `-arm64` artifact suffix — verify);
@@ -245,6 +240,13 @@ is colourblind: black and red read as the same colour):**
   (`src/shared`, `src/renderer/core`, `src/renderer/app`, `package.json`)
   must be minimal, additive, and listed in the PR description. Changing a
   contract needs an ADR (`docs/adr/NNNN-*.md`) merged first as its own PR.
+- **A feature is not covered until a test reaches it the way a person does**
+  (M04). Asserting that something is *visible* is not asserting that it is
+  *usable*: a UI test presses the button by its **visible label**, clicks the
+  panel tile, clicks the page, and then asserts *where* things are —
+  `test/e2e/journey.ts` and `test/e2e/layout.ts` are the helpers, and
+  `test/README.md` states the rule in full. `app.run(...)` is for setup, never
+  for the action under test.
 - Data that can change (presets, stamp catalogues, substitution tables)
   goes in `resources/` data files, not code.
 - Commits: `<Mid>: <what>` and end with

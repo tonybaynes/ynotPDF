@@ -91,6 +91,32 @@ writer).
   render identically outside the edited block (test enforces).
 - Keep original text objects untouched when not edited — do not
   re-serialise a whole page's content unless necessary.
+- **fontkit: use it for reading, not for writing a subset — and check what
+  M100 already built before adding it at all.** (M100, 2026-09-10.) M100
+  needed to cut embedded fonts down and did *not* use fontkit, for one
+  specific reason worth not re-litigating: every subsetting library
+  renumbers glyphs, and inside a PDF whose encoding is already written
+  that is a trap. A simple font finds its glyphs through `/Encoding`,
+  `/Differences` and the font's own `cmap`; a CID font through
+  `/CIDToGIDMap`; a renumbered font needs all of them rewritten in step,
+  and one mistake swaps letters in a file that still opens and still looks
+  plausible. So `src/engine/optimise/fonts/sfnt.ts` keeps the glyph count
+  fixed and empties the outlines of glyphs nothing can reach — same
+  saving, no way to be silently wrong — and it is proved by rendering the
+  result through PDFium. **Reuse it rather than writing a second one.**
+  That objection is to one *operation*, not to the library: fontkit for
+  **reading** — metrics, glyph availability, outlines — has no such trap
+  and is a fine choice. What it would add over `sfnt.ts` today is CFF /
+  Type 2 charstring parsing, which `sfnt.ts` deliberately does not do
+  (M100 leaves PostScript-outline fonts at full size and says so). Note
+  also that for laying text out *in a PDF* the authoritative advance
+  widths are the font dictionary's `/Widths` or `/W`, not the font
+  program's `hmtx` — they can disagree, and the PDF's are what the page
+  was set with. So the spike's first question is whether this module needs
+  glyph *outlines* at all, or only metrics and availability; if only the
+  latter, `hmtx`/`head`/`hhea` readers are about 150 lines on top of what
+  `sfnt.ts` already has, and fontkit's 5.6 MB buys nothing. Record the
+  answer in the ADR either way.
 
 ## Files you will create or touch
 
@@ -114,6 +140,12 @@ under their permissive option and credited as such (`node-forge` = BSD).
 The app is sold commercially; a copyleft component would block that._
 
 fontkit (MIT), @unicode/… line-break data if needed (MIT/Unicode).
+
+**Before adding fontkit, read the note about it in Design notes above.**
+M100 already ships the sfnt reading and subsetting this module needs
+(`src/engine/optimise/fonts/sfnt.ts`), and deliberately did not use
+fontkit to write subsets. Whether fontkit is needed at all is a question
+for the spike, not a foregone conclusion.
 
 ## Acceptance tests — the module is done when these pass on all three OSes
 
@@ -237,6 +269,13 @@ is colourblind: black and red read as the same colour):**
   (`src/shared`, `src/renderer/core`, `src/renderer/app`, `package.json`)
   must be minimal, additive, and listed in the PR description. Changing a
   contract needs an ADR (`docs/adr/NNNN-*.md`) merged first as its own PR.
+- **A feature is not covered until a test reaches it the way a person does**
+  (M04). Asserting that something is *visible* is not asserting that it is
+  *usable*: a UI test presses the button by its **visible label**, clicks the
+  panel tile, clicks the page, and then asserts *where* things are —
+  `test/e2e/journey.ts` and `test/e2e/layout.ts` are the helpers, and
+  `test/README.md` states the rule in full. `app.run(...)` is for setup, never
+  for the action under test.
 - Data that can change (presets, stamp catalogues, substitution tables)
   goes in `resources/` data files, not code.
 - Commits: `<Mid>: <what>` and end with

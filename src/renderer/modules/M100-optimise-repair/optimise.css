@@ -1,0 +1,357 @@
+/*
+ * Optimise and repair (M100): the dialog, and the space audit's chart and table.
+ *
+ * Every colour is a theme token; there is not a literal in this file and nothing is translucent.
+ * The chart's slices are told apart by hatch pattern rather than by colour (see `auditView.ts`),
+ * so the only two fills it needs are `--accent` and `--fg-muted`, both of which every theme
+ * guarantees against `--bg-modal`.
+ */
+
+/* ---- the dialog ------------------------------------------------------------------------------- */
+
+.optimise-dialog .dlg-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.opt-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  border-bottom: var(--border-width) solid var(--border);
+  padding-bottom: var(--sp-2);
+}
+
+.opt-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--fg);
+  font-weight: var(--fw-body);
+  cursor: pointer;
+}
+
+.opt-tab svg {
+  color: var(--icon);
+}
+
+.opt-tab[aria-selected='true'] {
+  background: var(--accent);
+  color: var(--fg-on-accent);
+  border-color: var(--accent);
+  border-width: calc(var(--border-width) * 2);
+  font-weight: var(--fw-heading);
+}
+
+.opt-tab[aria-selected='true'] svg {
+  color: var(--fg-on-accent);
+}
+
+.opt-panels {
+  min-height: 18rem;
+  max-height: 26rem;
+  overflow-y: auto;
+}
+
+.opt-panels > [role='tabpanel'][hidden] {
+  display: none;
+}
+
+.opt-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-1);
+}
+
+.opt-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: 0;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-3);
+}
+
+.opt-group > legend {
+  padding: 0 var(--sp-2);
+  color: var(--fg);
+  font-weight: var(--fw-heading);
+}
+
+.opt-group > .field-hint {
+  margin: 0;
+}
+
+/* ---- presets ----------------------------------------------------------------------------------- */
+
+.opt-presets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.opt-preset {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-3);
+  cursor: pointer;
+}
+
+.opt-preset:hover {
+  background: var(--bg-hover);
+}
+
+.opt-preset:has(input:checked) {
+  border-color: var(--accent);
+  border-width: calc(var(--border-width) * 2);
+  background: var(--bg-selected);
+}
+
+.opt-preset-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.opt-preset-name {
+  color: var(--fg);
+  font-weight: var(--fw-heading);
+}
+
+.opt-preset-desc {
+  color: var(--fg-muted);
+  font-size: var(--fs-1);
+}
+
+/* A word and an icon, never a colour on its own. */
+.opt-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  align-self: flex-start;
+  border: var(--border-width) solid var(--success);
+  border-radius: var(--radius);
+  padding: 0 var(--sp-2);
+  color: var(--fg);
+  font-size: var(--fs-1);
+}
+
+.opt-badge svg {
+  width: 1em;
+  height: 1em;
+  color: var(--success);
+}
+
+.opt-save-preset {
+  align-self: flex-start;
+}
+
+/* Options below this line change what the document *contains*, not only how big it is. */
+.opt-heavy:first-of-type {
+  border-top: var(--border-width) solid var(--border-strong);
+  padding-top: var(--sp-3);
+}
+
+/* ---- notes ------------------------------------------------------------------------------------- */
+
+.opt-note {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: 0;
+  border-left: calc(var(--border-width) * 3) solid var(--info);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-panel);
+  color: var(--fg);
+  font-size: var(--fs-1);
+}
+
+.opt-note[data-kind='warning'] {
+  border-left-color: var(--warning);
+}
+
+.opt-note svg {
+  flex: none;
+  width: 1em;
+  height: 1em;
+  color: var(--icon);
+  transform: translateY(0.15em);
+}
+
+/* ---- the size line ------------------------------------------------------------------------------ */
+
+.opt-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-3);
+  background: var(--bg-panel);
+}
+
+.opt-result-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.opt-summary {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--fs-3);
+  font-weight: var(--fw-heading);
+}
+
+.opt-changes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding-left: var(--sp-5);
+  color: var(--fg);
+  font-size: var(--fs-1);
+}
+
+.opt-change-saved {
+  color: var(--fg-muted);
+}
+
+.opt-change-saved::before {
+  content: ' — ';
+}
+
+.opt-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+/* ---- the space audit ----------------------------------------------------------------------------- */
+
+.opt-audit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-5);
+}
+
+.opt-audit-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  flex: 0 0 auto;
+}
+
+.opt-donut {
+  width: 11rem;
+  height: 11rem;
+}
+
+.opt-legend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-1);
+}
+
+.opt-legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.opt-swatch {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+}
+
+.opt-legend-label {
+  color: var(--fg);
+}
+
+.opt-legend-share {
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.opt-audit-table {
+  flex: 1 1 20rem;
+  border-collapse: collapse;
+  min-width: 18rem;
+  font-size: var(--fs-2);
+}
+
+.opt-audit-table th,
+.opt-audit-table td {
+  border-bottom: var(--border-width) solid var(--border);
+  padding: var(--sp-2);
+  text-align: left;
+  color: var(--fg);
+}
+
+.opt-audit-table thead th {
+  color: var(--fg-muted);
+  font-weight: var(--fw-heading);
+}
+
+.opt-audit-table tfoot th,
+.opt-audit-table tfoot td {
+  border-bottom: none;
+  border-top: calc(var(--border-width) * 2) solid var(--border-strong);
+  font-weight: var(--fw-heading);
+}
+
+.opt-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.opt-share {
+  min-width: 8rem;
+}
+
+.opt-share-value {
+  display: inline-block;
+  min-width: 3em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The bar is a second reading of the same number, never the only one. */
+.opt-bar {
+  display: inline-block;
+  height: 0.7em;
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--accent);
+  vertical-align: middle;
+}
+
+.opt-audit-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.opt-audit-panel {
+  min-height: 12rem;
+}

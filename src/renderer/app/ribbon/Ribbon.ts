@@ -289,18 +289,28 @@ export function mountRibbon(host: HTMLElement, services: ShellServices): RibbonH
     if (items instanceof HTMLElement) items.hidden = false;
   };
 
-  const COLLAPSED_WIDTH = 72;
+  /**
+   * Collapses groups from the right until the row fits — **measuring** after each one rather
+   * than predicting the width a collapsed group will take.
+   *
+   * It used to subtract a flat 72 px per collapsed group, which is its width at 100 % UI scale
+   * and nothing like its width at 150 % or 200 %, where everything in it is sized in rem. The
+   * arithmetic then stopped collapsing while the groups still needed another two hundred pixels
+   * and the ribbon clipped its last buttons off the right edge — the same mistake as the pane
+   * widths in `d1edee4`, and scaling the constant only moved the error rather than removing it
+   * (M04, 2026-09-10). The DOM knows the answer, so ask it.
+   *
+   * The measurement is a forced reflow per collapsed group, bounded by the number of groups on
+   * a tab and only on a rebuild or a resize; the common case — everything fits — costs one.
+   */
   const fitGroups = (): void => {
     if (groups.length === 0 || !isVisible(body)) return;
-    const available = body.clientWidth - 8;
-    if (available <= 0) return;
+    if (body.clientWidth <= 0) return;
     for (const g of groups) expandGroup(g);
-    let total = groups.reduce((sum, g) => sum + g.naturalWidth, 0);
-    for (let i = groups.length - 1; i >= 0 && total > available; i--) {
+    for (let i = groups.length - 1; i >= 0; i--) {
+      if (body.scrollWidth <= body.clientWidth) break;
       const g = groups[i];
-      if (!g) continue;
-      total -= g.naturalWidth - COLLAPSED_WIDTH;
-      collapseGroup(g);
+      if (g) collapseGroup(g);
     }
     bodyRoving.refresh();
   };

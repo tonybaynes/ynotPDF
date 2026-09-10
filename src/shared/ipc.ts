@@ -228,6 +228,64 @@ export interface CertificateDto {
   readonly certificateBase64: string;
 }
 
+/**
+ * What `qpdf --check` made of a file (M100, ADR 0019). Structurally `QpdfCheck` from
+ * `src/engine/optimise/types.ts`; restated here as data so `src/shared` keeps its place at the
+ * bottom of the dependency graph and does not import from the engine.
+ */
+export interface QpdfCheckDto {
+  readonly ok: boolean;
+  readonly unreadable: boolean;
+  readonly linearised: boolean;
+  readonly encrypted: boolean;
+  readonly version: string | null;
+  readonly warnings: ReadonlyArray<string>;
+  readonly errors: ReadonlyArray<string>;
+}
+
+/** The structural work qpdf does for M100. Mirrors `StructureOptions` in the engine. */
+export interface StructureOptionsDto {
+  readonly objectStreams: boolean;
+  readonly recompressStreams: boolean;
+  readonly removeUnused: boolean;
+  readonly linearise: boolean;
+}
+
+/** Bytes and anything worth telling the reader — what every qpdf pass answers with. */
+export interface QpdfBytesDto {
+  readonly bytes: Uint8Array;
+  readonly warnings: string[];
+}
+
+/**
+ * What `qpdf --check` made of a file (M100, ADR 0019). Structurally `QpdfCheck` from
+ * `src/engine/optimise/types.ts`; restated here as data so `src/shared` keeps its place at the
+ * bottom of the dependency graph and does not import from the engine.
+ */
+export interface QpdfCheckDto {
+  readonly ok: boolean;
+  readonly unreadable: boolean;
+  readonly linearised: boolean;
+  readonly encrypted: boolean;
+  readonly version: string | null;
+  readonly warnings: ReadonlyArray<string>;
+  readonly errors: ReadonlyArray<string>;
+}
+
+/** The structural work qpdf does for M100. Mirrors `StructureOptions` in the engine. */
+export interface StructureOptionsDto {
+  readonly objectStreams: boolean;
+  readonly recompressStreams: boolean;
+  readonly removeUnused: boolean;
+  readonly linearise: boolean;
+}
+
+/** Bytes and anything worth telling the reader — what every qpdf pass answers with. */
+export interface QpdfBytesDto {
+  readonly bytes: Uint8Array;
+  readonly warnings: string[];
+}
+
 /** Window state reported by main (M02). */
 export interface WindowState {
   readonly maximized: boolean;
@@ -363,6 +421,30 @@ export interface IpcInvokeMap {
     result: CertificateDto[];
   };
   'security:version': { args: []; result: string };
+  /**
+   * Optimising and repairing (M100, ADR 0019). qpdf runs in main for the reason M70 recorded in
+   * ADR 0011, so these carry bytes both ways, exactly as `security:*` does.
+   *
+   * The image and font work is **not** here: it is pure and runs in a renderer Worker. What
+   * crosses this boundary is only what qpdf itself must do.
+   */
+  'optimise:structure': {
+    args: [bytes: Uint8Array, options: StructureOptionsDto];
+    result: QpdfBytesDto;
+  };
+  /** Fast web view on its own, for M21's save pipeline. */
+  'optimise:linearise': { args: [bytes: Uint8Array]; result: QpdfBytesDto };
+  /** What is wrong with this file, as facts rather than as text. */
+  'optimise:check': { args: [bytes: Uint8Array]; result: QpdfCheckDto };
+  /**
+   * A qpdf rewrite — the *second* string of a repair. PDFium reconstructs where this build of
+   * qpdf will not (ADR 0019 §1a), so the renderer tries the engine first and comes here only for
+   * a file the engine refused.
+   */
+  'optimise:repair': {
+    args: [bytes: Uint8Array];
+    result: { bytes: Uint8Array; repaired: boolean; warnings: string[] };
+  };
   'recent:list': { args: []; result: RecentFile[] };
   'recent:add': { args: [path: string]; result: RecentFile[] };
   'recent:clear': { args: []; result: RecentFile[] };
@@ -401,6 +483,16 @@ export interface IpcInvokeMap {
    * dialogs, so the OS chrome follows the active theme (M01).
    */
   'theme:setNative': { args: [scheme: 'dark' | 'light']; result: void };
+  /**
+   * The renderer has finished booting: modules registered, shell mounted, IPC listeners
+   * installed. Main holds anything it must push at the renderer — a PDF from the command line,
+   * a file association — until this arrives (M04).
+   *
+   * `did-finish-load` is not this. It fires when the document has loaded, and the renderer's
+   * entry module then still has several `await`s to go before it listens for anything, so a file
+   * pushed at that moment went nowhere and the app opened empty (2026-09-10).
+   */
+  'app:ready': { args: []; result: void };
   'app:info': { args: []; result: AppInfo };
   'app:quit': { args: []; result: void };
   'window:minimize': { args: []; result: void };
@@ -529,6 +621,13 @@ export interface YnotBridge {
   readonly platform: Platform;
   /** True when launched with `YNOT_E2E=1` (see test/e2e/harness.ts). */
   readonly e2e: boolean;
+  /**
+   * Whether the e2e demo module should be registered (M04). False under `YNOT_E2E_NO_DEMO=1`,
+   * which is how a test takes the *real* startup path: the demo module registers panels that
+   * sort before M12's, so a fresh profile opened a demo panel and the Pages panel's own startup
+   * path went untested for a month (defect 2, 2026-09-10). Always false outside an e2e run.
+   */
+  readonly e2eDemoModule: boolean;
 }
 
 /** Full list of invoke channels, used by the preload script to whitelist and by tests. */
@@ -557,6 +656,10 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'security:unlock',
   'security:readCertificates',
   'security:version',
+  'optimise:structure',
+  'optimise:linearise',
+  'optimise:check',
+  'optimise:repair',
   'recent:list',
   'recent:add',
   'recent:clear',
@@ -570,6 +673,7 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'settings:path',
   'fonts:list',
   'theme:setNative',
+  'app:ready',
   'app:info',
   'app:quit',
   'window:minimize',

@@ -26,6 +26,10 @@ import type { ToolSpec } from '@shared/module';
 import type { ThemeManager } from '@theme/ThemeManager';
 import { THEME_SERVICE } from '@modules/M01-theme-system/manifest';
 import { DOCUMENT_SERVICE, type DocumentService } from '@modules/M20-document-model/manifest';
+import type { OpenedDocument } from '@modules/M20-document-model/DocumentService';
+// A type, so this import disappears at compile time and M11 gains no dependency on M100 in the
+// bundle. The service is optional and looked up by name (ADR 0019 §2).
+import type { RepairService } from '@modules/M100-optimise-repair/OptimiseService';
 import { megabytes } from '@view/TileCache';
 import { TileRenderer, type RenderFlags } from '@view/TileRenderer';
 import { FALLBACK_PALETTE, parseColor, type NightPalette } from '@view/night';
@@ -220,17 +224,30 @@ export class ViewerService {
     const prepared = await this.prepareBytes(file);
     if (!prepared) return null;
 
-    const opened = await openWithPassword(
-      (password) =>
-        // The engine transfers the buffer into its worker, which detaches it — so every attempt
-        // gets its own copy, or the second one would find an empty ArrayBuffer.
-        service.open(prepared.bytes.slice(), {
-          path: file.path,
-          name: file.name,
-          ...(password === undefined ? {} : { password }),
-        }),
-      { dialogs: this.shell.dialogs, name: file.name },
-    );
+    const attempt = (bytes: Uint8Array): Promise<OpenedDocument | null> =>
+      openWithPassword(
+        (password) =>
+          // The engine transfers the buffer into its worker, which detaches it — so every attempt
+          // gets its own copy, or the second one would find an empty ArrayBuffer.
+          service.open(bytes.slice(), {
+            path: file.path,
+            name: file.name,
+            ...(password === undefined ? {} : { password }),
+          }),
+        { dialogs: this.shell.dialogs, name: file.name },
+      );
+
+    let opened: OpenedDocument | null;
+    try {
+      opened = await attempt(prepared.bytes);
+    } catch (error) {
+      // The engine refused the file for something a password will not fix. M100 registers a
+      // `repair` service and offers to rebuild it; without M100 there is no such service and the
+      // failure is reported exactly as it was before (ADR 0019 §2).
+      const repaired = await this.offerRepair(prepared.bytes, file.name, error);
+      if (repaired === null) throw error;
+      opened = await attempt(repaired);
+    }
     if (!opened) return null;
     if (prepared.openedAs !== null) {
       this.registry
@@ -258,6 +275,22 @@ export class ViewerService {
       ): Promise<{ bytes: Uint8Array; openedAs: string | null } | null>;
     }>('security');
     return security.prepareForOpen(file.bytes, file.name);
+  }
+
+  /**
+   * Gives a registered `repair` service a chance to rebuild a file the engine refused (M100,
+   * ADR 0019 §2). Returns repaired bytes to try again with, or `null` — the reader declined,
+   * nothing could be done, or M100 is not in this build — in which case the caller reports the
+   * original failure, because a repair that was not wanted is not a new problem.
+   */
+  private async offerRepair(
+    bytes: Uint8Array,
+    name: string,
+    error: unknown,
+  ): Promise<Uint8Array | null> {
+    if (!this.registry.hasService('repair')) return null;
+    const repair = this.registry.service<RepairService>('repair');
+    return repair.offerRepair(bytes, name, error).catch(() => null);
   }
 
   /** Builds the viewport for a tab whose `Document` already exists. */

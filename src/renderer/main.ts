@@ -9,7 +9,7 @@ import { Registry } from '@core/Registry';
 import { Selection } from '@core/Selection';
 import { createStore } from '@core/Store';
 import { EngineClient } from '@engine/EngineClient';
-import { hasBridge, on, getBridge } from '@shared/ipc';
+import { hasBridge, invoke, on, getBridge } from '@shared/ipc';
 import { installShortcuts } from '@app/shortcuts';
 import { mountShell, type ShellState } from '@app/shell';
 import { installTestHarness } from '@app/testHarness';
@@ -33,8 +33,10 @@ import documentOpsManifest from '@modules/M41-merge-split-crop/manifest';
 import securityManifest from '@modules/M70-encryption/manifest';
 import propertiesManifest from '@modules/M72-properties-metadata/manifest';
 import createManifest from '@modules/M91-create-pdf/manifest';
+import exportManifest from '@modules/M92-export/manifest';
 import objectManifest from '@modules/M50-object-model/manifest';
 import formsManifest from '@modules/M60-forms/manifest';
+import optimiseManifest from '@modules/M100-optimise-repair/manifest';
 import preferencesManifest from '@modules/M130-preferences/manifest';
 import { ThemeManager } from '@theme/ThemeManager';
 
@@ -86,15 +88,20 @@ registry.register(documentOpsManifest);
 registry.register(securityManifest);
 registry.register(propertiesManifest);
 registry.register(createManifest);
+registry.register(exportManifest);
 registry.register(portfolioManifest);
 registry.register(objectManifest);
 registry.register(formsManifest);
+registry.register(optimiseManifest);
 // Last: M130 captures the shortcut bindings every other manifest declared, so it must see them all.
 registry.register(preferencesManifest);
 
 const e2e = hasBridge() && getBridge().e2e;
-if (e2e) {
-  // The demo module is the shell's regression suite; it exists only in e2e runs.
+// The demo module is the shell's regression suite; it exists only in e2e runs — and a run
+// launched with `YNOT_E2E_NO_DEMO=1` leaves it out, because its panels sort before M12's and a
+// fresh profile then opens a demo panel instead of Pages. The real startup path went untested
+// that way for a month (M04, defect 2).
+if (e2e && getBridge().e2eDemoModule) {
   const { default: demoManifest } = await import('../../test/e2e/demo-module/manifest');
   registry.register(demoManifest);
 }
@@ -121,4 +128,7 @@ if (hasBridge()) {
     });
   });
   if (e2e) installTestHarness(registry);
+  // Everything is registered, mounted and listening: main may now push what it has been holding
+  // — a PDF from the command line, a file association (M04).
+  void invoke('app:ready');
 }

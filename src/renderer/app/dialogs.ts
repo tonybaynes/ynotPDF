@@ -4,9 +4,8 @@
  * service.
  */
 
-import { hasBridge, invoke, type AppInfo } from '@shared/ipc';
+import type { AppInfo } from '@shared/ipc';
 import { platformLabel } from '@shared/platform';
-import { COMPANY_NAME, PRODUCT_NAME, WEBSITE, WEBSITE_URL, copyrightLine } from '@shared/brand';
 
 /** Opens the About dialog and resolves when it closes. */
 export function showAbout(info: AppInfo | null): HTMLDialogElement {
@@ -21,7 +20,7 @@ export function showAbout(info: AppInfo | null): HTMLDialogElement {
 
   const h2 = document.createElement('h2');
   h2.id = 'about-title';
-  h2.textContent = `About ${PRODUCT_NAME}`;
+  h2.textContent = 'About ynotPDF';
 
   const p = document.createElement('p');
   p.textContent = 'Cross-platform PDF editor. Electron + TypeScript + PDFium.';
@@ -46,27 +45,6 @@ export function showAbout(info: AppInfo | null): HTMLDialogElement {
     dl.append(dt, dd);
   }
 
-  // Who makes it and where to find them. The website is a button, not an <a>: the renderer
-  // never navigates itself — the main process opens the reader's own browser.
-  const maker = document.createElement('p');
-  maker.className = 'about-maker';
-  maker.append(document.createTextNode(`Made by ${COMPANY_NAME} — `));
-  const site = document.createElement('button');
-  site.type = 'button';
-  site.className = 'btn btn-link';
-  site.id = 'about-website';
-  site.textContent = WEBSITE;
-  site.title = `Open ${WEBSITE_URL} in your browser`;
-  site.addEventListener('click', () => {
-    if (hasBridge()) void invoke('shell:openExternal', WEBSITE_URL);
-  });
-  maker.append(site);
-
-  const copyright = document.createElement('p');
-  copyright.className = 'about-copyright';
-  copyright.id = 'about-copyright';
-  copyright.textContent = copyrightLine();
-
   const actions = document.createElement('div');
   actions.className = 'actions';
   const close = document.createElement('button');
@@ -78,7 +56,7 @@ export function showAbout(info: AppInfo | null): HTMLDialogElement {
   });
   actions.append(close);
 
-  dialog.append(h2, p, dl, maker, copyright, actions);
+  dialog.append(h2, p, dl, actions);
   document.body.append(dialog);
   dialog.showModal();
   close.focus();
