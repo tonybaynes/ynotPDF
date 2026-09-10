@@ -19,7 +19,7 @@ import type { PdfPoint, PdfRect } from '@shared/pdf';
 import { ContentBuilder, type PathOp } from './content';
 import type { DictValue } from './dict';
 import { textWidth } from './metrics';
-import { opsBounds, type ShapeDrawing } from './shapes';
+import { lineEndingDrawing, lineEndingsOf, opsBounds, type ShapeDrawing } from './shapes';
 import type {
   AppearanceGenerator,
   AppearanceInput,
@@ -146,6 +146,22 @@ export function parseMeasureScale(raw: unknown): MeasureScale | null {
 /** The scale an annotation's `extra` carries, or null when it has none. */
 export function measureScaleOf(extra: Readonly<Record<string, unknown>>): MeasureScale | null {
   return parseMeasureScale(extra['measure']);
+}
+
+/**
+ * The same physical scale, stated in another unit.
+ *
+ * Only the *display* changes: a length that measured 100 mm still measures 10 cm. The ratio is
+ * restated rather than recomputed, so nothing is lost to rounding on the way through.
+ */
+export function convertScaleTo(scale: MeasureScale, unit: MeasureUnit): MeasureScale {
+  const s = normaliseScale(scale);
+  if (s.toUnit === unit) return s;
+  return normaliseScale({
+    ...s,
+    toValue: (s.toValue * POINTS_PER_UNIT[s.toUnit]) / POINTS_PER_UNIT[unit],
+    toUnit: unit,
+  });
 }
 
 /** Points → the scale's real-world unit. This is `/C` of the `/X` and `/D` number formats. */
@@ -601,6 +617,19 @@ export function measureDrawings(input: AppearanceInput): MeasureDrawings | null 
     for (const ops of [leaderOps(from, nx, ny, style), leaderOps(to, nx, ny, style)]) {
       if (ops.length > 0) paths.push({ ops, stroke: colour, fill: null, width });
     }
+    /*
+     * `/LE` on the *line proper*, not on the measured points: the ends the reader sees are the
+     * ends of the dimension line, which `/LL` has moved. Drawn with the same arithmetic M31's
+     * arrows use, so an arrow on a measurement and an arrow on a plain line are the same head.
+     */
+    const [startKind, endKind] = lineEndingsOf(input.extra);
+    const startHead = lineEndingDrawing(startKind, line.from, line.to, width);
+    const endHead = lineEndingDrawing(endKind, line.to, line.from, width);
+    // The line stops short of a closed head so the stroke does not poke through the fill.
+    const startTrim = startHead?.trim ?? 0;
+    const endTrim = endHead?.trim ?? 0;
+    const drawnFrom = { x: line.from.x + ux * startTrim, y: line.from.y + uy * startTrim };
+    const drawnTo = { x: line.to.x - ux * endTrim, y: line.to.y - uy * endTrim };
     const mid = {
       x: (line.from.x + line.to.x) / 2 + ux * style.captionOffset[0] + nx * style.captionOffset[1],
       y: (line.from.y + line.to.y) / 2 + uy * style.captionOffset[0] + ny * style.captionOffset[1],
@@ -610,7 +639,7 @@ export function measureDrawings(input: AppearanceInput): MeasureDrawings | null 
       const gap = textLength / 2 + 3;
       paths.push({
         ops: [
-          { op: 'M', x: line.from.x, y: line.from.y },
+          { op: 'M', x: drawnFrom.x, y: drawnFrom.y },
           { op: 'L', x: mid.x - ux * gap, y: mid.y - uy * gap },
         ],
         stroke: colour,
@@ -620,7 +649,7 @@ export function measureDrawings(input: AppearanceInput): MeasureDrawings | null 
       paths.push({
         ops: [
           { op: 'M', x: mid.x + ux * gap, y: mid.y + uy * gap },
-          { op: 'L', x: line.to.x, y: line.to.y },
+          { op: 'L', x: drawnTo.x, y: drawnTo.y },
         ],
         stroke: colour,
         fill: null,
@@ -629,11 +658,20 @@ export function measureDrawings(input: AppearanceInput): MeasureDrawings | null 
     } else {
       paths.push({
         ops: [
-          { op: 'M', x: line.from.x, y: line.from.y },
-          { op: 'L', x: line.to.x, y: line.to.y },
+          { op: 'M', x: drawnFrom.x, y: drawnFrom.y },
+          { op: 'L', x: drawnTo.x, y: drawnTo.y },
         ],
         stroke: colour,
         fill: null,
+        width,
+      });
+    }
+    for (const head of [startHead, endHead]) {
+      if (!head) continue;
+      paths.push({
+        ops: head.ops,
+        stroke: colour,
+        fill: head.closed ? (input.interiorColor ?? colour) : null,
         width,
       });
     }

@@ -386,6 +386,8 @@ export class MeasureService {
       fontSize: defaults.fontSize,
     };
     if (defaults.dashArray.length > 0) extra['dashArray'] = [...defaults.dashArray];
+    // `/LE` belongs on a Line and a PolyLine; a Polygon has no ends to put anything on.
+    if (subtype !== 'Polygon') extra['lineEndings'] = [...defaults.lineEndings];
     if (subtype === 'Line') {
       extra['leaderLength'] = defaults.leaderLength;
       extra['leaderExtend'] = defaults.leaderExtend;

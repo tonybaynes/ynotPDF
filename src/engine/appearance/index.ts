@@ -140,6 +140,7 @@ export {
   areaFactor,
   captionBounds,
   centroid,
+  convertScaleTo,
   dimensionLine,
   formatFraction,
   formatMeasureNumber,

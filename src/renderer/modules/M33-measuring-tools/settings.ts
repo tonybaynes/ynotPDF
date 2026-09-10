@@ -14,6 +14,7 @@ import {
   DEFAULT_MEASURE_STYLE,
   parseMeasureScale,
   type CaptionPosition,
+  type LineEnding,
   type MeasureScale,
 } from '@engine/appearance';
 import { defaultColourFor } from '@modules/M30-markup-annotations/presets';
@@ -43,6 +44,8 @@ export interface MeasureDefaults {
   readonly borderWidth: number;
   /** Dash pattern in points; empty is a solid line. */
   readonly dashArray: ReadonlyArray<number>;
+  /** `/LE` — what each end of the dimension line carries. */
+  readonly lineEndings: readonly [LineEnding, LineEnding];
   /** `/LL`, `/LLE`, `/LLO` — a distance's leaders. */
   readonly leaderLength: number;
   readonly leaderExtend: number;
@@ -68,6 +71,7 @@ export function factoryMeasureDefaults(tool: MeasureToolId): MeasureDefaults {
     color: defaultColourFor(tool),
     borderWidth: 1,
     dashArray: [],
+    lineEndings: ['None', 'None'],
     leaderLength: DEFAULT_MEASURE_STYLE.leaderLength,
     leaderExtend: DEFAULT_MEASURE_STYLE.leaderExtend,
     leaderOffset: DEFAULT_MEASURE_STYLE.leaderOffset,
@@ -208,6 +212,15 @@ export function mergeMeasureDefaults(tool: MeasureToolId, raw: unknown): Measure
         break;
       case 'captionPosition':
         if (value === 'Inline' || value === 'Top') out[key] = value;
+        break;
+      case 'lineEndings':
+        if (
+          Array.isArray(value) &&
+          value.length === 2 &&
+          value.every((v) => typeof v === 'string')
+        ) {
+          out[key] = value;
+        }
         break;
       default:
         if (typeof value === typeof base[key]) out[key] = value;

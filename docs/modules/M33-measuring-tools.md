@@ -301,6 +301,14 @@ is colourblind: black and red read as the same colour):**
   value at the top while a tool is drawing, then every measurement in the document by page, with
   running totals for length and for area, and Copy and Export CSV. The CSV is RFC 4180 with a BOM,
   the same shape M13's search export uses.
+- **`/LE` goes on the line proper, and the unit goes on the measurement.** A dimension's ends are
+  the ends of the *drawn* line, which `/LL` has already moved across, so the heads are drawn there
+  rather than at the measured points — the same `lineEndingDrawing` M31's arrows use, so an arrow
+  on a measurement and an arrow on a plain line are the same head. The unit and the precision in
+  the properties panel rewrite that annotation's own `/Measure` rather than the page's scale:
+  showing one run in metres while the rest of the page is in millimetres is a display choice about
+  that measurement, and a reader who meant the whole page would recalibrate it. `convertScaleTo`
+  restates the ratio rather than recomputing it, so nothing is lost to rounding on the way through.
 - **Provenance.** `/Measure`, `/NumberFormat`, the `RL` subtype, `/IT` dimension intents, `/LL`,
   `/LLE`, `/LLO`, `/Cap`, `/CP` and `/CO` are ISO 32000-1 §12.9 and tables 172, 266 and 267 (PDF
   2.0 numbers them the same). The tool gestures (drag for a distance, click the corners for a
@@ -338,8 +346,10 @@ is colourblind: black and red read as the same colour):**
 - **The Measurements panel** — the live value while a tool draws, every measurement in the document
   by page as a button that selects it and goes there, totals kept apart by kind and by unit, and
   Copy (tab-separated) and Export CSV (RFC 4180, CRLF, BOM).
-- **The properties sections** — the value and the ruler it was measured with, the line colour,
-  width and dash, the three leader entries, and whether the value is drawn, where and how big.
+- **The properties sections** — the value and the ruler it was measured with; the unit and the
+  precision *this* measurement is shown in (its own `/Measure` restated, not the page's scale); the
+  line colour, width and dash; `/LE` at each end, the same ten endings M31's arrows offer; the
+  three leader entries; and whether the value is drawn, where and how big.
 - **`src/engine/appearance/measure.ts`** — one list of drawings per measurement that the overlay
   paints and the writer bakes, so the screen and the file cannot drift apart.
 
@@ -391,9 +401,9 @@ is colourblind: black and red read as the same colour):**
 ### Tests
 
 Green on Windows locally: lint (eslint, prettier, the colour/opacity rules, `tsc` on both
-projects), the unit suite with the coverage gates (11 new files, 159 tests in
-`test/unit/measure/`), and the Playwright suite (`test/e2e/measure.spec.ts`, 15 tests, one per
-acceptance line, plus every earlier module's spec — 368 in all).
+projects), the unit suite with the coverage gates (11 new files, 161 tests in
+`test/unit/measure/`), and the Playwright suite (`test/e2e/measure.spec.ts`, 16 tests, one per
+acceptance line, plus every earlier module's spec — 369 in all).
 
 **The hands-on check the conventions ask for, recorded.** `test/unit/measure/real-files.test.ts`
 measures a distance, a perimeter and an area on the first page of each of the operator's own files

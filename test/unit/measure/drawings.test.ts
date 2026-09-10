@@ -7,6 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { must } from '../find/helpers';
 import {
   DEFAULT_MEASURE_SCALE,
   DEFAULT_MEASURE_STYLE,
@@ -217,6 +218,34 @@ describe('what a dimension draws', () => {
     expect(readableAngle(-1, 0)).toBe(0);
     expect(readableAngle(0, 1)).toBe(90);
     expect(readableAngle(0, -1)).toBe(90);
+  });
+
+  it('draws a /LE ending on each end of the *line proper*, not on the measured points', () => {
+    const withHeads = measureDrawings(
+      input({ ...base, extra: { ...base.extra, lineEndings: ['None', 'OpenArrow'] } }),
+    );
+    // Two leaders, the line, and one head.
+    expect(withHeads?.paths).toHaveLength(4);
+    const head = must(withHeads?.paths[3], 'head');
+    const tip = head.ops[1];
+    if (tip?.op !== 'L') throw new Error('unexpected head');
+    // The head's tip is on the line proper, which /LL has moved 20 points across.
+    expect(tip.x).toBeCloseTo(300, 6);
+    expect(tip.y).toBeCloseTo(80, 6);
+    // A closed head is filled and the line stops short of it, so the stroke does not show through.
+    const closed = measureDrawings(
+      input({
+        ...base,
+        interiorColor: 0x5b2d91,
+        extra: { ...base.extra, lineEndings: ['ClosedArrow', 'None'] },
+      }),
+    );
+    // Two leaders, then the line proper, then the head.
+    const line = must(closed?.paths[2], 'line');
+    const start = line.ops[0];
+    if (start?.op !== 'M') throw new Error('unexpected line');
+    expect(start.x).toBeGreaterThan(100);
+    expect(must(closed?.paths[closed.paths.length - 1], 'head').fill).toBe(0x5b2d91);
   });
 
   it('leaves the caption out when /Cap is false', () => {

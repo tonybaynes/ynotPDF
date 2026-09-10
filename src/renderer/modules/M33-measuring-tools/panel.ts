@@ -12,7 +12,22 @@
 import { button, el } from '@app/dom';
 import { field } from '@app/dialog/Dialogs';
 import type { ModelAnnotation } from '@core/model';
-import { dashOf, measureStyleOf, scaleRatioText } from '@engine/appearance';
+import {
+  DEFAULT_MEASURE_SCALE,
+  LINE_ENDINGS,
+  LINE_ENDING_LABELS,
+  MEASURE_UNITS,
+  UNIT_NAMES,
+  convertScaleTo,
+  dashOf,
+  isLineEnding,
+  lineEndingsOf,
+  measureStyleOf,
+  normaliseScale,
+  scaleRatioText,
+  unitLabel,
+  type LineEnding,
+} from '@engine/appearance';
 import {
   INK_PRESETS,
   hexOf,
@@ -85,7 +100,7 @@ export function mountMeasureSections(
       label,
     );
   };
-  const out: HTMLElement[] = [valueSection(service, a)];
+  const out: HTMLElement[] = [valueSection(service, a), unitField(a, extra)];
   out.push(
     colourField({
       label: 'Line colour',
@@ -97,6 +112,7 @@ export function mountMeasureSections(
     }),
   );
   out.push(strokeFields(a, patch, extra));
+  if (a.subtype === 'Line' || a.subtype === 'PolyLine') out.push(endingsField(a, extra));
   if (a.subtype === 'Line') out.push(leaderFields(a, extra));
   out.push(captionFields(a, extra));
   out.push(defaultsRow(service, a, refresh));
@@ -130,6 +146,70 @@ function valueSection(service: MeasureService, a: ModelAnnotation): HTMLElement 
       );
     }
   }
+  return wrapper;
+}
+
+/**
+ * The unit and the precision this one measurement is shown in.
+ *
+ * It rewrites the annotation's own `/Measure`, not the page's scale: showing a run in metres while
+ * everything else is in millimetres is a display choice about that measurement, and a reader who
+ * wanted the whole page changed would recalibrate it.
+ */
+function unitField(a: ModelAnnotation, extra: ExtraPatch): HTMLElement {
+  const measurement = measurementFor(a);
+  const scale = normaliseScale(measurement?.scale ?? DEFAULT_MEASURE_SCALE);
+  const wrapper = el('div.annot-field');
+  const unit = el('select', { 'aria-label': 'Unit this measurement is shown in' });
+  for (const name of MEASURE_UNITS) {
+    const option = el(
+      'option',
+      { value: name },
+      `${UNIT_NAMES[name]} (${unitLabel(name, 'length')})`,
+    );
+    if (name === scale.toUnit) option.setAttribute('selected', '');
+    unit.append(option);
+  }
+  unit.addEventListener('change', () => {
+    const chosen = MEASURE_UNITS.find((u) => u === unit.value);
+    if (chosen) extra({ measure: convertScaleTo(scale, chosen) }, 'Change unit');
+  });
+  const precision = el('select', { 'aria-label': 'How many decimal places to show' });
+  for (const [value, label] of [
+    ['0', '1 (whole numbers)'],
+    ['1', '0.1'],
+    ['2', '0.01'],
+    ['3', '0.001'],
+    ['4', '0.0001'],
+    ['f2', 'Fractions to 1/2'],
+    ['f4', 'Fractions to 1/4'],
+    ['f8', 'Fractions to 1/8'],
+    ['f16', 'Fractions to 1/16'],
+  ] as const) {
+    const option = el('option', { value }, label);
+    const chosen =
+      scale.denominator > 0 ? `f${String(scale.denominator)}` : String(scale.precision);
+    if (value === chosen) option.setAttribute('selected', '');
+    precision.append(option);
+  }
+  precision.addEventListener('change', () => {
+    const raw = precision.value;
+    const fractional = raw.startsWith('f');
+    extra(
+      {
+        measure: normaliseScale({
+          ...scale,
+          precision: fractional ? 1 : Number.parseInt(raw, 10),
+          denominator: fractional ? Number.parseInt(raw.slice(1), 10) : 0,
+        }),
+      },
+      'Change precision',
+    );
+  });
+  wrapper.append(
+    field({ label: 'Show in', input: unit }),
+    field({ label: 'To the nearest', input: precision }),
+  );
   return wrapper;
 }
 
@@ -222,6 +302,33 @@ function strokeFields(a: ModelAnnotation, patch: Patch, extra: ExtraPatch): HTML
     field({ label: 'Line width (points)', input: width }),
     field({ label: 'Line style', input: dash }),
   );
+  return wrapper;
+}
+
+/**
+ * `/LE` — what each end of the dimension line carries. The same ten endings M31's arrows offer,
+ * by the same names, because they are the same drawing.
+ */
+function endingsField(a: ModelAnnotation, extra: ExtraPatch): HTMLElement {
+  const current = lineEndingsOf(a.extra);
+  const wrapper = el('div.annot-field');
+  wrapper.append(el('p.annot-field-label', null, 'Line ends'));
+  const pick = (index: 0 | 1, label: string): HTMLElement => {
+    const select = el('select', { 'aria-label': label });
+    for (const ending of LINE_ENDINGS) {
+      const option = el('option', { value: ending }, LINE_ENDING_LABELS[ending]);
+      if (ending === current[index]) option.setAttribute('selected', '');
+      select.append(option);
+    }
+    select.addEventListener('change', () => {
+      const chosen: LineEnding = isLineEnding(select.value) ? select.value : 'None';
+      const next: [LineEnding, LineEnding] = [...current];
+      next[index] = chosen;
+      extra({ lineEndings: next }, 'Change line ends');
+    });
+    return field({ label, input: select });
+  };
+  wrapper.append(pick(0, 'Start'), pick(1, 'End'));
   return wrapper;
 }
 
@@ -320,6 +427,7 @@ function defaultsRow(
       ...(a.color === null ? {} : { color: a.color }),
       borderWidth: a.borderWidth ?? service.defaults(tool).borderWidth,
       dashArray: dashOf(a.extra),
+      ...(a.subtype === 'Polygon' ? {} : { lineEndings: lineEndingsOf(a.extra) }),
       leaderLength: style.leaderLength,
       leaderExtend: style.leaderExtend,
       leaderOffset: style.leaderOffset,

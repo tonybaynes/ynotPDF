@@ -12,6 +12,7 @@ import {
   MEASURE_UNITS,
   POINTS_PER_UNIT,
   areaFactor,
+  convertScaleTo,
   formatFraction,
   formatMeasureNumber,
   formatMeasurement,
@@ -88,6 +89,20 @@ describe('the scale', () => {
   it('measures a 50 x 20 mm rectangle as 1000 mm²', () => {
     const points = ((50 * 72) / 25.4) * ((20 * 72) / 25.4);
     expect(measureArea(points, DEFAULT_MEASURE_SCALE)).toBeCloseTo(1000, 6);
+  });
+
+  it('restates itself in another unit without changing what anything measures', () => {
+    const plan = scale({ fromValue: 1, fromUnit: 'cm', toValue: 5, toUnit: 'm' });
+    const inMm = convertScaleTo(plan, 'mm');
+    expect(inMm.toUnit).toBe('mm');
+    expect(inMm.toValue).toBeCloseTo(5000, 6);
+    // One centimetre of page is still five metres, said as five thousand millimetres.
+    expect(measureLength(POINTS_PER_UNIT.cm, inMm)).toBeCloseTo(5000, 6);
+    expect(formatMeasurement(measureLength(POINTS_PER_UNIT.cm, inMm), inMm, 'length')).toBe(
+      '5,000.0 mm',
+    );
+    // Asking for the unit it already has changes nothing at all.
+    expect(convertScaleTo(plan, 'm')).toEqual(plan);
   });
 
   it('states the ratio in words', () => {

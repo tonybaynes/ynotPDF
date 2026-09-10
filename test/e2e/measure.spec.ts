@@ -503,6 +503,68 @@ test.describe('a measurement is M33’s, not M31’s', () => {
     await expect(pane).toContainText('100.0 mm');
     await expect(pane).toContainText('Show the value on the page');
     await expect(pane).toContainText('Leader lines');
+    await expect(pane).toContainText('Line ends');
+    await expect(pane).toContainText('Show in');
+  });
+
+  test('the panel changes the unit and the line ends, each undoing as one step', async () => {
+    await openPath(stage('measure.pdf', 'panel-edits.pdf'));
+    await app.page.setViewportSize({ width: 1400, height: 900 });
+    await app.run('measure.calibrate', {
+      page: 0,
+      from: LINE_100MM[0],
+      to: LINE_100MM[1],
+      length: 100,
+      unit: 'mm',
+      scope: 'page',
+    });
+    const id = (await app.run('measure.distance', { page: 0, vertices: LINE_100MM })) as string;
+    await app.page.waitForTimeout(300);
+
+    // Shown in centimetres: the same length, said differently.
+    await app.page
+      .locator('#annot-props select[aria-label="Unit this measurement is shown in"]')
+      .selectOption('cm');
+    let row = await until(
+      async () =>
+        must(
+          (await measurements()).find((r) => r.id === id),
+          'row',
+        ),
+      (r) => r.text === '10.0 cm',
+    );
+    expect(row.text).toBe('10.0 cm');
+    expect(row.measure).toMatchObject({ toUnit: 'cm' });
+    await app.run('edit.undo');
+    await app.page.waitForTimeout(250);
+    expect(
+      must(
+        (await measurements()).find((r) => r.id === id),
+        'row',
+      ).text,
+    ).toBe('100.0 mm');
+
+    // An arrow on the far end of the dimension line.
+    await app.page.locator('#annot-props select[aria-label="End"]').selectOption('OpenArrow');
+    row = await until(
+      async () =>
+        must(
+          (await measurements()).find((r) => r.id === id),
+          'row',
+        ),
+      (r) => Array.isArray(r.extra['lineEndings']),
+    );
+    expect(row.extra['lineEndings']).toEqual(['None', 'OpenArrow']);
+    // The head is in the appearance stream the file will carry.
+    expect(row.appearance?.content).toContain('m');
+    await app.run('edit.undo');
+    await app.page.waitForTimeout(250);
+    expect(
+      must(
+        (await measurements()).find((r) => r.id === id),
+        'row',
+      ).extra['lineEndings'],
+    ).toEqual(['None', 'None']);
   });
 });
 
