@@ -9,7 +9,7 @@
  */
 
 export * from './types';
-export { optimise, auditBytes, type OptimiseHooks } from './optimise';
+export { optimise, auditBytes, withStructure, type OptimiseHooks } from './optimise';
 export { auditDocument } from './audit';
 export { discard, type DiscardOutcome } from './discard';
 export { dedupe, type DedupeOutcome } from './dedupe';

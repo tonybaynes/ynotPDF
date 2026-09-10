@@ -228,6 +228,64 @@ export interface CertificateDto {
   readonly certificateBase64: string;
 }
 
+/**
+ * What `qpdf --check` made of a file (M100, ADR 0019). Structurally `QpdfCheck` from
+ * `src/engine/optimise/types.ts`; restated here as data so `src/shared` keeps its place at the
+ * bottom of the dependency graph and does not import from the engine.
+ */
+export interface QpdfCheckDto {
+  readonly ok: boolean;
+  readonly unreadable: boolean;
+  readonly linearised: boolean;
+  readonly encrypted: boolean;
+  readonly version: string | null;
+  readonly warnings: ReadonlyArray<string>;
+  readonly errors: ReadonlyArray<string>;
+}
+
+/** The structural work qpdf does for M100. Mirrors `StructureOptions` in the engine. */
+export interface StructureOptionsDto {
+  readonly objectStreams: boolean;
+  readonly recompressStreams: boolean;
+  readonly removeUnused: boolean;
+  readonly linearise: boolean;
+}
+
+/** Bytes and anything worth telling the reader — what every qpdf pass answers with. */
+export interface QpdfBytesDto {
+  readonly bytes: Uint8Array;
+  readonly warnings: string[];
+}
+
+/**
+ * What `qpdf --check` made of a file (M100, ADR 0019). Structurally `QpdfCheck` from
+ * `src/engine/optimise/types.ts`; restated here as data so `src/shared` keeps its place at the
+ * bottom of the dependency graph and does not import from the engine.
+ */
+export interface QpdfCheckDto {
+  readonly ok: boolean;
+  readonly unreadable: boolean;
+  readonly linearised: boolean;
+  readonly encrypted: boolean;
+  readonly version: string | null;
+  readonly warnings: ReadonlyArray<string>;
+  readonly errors: ReadonlyArray<string>;
+}
+
+/** The structural work qpdf does for M100. Mirrors `StructureOptions` in the engine. */
+export interface StructureOptionsDto {
+  readonly objectStreams: boolean;
+  readonly recompressStreams: boolean;
+  readonly removeUnused: boolean;
+  readonly linearise: boolean;
+}
+
+/** Bytes and anything worth telling the reader — what every qpdf pass answers with. */
+export interface QpdfBytesDto {
+  readonly bytes: Uint8Array;
+  readonly warnings: string[];
+}
+
 /** Window state reported by main (M02). */
 export interface WindowState {
   readonly maximized: boolean;
@@ -363,6 +421,30 @@ export interface IpcInvokeMap {
     result: CertificateDto[];
   };
   'security:version': { args: []; result: string };
+  /**
+   * Optimising and repairing (M100, ADR 0019). qpdf runs in main for the reason M70 recorded in
+   * ADR 0011, so these carry bytes both ways, exactly as `security:*` does.
+   *
+   * The image and font work is **not** here: it is pure and runs in a renderer Worker. What
+   * crosses this boundary is only what qpdf itself must do.
+   */
+  'optimise:structure': {
+    args: [bytes: Uint8Array, options: StructureOptionsDto];
+    result: QpdfBytesDto;
+  };
+  /** Fast web view on its own, for M21's save pipeline. */
+  'optimise:linearise': { args: [bytes: Uint8Array]; result: QpdfBytesDto };
+  /** What is wrong with this file, as facts rather than as text. */
+  'optimise:check': { args: [bytes: Uint8Array]; result: QpdfCheckDto };
+  /**
+   * A qpdf rewrite — the *second* string of a repair. PDFium reconstructs where this build of
+   * qpdf will not (ADR 0019 §1a), so the renderer tries the engine first and comes here only for
+   * a file the engine refused.
+   */
+  'optimise:repair': {
+    args: [bytes: Uint8Array];
+    result: { bytes: Uint8Array; repaired: boolean; warnings: string[] };
+  };
   'recent:list': { args: []; result: RecentFile[] };
   'recent:add': { args: [path: string]; result: RecentFile[] };
   'recent:clear': { args: []; result: RecentFile[] };
@@ -557,6 +639,10 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'security:unlock',
   'security:readCertificates',
   'security:version',
+  'optimise:structure',
+  'optimise:linearise',
+  'optimise:check',
+  'optimise:repair',
   'recent:list',
   'recent:add',
   'recent:clear',

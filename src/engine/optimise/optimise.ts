@@ -223,3 +223,31 @@ function discardWording(key: string, count: number): string {
       return `${plural(count, 'item was', 'items were')} removed`;
   }
 }
+
+/**
+ * Folds a qpdf pass that happened *after* {@link optimise} into its report.
+ *
+ * The app cannot use {@link OptimiseHooks.structure}: the in-process passes run in a renderer
+ * Worker, and qpdf runs in the main process, which a Worker cannot reach. So the Worker optimises
+ * without a hook and the renderer does the qpdf pass afterwards — and this is what makes the two
+ * arrangements produce the same report rather than two that differ in small ways nobody would
+ * notice until they disagreed.
+ */
+export function withStructure(
+  result: OptimiseResult,
+  packed: BytesAndWarnings,
+  options: StructureOptions,
+): OptimiseResult {
+  const changes = [...result.changes];
+  if (options.objectStreams || options.recompressStreams) {
+    changes.push({ what: 'The file was repacked', count: 1, saved: 0 });
+  }
+  return {
+    bytes: packed.bytes,
+    before: result.before,
+    after: packed.bytes.length,
+    changes: attributeSaving(changes, result.before, packed.bytes.length),
+    warnings: [...new Set([...result.warnings, ...packed.warnings])],
+    linearised: options.linearise,
+  };
+}
