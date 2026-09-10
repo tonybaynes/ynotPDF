@@ -202,8 +202,11 @@ export async function mountShell(root: HTMLElement, options: ShellOptions): Prom
     const switcher = createThemeSwitcher(registry, registry.service<ThemeManager>(THEME_SERVICE));
     statusBar.element.querySelector('.status-right')?.append(switcher.element);
     registry.service<ThemeManager>(THEME_SERVICE).onChange(() => {
-      // UI scale changes every natural width; re-measure the ribbon.
+      // UI scale changes every natural width; re-measure the ribbon, and re-apply the pane
+      // widths, which are stored at scale 1 and multiplied on the way to the DOM.
       ribbon.rebuild();
+      navPane.refresh();
+      propertiesPane.refresh();
     });
   }
 

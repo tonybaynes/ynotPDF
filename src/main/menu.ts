@@ -134,5 +134,10 @@ export function buildMenu(recent: RecentFiles): void {
       submenu: [cmd('app.about', 'About ynotPDF')],
     },
   ];
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  // macOS keeps its menu — it lives in the system bar and the platform expects one. Windows and
+  // Linux draw it inside the window, a second row of File/Edit/View above the ribbon's own tabs;
+  // the operator wants one tab row, so there is no application menu there (2026-09-10). Nothing
+  // is lost: every item's command is in the ribbon or the palette, and all 17 accelerators are
+  // also declared by the renderer's own commands, which bind them itself.
+  Menu.setApplicationMenu(isMac ? Menu.buildFromTemplate(template) : null);
 }

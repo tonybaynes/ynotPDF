@@ -5,7 +5,7 @@
  * and clamping live in one place.
  */
 
-import { el } from '../dom';
+import { el, uiScaleFactor } from '../dom';
 import { PANE_MAX_WIDTH, PANE_MIN_WIDTH } from '../ui/UiState';
 
 export interface ResizerOptions {
@@ -46,7 +46,9 @@ export function createResizer(options: ResizerOptions): HTMLElement {
   });
   handle.addEventListener('pointermove', (e) => {
     if (!handle.hasPointerCapture(e.pointerId)) return;
-    const delta = e.clientX - startX;
+    // Widths are stored at scale 1 (see `uiScaleFactor`), so a drag of N screen pixels is
+    // N / scale of stored width — otherwise the pane runs away from the pointer when scaled.
+    const delta = (e.clientX - startX) / uiScaleFactor();
     options.setWidth(startWidth + (options.side === 'left' ? delta : -delta));
     sync();
   });

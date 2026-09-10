@@ -6,7 +6,7 @@
  */
 
 import type { PanelSpec } from '@shared/module';
-import { button, el, srOnly } from '../dom';
+import { button, el, srOnly, uiScaleFactor } from '../dom';
 import { makeRoving } from '../focus';
 import { icon } from '../icons';
 import type { ShellServices } from '../services';
@@ -145,7 +145,7 @@ export function mountNavPane(host: HTMLElement, services: ShellServices): NavPan
     const spec = list.find((p) => p.id === st.panel) ?? null;
     const collapsed = st.collapsed || !spec;
     root.classList.toggle('pane-collapsed', collapsed);
-    root.style.width = collapsed ? '' : `${st.width}px`;
+    root.style.width = collapsed ? '' : `${st.width * uiScaleFactor()}px`;
     content.hidden = collapsed;
     resizer.hidden = collapsed || list.length === 0;
     root.hidden = list.length === 0;

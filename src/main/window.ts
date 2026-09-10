@@ -62,7 +62,9 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
     minHeight: 480,
     show: false,
     title: 'ynotPDF',
-    autoHideMenuBar: false,
+    // There is no application menu off macOS (see main/menu.ts): the ribbon's tab row is the
+    // only tab row. `true` keeps Alt from summoning a menu bar that should not exist.
+    autoHideMenuBar: true,
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
       contextIsolation: true,

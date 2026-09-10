@@ -118,3 +118,17 @@ export function debounce<A extends unknown[]>(
   };
   return wrapped;
 }
+
+/**
+ * The live `--ui-scale` factor (1 = 100%).
+ *
+ * Everything inside a pane is sized in rem, so it grows with the reader's UI scale — but a pane
+ * whose width is a fixed pixel count does not, and its contents are then cut off at the edge
+ * (the operator's right pane at 280 px, 2026-09-10). Pane widths are therefore stored at scale 1
+ * and multiplied by this on the way to the DOM.
+ */
+export function uiScaleFactor(): number {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--ui-scale');
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}

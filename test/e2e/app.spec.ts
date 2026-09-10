@@ -44,6 +44,17 @@ test('the panel open at startup is mounted after the modules activate', async ()
   await expect(app.page.locator('#pane-left .panel-error')).toHaveCount(0);
 });
 
+// One tab row, not two: off macOS the ribbon's tabs are the only tabs, so there is no
+// application menu drawing File/Edit/View/Window/Help above them (2026-09-10). Every command it
+// held is in the ribbon or the palette, and the renderer binds all of its accelerators itself.
+test('there is no second tab row above the ribbon', async () => {
+  const hasAppMenu = await app.electron.evaluate(({ Menu }) => Menu.getApplicationMenu() !== null);
+  expect(hasAppMenu).toBe(process.platform === 'darwin');
+  // The tab row is always there, and the ribbon below it is open unless the reader minimises it.
+  await expect(app.page.locator('#ribbon-tabs')).toBeVisible();
+  await expect(app.page.locator('#ribbon-body')).toBeVisible();
+});
+
 test('registers the core commands', async () => {
   const ids = await app.commands();
   for (const id of [

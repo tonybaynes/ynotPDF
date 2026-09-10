@@ -5,7 +5,7 @@
  */
 
 import type { PanelSpec } from '@shared/module';
-import { button, el } from '../dom';
+import { button, el, uiScaleFactor } from '../dom';
 import { icon } from '../icons';
 import type { ShellServices } from '../services';
 import { clampPaneWidth } from '../ui/UiState';
@@ -73,7 +73,7 @@ export function mountPropertiesPane(
     const visible = ui.get().rightPane.visible && spec !== null;
     root.hidden = !visible;
     resizer.hidden = !visible;
-    root.style.width = `${ui.get().rightPane.width}px`;
+    root.style.width = `${ui.get().rightPane.width * uiScaleFactor()}px`;
     active = visible && spec ? spec.id : null;
     if (!spec || !visible) return;
     title.textContent = spec.title;
