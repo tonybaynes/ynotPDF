@@ -175,20 +175,20 @@ describe('tab order', () => {
 
   it('reads by row, top to bottom then left to right', () => {
     const items = [box(300, 700), box(100, 700), box(100, 600)];
-    expect(tabSort(items, 'row').map((i) => i.rect.x0)).toEqual([100, 300, 100]);
-    expect(tabSort(items, 'row').map((i) => i.rect.y0)).toEqual([700, 700, 600]);
+    expect(tabSort(items, 'row', (i) => i.rect).map((i) => i.rect.x0)).toEqual([100, 300, 100]);
+    expect(tabSort(items, 'row', (i) => i.rect).map((i) => i.rect.y0)).toEqual([700, 700, 600]);
   });
 
   it('bands a row rather than sorting on `y` alone', () => {
     // Two boxes three points apart vertically are on the same line to any reader; a sort on `y`
     // would put the second one on a row of its own and tab through the form in the wrong order.
     const items = [box(300, 700), box(100, 703)];
-    expect(tabSort(items, 'row').map((i) => i.rect.x0)).toEqual([100, 300]);
+    expect(tabSort(items, 'row', (i) => i.rect).map((i) => i.rect.x0)).toEqual([100, 300]);
   });
 
   it('reads by column, left to right then top to bottom', () => {
     const items = [box(100, 600), box(300, 700), box(100, 700)];
-    expect(tabSort(items, 'column').map((i) => [i.rect.x0, i.rect.y0])).toEqual([
+    expect(tabSort(items, 'column', (i) => i.rect).map((i) => [i.rect.x0, i.rect.y0])).toEqual([
       [100, 700],
       [100, 600],
       [300, 700],

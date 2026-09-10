@@ -9,6 +9,7 @@
  * Geometry is PDF user space (points, origin bottom-left), as everywhere else.
  */
 
+import type { PdfRect } from '@shared/pdf';
 import type { AppearanceFont } from '../appearance/types';
 
 /** AcroForm field types (PDF 12.7.4) — the `/FT` values, plus our own "we could not tell". */
@@ -630,19 +631,24 @@ export function tabModeOf(name: string | null | undefined): TabOrderMode | null 
  * Rows are banded rather than sorted on `y` alone: two boxes whose vertical spans overlap by more
  * than half the shorter one are on the same line however their tops differ, which is what a form
  * laid out by eye actually looks like.
+ *
+ * `rectOf` says where an item is, so the same sort serves the engine's own boxes and the
+ * renderer's field references without either having to reshape the other's data.
  */
-export function tabSort<
-  T extends { readonly rect: { x0: number; y0: number; x1: number; y1: number } },
->(items: ReadonlyArray<T>, mode: 'row' | 'column'): T[] {
+export function tabSort<T>(
+  items: ReadonlyArray<T>,
+  mode: 'row' | 'column',
+  rectOf: (item: T) => PdfRect,
+): T[] {
   const sorted = [...items];
   if (mode === 'column') {
-    sorted.sort((a, b) => a.rect.x0 - b.rect.x0 || b.rect.y1 - a.rect.y1);
-    const bands = band(sorted, (i) => ({ lo: i.rect.x0, hi: i.rect.x1 }));
-    return bands.flatMap((column) => column.sort((a, b) => b.rect.y1 - a.rect.y1));
+    sorted.sort((a, b) => rectOf(a).x0 - rectOf(b).x0 || rectOf(b).y1 - rectOf(a).y1);
+    const columns = band(sorted, (i) => ({ lo: rectOf(i).x0, hi: rectOf(i).x1 }));
+    return columns.flatMap((column) => column.sort((a, b) => rectOf(b).y1 - rectOf(a).y1));
   }
-  sorted.sort((a, b) => b.rect.y1 - a.rect.y1 || a.rect.x0 - b.rect.x0);
-  const bands = band(sorted, (i) => ({ lo: i.rect.y0, hi: i.rect.y1 }));
-  return bands.flatMap((row) => row.sort((a, b) => a.rect.x0 - b.rect.x0));
+  sorted.sort((a, b) => rectOf(b).y1 - rectOf(a).y1 || rectOf(a).x0 - rectOf(b).x0);
+  const rows = band(sorted, (i) => ({ lo: rectOf(i).y0, hi: rectOf(i).y1 }));
+  return rows.flatMap((row) => row.sort((a, b) => rectOf(a).x0 - rectOf(b).x0));
 }
 
 /** Groups already-sorted items into bands whose spans overlap by more than half. */

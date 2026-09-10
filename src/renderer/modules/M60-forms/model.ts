@@ -13,7 +13,7 @@ import type { Document } from '@core/Document';
 import type { ModelId } from '@core/Ids';
 import { fieldDesignOf, widgetAppearanceOf, type ModelField, type ModelWidget } from '@core/model';
 import type { FieldDesign, WidgetAppearance } from '@engine/forms/model';
-import { TAB_ORDER_MODES, type TabOrderMode } from '@engine/forms/model';
+import { TAB_ORDER_MODES, tabSort, type TabOrderMode } from '@engine/forms/model';
 import type { PdfRect } from '@shared/pdf';
 
 /** The `Document.custom` namespace this module keeps its per-document state in. */
@@ -153,48 +153,13 @@ export function orderWidgets(
         byKey.delete(key);
       }
     }
-    return [...out, ...sortByBand([...byKey.values()], 'row')];
+    return [...out, ...tabSort([...byKey.values()], 'row', boxOf)];
   }
-  return sortByBand(widgets, mode === 'column' ? 'column' : 'row');
+  return tabSort(widgets, mode === 'column' ? 'column' : 'row', boxOf);
 }
 
-/** Row- or column-major order over the widget rectangles. */
-function sortByBand(widgets: ReadonlyArray<WidgetRef>, mode: 'row' | 'column'): WidgetRef[] {
-  const items = widgets.map((w) => ({ w, rect: w.widget.rect }));
-  const sorted =
-    mode === 'column'
-      ? [...items].sort((a, b) => a.rect.x0 - b.rect.x0 || b.rect.y1 - a.rect.y1)
-      : [...items].sort((a, b) => b.rect.y1 - a.rect.y1 || a.rect.x0 - b.rect.x0);
-  const bands: Array<Array<(typeof sorted)[number]>> = [];
-  for (const item of sorted) {
-    const span =
-      mode === 'column'
-        ? { lo: item.rect.x0, hi: item.rect.x1 }
-        : { lo: item.rect.y0, hi: item.rect.y1 };
-    const last = bands[bands.length - 1];
-    const prevItem = last?.[last.length - 1];
-    if (last && prevItem) {
-      const prev =
-        mode === 'column'
-          ? { lo: prevItem.rect.x0, hi: prevItem.rect.x1 }
-          : { lo: prevItem.rect.y0, hi: prevItem.rect.y1 };
-      const overlap = Math.min(prev.hi, span.hi) - Math.max(prev.lo, span.lo);
-      const shorter = Math.min(prev.hi - prev.lo, span.hi - span.lo);
-      if (overlap > shorter / 2) {
-        last.push(item);
-        continue;
-      }
-    }
-    bands.push([item]);
-  }
-  return bands
-    .flatMap((band) =>
-      mode === 'column'
-        ? [...band].sort((a, b) => b.rect.y1 - a.rect.y1)
-        : [...band].sort((a, b) => a.rect.x0 - b.rect.x0),
-    )
-    .map((i) => i.w);
-}
+/** Where a widget reference sits on the page. */
+const boxOf = (w: WidgetRef): PdfRect => w.widget.rect;
 
 /** The union of some rectangles, or null for none. */
 export function unionRect(rects: ReadonlyArray<PdfRect>): PdfRect | null {

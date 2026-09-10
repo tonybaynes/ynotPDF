@@ -68,8 +68,6 @@ export interface FormLayerHandlers {
   /** The control lost focus or the reader pressed Enter — commit the value. */
   onCommit?(key: string, value: string): void;
   onFocus?(key: string): void;
-  /** Tab past the last field of the document, or Shift+Tab before the first. */
-  onTabOut?(key: string, backwards: boolean): void;
   /** A push button was pressed. */
   onActivate?(key: string): void;
 }
@@ -93,8 +91,6 @@ interface Built {
   readonly root: HTMLDivElement;
   readonly control: HTMLElement;
   widget: LayerWidget;
-  /** The last value pushed into the control, so an outside change is not fought with typing. */
-  lastValue: string;
 }
 
 /** How far outside a widget a pointer still counts as on its resize handle, in CSS pixels. */
@@ -397,7 +393,7 @@ export class FormLayer {
     const control = this.createControl(widget, root);
     root.append(control);
     host.append(root);
-    const entry: Built = { root, control, widget, lastValue: widget.value };
+    const entry: Built = { root, control, widget };
     this.built.set(widget.key, entry);
     this.applyMode(entry);
     return entry;
@@ -606,7 +602,6 @@ export class FormLayer {
       );
       for (const option of Array.from(control.options))
         option.selected = selected.has(option.value);
-      entry.lastValue = widget.value;
       return;
     }
     if (control instanceof HTMLButtonElement) {
@@ -631,7 +626,6 @@ export class FormLayer {
       if (document.activeElement !== control && control.value !== widget.value) {
         control.value = widget.value;
       }
-      entry.lastValue = widget.value;
       if (isComb(design) && design.maxLength) {
         entry.root.style.setProperty('--widget-comb', String(design.maxLength));
       }

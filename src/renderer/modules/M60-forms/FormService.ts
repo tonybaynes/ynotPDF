@@ -495,14 +495,6 @@ export class FormService {
   /** Values whose command is in flight, by field id. See `commitValue`. */
   private readonly committing = new Map<string, string>();
 
-  /** Sets a check box or radio to an export value (or `"Off"`). */
-  async setChecked(key: string, on: boolean): Promise<void> {
-    const found = this.resolve(key);
-    if (!found) return;
-    const appearance = widgetAppearanceOf(found.widget, fieldDesignOf(found.field));
-    await this.commitValue(key, on ? appearance.exportValue : 'Off');
-  }
-
   /** A push button has no value; the actions it runs are M61's. */
   private activateButton(key: string): void {
     const found = this.resolve(key);
