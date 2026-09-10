@@ -18,6 +18,8 @@
  * Nothing here touches a PDF library or PDFium: it is a table plus two pure functions.
  */
 
+import { measureDictValue, parseMeasureScale } from './measure';
+
 /** A value a planned dictionary entry may take. `null` removes the entry. */
 export type DictValue =
   | { readonly kind: 'string'; readonly value: string }
@@ -43,7 +45,15 @@ export type DictValue =
    * writer resolves it once every planned annotation exists, so a reply to one added in the same
    * save works; a name that matches nothing is warned about and the entry is left out.
    */
-  | { readonly kind: 'annotationRef'; readonly value: string };
+  | { readonly kind: 'annotationRef'; readonly value: string }
+  /** A boolean — a measurement's `/Cap` (M33, ADR 0018). */
+  | { readonly kind: 'bool'; readonly value: boolean }
+  /**
+   * An array of anything, dictionaries included (M33, ADR 0018). A `/Measure` number-format axis
+   * is `[ << /Type /NumberFormat … >> ]`, which no other kind could say. Unlike `dict`, an array
+   * entry **replaces** what the file had: an array has no keys to merge on.
+   */
+  | { readonly kind: 'array'; readonly value: ReadonlyArray<DictValue> };
 
 /** How one model key reaches the file. */
 export interface DictMapping {
@@ -169,6 +179,37 @@ export const ANNOTATION_DICT_MAPPINGS: ReadonlyArray<DictMapping> = [
     },
   },
   { key: 'attachmentName', pdfKey: 'FS', kind: 'embeddedFile', engineWritable: false },
+  /*
+   * M33 (ADR 0018). A measurement's scale, and the leaders and caption a dimension line draws.
+   *
+   * `measure` holds a `MeasureScale` in the model — the ratio the reader set — and reaches the
+   * file as the whole RectilinearMeasure dictionary, because that is the only form a reader
+   * understands. `measureDictValue` is in `measure.ts`, so the shape of a scale is stated once.
+   */
+  {
+    key: 'measure',
+    pdfKey: 'Measure',
+    kind: 'dict',
+    engineWritable: false,
+    encode: (value) => {
+      const scale = parseMeasureScale(value);
+      return scale ? measureDictValue(scale) : null;
+    },
+  },
+  { key: 'leaderLength', pdfKey: 'LL', kind: 'number', engineWritable: false },
+  { key: 'leaderExtend', pdfKey: 'LLE', kind: 'number', engineWritable: false },
+  { key: 'leaderOffset', pdfKey: 'LLO', kind: 'number', engineWritable: false },
+  {
+    key: 'caption',
+    pdfKey: 'Cap',
+    kind: 'bool',
+    engineWritable: false,
+    // `false` is a value, not an absence: a caption turned off has to be said, or the file's own
+    // `/Cap true` would outlive the reader clearing it.
+    encode: (value) => (typeof value === 'boolean' ? { kind: 'bool', value } : null),
+  },
+  { key: 'captionPosition', pdfKey: 'CP', kind: 'name', engineWritable: true },
+  { key: 'captionOffset', pdfKey: 'CO', kind: 'numbers', engineWritable: false },
 ];
 
 const BY_KEY = new Map(ANNOTATION_DICT_MAPPINGS.map((m) => [m.key, m]));
@@ -210,7 +251,12 @@ export function toDictValue(mapping: DictMapping, value: unknown): DictValue | n
         ? { kind: 'names', value: names }
         : null;
     }
+    case 'bool':
+      return typeof value === 'boolean' ? { kind: 'bool', value } : null;
+    // Both are built by an `encode`, never coerced: there is no way to guess the shape of a
+    // dictionary or of an array of them from a bare model value (M33, ADR 0018).
     case 'dict':
+    case 'array':
       return null;
   }
 }

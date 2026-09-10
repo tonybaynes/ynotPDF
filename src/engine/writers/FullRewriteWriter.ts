@@ -1652,14 +1652,17 @@ function dictAt(ctx: PDFContext, owner: PDFDict, key: string): PDFDict | undefin
   return value instanceof PDFDict ? value : undefined;
 }
 
-/** One planned dictionary entry as a pdf-lib object (M30, ADR 0013; M31 added the arrays of names). */
+/**
+ * One planned dictionary entry as a pdf-lib object (M30, ADR 0013; M31 added the arrays of names,
+ * M33 the booleans and the arrays of anything — ADR 0018).
+ *
+ * `embeddedFile` and `annotationRef` point at objects elsewhere in the document and can only be
+ * resolved at the top level of an annotation dictionary, so they never reach here.
+ */
 function dictValue(
   ctx: PDFContext,
-  value: Exclude<
-    DictValue,
-    { kind: 'dict' } | { kind: 'embeddedFile' } | { kind: 'annotationRef' }
-  >,
-): PDFArray | PDFHexString | PDFName | PDFNumber {
+  value: Exclude<DictValue, { kind: 'embeddedFile' } | { kind: 'annotationRef' }>,
+): PDFArray | PDFBool | PDFDict | PDFHexString | PDFName | PDFNumber {
   switch (value.kind) {
     case 'string':
       return PDFHexString.fromText(value.value);
@@ -1667,10 +1670,26 @@ function dictValue(
       return PDFName.of(value.value);
     case 'number':
       return PDFNumber.of(value.value);
+    case 'bool':
+      return value.value ? PDFBool.True : PDFBool.False;
     case 'numbers':
       return ctx.obj([...value.value]);
     case 'names':
       return ctx.obj(value.value.map((n) => PDFName.of(n)));
+    case 'array': {
+      const array = PDFArray.withContext(ctx);
+      for (const item of value.value) {
+        // Both point at objects elsewhere and are resolved only on the annotation itself.
+        if (item.kind === 'embeddedFile' || item.kind === 'annotationRef') continue;
+        array.push(dictValue(ctx, item));
+      }
+      return array;
+    }
+    case 'dict': {
+      const dict = ctx.obj({});
+      mergeDict(ctx, dict, value.value);
+      return dict;
+    }
   }
 }
 

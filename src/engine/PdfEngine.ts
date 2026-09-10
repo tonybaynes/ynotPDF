@@ -137,6 +137,18 @@ export interface PageObject {
   readonly fontSize?: number;
 }
 
+/**
+ * The outline of one path object, flattened to polylines in page space (M33, ADR 0018).
+ *
+ * Béziers are subdivided; a closed subpath repeats its first point as its last, so a caller can
+ * walk `points[i] → points[i + 1]` and see every edge without a special case for the closing one.
+ */
+export interface PageObjectPath {
+  /** Index into the page's object list, as `pageObjects` numbers them. */
+  readonly index: number;
+  readonly subpaths: ReadonlyArray<ReadonlyArray<PdfPoint>>;
+}
+
 /** Annotation subtypes (PDF 12.5.6). */
 export type AnnotationSubtype =
   | 'Text'
@@ -638,6 +650,14 @@ export interface PdfEngine {
   textRuns(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<TextRun>>;
   /** Content objects of a page, in z-order (index 0 is bottom-most). */
   pageObjects(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<PageObject>>;
+  /**
+   * The outlines of a page's path objects, flattened to polylines in page space (M33, ADR 0018).
+   *
+   * **Optional, and callers must cope with its absence.** It needs PDFium's `FPDFPath_*` exports,
+   * which a wasm build need not have, and the in-memory engine the model tests use has no path
+   * data at all. Where it is missing, fall back to `pageObjects`' bounding boxes.
+   */
+  pageObjectPaths?(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<PageObjectPath>>;
   annotations(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<Annotation>>;
   formFields(doc: DocHandle): Promise<ReadonlyArray<FormField>>;
   /** Links on a page with their destination / URI resolved (ADR 0005). */
@@ -901,6 +921,7 @@ export const ENGINE_METHODS = [
   'render',
   'textRuns',
   'pageObjects',
+  'pageObjectPaths',
   'annotations',
   'formFields',
   'links',

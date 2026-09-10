@@ -22,11 +22,13 @@ import {
   underlineAppearance,
 } from './markup';
 import { noteAppearance } from './note';
+import { measureAware } from './measure';
 import {
   circleAppearance,
   lineAppearance,
   polygonAppearance,
   polylineAppearance,
+  shapeDrawings,
   squareAppearance,
 } from './shapes';
 import { stampAppearance } from './stamp';
@@ -127,6 +129,59 @@ export {
   type ShapeDrawing,
 } from './shapes';
 export {
+  MEASURE_UNITS,
+  MEASURE_INTENTS,
+  POINTS_PER_UNIT,
+  UNIT_NAMES,
+  FRACTION_DENOMINATORS,
+  DEFAULT_MEASURE_SCALE,
+  DEFAULT_MEASURE_STYLE,
+  CAPTION_FONT,
+  areaFactor,
+  captionBounds,
+  centroid,
+  dimensionLine,
+  formatFraction,
+  formatMeasureNumber,
+  formatMeasurement,
+  isMeasureIntent,
+  isMeasureUnit,
+  isMeasurement,
+  kindOfIntent,
+  linearFactor,
+  measureArea,
+  measureAware,
+  measureDictValue,
+  measureDrawings,
+  measureIntentOf,
+  measureLength,
+  measureRectFor,
+  measureScaleOf,
+  measureStyleOf,
+  measurementOf,
+  midpointAlong,
+  normaliseScale,
+  paintMeasurement,
+  parseMeasureScale,
+  pathLength,
+  polygonArea,
+  readableAngle,
+  scaleFromNumberFormat,
+  scaleRatioText,
+  shoelace,
+  unitLabel,
+  type CaptionPosition,
+  type MeasureCaption,
+  type MeasureDrawings,
+  type MeasureIntent,
+  type MeasureKind,
+  type MeasureScale,
+  type MeasureStyle,
+  type MeasureUnit,
+  type Measurement,
+  type RawNumberFormat,
+} from './measure';
+export {
   smoothStrokeOps,
   catmullRomSegments,
   inkDrawings,
@@ -221,9 +276,16 @@ export function createAppearanceService(): AppearanceService {
   const service = new AppearanceService();
   service.register('Square', squareAppearance);
   service.register('Circle', circleAppearance);
-  service.register('Line', lineAppearance);
-  service.register('Polygon', polygonAppearance);
-  service.register('PolyLine', polylineAppearance);
+  /*
+   * The three subtypes a measurement can be are registered through `measureAware` (M33,
+   * ADR 0018): a `Line`, `Polygon` or `PolyLine` carrying a `/Measure` and a dimension `/IT`
+   * draws its leaders and its caption, and anything else is drawn exactly as before. It is
+   * wired here rather than in M33's `activate` so a file's captions survive a save made by a
+   * build without the measuring tools in it.
+   */
+  service.register('Line', measureAware(lineAppearance, shapeDrawings));
+  service.register('Polygon', measureAware(polygonAppearance, shapeDrawings));
+  service.register('PolyLine', measureAware(polylineAppearance, shapeDrawings));
   service.register('Ink', inkAppearance);
   service.register('Highlight', highlightAppearance);
   service.register('Underline', underlineAppearance);
