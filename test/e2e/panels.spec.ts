@@ -89,21 +89,43 @@ async function openPath(path: string): Promise<void> {
 const navState = (): Promise<NavState> => app.run('dev.navState') as Promise<NavState>;
 const viewState = (): Promise<ViewerState> => app.run('dev.viewerState') as Promise<ViewerState>;
 
+/**
+ * A fresh path for every open, so no test inherits where another one left the reader.
+ *
+ * M11 remembers the page, zoom and scroll of every document *by path* and puts the reader back
+ * there when it is reopened — a feature, and one `viewer.spec.ts` tests on purpose. These tests
+ * all opened `C:/fixtures/<name>`, so the second test to open `multipage.pdf` started wherever
+ * the first one had finished: "two pages on from the start" landed on page 4, not page 2, and
+ * only when the earlier test had got far enough to be remembered. A different path each time
+ * means each test opens a document nothing has seen before, which is what they all assume
+ * (2026-09-11).
+ */
+let opens = 0;
+
 /** Opens a fixture and waits for its first page. */
-async function open(name: string, path = `C:/fixtures/${name}`): Promise<void> {
+async function open(name: string, path = `C:/fixtures/${String(++opens)}/${name}`): Promise<void> {
   const bytes = Array.from(readFileSync(join(FIXTURES, name)));
   await app.run('file.openBytes', { file: { path, name, bytes } });
   await app.page.waitForSelector('.viewer-content .page');
   await settle();
 }
 
-/** Waits until the thumbnails the panel wants have been drawn, or the time is up. */
+/**
+ * Waits until the thumbnails the panel wants have been drawn, or the time is up.
+ *
+ * Two empty queues in a row, not one: a document that has only just opened has not queued its
+ * thumbnails yet, so the first reading is zero because the work has not started rather than
+ * because it has finished — and the caller walks on to click a cell that is not there yet.
+ */
 async function settle(timeout = 6000): Promise<void> {
   const deadline = Date.now() + timeout;
+  let quiet = 0;
   for (;;) {
     await app.page.waitForTimeout(120);
     const state = await navState().catch(() => null);
-    if (!state || state.thumbnailStats.queued === 0) return;
+    if (!state) return;
+    quiet = state.thumbnailStats.queued === 0 ? quiet + 1 : 0;
+    if (quiet >= 2) return;
     if (Date.now() > deadline) return;
   }
 }
@@ -257,7 +279,9 @@ test.describe('the thumbnail grid — the operator’s layout rules', () => {
 
   test('clicking a thumbnail navigates, and the current page is marked with a word', async () => {
     await open('multipage.pdf');
-    await app.page.locator('.thumb-cell').nth(2).click();
+    // The cell for page 2, not the third cell drawn: the grid is virtualised, so which pages are
+    // mounted — and in what order — is its business, and `nth(2)` was only page 2 by luck.
+    await app.page.locator('.thumb-cell[data-page="2"]').click();
     // Polled rather than waited out: the viewport scrolls, tells the store, and the panel
     // repaints on the next frame, and how long that takes is the runner's business.
     await expect.poll(async () => (await viewState()).page).toBe(2);

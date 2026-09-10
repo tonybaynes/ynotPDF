@@ -103,7 +103,7 @@ export class PreferencesService {
   private themeApplier(): SettingsApplier {
     return {
       prefixes: ['theme', 'ui.scale', 'view.nightMode'],
-      apply: (values, changed) => {
+      apply: async (values, changed) => {
         const themes = this.themes;
         if (!themes) return;
         if (changed.has('theme.name')) {
@@ -120,6 +120,9 @@ export class PreferencesService {
           const next = typeof night === 'boolean' ? night : false;
           if (next !== themes.nightMode) themes.setNightMode(next);
         }
+        // The manager saves its own copy of these keys, so let that landing finish before
+        // `apply` moves on to reload every service — one of which reads them straight back.
+        await themes.whenSaved();
       },
     };
   }
