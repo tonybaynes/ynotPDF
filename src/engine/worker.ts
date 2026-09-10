@@ -62,7 +62,13 @@ export function serveEngine(
       port.postMessage({ kind: 'progress', id: req.id, fraction });
     };
     // eslint-disable-next-line @typescript-eslint/unbound-method -- invoked with Reflect.apply(engine) below
-    const fn = eng[req.method] as (...args: unknown[]) => Promise<unknown>;
+    const fn = eng[req.method] as ((...args: unknown[]) => Promise<unknown>) | undefined;
+    // A `PdfEngine` method may be optional since M33 (ADR 0018); a backend without it says so
+    // rather than failing with "fn is not a function" three frames deep.
+    if (typeof fn !== 'function') {
+      fail(req.id, new EngineError('not-implemented', `${req.method} is not available`));
+      return;
+    }
     const args = req.method === 'save' ? [...req.args, progress] : [...req.args];
     try {
       const result: unknown = await Reflect.apply(fn, eng, args);

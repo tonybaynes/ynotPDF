@@ -104,6 +104,14 @@ export const PROPERTIES_PANEL_ID = 'props.annotation';
  */
 export interface AnnotationProvider {
   readonly id: string;
+  /**
+   * How badly this provider wants an annotation two of them both claim. Higher wins; the default
+   * is 0, and registration order breaks a tie (M33, ADR 0018).
+   *
+   * M31's provider claims the whole `shape` family, and a measurement *is* a shape — a `Line`,
+   * `PolyLine` or `Polygon` with a dimension `/IT`. M33 registers at 10 and takes those back.
+   */
+  readonly priority?: number;
   /** Tool ids that create something and must own the pointer while active. */
   readonly creationTools?: ReadonlySet<string>;
   owns(a: ModelAnnotation): boolean;
@@ -303,9 +311,19 @@ export class AnnotationService {
     };
   }
 
-  /** The provider that owns an annotation, or null when it is one of this module's own. */
+  /**
+   * The provider that owns an annotation, or null when it is one of this module's own.
+   *
+   * The highest `priority` among those that claim it wins, and registration order breaks a tie
+   * (M33, ADR 0018) — a measurement is a shape, and both M31 and M33 say yes to it.
+   */
   providerFor(a: ModelAnnotation): AnnotationProvider | null {
-    return this.providers.find((p) => p.owns(a)) ?? null;
+    let best: AnnotationProvider | null = null;
+    for (const provider of this.providers) {
+      if (!provider.owns(a)) continue;
+      if (best === null || (provider.priority ?? 0) > (best.priority ?? 0)) best = provider;
+    }
+    return best;
   }
 
   /** Whether the overlay, the selection and the panel handle this annotation at all. */

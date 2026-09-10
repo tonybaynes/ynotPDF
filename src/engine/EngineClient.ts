@@ -25,6 +25,13 @@ import {
 } from './PdfEngine';
 import { collectTransferables, type RpcFromWorker, type RpcRequest, type RpcToWorker } from './rpc';
 
+/**
+ * One engine method as a callable type. `PdfEngine` has optional methods since M33 (ADR 0018),
+ * and `Parameters<T>` refuses a `T` that may be `undefined` — the proxy forwards every method by
+ * name whether the backend implements it or not, so the union is narrowed here.
+ */
+type EngineFn<M extends EngineMethod> = NonNullable<PdfEngine[M]>;
+
 interface Pending {
   readonly method: EngineMethod;
   /** Document handle of the call, when its first argument is one. */
@@ -110,16 +117,16 @@ export class EngineClient {
   /** Low-level call. Prefer the typed `engine` proxy. */
   call<M extends EngineMethod>(
     method: M,
-    args: Parameters<PdfEngine[M]>,
-  ): Promise<Awaited<ReturnType<PdfEngine[M]>>> {
+    args: Parameters<EngineFn<M>>,
+  ): Promise<Awaited<ReturnType<EngineFn<M>>>> {
     return this.request(method, args).promise;
   }
 
   /** Like {@link call} but returns a handle that can cancel the request (ADR 0005). */
   request<M extends EngineMethod>(
     method: M,
-    args: Parameters<PdfEngine[M]>,
-  ): RequestHandle<Awaited<ReturnType<PdfEngine[M]>>> {
+    args: Parameters<EngineFn<M>>,
+  ): RequestHandle<Awaited<ReturnType<EngineFn<M>>>> {
     const id = this.nextId++;
     if (this.terminated) {
       return {
@@ -138,7 +145,7 @@ export class EngineClient {
     }
     const request: RpcRequest = { kind: 'request', id, method, args: plainArgs };
     const first = plainArgs[0];
-    const promise = new Promise<Awaited<ReturnType<PdfEngine[M]>>>((resolve, reject) => {
+    const promise = new Promise<Awaited<ReturnType<EngineFn<M>>>>((resolve, reject) => {
       this.pending.set(id, {
         method,
         doc: typeof first === 'number' && method !== 'info' ? first : undefined,
@@ -200,7 +207,7 @@ export class EngineClient {
     const proxy: Record<string, unknown> = {};
     for (const method of ENGINE_METHODS) {
       proxy[method] = (...args: unknown[]) =>
-        this.call(method, args as Parameters<PdfEngine[typeof method]>);
+        this.call(method, args as Parameters<EngineFn<typeof method>>);
     }
     return proxy as unknown as PdfEngine;
   }

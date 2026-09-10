@@ -491,12 +491,15 @@ describe('quad-aware text markup', () => {
 });
 
 describe('the dictionary mapping', () => {
-  it('names every key M30, M31 and M32 write, and only those', () => {
+  it('names every key M30, M31, M32 and M33 write, and only those', () => {
     const keys = ANNOTATION_DICT_MAPPINGS.map((m) => m.key).sort();
     expect(keys).toEqual([
       'align',
       'attachmentName',
       'callout',
+      'caption',
+      'captionOffset',
+      'captionPosition',
       'cloudy',
       'dashArray',
       'defaultAppearance',
@@ -504,8 +507,12 @@ describe('the dictionary mapping', () => {
       'icon',
       'inReplyTo',
       'intent',
+      'leaderExtend',
+      'leaderLength',
+      'leaderOffset',
       'lineEnding',
       'lineEndings',
+      'measure',
       'padding',
       'replyType',
       'richContents',

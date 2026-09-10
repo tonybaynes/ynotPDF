@@ -8,6 +8,7 @@
 import type { PDFObject } from 'pdf-lib';
 import {
   PDFArray,
+  PDFBool,
   PDFDict,
   PDFDocument,
   PDFHexString,
@@ -20,6 +21,7 @@ import {
   decodePDFRawStream,
 } from 'pdf-lib';
 import { parseTreeKey } from '@shared/portfolio';
+import { scaleFromNumberFormat, type MeasureScale } from '../appearance/measure';
 import { DEFAULT_INITIAL_VIEW } from '../PdfEngine';
 import type {
   CollectionField,
@@ -54,6 +56,19 @@ export interface AnnotColors {
   readonly cloudy?: number;
   /** `/BS /D` — the dash pattern (M31). */
   readonly dashArray?: ReadonlyArray<number>;
+  /**
+   * `/Measure` as a scale (M33, ADR 0018). Rebuilt from the `/D` (or `/X`) number format, since
+   * that is what states the arithmetic; `/R` is only words.
+   */
+  readonly measure?: MeasureScale;
+  /** `/LL`, `/LLE`, `/LLO` — a dimension line's leaders (M33). */
+  readonly leaderLength?: number;
+  readonly leaderExtend?: number;
+  readonly leaderOffset?: number;
+  /** `/Cap`, `/CP`, `/CO` — whether the value is drawn on the line, where, and nudged how far. */
+  readonly caption?: boolean;
+  readonly captionPosition?: string;
+  readonly captionOffset?: ReadonlyArray<number>;
 }
 
 export interface RawInfo {
@@ -119,6 +134,44 @@ export function colorArrayToRgb(components: ReadonlyArray<number>): number | und
     default:
       return undefined; // empty array = transparent / no colour
   }
+}
+
+/**
+ * A `/Measure` dictionary as a scale (M33, ADR 0018).
+ *
+ * The distance format (`/D`) is what a length is shown in; a file that gives only `/X` — which is
+ * what the spec's default says to fall back on — is read from that instead. Anything malformed is
+ * simply absent: a measurement with no scale falls back to the app's own, which is what a reader
+ * would rather have than a number computed from a factor that made no sense.
+ */
+function readMeasure(
+  value: unknown,
+  resolve: (value: PDFObject | undefined) => unknown,
+): MeasureScale | undefined {
+  if (!(value instanceof PDFDict)) return undefined;
+  const at = (owner: PDFDict, key: string): unknown => resolve(owner.get(PDFName.of(key)));
+  for (const axis of ['D', 'X']) {
+    const array = at(value, axis);
+    if (!(array instanceof PDFArray) || array.size() === 0) continue;
+    const format = resolve(array.get(0));
+    if (!(format instanceof PDFDict)) continue;
+    const unit = at(format, 'U');
+    const conversion = at(format, 'C');
+    if (!(conversion instanceof PDFNumber)) continue;
+    const label =
+      unit instanceof PDFHexString || unit instanceof PDFString ? unit.decodeText() : null;
+    if (label === null) continue;
+    const style = at(format, 'F');
+    const denominator = at(format, 'D');
+    const scale = scaleFromNumberFormat({
+      unit: label,
+      conversion: conversion.asNumber(),
+      ...(style instanceof PDFName ? { fractionStyle: style.decodeText() } : {}),
+      ...(denominator instanceof PDFNumber ? { denominator: denominator.asNumber() } : {}),
+    });
+    if (scale) return scale;
+  }
+  return undefined;
 }
 
 const XMP_BEGIN = '<?xpacket begin=';
@@ -300,6 +353,12 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
               .map((v) => (v instanceof PDFNumber ? v.asNumber() : Number.NaN));
             if (nums.length > 0 && !nums.some((n) => Number.isNaN(n))) dashArray = nums;
           }
+          // `/Measure` and the dimension entries beside it (M33, ADR 0018). PDFium has a getter
+          // for none of them, and a measurement that reopened without its scale would show a
+          // different number from the one it was saved with.
+          const measure = readMeasure(entryOf(dict, 'Measure'), (v) => ctx.lookup(v));
+          const cap = entryOf(dict, 'Cap');
+          const captionPosition = entryOf(dict, 'CP');
           out.push({
             ...optional('color', read('C')),
             ...optional('interiorColor', read('IC')),
@@ -311,6 +370,16 @@ export async function readRawInfo(bytes: Uint8Array): Promise<RawInfo> {
             ...optional('lineEndings', lineEndings),
             ...optional('cloudy', cloudy),
             ...optional('dashArray', dashArray),
+            ...optional('measure', measure),
+            ...optional('leaderLength', number('LL')),
+            ...optional('leaderExtend', number('LLE')),
+            ...optional('leaderOffset', number('LLO')),
+            ...optional('caption', cap instanceof PDFBool ? cap.asBoolean() : undefined),
+            ...optional(
+              'captionPosition',
+              captionPosition instanceof PDFName ? captionPosition.decodeText() : undefined,
+            ),
+            ...optional('captionOffset', numbers('CO')),
           });
         }
       }

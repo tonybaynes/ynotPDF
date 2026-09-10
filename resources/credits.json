@@ -21,8 +21,14 @@
         "M20",
         "M21",
         "M30",
+        "M31",
+        "M32",
+        "M33",
         "M40",
+        "M41",
+        "M42",
         "M70",
+        "M72",
         "M91"
       ],
       "note": "Every icon in the interface. Drawn inline as SVG with stroke=\"currentColor\", so contrast comes from the theme's --icon token and never from the icon itself."
