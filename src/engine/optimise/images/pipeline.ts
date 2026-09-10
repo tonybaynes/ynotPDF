@@ -138,10 +138,24 @@ function optimiseOne(
   const wantsRecompression = policy.codec !== 'keep';
   if (!target && !wantsRecompression) return null;
 
-  const written = writeImage(doc, ref, stream, scaled, info, policy.codec, policy.quality);
+  const before = stream.getContentsSize();
+  let written = writeImage(doc, ref, stream, scaled, info, policy.codec, policy.quality);
   if (!written) return null;
 
-  const before = stream.getContentsSize();
+  /*
+   * When the chosen codec made it bigger, try flate at the new size before giving up.
+   *
+   * This matters more than it sounds. A picture that flates well — a screenshot, a chart, an
+   * indexed palette — can be *smaller* as 200 px of flate than as 100 px of JPEG, and the naive
+   * rule ("it grew, put it back") then throws away a downsample that would have helped, because
+   * one of the two changes lost. Trying the lossless codec at the reduced size costs one deflate
+   * and recovers exactly that case.
+   */
+  if (options.neverGrow && written.length >= before && policy.codec === 'jpeg') {
+    const lossless = writeImage(doc, ref, stream, scaled, info, 'flate', 100);
+    if (lossless) written = lossless;
+  }
+
   if (options.neverGrow && written.length >= before) {
     // Put it back exactly as it was. Nothing is said about it: "this image did not get smaller"
     // is not something a reader can act on.
