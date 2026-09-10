@@ -73,6 +73,14 @@ jobs:
       - name: Lint (eslint, prettier, colour/opacity rules, tsc)
         run: npm run lint
 
+      # M04, advisory: warn when a new e2e spec drives the app only through its command API.
+      # A warning, never a failure — a spec that legitimately has no journey in it (an engine
+      # test, an arithmetic test) must not be blocked, and a rule that blocks gets deleted.
+      - name: Journey helpers (advisory)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: node scripts/check-journeys.ts
+
       - name: Unit tests (vitest, coverage gate)
         run: npm test
 

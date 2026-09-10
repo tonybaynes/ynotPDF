@@ -271,6 +271,13 @@ is colourblind: black and red read as the same colour):**
   (`src/shared`, `src/renderer/core`, `src/renderer/app`, `package.json`)
   must be minimal, additive, and listed in the PR description. Changing a
   contract needs an ADR (`docs/adr/NNNN-*.md`) merged first as its own PR.
+- **A feature is not covered until a test reaches it the way a person does**
+  (M04). Asserting that something is *visible* is not asserting that it is
+  *usable*: a UI test presses the button by its **visible label**, clicks the
+  panel tile, clicks the page, and then asserts *where* things are —
+  `test/e2e/journey.ts` and `test/e2e/layout.ts` are the helpers, and
+  `test/README.md` states the rule in full. `app.run(...)` is for setup, never
+  for the action under test.
 - Data that can change (presets, stamp catalogues, substitution tables)
   goes in `resources/` data files, not code.
 - Commits: `<Mid>: <what>` and end with
@@ -294,8 +301,157 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+Written up in full in **[ADR 0019](../adr/0019-ui-journey-harness.md)**, which is the shared
+contract for the helpers. The decisions, in short:
+
+1. **Clipping is only clipping where a box actually clips.** `expectNothingClipped` reports an
+   overflow on an element whose `overflow` is `hidden` or `clip`, and a *reachability* failure on
+   one whose `overflow` is `auto` or `scroll`. Content spilling out of an `overflow: visible` box
+   is still painted and still readable — whether it then leaves the window is
+   `expectInsideWindow`'s question. The first version of the helper reported every overflow and
+   drowned in two-pixel rounding noise from absolutely-positioned thumbnail cells and page roots;
+   a check nobody can read is a check nobody runs.
+2. **Reachability, not overflow, is what catches defect 1.** A scrolling box whose content is
+   centred overflows at *both* ends and its top slides above the scroll origin, where no
+   scrollbar reaches. The helper scrolls the box to 0 and asserts the first laid-out child's top
+   is not above the content box's.
+3. **Deliberate truncation is declared in the product, not tolerated in the test.** A box that
+   cuts content off on purpose carries `data-allow-clip` with a sentence saying why: the comments
+   row clamped to three lines (M32's own documented design), the deskew dialog's fixed preview
+   window, and the document tab strip, whose tabs meet its bottom border at the seam. Everything
+   else that is cut off is a defect. Our own choice; the alternative — a list of exempt selectors
+   inside the test — puts the reason where the next reader will not look.
+4. **Two measurement corrections, both measured rather than assumed.** A text field's Chromium
+   `scrollWidth` runs a few pixels past its `clientWidth` even when the value fits ("100%" is
+   27 px in a 30 px box and the input still reports 33), and the visually-hidden idiom
+   (`clip: rect(0 0 0 0)`) is *meant* to overflow a 1x1 box — `.sr-only`, the QAT's labels and the
+   whole ribbon in compact mode all use it. Both are skipped, with the numbers in the code.
+5. **`expectReadable` is the one opacity walk.** `annotations`, `comments`, `drawing` and
+   `preferences` each carried a copy of the "no `opacity < 1`, no `rgba()` alpha, no
+   `backdrop-filter`" walk from `CLAUDE.md`. The shared implementation lives in `layout.ts` and
+   adds the contrast half (4.5:1 against the first opaque background behind the text), skipping
+   elements painted over a gradient or an image, where there is no single colour to compare.
+6. **A journey helper asserts the hit before it clicks.** `elementFromPoint` at the click point
+   has to resolve inside the target; when it does not, the failure names what is on top. Relying
+   on Playwright's actionability retry means an "intercepts pointer events" ends in a pass often
+   enough that nothing notices.
+7. **Page coordinates are fractions, not pixels.** The viewer re-fits the page whenever the
+   window around it changes, and it changes mid-journey: the first annotation opens the
+   properties pane and the page goes from 1006x1423 to 720x1019. Every pixel offset measured
+   before that then points at the wrong line — which cost an afternoon to find, so `clickPageAt`
+   and `dragOnPageAt` take fractions and `test/README.md` says why.
+8. **`YNOT_E2E_NO_DEMO=1` rather than deleting the demo module.** The demo module is M02's own
+   regression suite and covers every contribution point; both worlds have to be testable — the
+   one the shell tests need and the one the reader gets. Four additive lines
+   (`src/shared/ipc.ts`, `src/preload/index.ts`, `src/main/window.ts`, `src/renderer/main.ts`),
+   no behaviour change in a release build.
+9. **The UI scale is seeded into the profile, not set by a command.** A layout that only works at
+   100 % gets to look correct at the first paint and is then never re-measured, so the matrix
+   launches with `ui.scale` already written into `settings.json`.
+10. **The rule is machine-checked.** `test/e2e/journeys/coverage.spec.ts` reads the ticks in
+    `PLAN.md` §0 and the test titles in `test/e2e/journeys/`, and fails when a merged module has
+    no journey named after it; a second test rejects an `app.run` of a feature command inside a
+    journey, with a named allow-list for setup. The CI step (`scripts/check-journeys.ts`) that
+    looks at the *older* specs only warns — a rule that fails the build over a judgement call
+    gets deleted, and then it catches nothing.
+
+**Provenance.** Nothing here comes from another product. The five defects are the operator's own
+(2026-09-10); the contrast maths is WCAG 2.1's relative-luminance formula; the reachability rule
+is CSS box-model arithmetic. Visual comparison is Playwright's own `toHaveScreenshot`.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Merged 2026-09-10** from branch `mod/M04-ui-journey-tests`.
+
+### The five defects, each with a test that fails against the commit before its fix
+
+Verified by restoring the pre-fix source into the worktree, rebuilding, and running the named
+test. Every one failed, in the words below, and passes on `main`.
+
+| # | Fixed in | The test that catches it | What it says against the pre-fix build |
+|---|---|---|---|
+| 1 | `90cdd1c` | `startup.spec.ts` — *the start page is whole*; `scale-matrix.spec.ts` — *the start page survives all three window sizes* | `expect(#doc-host).toBeHidden() … Received: visible`, and `clipped: div#empty-state — the top of a scrolling box is above its scroll origin, so it can never be reached (first child top 208 vs content top 438)` |
+| 2 | `884f000` | `startup.spec.ts` — *no panel anywhere says it is not available* | `after opening nav.pages … "The navigation panels are not available"`, and the Pages panel has no thumbnails |
+| 3 | `d1edee4` | `scale-matrix.spec.ts` — *UI scale 150% / a document with both panes…* | `clipped: h2#nav-title.pane-title — content is cut off at the right edge of its box (scrollWidth 103 > clientWidth 87)` |
+| 4 | `d1edee4` | `startup.spec.ts` — *there is one row of tabs* | `Menu.getApplicationMenu() !== null` gives `Expected: false, Received: true` |
+| 5 | `45d810f` | `journeys/annotate.spec.ts` — *a catalogue stamp and a stamp the reader made both go on by tile then page* | the first stamp group is `"Standard business"`, not `"Custom"` |
+
+### What the new tests found — seven defects, all fixed in this branch
+
+The point of the module, and the reason the diff touches product code at all.
+
+1. **The Pages panel was mounted twice on the real startup path.** A panel whose `mount` changes
+   UI state re-enters the pane's own `refresh` before the pane has recorded it, so the reader got
+   two Pages panels stacked in the nav host. Invisible to the old suite, because with the demo
+   module registered the panel a fresh profile opens is `demo.alpha`, whose mount changes nothing.
+   Fixed in `src/renderer/app/panes/NavPane.ts` and `PropertiesPane.ts` — claim the slot before
+   mounting — and asserted by *every panel is mounted exactly once*.
+2. **The ribbon clipped its last buttons at 150 % and 200 % UI scale.** `fitGroups` collapses
+   groups from the right until they fit, using a flat 72 px for a collapsed group — a pixel
+   constant that does not scale, so it stopped collapsing while the groups still needed another
+   two hundred pixels. The same mistake as defect 3, in a second place. Fixed in
+   `src/renderer/app/ribbon/Ribbon.ts`.
+3. **The comments list clipped every row at 150 % and 200 %.** M32 computes row heights from
+   constants documented as "CSS pixels at 100 % UI scale", while the stylesheet sizes the rows in
+   rem — so at the scale the operator actually runs, every row was a 100 %-height box holding
+   200 %-sized text. Fixed in `M32-comments-panel/metrics.ts` (a `scale` option) and
+   `CommentsPanel.ts` (passing `uiScaleFactor()`).
+4. **The navigation strip could not be reached at 200 % in a short window.** Eleven panel buttons
+   at 2.3 rem need 414 px at 200 %, which a 600 px-high window does not have; the last two were
+   drawn below the pane's own bottom edge, inside `overflow: hidden`. Fixed in
+   `src/renderer/app/panes/panes.css` — the strip scrolls when it has to.
+5. **"Pick the highlighter, then drag" highlighted nothing.** A markup command works on the
+   *current* text selection, and with nothing selected the ribbon button only switched the reader
+   into the text tool — while `M30/tools.ts` has always said a reader "can just pick Highlight and
+   drag, which is what Foxit does". The command now **arms** the markup and the drag that follows
+   applies it (`AnnotationService.armMarkup`), waiting for the selection to arrive rather than for
+   a fixed number of frames: a dense line of monospaced text resolves its caret later than two
+   frames, and the markup then fired on an empty selection, which looks exactly like the tool not
+   working.
+6. **A PDF on the command line was sometimes dropped.** Main decided the renderer was listening
+   from `did-finish-load`, which fires when the *document* has loaded — while the renderer's
+   entry module still has a theme to read, a shell to mount and its IPC listeners to install,
+   all behind `await`s. The file was pushed at that moment and landed on nobody, so
+   double-clicking a PDF opened an empty app: intermittently, which is exactly why it had
+   survived. It showed up here as a flaky startup test and then reproduced. The renderer now
+   says when it is ready (`app:ready`, a new invoke channel — see ADR 0019 §3a) and main flushes
+   what it was holding then.
+7. **Three boxes clip on purpose and now say so** — the comments row's three-line clamp, the
+   deskew dialog's rotated preview, and the tab strip's seam. `data-allow-clip` carries the
+   reason, so the next reader knows which of the two it is looking at.
+
+### Not covered, and why
+
+- **Filling a form field.** The brief's minimum journey list includes it and it cannot be written
+  yet: M60 (Form fill & AcroForm field designer) is unbuilt, the Form ribbon tab is empty, and no
+  merged module offers a fill command. `journeys/coverage.spec.ts` will demand a journey named
+  `M60` the moment its row in `PLAN.md` §0 is ticked, so it cannot be forgotten.
+- **Visual baselines exist for Windows only.** Only `win32` could be seeded from this machine, so
+  `visual.spec.ts` skips with a message on a platform whose baselines are missing rather than
+  failing. Seeding macOS and Linux is one command on each
+  (`npx playwright test test/e2e/visual.spec.ts --update-snapshots=all`) and a commit.
+
+### Shape of the work
+
+- `test/e2e/layout.ts` — four assertions, each naming the element and both numbers.
+- `test/e2e/journey.ts` — the helpers, each hit-testing before it clicks.
+- `test/e2e/journeys/` — 22 journeys over the 22 merged modules, plus `coverage.spec.ts`.
+- `test/e2e/startup.spec.ts` — 11 tests: a fresh profile with no demo module, a document on the
+  command line, all four `ui.leftPaneOnOpen` values, and a relaunch after a crash.
+- `test/e2e/scale-matrix.spec.ts` — 100/150/200 % across 1280x800, 1920x1080 and 1280x600.
+- `test/e2e/visual.spec.ts` — ten screens, `maxDiffPixelRatio: 0.02`, baselines committed.
+- `test/e2e/harness.ts` — `noDemo`, `settings`, `open`, `window`; `resize`, `contentSize`,
+  `userData`. Additive: every existing call site is unchanged.
+- Shared files touched, all additive and small: `src/shared/ipc.ts` (one bridge flag and the
+  `app:ready` channel), `src/main/ipc.ts`, `src/main/index.ts`,
+  `src/preload/index.ts`, `src/main/window.ts`, `src/renderer/main.ts`,
+  `src/renderer/app/panes/{NavPane,PropertiesPane}.ts`, `panes.css`,
+  `src/renderer/app/ribbon/Ribbon.ts`, `src/renderer/app/tabs/TabStrip.ts`.
+- `scripts/check-journeys.ts` and an advisory CI step, `test/README.md`, and the rule added to the
+  shared wording carried by all 44 module briefs.
+
+### Cost
+
+The suite went from about six minutes to **7.9 minutes** locally — one worker, 463 tests, 4
+skipped. The budget is ten. The matrix is the expensive part and relaunches only where the scale
+has to differ at the first paint: three launches, not nine.

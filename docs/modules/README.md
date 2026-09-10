@@ -50,3 +50,13 @@ One self-contained brief per module. Tell a conversation:
 | 9 | [M81 Digital signatures — sign, certify, timestamp, LTV, validate, trust](./M81-digital-signatures.md) | Core | M80, M60 |
 | 9 | [M94 PDF/A conversion & basic validation](./M94-pdfa.md) | Pro | M100, M72 |
 | 10 | [M131 Installers, code signing, auto-update, crash reporting, help & first run](./M131-release.md) | Core | M00, M130 |
+
+---
+
+## The rule every brief carries
+
+**A feature is not covered until a test reaches it the way a person does.** Asserting that
+something is *visible* is not asserting that it is *usable*. The helpers are
+`test/e2e/journey.ts` and `test/e2e/layout.ts`; the rule is stated in full in `test/README.md`
+and the reasoning is in [ADR 0019](../adr/0019-ui-journey-harness.md).
+
