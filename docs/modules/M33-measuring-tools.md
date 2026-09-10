@@ -236,7 +236,78 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **A measurement is one of M31's shapes carrying a `/Measure` dictionary, not a family of its
+  own.** Distance is a `Line` with `/IT /LineDimension`, perimeter a `PolyLine` with
+  `/IT /PolyLineDimension`, area a `Polygon` with `/IT /PolygonDimension` — what Acrobat and Foxit
+  write, so ours reopen in either as measurements rather than as plain shapes. The model already
+  has the `shape` family, so nothing new is added to it: M33 registers a second
+  `AnnotationProvider` (ADR 0015) and takes those three intents back off M31's.
+- **A provider says how badly it wants an annotation.** `providerFor` used to take the first
+  provider that claimed one, and M31's claims every shape — so M33's would never have been asked.
+  `AnnotationProvider.priority` (default 0, higher first) is the whole fix; M33 registers at 10
+  and M31 keeps every shape that is not a measurement (ADR 0018).
+- **The scale is a value, and it deliberately lives in three places.** `MeasureScale` — *n* of a
+  page unit = *m* of a real unit, plus the precision and an optional fraction denominator — is the
+  unit of currency. **Every annotation carries its own**, as `/Measure`, which is what makes a
+  saved measurement reopen with the value it had whatever the document's scale is now. **The
+  document** keeps the working scale in `Document.custom['M33.measure']`, per page and per
+  document, written by a `SetCustomCommand` so a calibration is undoable, journalled and in the
+  recovery file. **The settings** keep the scale a new document starts with. A page's scale wins
+  over the document's, as Foxit's per-page calibration does.
+- **`/Measure` is data in `dict.ts`, like every other entry we write.** Adding `measure` →
+  `/Measure` there teaches the plan, the writer and the raw reader at once; the same table gains
+  `/LL`, `/LLE`, `/LLO`, `/Cap`, `/CP` and `/CO`, which M31 deferred to here. It needed two new
+  `DictValue` kinds — `bool` for `/Cap` and `array` for a `/Measure` number-format array, which is
+  an array *of dictionaries* and the first thing in this app that is (ADR 0018).
+- **Number formats are written the long way round, so Acrobat reads them.** One
+  `/Type /NumberFormat` per axis (`/X`, `/Y`, `/D`, `/A`, `/T`), each with `/U`, `/C`, `/F`, `/D`,
+  `/RD`, `/RT` and `/O`, and `/R` as the ratio in words. `/C` converts a value in *default user
+  space* — points — to the format's unit, so it is `to / (from × pointsPer(fromUnit))`; the area
+  format's factor is that squared and its label carries the `²`. Read back the same way, so a file
+  written by Acrobat measures the same here.
+- **Snapping needs real paths, so the engine grew one additive method.** `pageObjectPaths(doc,
+  page)` returns each page object's subpaths flattened to polylines in page space (PDFium's
+  `FPDFPath_*`, Béziers subdivided, form objects walked one level with their matrices composed).
+  It is **optional** on `PdfEngine` and guarded by `ffi.has`, so a wasm build without those
+  exports — and the fake engine in the model tests — simply have no paths; snapping then falls
+  back to page-object bounding boxes, which still gives corners and edge midpoints (ADR 0018).
+- **Snap candidates are computed once per page and cached by document revision.** Endpoints,
+  segment midpoints, segment/segment intersections and the nearest point on a path, each with its
+  own toggle, plus the vertices of annotations already on the page. Intersections are the
+  expensive one, so they are computed only for segments within a window of the pointer. The
+  indicator is a fully opaque marker in the annotation layer — a square for an endpoint, a
+  triangle for a midpoint, a cross for an intersection, a circle for a point on a path — and the
+  status line says which in words, because four shapes alone are not enough to tell them apart.
+- **Geometry is pure and lives in `geometry.ts`:** shoelace area, segment intersection,
+  point-to-segment distance, polyline length. Everything the tools, the panel and the writer
+  measure goes through those four functions, so there is one answer per question.
+- **Leaders and the caption are drawn by the same list of drawings the writer bakes.** `/LL`
+  offsets the line proper perpendicular to the measured points (clockwise for a positive value, as
+  the spec has it), `/LLO` leaves a gap at each end and `/LLE` extends past it; `/Cap` puts the
+  value on the line, `/CP /Inline` breaking it for the text and `/Top` sitting above it, `/CO`
+  nudging it. `src/engine/appearance/measure.ts` produces the paths and the text, `overlay.ts`
+  paints them and `measureAppearance` bakes them, so the screen and the file agree.
+- **The value is in `/Contents` as well as in the appearance.** A viewer with neither our `/AP`
+  nor a measurement of its own still shows the number in the annotation's pop-up, and M32's
+  comments panel lists it without knowing what a measurement is. The provider rewrites it whenever
+  the geometry or the scale changes — and only when the text actually differs, or `afterChange`
+  would call itself for ever.
+- **Calibration is a tool, not a mode.** Draw a line over something whose real length is known,
+  type the length and its unit, and the scale that makes those two agree is stored for the page or
+  the document. The line itself is not kept — Foxit does not keep it either — but every
+  measurement already on that page is re-measured, since their captions would otherwise disagree
+  with the ruler they were made with.
+- **The results panel is a panel, not a dialog**, so it can stay open while measuring: the live
+  value at the top while a tool is drawing, then every measurement in the document by page, with
+  running totals for length and for area, and Copy and Export CSV. The CSV is RFC 4180 with a BOM,
+  the same shape M13's search export uses.
+- **Provenance.** `/Measure`, `/NumberFormat`, the `RL` subtype, `/IT` dimension intents, `/LL`,
+  `/LLE`, `/LLO`, `/Cap`, `/CP` and `/CO` are ISO 32000-1 §12.9 and tables 172, 266 and 267 (PDF
+  2.0 numbers them the same). The tool gestures (drag for a distance, click the corners for a
+  perimeter or an area, Enter to finish), the calibration flow, the scale-ratio wording and the
+  idea of a results list with cumulative totals are the conventions every measuring tool shares,
+  learned from public documentation and from using such tools as a reader. Nothing was copied from
+  any product's artwork, strings or files.
 
 ## Build log (fill in at merge)
 
