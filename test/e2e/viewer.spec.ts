@@ -12,7 +12,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { launchApp, type App } from './harness';
+import { fixturePath, launchApp, type App } from './harness';
 
 const FIXTURES = join(process.cwd(), 'test', 'fixtures');
 
@@ -66,7 +66,7 @@ test.afterAll(async () => {
 async function open(name: string, options: { path?: string } = {}): Promise<unknown> {
   const bytes = Array.from(readFileSync(join(FIXTURES, name)));
   const result = await app.run('file.openBytes', {
-    file: { path: options.path ?? `C:/fixtures/${name}`, name, bytes },
+    file: { path: options.path ?? fixturePath(name), name, bytes },
   });
   await app.page.waitForSelector('.viewer-content .page');
   await settle(app.page);

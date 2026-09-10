@@ -76,6 +76,27 @@ So, for every module:
 
 If a journey finds a real defect, **fix the product**, not the test.
 
+## Opening a document: give it its own path
+
+A document opened by its bytes still needs a path — that is how the app identifies one — and
+M11 remembers **where the reader left a document, by path**. So an open helper that defaults to
+`C:/fixtures/<name>` hands every test that opens `multipage.pdf` the same document identity, and
+the second test starts wherever the first one finished.
+
+That is not a hypothetical. It read as a flaky macOS test for days; it was neither flaky nor
+macOS, and it reproduced on Windows in one run once someone looked (2026-09-11).
+
+Use `fixturePath(name)` from `harness.ts`, which is a fresh path every call:
+
+```ts
+await app.run('file.openBytes', { file: { path: fixturePath(name), name, bytes } });
+```
+
+Sharing a path is a perfectly good thing to _ask_ for — `viewer.spec.ts` shares one on purpose,
+to prove the reader comes back to where they left a document. Ask by passing an explicit path,
+and it is obvious to the next reader that it was meant. `harness-rules.spec.ts` fails the build
+on the silent kind.
+
 ## Visual baselines
 
 `visual.spec.ts` compares ten screens with `maxDiffPixelRatio: 0.02`. Baselines live in

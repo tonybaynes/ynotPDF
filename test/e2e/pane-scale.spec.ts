@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { launchApp, type App } from './harness';
+import { fixturePath, launchApp, type App } from './harness';
 
 let app: App;
 
@@ -43,7 +43,7 @@ const paneWidth = (id: string): Promise<number> =>
 test('both panes grow with the UI scale, and nothing inside is cut off', async () => {
   const name = 'annotations-all.pdf';
   const bytes = Array.from(readFileSync(join(process.cwd(), 'test', 'fixtures', name)));
-  await app.run('file.openBytes', { file: { path: `C:/fixtures/${name}`, name, bytes } });
+  await app.run('file.openBytes', { file: { path: fixturePath(name), name, bytes } });
   await app.page.waitForSelector('.viewer-content .page');
   await app.run('annot.selectAll');
   if ((await app.run('view.pane.right.toggle')) === false) {

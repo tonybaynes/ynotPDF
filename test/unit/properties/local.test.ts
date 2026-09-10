@@ -20,7 +20,7 @@ import { compareDocuments, summarise } from '../roundtrip';
 const LOCAL = join(FIXTURES, 'local');
 const files = ['Sample Portfolio.pdf', '220909 Cemair AMB 4D.pdf'];
 
-describe('the operator’s own files', () => {
+describe('Tony’s own files', () => {
   for (const name of files) {
     const path = join(LOCAL, name);
     it.skipIf(!existsSync(path))(`${name}: fonts, view and metadata read`, async () => {

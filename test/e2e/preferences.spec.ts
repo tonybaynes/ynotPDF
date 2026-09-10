@@ -134,7 +134,7 @@ test.describe('the Preferences dialog', () => {
     await expect(dialog()).toBeVisible();
   });
 
-  test('lists a page for every module that has settings, with the operator’s names', async () => {
+  test('lists a page for every module that has settings, with Tony’s names', async () => {
     await openPreferences();
     const labels = await dialog().locator('.prefs-cat span').allTextContents();
     for (const expected of [
@@ -151,7 +151,7 @@ test.describe('the Preferences dialog', () => {
     }
   });
 
-  test('shows every setting on its page, and the operator’s left-pane choice in words', async () => {
+  test('shows every setting on its page, and Tony’s left-pane choice in words', async () => {
     await openPreferences({ page: 'M12' });
     const pane = setting('ui.leftPaneOnOpen');
     await expect(pane).toBeVisible();
@@ -567,7 +567,7 @@ test.describe('language', () => {
 
 // ---- accessibility ------------------------------------------------------------------------------
 
-test.describe('the dialog obeys the operator’s rules', () => {
+test.describe('the dialog obeys Tony’s rules', () => {
   test('nothing in it is translucent, and every word in it is readable', async () => {
     await openPreferences();
     // M04's shared check, rather than a fifth copy of the walk: no `opacity < 1`, no `rgba()`

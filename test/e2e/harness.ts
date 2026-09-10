@@ -83,6 +83,28 @@ export interface LaunchOptions {
   readonly window?: WindowSize;
 }
 
+/** Opens counted so far, so {@link fixturePath} can hand out a fresh path each time. */
+let opens = 0;
+
+/**
+ * A synthetic path for a fixture opened by its bytes — **a different one every call**.
+ *
+ * A document opened by bytes still needs a path, because that is what the app keys a document
+ * by, and M11 remembers where the reader left a document *by path*. A helper that defaults to
+ * `C:/fixtures/<name>` therefore hands every test that opens `multipage.pdf` the same document
+ * identity: the second test starts where the first one finished. It cost M60 a morning —
+ * "two pages on from the start" reached page 4 — and it was never a macOS problem, it just
+ * showed up there first (2026-09-11).
+ *
+ * Sharing a path is a fine thing to *ask* for: `viewer.spec.ts` does it deliberately to prove
+ * the reader comes back to where they left a document. Ask by passing an explicit path. What
+ * this removes is sharing nobody asked for.
+ */
+export function fixturePath(name: string): string {
+  opens += 1;
+  return `C:/fixtures/${String(opens)}/${name}`;
+}
+
 /** The user-data dir of the most recent launch, for `reuseUserData`. */
 let lastUserData: string | undefined;
 
