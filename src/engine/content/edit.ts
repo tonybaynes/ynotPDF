@@ -297,13 +297,13 @@ function repairAfter(
 /** The graphics-state ops a style change needs, for the inside of the object's `q … Q`. */
 export function styleOps(style: ObjectStyle): ContentOp[] {
   const out: ContentOp[] = [];
-  const rgb = (c: number): [number, number, number] => [
+  const components = (c: number): [number, number, number] => [
     ((c >> 16) & 255) / 255,
     ((c >> 8) & 255) / 255,
     (c & 255) / 255,
   ];
-  if (style.fillColor !== undefined) out.push(op('rg', ...rgb(style.fillColor)));
-  if (style.strokeColor !== undefined) out.push(op('RG', ...rgb(style.strokeColor)));
+  if (style.fillColor !== undefined) out.push(op('rg', ...components(style.fillColor)));
+  if (style.strokeColor !== undefined) out.push(op('RG', ...components(style.strokeColor)));
   if (style.strokeWidth !== undefined) out.push(op('w', Math.max(0, style.strokeWidth)));
   if (style.dash !== undefined) {
     out.push(
