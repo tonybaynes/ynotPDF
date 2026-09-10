@@ -560,7 +560,7 @@ export default defineModule({
 
     // ---- probes: how the acceptance tests read this module out of the running app ------------
     {
-      id: 'form.probe.fields',
+      id: 'dev.formFields',
       label: 'Probe: Form Fields',
       category: 'Developer',
       hidden: true,
@@ -590,7 +590,7 @@ export default defineModule({
       },
     },
     {
-      id: 'form.probe.selection',
+      id: 'dev.formSelection',
       label: 'Probe: Field Selection',
       category: 'Developer',
       hidden: true,
@@ -607,7 +607,7 @@ export default defineModule({
       },
     },
     {
-      id: 'form.probe.tabOrder',
+      id: 'dev.formTabOrder',
       label: 'Probe: Tab Order',
       category: 'Developer',
       hidden: true,

@@ -108,11 +108,11 @@ async function closeAll(): Promise<void> {
   await app.page.waitForTimeout(150);
 }
 
-const fields = (): Promise<FieldProbe[]> => app.run('form.probe.fields') as Promise<FieldProbe[]>;
+const fields = (): Promise<FieldProbe[]> => app.run('dev.formFields') as Promise<FieldProbe[]>;
 const selection = (): Promise<SelectionProbe> =>
-  app.run('form.probe.selection') as Promise<SelectionProbe>;
+  app.run('dev.formSelection') as Promise<SelectionProbe>;
 const tabOrder = (page = 0): Promise<{ mode: string; names: string[] }> =>
-  app.run('form.probe.tabOrder', { page }) as Promise<{ mode: string; names: string[] }>;
+  app.run('dev.formTabOrder', { page }) as Promise<{ mode: string; names: string[] }>;
 
 async function fieldNamed(name: string): Promise<FieldProbe> {
   const all = await fields();

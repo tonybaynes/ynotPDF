@@ -117,8 +117,8 @@ describe('M60’s manifest', () => {
 
   it('hides the probes and the argument-only commands from the palette', () => {
     const hidden = (formsManifest.commands ?? []).filter((c) => c.hidden).map((c) => c.id);
-    expect(hidden).toContain('form.probe.fields');
-    expect(hidden).toContain('form.probe.selection');
+    expect(hidden).toContain('dev.formFields');
+    expect(hidden).toContain('dev.formSelection');
     expect(hidden).toContain('form.place');
   });
 
