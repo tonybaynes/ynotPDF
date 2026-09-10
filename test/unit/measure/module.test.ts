@@ -4,12 +4,15 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { must } from '../find/helpers';
 import type { ModelAnnotation } from '@core/model';
 import type { ModelId } from '@core/Ids';
 import { DEFAULT_ANNOTATION_FLAGS } from '@core/commands';
 import { DEFAULT_MEASURE_SCALE, MEASURE_INTENTS, normaliseScale } from '@engine/appearance';
 import type { PdfPoint } from '@shared/pdf';
 import {
+  CAPTION_HANDLE,
+  captionHandleFor,
   drawnByOverlay,
   handlesFor,
   hitRects,
@@ -20,9 +23,10 @@ import {
   toLayerAnnotation,
 } from '@modules/M33-measuring-tools/overlay';
 import {
-  dragMeasurementVertex,
+  dragMeasurementHandle,
   measureProvider,
   measurementRect,
+  moveCaption,
   moveMeasurement,
   resizeMeasurement,
 } from '@modules/M33-measuring-tools/provider';
@@ -242,15 +246,76 @@ describe('the provider patches', () => {
 
   it('moves one measured point when its handle is dragged', () => {
     const a = line();
-    const patch = dragMeasurementVertex(a, 'v1', { x: mm(70), y: mm(250) });
+    const patch = dragMeasurementHandle(a, 'v1', { x: mm(70), y: mm(250) });
     expect(patch?.vertices?.[1]).toEqual({ x: mm(70), y: mm(250) });
     const dragged = { ...a, ...patch } as ModelAnnotation;
     expect(measurementFor(dragged)?.text).toBe('50.0 mm');
   });
 
+  it('gives the caption a handle of its own, beside the measured points', () => {
+    const a = line();
+    const handle = must(captionHandleFor(a), 'caption handle');
+    expect(handle.id).toBe(CAPTION_HANDLE);
+    const layer = toLayerAnnotation(a, 0, { edited: new Set() });
+    expect(layer.extraHandles).toEqual([handle]);
+    // Two measured points *and* the caption: the caption is extra, not instead.
+    expect(layer.vertices).toHaveLength(2);
+    // A measurement with its value hidden has nothing to grab.
+    const quiet = { ...a, extra: { ...a.extra, caption: false } } as ModelAnnotation;
+    expect(captionHandleFor(quiet)).toBeNull();
+    expect(toLayerAnnotation(quiet, 0, { edited: new Set() }).extraHandles).toBeUndefined();
+  });
+
+  it('dragging the caption moves the label and nothing else', () => {
+    const a = line();
+    const start = must(captionHandleFor(a), 'handle').point;
+    const patch = must(
+      dragMeasurementHandle(a, CAPTION_HANDLE, { x: start.x + 30, y: start.y + 12 }),
+      'patch',
+    );
+    // The measured points are untouched, so the value is untouched.
+    expect(patch.vertices).toBeUndefined();
+    const moved = { ...a, ...patch } as ModelAnnotation;
+    expect(measurementFor(moved)?.text).toBe('100.0 mm');
+    const landed = must(captionHandleFor(moved), 'moved handle').point;
+    expect(landed.x).toBeCloseTo(start.x + 30, 2);
+    expect(landed.y).toBeCloseTo(start.y + 12, 2);
+    // And the rect grew to hold it where it now is.
+    expect(must(patch.rect, 'rect').y1).toBeGreaterThanOrEqual(a.rect.y1);
+  });
+
+  it('puts the caption back where it belongs', () => {
+    const a = line();
+    const start = must(captionHandleFor(a), 'handle').point;
+    const nudged = {
+      ...a,
+      ...must(dragMeasurementHandle(a, CAPTION_HANDLE, { x: start.x + 40, y: start.y }), 'patch'),
+    } as ModelAnnotation;
+    const back = {
+      ...nudged,
+      extra: { ...nudged.extra, captionOffset: [0, 0] },
+    } as ModelAnnotation;
+    const home = must(captionHandleFor(back), 'home').point;
+    expect(home.x).toBeCloseTo(start.x, 6);
+    expect(home.y).toBeCloseTo(start.y, 6);
+  });
+
+  it('refuses to move a caption on something that has none', () => {
+    const plain = measurement({
+      subtype: 'Line',
+      vertices: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+      ],
+      extra: { intent: 'LineArrow' },
+    });
+    expect(moveCaption(plain, { x: 5, y: 5 })).toBeNull();
+    expect(dragMeasurementHandle(plain, CAPTION_HANDLE, { x: 5, y: 5 })).toBeNull();
+  });
+
   it('refuses a handle that is not a vertex, or one past the end', () => {
-    expect(dragMeasurementVertex(line(), 'nw', { x: 0, y: 0 })).toBeNull();
-    expect(dragMeasurementVertex(line(), 'v9', { x: 0, y: 0 })).toBeNull();
+    expect(dragMeasurementHandle(line(), 'nw', { x: 0, y: 0 })).toBeNull();
+    expect(dragMeasurementHandle(line(), 'v9', { x: 0, y: 0 })).toBeNull();
   });
 
   it('does nothing but move an annotation that is not a shape at all', () => {
@@ -261,7 +326,7 @@ describe('the provider patches', () => {
     expect(measurementRect(notShape, [])).toEqual(note.rect);
     expect(moveMeasurement(notShape, 5, 5).vertices).toBeUndefined();
     expect(resizeMeasurement(notShape, note.rect)).toBeNull();
-    expect(dragMeasurementVertex(notShape, 'v0', { x: 0, y: 0 })).toBeNull();
+    expect(dragMeasurementHandle(notShape, 'v0', { x: 0, y: 0 })).toBeNull();
   });
 });
 

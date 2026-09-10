@@ -22,6 +22,9 @@ import {
   measureDrawings,
   measureIntentOf,
   measureRectFor,
+  captionAnchor,
+  captionHandle,
+  captionOffsetFor,
   measureStyleOf,
   measurementOf,
   midpointAlong,
@@ -342,6 +345,108 @@ describe('what a dimension draws', () => {
     expect(grown.y1).toBeGreaterThanOrEqual(100);
     // A shape that is not a measurement keeps the rect it was given.
     expect(measureRectFor(input({ extra: {} }), tight)).toEqual(tight);
+  });
+});
+
+describe('moving the caption', () => {
+  const distance = input({
+    subtype: 'Line',
+    vertices: [
+      { x: 100, y: 100 },
+      { x: 300, y: 100 },
+    ],
+    extra: { ...scaled, intent: MEASURE_INTENTS.Line, leaderLength: 20 },
+  });
+  const area = input({
+    subtype: 'Polygon',
+    vertices: [
+      { x: 0, y: 0 },
+      { x: 200, y: 0 },
+      { x: 200, y: 100 },
+      { x: 0, y: 100 },
+    ],
+    extra: { ...scaled, intent: MEASURE_INTENTS.Polygon },
+  });
+
+  it('puts the handle past the end of the text, so it hides no digit', () => {
+    const drawn = must(measureDrawings(distance), 'drawings');
+    const caption = must(drawn.caption, 'caption');
+    const at = captionAnchor(caption);
+    // Clear of the last glyph, and at the height of the text's middle.
+    expect(at.x).toBeGreaterThan(caption.x + caption.width);
+    expect(at.y).toBeGreaterThan(caption.y);
+    expect(captionHandle(distance)).toEqual(at);
+  });
+
+  it('has no handle when there is no caption to move', () => {
+    expect(
+      captionHandle(input({ ...distance, extra: { ...distance.extra, caption: false } })),
+    ).toBeNull();
+    expect(captionHandle(input({ extra: {} }))).toBeNull();
+    expect(captionOffsetFor(input({ extra: {} }), { x: 0, y: 0 })).toBeNull();
+  });
+
+  it('works out the /CO that puts the caption where it was dragged, and back again', () => {
+    for (const source of [distance, area]) {
+      const start = must(captionHandle(source), 'handle');
+      const to = { x: start.x + 17, y: start.y - 23 };
+      const offset = must(captionOffsetFor(source, to), 'offset');
+      const moved = input({
+        ...source,
+        extra: { ...source.extra, captionOffset: [...offset] },
+      });
+      const landed = must(captionHandle(moved), 'moved handle');
+      expect(landed.x, source.subtype).toBeCloseTo(to.x, 6);
+      expect(landed.y, source.subtype).toBeCloseTo(to.y, 6);
+      // Asking for where it already is gives no offset at all.
+      expect(must(captionOffsetFor(source, start), 'zero')[0]).toBeCloseTo(0, 9);
+      expect(must(captionOffsetFor(source, start), 'zero')[1]).toBeCloseTo(0, 9);
+    }
+  });
+
+  it('nudges a distance along its own line, so the caption turns with it', () => {
+    // Dragged 10 points along the line and 4 across it…
+    const start = must(captionHandle(distance), 'handle');
+    const offset = must(captionOffsetFor(distance, { x: start.x + 10, y: start.y - 4 }), 'offset');
+    expect(offset[0]).toBeCloseTo(10, 6);
+    expect(offset[1]).toBeCloseTo(4, 6);
+    // …and the same `/CO` on the same line drawn backwards keeps the caption on the same side of
+    // it, because the frame is the line's, not the page's.
+    const reversed = input({
+      ...distance,
+      vertices: [
+        { x: 300, y: 100 },
+        { x: 100, y: 100 },
+      ],
+      extra: { ...distance.extra, captionOffset: [...offset] },
+    });
+    const drawn = must(measureDrawings(reversed), 'drawings');
+    expect(must(drawn.caption, 'caption').text).toBe('70.6 mm');
+  });
+
+  it('never changes what the measurement says', () => {
+    const before = must(measurementOf({ ...distance }), 'before');
+    const offset = must(captionOffsetFor(distance, { x: 500, y: 500 }), 'offset');
+    const after = must(
+      measurementOf({
+        subtype: 'Line',
+        vertices: distance.vertices,
+        extra: { ...distance.extra, captionOffset: [...offset] },
+      }),
+      'after',
+    );
+    expect(after.value).toBe(before.value);
+    expect(after.text).toBe(before.text);
+  });
+
+  it('grows the rect to hold a caption that has been dragged off the line', () => {
+    const offset = must(captionOffsetFor(distance, { x: 200, y: 260 }), 'offset');
+    const moved = input({
+      ...distance,
+      extra: { ...distance.extra, captionOffset: [...offset] },
+    });
+    const rect = measureRectFor(moved, moved.rect, shapeDrawings);
+    expect(rect.y1).toBeGreaterThan(250);
   });
 });
 

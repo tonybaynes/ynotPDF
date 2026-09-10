@@ -244,6 +244,19 @@ const SEGMENT = { LINETO: 0, BEZIERTO: 1, MOVETO: 2 } as const;
 /** How many straight pieces one Bézier becomes. 16 is under a tenth of a point at any real zoom. */
 const BEZIER_STEPS = 16;
 
+/**
+ * How many objects one `pageObjectPaths` call will look at, however they are nested (M33).
+ *
+ * Not a limit on how deep a page may nest — that is the file's business, and a placed drawing
+ * inside a stamp inside an imported page is ordinary. It is a limit on how long the call may
+ * take, because it runs on the first pointer move over a page. Twenty thousand objects is far
+ * more than any page a reader measures and still returns in a few milliseconds.
+ */
+const MAX_PATH_OBJECTS = 20_000;
+
+/** Deep enough for any real file; a form that contains itself is stopped here. */
+const MAX_FORM_DEPTH = 12;
+
 const IDENTITY_MATRIX: PdfMatrix = [1, 0, 0, 1, 0, 0];
 
 /** `a` applied after `b`: the matrix that maps a child's space through its parent's. */
@@ -1663,7 +1676,19 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
     ffi.scope((s) => {
       const f = s.alloc(4 * 6);
       const pt = s.alloc(4 * 2);
+      /*
+       * A budget rather than a depth limit. How deeply a page nests its form XObjects is not
+       * something a reader chose — a placed drawing inside a stamp inside an imported page is
+       * three deep and perfectly ordinary — so a depth cut-off silently loses outlines for no
+       * reason the reader can see. What actually has to be bounded is the *work*: this is called
+       * on the first pointer move over a page, and a malformed file can nest for ever. So every
+       * object visited costs one, the walk stops when the budget is spent, and the depth guard is
+       * only there to catch a form that contains itself.
+       */
+      let budget = MAX_PATH_OBJECTS;
       const walk = (obj: number, matrix: PdfMatrix, index: number, depth: number): void => {
+        if (budget <= 0 || depth > MAX_FORM_DEPTH) return;
+        budget--;
         const type = ffi.call('FPDFPageObj_GetType', obj);
         const own = ffi.call('FPDFPageObj_GetMatrix', obj, f)
           ? composeMatrix(matrix, readMatrix(ffi, f))
@@ -1673,9 +1698,9 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
           if (subpaths.length > 0) out.push({ index, subpaths });
           return;
         }
-        if (type === PAGEOBJ.FORM && depth < 2) {
+        if (type === PAGEOBJ.FORM) {
           const children = ffi.call('FPDFFormObj_CountObjects', obj);
-          for (let c = 0; c < Math.min(children, 500); c++) {
+          for (let c = 0; c < children && budget > 0; c++) {
             const child = ffi.call('FPDFFormObj_GetObject', obj, c);
             if (child !== 0) walk(child, own, index, depth + 1);
           }

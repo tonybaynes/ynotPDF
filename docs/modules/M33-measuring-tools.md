@@ -313,6 +313,17 @@ is colourblind: black and red read as the same colour):**
   showing one run in metres while the rest of the page is in millimetres is a display choice about
   that measurement, and a reader who meant the whole page would recalibrate it. `convertScaleTo`
   restates the ratio rather than recomputing it, so nothing is lost to rounding on the way through.
+- **The caption has a handle of its own, and it is beside the text rather than on it.** A
+  measurement's label is not one of the points it measures, so moving it must not be able to
+  change the value — a separate handle says that, where a ninth box handle would not.
+  `AnnotationLayer.extraHandles` (additive) lets a provider name handles of its own beside the set
+  it asks for; M33 uses one, `caption`, and it is drawn round where every other handle is square,
+  because the operator cannot tell two handles apart by colour. It sits just past the end of the
+  text: nine pixels of opaque chrome on top of the number the reader came for would hide a digit.
+  `/CO` is a *nudge*, and its frame differs by kind — along a distance's own line and across it,
+  plain page space for a polygon — so the offset is worked out by asking where the caption would
+  sit with no offset at all and measuring from there, which needs no inverse of the placement
+  arithmetic and is exact in either frame.
 - **Provenance.** `/Measure`, `/NumberFormat`, the `RL` subtype, `/IT` dimension intents, `/LL`,
   `/LLE`, `/LLO`, `/Cap`, `/CP` and `/CO` are ISO 32000-1 §12.9 and tables 172, 266 and 267 (PDF
   2.0 numbers them the same). The tool gestures (drag for a distance, click the corners for a
@@ -350,6 +361,8 @@ is colourblind: black and red read as the same colour):**
 - **The Measurements panel** — the live value while a tool draws, every measurement in the document
   by page as a button that selects it and goes there, totals kept apart by kind and by unit, and
   Copy (tab-separated) and Export CSV (RFC 4180, CRLF, BOM).
+- **The caption can be dragged** by a round handle just past it, and put back from the panel; the
+  measurement underneath never changes, whatever is done to its label.
 - **The properties sections** — the value and the ruler it was measured with; the unit and the
   precision *this* measurement is shown in (its own `/Measure` restated, not the page's scale); the
   line colour, width and dash; `/LE` at each end, the same ten endings M31's arrows offer; the
@@ -401,6 +414,9 @@ is colourblind: black and red read as the same colour):**
   `dict`; an array member that can only resolve at the top level is skipped.
 - `src/renderer/modules/M30-markup-annotations/AnnotationService.ts` —
   `AnnotationProvider.priority` and the highest-wins `providerFor`.
+- `src/renderer/view/AnnotationLayer.ts` — `LayerAnnotation.extraHandles`, a `HandleId` that
+  admits a provider's own ids, and both in the repaint signature; `AnnotationController.ts` narrows
+  `tip`/`knee` one at a time now that a handle id may be any string.
 - `src/renderer/main.ts`, `src/renderer/index.html`, `vitest.config.ts`, `scripts/make-fixtures.ts`
   (`measure.pdf`), `test/fixtures/{manifest.json,hashes/*.json}`,
   `resources/annotations/colours.json` (four tool colours), `docs/shortcuts.md`, `PLAN.md` §0, and
@@ -409,9 +425,9 @@ is colourblind: black and red read as the same colour):**
 ### Tests
 
 Green on Windows locally: lint (eslint, prettier, the colour/opacity rules, `tsc` on both
-projects), the unit suite with the coverage gates (11 new files, 161 tests in
-`test/unit/measure/`), and the Playwright suite (`test/e2e/measure.spec.ts`, 17 tests, one per
-acceptance line, plus every earlier module's spec — 370 in all).
+projects), the unit suite with the coverage gates (11 new files, 172 tests in
+`test/unit/measure/`), and the Playwright suite (`test/e2e/measure.spec.ts`, 18 tests, one per
+acceptance line, plus every earlier module's spec).
 
 **The hands-on check the conventions ask for, recorded.** `test/unit/measure/real-files.test.ts`
 measures a distance, a perimeter and an area on the first page of each of the operator's own files
@@ -429,14 +445,28 @@ pinned zoom they are now pixel-identical.
 - **An angle tool.** `/Measure` carries a `/T` angle format and this module writes one, so the file
   is ready for it, but neither the brief nor Foxit's Measure group has an angle tool and inventing
   one would be scope of my own.
-- **`/CO`, the caption's nudge, has no handle.** It is written, read and honoured, and the panel
-  can set the leaders and the caption's place and size — but dragging the caption itself needs a
-  handle set the annotation layer does not have, and one more `HandleSet` for one nudge is a poor
-  trade until something else needs it.
-- **Snapping to a form XObject nested more than one level deep.** The walk stops at depth two and
-  at 500 children per form; a drawing with a logo inside a logo inside a stamp snaps to the outer
-  two.
-- **Cumulative measuring in the Foxit sense** — clicking to keep adding to one running distance
-  without ending it. The perimeter tool is that, with the total shown as it is drawn and each
-  segment visible; a second gesture that did the same thing without leaving an annotation behind
-  would be a second way to do one thing.
+- **Cumulative measuring as a fourth gesture.** The brief lists it among the Measurement panel's
+  features, and that is where it is: the panel keeps every measurement and totals them by kind and
+  unit. The Perimeter tool is the running-distance gesture, with the total shown as it is drawn.
+  A fourth tool that produced the same numbers without leaving an annotation behind would be a
+  second way to do one thing — but if it turns out that Perimeter is not the obvious place to look
+  for it, the answer is a better name or a menu entry, not a new tool.
+
+### Added after the merge (2026-09-10)
+
+Three of the items above were reconsidered on the operator's reading and are now done, on
+`fix/M33-caption-and-nesting`:
+
+- **The caption is draggable.** `AnnotationLayer.extraHandles` is the additive layer change that
+  made it possible without a new `HandleSet`; the panel gained "Put the value back", because a
+  `/CO` of a point and a half is not something anyone can see they typed.
+- **Nesting is no longer capped at two forms.** The depth cut-off is gone. How deeply a file nests
+  is the file's business — a placed drawing inside a stamp inside an imported page is three deep
+  and perfectly ordinary — and what actually needed bounding was the *work*, since the walk runs
+  on the first pointer move over a page. It is a budget of 20 000 objects now, with a depth guard
+  of 12 left only to stop a form that contains itself. A three-deep fixture built in the test
+  proves it, and fails against the old limit.
+- **No claim is made about what other editors do here.** Neither Adobe's, Foxit's nor Tungsten's
+  public documentation states a nesting limit for snapping, and this project may not inspect their
+  builds to find out (CLAUDE.md). The old limit was mine, not theirs, and it is gone on its own
+  merits.

@@ -118,6 +118,15 @@ export interface LayerAnnotation {
   readonly callout?: ReadonlyArray<PdfPoint>;
   /** A polygon's or polyline's points, for `handles: 'vertices'` (M31). */
   readonly vertices?: ReadonlyArray<PdfPoint>;
+  /**
+   * Handles a provider names itself, beside whatever `handles` gives — a measurement's caption,
+   * which is neither a corner of the box nor one of the measured points (M33).
+   *
+   * The id is the provider's own: it reaches `AnnotationProvider.handlePatch` unchanged, and it
+   * becomes the handle's `data-handle` attribute and the `annot-handle-<id>` class, so a
+   * stylesheet can give it a shape of its own.
+   */
+  readonly extraHandles?: ReadonlyArray<HandlePoint>;
   /** Hidden while its inline editor is open, so the two never draw the same text twice. */
   readonly hidden?: boolean;
 }
@@ -127,7 +136,11 @@ export const BOX_HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const
 export type BoxHandle = (typeof BOX_HANDLES)[number];
 /** A vertex handle is `v<index>` (M31). */
 export type VertexHandle = `v${number}`;
-export type HandleId = BoxHandle | 'tip' | 'knee' | VertexHandle;
+/**
+ * A handle's id. The named ones are the layer's own; anything else is a provider's, from
+ * `LayerAnnotation.extraHandles`, and is passed through untouched (M33).
+ */
+export type HandleId = BoxHandle | 'tip' | 'knee' | VertexHandle | (string & {});
 
 /** The index a vertex handle names, or null for any other handle. */
 export function vertexIndexOf(id: string): number | null {
@@ -173,6 +186,8 @@ export function handlePoints(annotation: LayerAnnotation): HandlePoint[] {
       out.push({ id: `v${i}`, point });
     });
   }
+  // A provider's own, whatever the handle set: they are extra, not instead (M33).
+  for (const handle of annotation.extraHandles ?? []) out.push(handle);
   return out;
 }
 
@@ -562,6 +577,8 @@ function signature(
         a.vertices ?? []
       )
         .map((v) => `${round(v.x)},${round(v.y)}`)
+        .join('/')}${(a.extraHandles ?? [])
+        .map((h) => `${h.id}@${round(h.point.x)},${round(h.point.y)}`)
         .join('/')}`,
   );
   const m = marquee

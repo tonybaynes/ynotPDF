@@ -11,14 +11,14 @@
  */
 
 import type { ModelAnnotation, AnnotationPatch } from '@core/model';
-import { measureRectFor, shapeDrawings, shapeRectFor } from '@engine/appearance';
+import { captionOffsetFor, measureRectFor, shapeDrawings, shapeRectFor } from '@engine/appearance';
 import type { PdfPoint, PdfRect } from '@shared/pdf';
 import { toAppearanceInput } from '@modules/M21-save/plan';
 import { vertexIndexOf } from '@view/AnnotationLayer';
 import type { AnnotationProvider } from '@modules/M30-markup-annotations/AnnotationService';
 import { offsetPoints, offsetRect, scalePoints } from './geometry';
 import type { MeasureService } from './MeasureService';
-import { isMeasureAnnotation, toLayerAnnotation } from './overlay';
+import { CAPTION_HANDLE, isMeasureAnnotation, toLayerAnnotation } from './overlay';
 import { describeMeasurement, measurePanel } from './panel';
 import { MEASURE_TOOL_IDS } from './tools';
 
@@ -56,17 +56,39 @@ export function resizeMeasurement(a: ModelAnnotation, rect: PdfRect): Annotation
   return { vertices, rect: measurementRect(a, vertices) };
 }
 
-/** A vertex handle dragged: that measured point moves, and the value is re-read from the rest. */
-export function dragMeasurementVertex(
+/**
+ * A handle dragged.
+ *
+ * A vertex handle moves that measured point, and the value is re-read from the rest. The caption
+ * handle moves only the caption — the annotation goes on saying exactly what it said, which is
+ * the whole point of a separate handle for it: nothing a reader does to the label can change the
+ * measurement underneath.
+ */
+export function dragMeasurementHandle(
   a: ModelAnnotation,
   handle: string,
   to: PdfPoint,
 ): AnnotationPatch | null {
   if (a.family !== 'shape') return null;
+  if (handle === CAPTION_HANDLE) return moveCaption(a, to);
   const index = vertexIndexOf(handle);
   if (index === null || index >= a.vertices.length) return null;
   const vertices = a.vertices.map((p, i) => (i === index ? to : p));
   return { vertices, rect: measurementRect(a, vertices) };
+}
+
+/** The caption's `/CO`, so that its middle lands on `to`, and the rect that then holds it. */
+export function moveCaption(a: ModelAnnotation, to: PdfPoint): AnnotationPatch | null {
+  if (a.family !== 'shape') return null;
+  const offset = captionOffsetFor(toAppearanceInput(a), to);
+  if (offset === null) return null;
+  const extra = { ...a.extra, captionOffset: [round(offset[0]), round(offset[1])] };
+  return { extra, rect: measurementRect({ ...a, extra }, a.vertices) };
+}
+
+/** Hundredths of a point: finer than any screen, and it keeps `/CO` short in the file. */
+function round(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 /** The provider, bound to the live service. */
@@ -80,7 +102,7 @@ export function measureProvider(service: MeasureService): AnnotationProvider {
     toLayer: toLayerAnnotation,
     movePatch: moveMeasurement,
     resizePatch: resizeMeasurement,
-    handlePatch: dragMeasurementVertex,
+    handlePatch: dragMeasurementHandle,
     afterChange: (a) => service.afterChange(a),
     panel: measurePanel(service),
     describe: describeMeasurement,

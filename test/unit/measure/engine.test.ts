@@ -4,6 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { PDFDocument, PDFName, type PDFRef } from 'pdf-lib';
 import {
   ANNOTATION_DICT_MAPPINGS,
   DEFAULT_MEASURE_SCALE,
@@ -116,6 +117,49 @@ describe('pageObjectPaths', () => {
         });
       // The 50 x 20 mm rectangle is the closed one.
       expect(closed.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      await eng.close(doc);
+    }
+  });
+
+  it('walks as deep as a file nests, composing the matrices on the way', async () => {
+    /*
+     * Three forms deep, which is what a placed drawing inside a stamp inside an imported page
+     * looks like — and one deeper than the guard this used to have. Built here rather than added
+     * to the corpus because the point is the *nesting*: a line at (10,10)-(90,10) inside a form
+     * placed at (20,20), inside one at (50,50), inside one at (100,100), has to come back at
+     * (180,180)-(260,180).
+     */
+    const pdf = await PDFDocument.create({ updateMetadata: false });
+    const page = pdf.addPage([400, 400]);
+    const ctx = pdf.context;
+    const form = (content: string, resources?: PDFRef): PDFRef =>
+      ctx.register(
+        ctx.flateStream(content, {
+          Type: 'XObject',
+          Subtype: 'Form',
+          FormType: 1,
+          BBox: ctx.obj([0, 0, 400, 400]),
+          Matrix: ctx.obj([1, 0, 0, 1, 0, 0]),
+          ...(resources ? { Resources: ctx.obj({ XObject: ctx.obj({ Child: resources }) }) } : {}),
+        }),
+      );
+    const inner = form('1 w 10 10 m 90 10 l S');
+    const middle = form('q 1 0 0 1 20 20 cm /Child Do Q', inner);
+    const outer = form('q 1 0 0 1 50 50 cm /Child Do Q', middle);
+    page.node.setXObject(PDFName.of('Outer'), outer);
+    page.node.set(
+      PDFName.of('Contents'),
+      ctx.register(ctx.flateStream('q 1 0 0 1 100 100 cm /Outer Do Q')),
+    );
+
+    const eng = await engine();
+    const doc = await eng.open(await pdf.save({ useObjectStreams: false }));
+    try {
+      const subpaths = (await outlines(eng, doc)).flatMap((o) => o.subpaths);
+      expect(subpaths.length, 'nothing was found inside the nested forms').toBeGreaterThan(0);
+      expect(hasPointNear(subpaths, { x: 180, y: 180 }, 1)).toBe(true);
+      expect(hasPointNear(subpaths, { x: 260, y: 180 }, 1)).toBe(true);
     } finally {
       await eng.close(doc);
     }
