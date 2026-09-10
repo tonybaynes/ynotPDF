@@ -252,7 +252,93 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+Provenance key: **spec** = ISO 32000-1, **Foxit** = observed as a user or from public
+help, **ours** = our own choice.
+
+1. **One marker, and it is a PDFium content mark (ADR 0020).** Every decoration is a
+   form XObject invoked inside `/YNOTDec <</Id … /Kind … /Spec …>> BDC … EMC`. That tag
+   is the only marker that survives all four paths a decoration takes: PDFium's live
+   object list, `FPDFPage_GenerateContent`, a save, and our own content parser. A key
+   on the XObject's dictionary does not — PDFium rebuilds the XObject — and a
+   `/PieceInfo` on the page cannot say *which* object. `Spec` carries the settings as
+   JSON, so "Update header" opens on what the last person chose even in a file this
+   application has never seen before. *(ours; Foxit marks its own decorations too, by
+   some means of its own we have not looked at and must not.)*
+2. **The writer restores the page and appends a stream; it never edits one.**
+   `/Contents` is an array, so a decoration is a new element beside the originals — the
+   page's own bytes are untouched. Before appending, the applier restores the original
+   stream captured before the first decoration (undoing PDFium's regeneration) and
+   strips every `/YNOTDec` span it finds, whoever wrote it. That strip is what makes
+   the order of M50's edits and M53's decorations on one page irrelevant. *(ours;
+   forced by the brief's "never bake into existing streams".)*
+3. **The live view goes through PDFium, so a watermark can be behind the text.**
+   `insertObject` at index 0 puts a decoration under the page's content and at the end
+   puts it over — which an overlay layer could never do, and the acceptance test asks
+   for exactly that. It also means the header's text is in `textRuns` the moment it is
+   added, not only after a save. *(ours; verified against our PDFium build before the
+   design was fixed.)*
+4. **A decoration is described once and drawn once.** `DecorationDraw` — content-stream
+   text, bbox, matrix, resources, behind/in front — is produced by pure functions in
+   `src/engine/decorations/draw.ts` and consumed by both the live engine and the
+   writer. There is one piece of drawing code, so the preview, the page and the saved
+   file cannot disagree. *(ours.)*
+5. **The model holds specs, not geometry.** `Document.custom('M53')` holds the
+   decoration *settings* plus the page range; the per-page drawing is derived. Undo is
+   therefore "put the previous settings back and re-apply", which is exact, cheap to
+   journal and replays in a batch run. *(ours; M20/ADR 0007 sanctions `custom` for
+   this.)*
+6. **Six zones, three positions each side, and the macro set is data.** Header and
+   footer each have left, centre and right; the macros are `<<1>>`, `<<1 of n>>`,
+   `<<Bates>>`, `<<FileName>>`, `<<FullPath>>`, `<<Title>>`, `<<Author>>`,
+   `<<Subject>>`, `<<Date>>`, `<<Time>>` and `<<d:…>>` for an explicit date pattern.
+   Page-number macros take an optional start and prefix (`<<1,start=5>>`). The list
+   lives in `resources/presets/macros.json` so it can grow without a release.
+   *(Foxit's own header/footer offers page-number and date macros and six zones; the
+   spelling and the escape rules are ours.)*
+7. **Bates numbering is a decoration like any other**, with prefix, suffix, digit count
+   and start, and it is the one whose number keeps counting across documents in a batch
+   run: the spec carries `startAt` and the runner passes the next value on. Its text is
+   real text in the page content, so a search finds `000123`. *(Foxit; spec for the
+   text.)*
+8. **No transparency anywhere, including on the page.** The brief marks watermark
+   opacity ✗ and CLAUDE.md forbids translucent chrome. A watermark we create is a
+   solid colour the reader picks; a watermark the file already carries keeps whatever
+   alpha it has, because that is the document rather than the interface. *(operator
+   rule.)*
+9. **Preview is the real thing, one page at a time.** The dialog renders the current
+   page through the engine on a scratch copy with the decoration applied, so what the
+   preview shows is what the page will be — not a CSS approximation of it. It is
+   debounced and cancelled on every keystroke. *(brief's own constraint.)*
+10. **Presets ship as data and the reader's own live in settings.** Built-in presets are
+    `resources/presets/*.json`; saved ones are JSON in one hidden setting per family, as
+    M100 does for optimise presets. *(PLAN.md §4.4.)*
+11. **A link is an annotation the writer inserts.** PDFium refuses to create a Link, so
+    links take M30's path (ADR 0013): the model holds it, the writer writes it.
+    `PlannedAnnotation.dest` is new because a destination is a reference to a page and
+    nothing in the plan could express one (ADR 0020 §5). *(spec 12.5.6.5; PDFium's
+    `IsValidAnnotSubtype`.)*
+12. **External links are confirmed before they open, and only `http(s)` opens at all.**
+    A click on a link inside a document is the document asking to run something; the
+    reader is shown the whole URL in an opaque dialog and says yes. `file:`,
+    `javascript:` and everything else is refused in words, as M12 already refuses them
+    for bookmarks. A "don't ask again for this session" tick is offered, not defaulted.
+    *(ours; security.)*
+13. **Auto-detect reads `textRuns`, and every candidate is reviewed before it is made.**
+    URLs, bare `www.`, and e-mail addresses are matched over the reconstructed text of
+    each run, mapped back to character boxes for the rectangle. The review dialog lists
+    every hit with its page and text and lets each be unticked. Nothing is written
+    until the reader presses Create. *(Foxit offers the same as one action; the review
+    step is ours — an unattended pass that turns a version number into a link is worse
+    than no pass.)*
+14. **Everything is a command.** `decorate.*` and `link.*` ids, all in the palette;
+    `Mod+Shift+H` header & footer, `Mod+Shift+W` watermark, `Mod+Shift+B` Bates,
+    `Mod+Shift+K` the link tool — checked against
+    `test/unit/shortcut-conflicts.test.ts`. *(ours + Foxit where free.)*
+15. **The link layer is its own overlay layer.** `annot`, `object` and `widget` each
+    call `replaceChildren()` on the layer they own, so links cannot share one. `link`
+    sits between `annot` and `widget`, takes pointer events only on the link boxes, and
+    is raised above the tool layer for the same reason M60's widget layer is. *(M00's
+    layer stack; ADR 0020 §6.)*
 
 ## Build log (fill in at merge)
 
