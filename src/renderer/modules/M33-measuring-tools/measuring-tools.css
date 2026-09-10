@@ -47,6 +47,16 @@
   stroke-dasharray: 3 2;
 }
 
+/*
+ * The caption's own handle. Round, where every other handle is square: the operator cannot tell
+ * two handles apart by colour, and this one does something different from all of them — it moves
+ * the label, never the measurement.
+ */
+.viewer-content .page .layer-annot .annot-handle-caption {
+  rx: 4.5;
+  ry: 4.5;
+}
+
 /* ---- the Measurements panel -------------------------------------------------------------------- */
 
 .measure-panel {

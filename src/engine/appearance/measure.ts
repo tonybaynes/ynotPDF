@@ -714,6 +714,68 @@ export function measureDrawings(input: AppearanceInput): MeasureDrawings | null 
   return { paths, caption };
 }
 
+// ---- moving the caption -------------------------------------------------------------------------
+
+/**
+ * Where a caption's drag handle sits: just past the end of the text, at the height of its middle.
+ *
+ * **Beside the text, not on it.** A handle is nine pixels of opaque chrome, and a caption is the
+ * number the reader came for — put one over the other and the handle hides a digit. Past the end
+ * it is unmistakably attached to the caption and covers nothing.
+ *
+ * Anywhere fixed relative to the caption would do: this is also the point `captionOffsetFor`
+ * measures from, so the caption keeps its grip as it is dragged.
+ */
+export function captionAnchor(caption: MeasureCaption): PdfPoint {
+  const radians = (caption.rotate * Math.PI) / 180;
+  const ax = Math.cos(radians);
+  const ay = Math.sin(radians);
+  const along = caption.width + caption.size * 0.55;
+  // A third of the size above the baseline is about the middle of a line of text.
+  const across = caption.size / 3;
+  return {
+    x: caption.x + ax * along - ay * across,
+    y: caption.y + ay * along + ax * across,
+  };
+}
+
+/** The caption's handle for one measurement, or null when it has no caption drawn. */
+export function captionHandle(input: AppearanceInput): PdfPoint | null {
+  const drawn = measureDrawings(input);
+  return drawn?.caption ? captionAnchor(drawn.caption) : null;
+}
+
+/**
+ * The `/CO` that would put the caption's middle at `to`.
+ *
+ * `/CO` is a nudge, not a position, and the frame it nudges in differs by kind: a distance's is
+ * *along its own line and across it*, so a caption keeps its place when the line is turned; a
+ * polygon's or a polyline's is plain page space, because their captions are drawn upright. The
+ * offset is therefore worked out by asking where the caption would sit with no offset at all and
+ * measuring from there — which is exact whichever frame it is, and needs no inverse of the
+ * placement arithmetic.
+ */
+export function captionOffsetFor(
+  input: AppearanceInput,
+  to: PdfPoint,
+): readonly [number, number] | null {
+  const centred = measureDrawings({
+    ...input,
+    extra: { ...input.extra, captionOffset: [0, 0] },
+  });
+  if (!centred?.caption) return null;
+  const origin = captionAnchor(centred.caption);
+  const dx = to.x - origin.x;
+  const dy = to.y - origin.y;
+  if (measureIntentOf(input.extra) !== 'LineDimension') return [dx, dy];
+  const from = input.vertices[0];
+  const end = input.vertices[1];
+  if (!from || !end) return [dx, dy];
+  const { ux, uy } = unitVector(from, end);
+  // Along the line, and across it — the same pair `measureDrawings` adds back.
+  return [dx * ux + dy * uy, dx * uy - dy * ux];
+}
+
 // ---- generators ---------------------------------------------------------------------------------------
 
 /** The box a caption's glyphs occupy, turned by its own angle. */

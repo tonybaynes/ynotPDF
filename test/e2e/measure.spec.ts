@@ -527,6 +527,64 @@ test.describe('a measurement is M33’s, not M31’s', () => {
     await expect(pane).toContainText('Show in');
   });
 
+  test('the caption has a handle of its own, and moving it changes no measurement', async () => {
+    await openPath(stage('measure.pdf', 'caption-drag.pdf'));
+    await app.page.setViewportSize({ width: 1400, height: 900 });
+    await app.run('measure.calibrate', {
+      page: 0,
+      from: LINE_100MM[0],
+      to: LINE_100MM[1],
+      length: 100,
+      unit: 'mm',
+      scope: 'page',
+    });
+    const id = (await app.run('measure.distance', { page: 0, vertices: LINE_100MM })) as string;
+    await app.page.waitForTimeout(300);
+    await app.run('annot.selectAll');
+
+    const handle = app.page.locator(`.annot-handle[data-handle="caption"][data-annot="${id}"]`);
+    await expect(handle).toBeVisible();
+    const box = must(await handle.boundingBox(), 'caption handle');
+    await app.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await app.page.mouse.down();
+    await app.page.mouse.move(box.x + 70, box.y - 50, { steps: 10 });
+    await app.page.mouse.up();
+    await app.page.waitForTimeout(400);
+
+    const moved = must(
+      (await measurements()).find((r) => r.id === id),
+      'moved',
+    );
+    const offset = moved.extra['captionOffset'];
+    expect(Array.isArray(offset)).toBe(true);
+    expect((offset as number[]).some((n) => Math.abs(n) > 5)).toBe(true);
+    // The label moved; the measurement did not.
+    expect(moved.text).toBe('100.0 mm');
+    expect(moved.vertices).toEqual(LINE_100MM);
+    // And the caption is drawn where it was dropped, in the stream the file will carry.
+    expect(moved.appearance?.content).toContain('(100.0 mm)');
+
+    // "Put the value back" is one step, and so was the drag.
+    await app.page.locator('#annot-props button', { hasText: 'Put the value back' }).click();
+    await app.page.waitForTimeout(300);
+    expect(
+      must(
+        (await measurements()).find((r) => r.id === id),
+        'centred',
+      ).extra['captionOffset'],
+    ).toEqual([0, 0]);
+    await app.run('edit.undo');
+    await app.page.waitForTimeout(250);
+    expect(
+      (
+        must(
+          (await measurements()).find((r) => r.id === id),
+          'again',
+        ).extra['captionOffset'] as number[]
+      ).some((n) => Math.abs(n) > 5),
+    ).toBe(true);
+  });
+
   test('the panel changes the unit and the line ends, each undoing as one step', async () => {
     await openPath(stage('measure.pdf', 'panel-edits.pdf'));
     await app.page.setViewportSize({ width: 1400, height: 900 });

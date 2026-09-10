@@ -14,6 +14,7 @@
 
 import type { ModelAnnotation } from '@core/model';
 import {
+  captionHandle,
   isMeasurement,
   measureDrawings,
   measureIntentOf,
@@ -24,8 +25,17 @@ import {
   type ShapeDrawing,
 } from '@engine/appearance';
 import { toAppearanceInput } from '@modules/M21-save/plan';
-import type { PdfRect } from '@shared/pdf';
-import type { AnnotationShape, HandleSet, LayerAnnotation, ShapePath } from '@view/AnnotationLayer';
+import type { PdfPoint, PdfRect } from '@shared/pdf';
+import type {
+  AnnotationShape,
+  HandlePoint,
+  HandleSet,
+  LayerAnnotation,
+  ShapePath,
+} from '@view/AnnotationLayer';
+
+/** The id of the handle that moves a measurement's caption. */
+export const CAPTION_HANDLE = 'caption';
 
 /** The annotations M33 owns: a shape with a dimension `/IT` on the subtype that intent belongs to. */
 export function isMeasureAnnotation(a: ModelAnnotation): boolean {
@@ -107,6 +117,18 @@ export function handlesFor(_a: ModelAnnotation): HandleSet {
   return 'vertices';
 }
 
+/**
+ * The handle that moves the caption, when there is a caption drawn to move.
+ *
+ * It is an extra handle rather than one of the vertex set: the caption is not a measured point,
+ * and dragging it must change what the annotation *says about itself*, never what it measures.
+ */
+export function captionHandleFor(a: ModelAnnotation): HandlePoint | null {
+  if (a.family !== 'shape') return null;
+  const at: PdfPoint | null = captionHandle(toAppearanceInput(a));
+  return at === null ? null : { id: CAPTION_HANDLE, point: at };
+}
+
 /** The rectangles a pointer must be inside to hit it. */
 export function hitRects(a: ModelAnnotation): PdfRect[] {
   return [a.rect];
@@ -124,6 +146,7 @@ export function toLayerAnnotation(
 ): LayerAnnotation {
   const draws = drawnByOverlay(a, options.edited, options.raster ?? true);
   const vertices = a.family === 'shape' ? a.vertices : [];
+  const caption = captionHandleFor(a);
   return {
     id: a.id,
     page,
@@ -132,6 +155,7 @@ export function toLayerAnnotation(
     hit: hitRects(a),
     handles: handlesFor(a),
     ...(vertices.length > 0 ? { vertices } : {}),
+    ...(caption ? { extraHandles: [caption] } : {}),
     ...(options.hidden ? { hidden: true } : {}),
   };
 }

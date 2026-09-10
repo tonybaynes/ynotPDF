@@ -154,8 +154,10 @@ export class AnnotationController {
 
   private beginHandleDrag(handle: { id: HandleId; on: string }, e: PointerEvent): void {
     const id = handle.on as ModelId;
-    if (handle.id === 'tip' || handle.id === 'knee') {
-      this.drag = { kind: 'callout', id, which: handle.id };
+    if (handle.id === 'tip') {
+      this.drag = { kind: 'callout', id, which: 'tip' };
+    } else if (handle.id === 'knee') {
+      this.drag = { kind: 'callout', id, which: 'knee' };
     } else if (isBoxHandle(handle.id)) {
       this.drag = { kind: 'resize', id, handle: handle.id };
     } else {

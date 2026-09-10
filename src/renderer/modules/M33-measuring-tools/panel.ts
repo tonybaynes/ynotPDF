@@ -410,6 +410,29 @@ function captionFields(a: ModelAnnotation, extra: ExtraPatch): HTMLElement {
       ),
     );
   }
+  /*
+   * A caption that has been dragged says so, and can be put back. There is no way to see from a
+   * `/CO` of a point and a half that it has moved at all, and a reader who nudged one by accident
+   * has otherwise no way back but undo — which by then is several steps ago.
+   */
+  const moved = style.captionOffset[0] !== 0 || style.captionOffset[1] !== 0;
+  if (style.caption) {
+    const note = el(
+      'p.annot-field-note',
+      null,
+      moved
+        ? 'The value has been dragged out of its place.'
+        : 'Drag the round handle to move the value.',
+    );
+    const centre = button('btn', { type: 'button' }, 'Put the value back');
+    centre.disabled = !moved;
+    centre.addEventListener('click', () => {
+      extra({ captionOffset: [0, 0] }, 'Put the value back');
+    });
+    const actions = el('div.annot-buttons', { role: 'group', 'aria-label': 'The value' });
+    actions.append(centre);
+    wrapper.append(note, actions);
+  }
   return wrapper;
 }
 

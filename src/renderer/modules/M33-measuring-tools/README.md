@@ -61,4 +61,8 @@ writer needs them too and there must be exactly one answer per question.
   (PDF 12.5.5), so the two disagreeing by a point scales everything the stream draws — invisible on
   an outline, obvious on a caption. `measureRectFor` and `paintMeasurement` compute the same box.
 - **`PdfEngine.pageObjectPaths` is optional.** Snapping falls back to page-object bounding boxes
-  when a backend has no path data, which still gives corners and edge midpoints (ADR 0018).
+  when a backend has no path data, which still gives corners and edge midpoints (ADR 0018). It
+  walks as deep as a file nests, bounded by a budget of objects rather than by a depth limit.
+- **The caption's handle is not a measured point.** It comes from
+  `LayerAnnotation.extraHandles`, and dragging it writes `/CO` and nothing else — no gesture on
+  the label may change the value underneath.
