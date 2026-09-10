@@ -13,6 +13,9 @@
  */
 
 import * as pako from 'pako';
+// Before jpeg-js, and it has to stay before it: the shim is what stops the encoder falling over
+// in a Worker (see the file for why).
+import './installBuffer';
 import { decode as decodeJpegRaw, encode as encodeJpegRaw } from 'jpeg-js';
 
 /**

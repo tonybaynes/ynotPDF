@@ -63,9 +63,17 @@ function isDocument(value: unknown): value is Document {
   return typeof value === 'object' && value !== null && 'state' in value && 'engine' in value;
 }
 
-/** A document is open. Everything in this module needs one. */
+/**
+ * A document is open. Everything in this module needs one.
+ *
+ * The service is looked up rather than assumed, because the File backstage's slots are filled
+ * before any module has activated — so this runs at least once with nothing registered under
+ * `"optimise"`, and asking for it outright throws before the window has painted.
+ */
 function open(ctx: ServiceContext): boolean {
-  return ctx.service<OptimiseService>(OPTIMISE_SERVICE).document !== null;
+  const registry = ctx.service<Registry>('registry');
+  if (!registry.hasService(OPTIMISE_SERVICE)) return false;
+  return registry.service<OptimiseService>(OPTIMISE_SERVICE).document !== null;
 }
 
 /** `"<name> (optimised).pdf"` from a path or a title. */
@@ -210,6 +218,39 @@ export default defineModule({
         'as a new file.',
       when: open,
       run: (ctx) => repair(ctx),
+    },
+    {
+      id: 'dev.optimiseState',
+      label: 'Developer: optimise state',
+      category: 'Developer',
+      hidden: true,
+      description: 'Internal: what the settings are, what the last optimise did, what qpdf said.',
+      run: (ctx) => {
+        const s = service(ctx);
+        return {
+          settings: { ...s.settings },
+          presets: s.presets.map((p) => ({ id: p.id, name: p.name, lossless: p.lossless })),
+          last: s.lastOutcome,
+          check: s.lastCheck,
+          offThread: s.offThread,
+        };
+      },
+    },
+    {
+      id: 'dev.optimiseAudit',
+      label: 'Developer: space audit of the open document',
+      category: 'Developer',
+      hidden: true,
+      when: open,
+      description: 'Internal: the space audit as plain numbers, without opening a dialog.',
+      run: async (ctx) => {
+        const s = service(ctx);
+        const audit = await s.audit(await s.sourceBytes(s.require()));
+        return {
+          total: audit.total,
+          slices: audit.slices.map((slice) => ({ ...slice })),
+        };
+      },
     },
     {
       id: 'optimise.fastWebView.toggle',
@@ -380,19 +421,27 @@ async function audit(ctx: CommandContext): Promise<Record<string, number>> {
   return Object.fromEntries(result.slices.map((slice) => [slice.category, slice.bytes]));
 }
 
-/** Check This Document: what qpdf makes of the file, said in words. */
+/**
+ * Check This Document: what qpdf makes of the file, said in words.
+ *
+ * **The command resolves as soon as it has the answer; it does not wait for the reader to close
+ * the dialog.** A command's return value is what another command, the e2e harness or M120's
+ * batch reads back, and a checker that only answers once somebody has pressed OK is a checker
+ * nothing can use. The dialog is still shown, and the Repair it offers is chained off the
+ * dialog's own promise rather than off this one.
+ */
 async function check(ctx: CommandContext): Promise<Record<string, unknown> | null> {
   const s = service(ctx);
   const doc = s.require();
   const bytes = await s.sourceBytes(doc);
   const result = await s.check(bytes);
   if (!result) {
-    await s.dialogs.info('Cannot check', 'Checking a document needs the app shell.');
+    void s.dialogs.info('Cannot check', 'Checking a document needs the app shell.');
     return null;
   }
   const problems = [...result.errors, ...result.warnings];
   if (result.ok) {
-    await s.dialogs.message({
+    void s.dialogs.message({
       kind: 'success',
       title: 'Nothing wrong',
       text:
@@ -401,17 +450,21 @@ async function check(ctx: CommandContext): Promise<Record<string, unknown> | nul
         `fast web view is ${result.linearised ? 'on' : 'off'}.`,
     });
   } else {
-    const answer = await s.dialogs.message({
-      kind: 'warning',
-      title: 'This file has damage in it',
-      text: `${doc.state.title}: ${problems[0] ?? 'qpdf found something wrong with this file.'}`,
-      ...(problems.length > 1 ? { detail: problems.slice(1).join('\n') } : {}),
-      buttons: [
-        { id: 'repair', label: 'Repair a copy…', primary: true },
-        { id: 'ok', label: 'Close' },
-      ],
-    });
-    if (answer === 'repair') await ctx.run('optimise.repair');
+    void s.dialogs
+      .message({
+        kind: 'warning',
+        title: 'This file has damage in it',
+        text: `${doc.state.title}: ${problems[0] ?? 'qpdf found something wrong with this file.'}`,
+        ...(problems.length > 1 ? { detail: problems.slice(1).join('\n') } : {}),
+        buttons: [
+          { id: 'repair', label: 'Repair a copy…', primary: true },
+          { id: 'ok', label: 'Close' },
+        ],
+      })
+      .then(async (answer) => {
+        if (answer === 'repair') await ctx.run('optimise.repair');
+      })
+      .catch(() => undefined);
   }
   return { ...result };
 }
