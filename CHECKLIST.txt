@@ -149,7 +149,7 @@ WAVE 4
       needs: M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M72-properties-metadata.md and carry out the "Your task" section in full.
 
-[ ] M130  Preferences, keyboard shortcuts editor, ribbon/QAT customisation, UI scale, i18n framework
+[✔] M130  Preferences, keyboard shortcuts editor, ribbon/QAT customisation, UI scale, i18n framework
       model:  Opus
       needs: M02 M01
       prompt: Read D:\Projects\ynotPDF\docs\modules\M130-preferences.md and carry out the "Your task" section in full.
@@ -165,7 +165,7 @@ WAVE 5
       needs: M31
       prompt: Read D:\Projects\ynotPDF\docs\modules\M33-measuring-tools.md and carry out the "Your task" section in full.
 
-[ ] M50  Page-object model — select, move, resize, align, arrange
+[✔] M50  Page-object model — select, move, resize, align, arrange
       model:  Fable 5.1  (hard - use the strongest model)
       needs: M21 M11
       prompt: Read D:\Projects\ynotPDF\docs\modules\M50-object-model.md and carry out the "Your task" section in full.
