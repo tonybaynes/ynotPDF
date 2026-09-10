@@ -385,11 +385,18 @@ export class ExportService {
     }
     const written = await this.write(result.files, destination);
     if (written === null) return null;
+    const files = result.files.slice(0, written.count);
     const outcome: ExportOutcome = {
       kind,
-      files: result.files.map((f) => f.name),
-      bytes: result.files.reduce((n, f) => n + f.bytes.byteLength, 0),
-      warnings: result.warnings,
+      files: files.map((f) => f.name),
+      bytes: files.reduce((n, f) => n + f.bytes.byteLength, 0),
+      warnings:
+        written.count < result.files.length
+          ? [
+              ...result.warnings,
+              `Writing was stopped after ${String(written.count)} of ${String(result.files.length)} files.`,
+            ]
+          : result.warnings,
       directory: written.directory,
     };
     this.lastOutcome = outcome;
@@ -401,17 +408,23 @@ export class ExportService {
    * Writes the files. One file goes to a Save As dialog; several go into a folder the reader
    * chooses. `directory` / `path` in the arguments skip the dialog, which is how a test and a
    * batch run drive it.
+   *
+   * A folder of five hundred PNGs is five hundred IPC round trips and a second or two of disk, so
+   * the loop runs under M40's progress dialog as well — which only appears if it turns out to be
+   * slow — with a macrotask between files so the window stays alive, and a Cancel that stops
+   * where it is and says how many were written. `null` means the reader cancelled the *dialog*
+   * and nothing at all was written.
    */
   private async write(
     files: ReadonlyArray<ExportedFile>,
     destination: Destination,
-  ): Promise<{ directory: string | null } | null> {
-    if (files.length === 0) return { directory: null };
-    if (!hasBridge()) return { directory: null };
+  ): Promise<{ directory: string | null; count: number } | null> {
+    if (files.length === 0) return { directory: null, count: 0 };
+    if (!hasBridge()) return { directory: null, count: files.length };
     const single = files.length === 1 ? files[0] : undefined;
     if (destination.path !== undefined && single) {
       await invoke('file:write', destination.path, single.bytes);
-      return { directory: directoryOf(destination.path) };
+      return { directory: directoryOf(destination.path), count: 1 };
     }
     let directory = destination.directory;
     if (directory === undefined && single && destination.ask !== false) {
@@ -423,20 +436,38 @@ export class ExportService {
       });
       if (path === null) return null;
       await invoke('file:write', path, single.bytes);
-      return { directory: directoryOf(path) };
+      return { directory: directoryOf(path), count: 1 };
     }
     if (directory === undefined) {
-      if (destination.ask === false) return { directory: null };
+      if (destination.ask === false) return { directory: null, count: files.length };
       const chosen = await invoke('dialog:pickFolder', 'Choose where to put the exported files');
       if (chosen === null) return null;
       directory = chosen;
     }
-    for (const file of files) {
-      await invoke('file:writeInto', directory, file.name, file.bytes);
-      // One macrotask between files: a folder of five hundred keeps the window alive.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-    return { directory };
+    const into = directory;
+    const organise = this.organise;
+    const loop = async (
+      report: (fraction: number, text?: string) => void,
+      signal: AbortSignal,
+    ): Promise<number> => {
+      let written = 0;
+      for (const [index, file] of files.entries()) {
+        if (signal.aborted) break;
+        report(index / files.length, `Writing ${file.name}`);
+        await invoke('file:writeInto', into, file.name, file.bytes);
+        written++;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      report(1);
+      return written;
+    };
+    const count = organise
+      ? await organise.withProgress(
+          { title: 'Writing the exported files', pages: files.length },
+          loop,
+        )
+      : await loop(() => undefined, new AbortController().signal);
+    return { directory: into, count };
   }
 
   /** Says what happened, in words, with a way to see it. */

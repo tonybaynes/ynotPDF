@@ -341,6 +341,28 @@ test.describe('export to images', () => {
     expect(outcome.files).toEqual(['scan-2-at-36dpi.png', 'scan-3-at-36dpi.png']);
   });
 
+  /**
+   * A folder of hundreds of files is hundreds of IPC round trips, and it happens after the
+   * encoding has finished — so it gets its own progress pass. What matters here is that every
+   * file really lands and the window is still alive at the end of it.
+   */
+  test('a hundred pages become a hundred files, and the window survives it', async () => {
+    await open('huge-page-count.pdf');
+    const dir = outDir('many');
+    const outcome = (await app.run('convert.exportImages', {
+      range: '1-100',
+      dpi: 12,
+      format: 'png',
+      directory: dir,
+    })) as Outcome;
+    expect(outcome.files).toHaveLength(100);
+    expect(readdirSync(dir)).toHaveLength(100);
+    // Zero-padded to the width of the *document*, which is a thousand pages.
+    expect(outcome.files[0]).toBe('huge-page-count_page0001.png');
+    expect(outcome.files[99]).toBe('huge-page-count_page0100.png');
+    expect(await app.page.locator('.viewer-content .page').first().isVisible()).toBe(true);
+  });
+
   test('the whole document is the default when nothing was chosen', async () => {
     await open('multipage.pdf');
     const dir = outDir('all');
