@@ -189,6 +189,12 @@ export class AnnotationService {
   /** The tool that made the last annotation, so "keep tool selected" knows what to restore. */
   private lastTool: AnnotationToolId | null = null;
 
+  /** The markup a ribbon button armed, waiting for the selection the reader is about to make. */
+  private pendingMarkup: {
+    readonly kind: 'Highlight' | 'Underline' | 'Squiggly' | 'StrikeOut';
+    readonly tool: AnnotationToolId;
+  } | null = null;
+
   constructor(options: {
     readonly registry: Registry;
     readonly shell: ShellServices;
@@ -677,6 +683,62 @@ export class AnnotationService {
    * One annotation per page the selection touches, because `/QuadPoints` belong to one page —
    * which is also what Foxit does, and what makes each page's highlight deletable on its own.
    */
+  /**
+   * Pick the highlighter, then drag: the markup the reader asked for, waiting for the words
+   * they are about to choose.
+   *
+   * A markup command works on the *current* text selection, and with nothing selected the
+   * ribbon button only switched the reader into the text tool — so "pick Highlight and drag",
+   * which is what Foxit does and what `tools.ts` has always said this app does, highlighted
+   * nothing at all (M04, 2026-09-10). The command now arms the markup instead, and the drag
+   * that follows applies it.
+   *
+   * Armed for one selection only, and applied on `pointerup`: the selection changes on every
+   * pointer move, and marking up each intermediate one would leave a trail of highlights behind
+   * the pointer.
+   *
+   * It then *waits for the selection to arrive* rather than for a fixed number of frames. M13
+   * resolves the caret under the pointer asynchronously, so the last change of a drag lands
+   * after the button is already up — and how long after depends on the line: a dense line of
+   * monospaced text took longer than two frames and the markup fired on an empty selection,
+   * which looked exactly like the tool not working (M04, 2026-09-10). Half a second is the
+   * ceiling; a reader who only clicked gets nothing, silently, which is right.
+   */
+  armMarkup(
+    kind: 'Highlight' | 'Underline' | 'Squiggly' | 'StrikeOut',
+    tool: AnnotationToolId,
+  ): void {
+    this.pendingMarkup = { kind, tool };
+    const onUp = (): void => {
+      window.removeEventListener('pointerup', onUp, true);
+      const deadline = performance.now() + 500;
+      const attempt = (): void => {
+        const pending = this.pendingMarkup;
+        if (!pending) return;
+        const selectFind = this.selectFind();
+        const ready = selectFind ? pagesOf(selectFind.selection).length > 0 : false;
+        if (!ready && performance.now() < deadline) {
+          requestAnimationFrame(attempt);
+          return;
+        }
+        this.pendingMarkup = null;
+        if (!ready) return;
+        void this.createMarkup(pending.kind, pending.tool);
+      };
+      requestAnimationFrame(attempt);
+    };
+    window.addEventListener('pointerup', onUp, true);
+    this.disposers.push(() => {
+      window.removeEventListener('pointerup', onUp, true);
+      this.pendingMarkup = null;
+    });
+  }
+
+  /** Forgets an armed markup — the reader changed their mind, or chose another tool. */
+  disarmMarkup(): void {
+    this.pendingMarkup = null;
+  }
+
   async createMarkup(
     kind: 'Highlight' | 'Underline' | 'Squiggly' | 'StrikeOut',
     tool: AnnotationToolId,
