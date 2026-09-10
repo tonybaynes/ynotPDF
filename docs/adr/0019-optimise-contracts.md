@@ -29,18 +29,46 @@ Added to `src/shared/ipc.ts`, handled in `src/main/ipc.ts`, backed by one lazily
 `QpdfTasks` in `src/main/optimise.ts` — the same arrangement, file for file, as M70's
 `security:*` and `src/main/security.ts`.
 
-| Channel | Args | Result |
-|---|---|---|
-| `optimise:structure` | bytes, `StructureOptions` | `{ bytes, warnings }` |
-| `optimise:linearise` | bytes | `{ bytes, warnings }` |
-| `optimise:check` | bytes | `QpdfCheck` — `{ ok, linearised, encrypted, version, warnings, errors }` |
-| `optimise:repair` | bytes | `{ bytes, warnings, repaired }` |
+| Channel              | Args                      | Result                                                                   |
+| -------------------- | ------------------------- | ------------------------------------------------------------------------ |
+| `optimise:structure` | bytes, `StructureOptions` | `{ bytes, warnings }`                                                    |
+| `optimise:linearise` | bytes                     | `{ bytes, warnings }`                                                    |
+| `optimise:check`     | bytes                     | `QpdfCheck` — `{ ok, linearised, encrypted, version, warnings, errors }` |
+| `optimise:repair`    | bytes                     | `{ bytes, warnings, repaired }` — the fallback of 1a                     |
 
 `QpdfTasks` (`src/engine/optimise/qpdf/tasks.ts`) is the façade, shaped like `Security`: a `Qpdf`
 in, four methods out, no UI and no model, so a Node test drives the real qpdf directly and M120's
 batch will drive it with no window open. Nothing above it mentions argv.
 
 Bytes cross the boundary twice per optimise, which is the crossing a save already makes.
+
+### 1a. Repair is PDFium's, not qpdf's — this build of qpdf cannot reconstruct
+
+The brief assumed `qpdf --check` for detection and a qpdf rewrite for the repair itself. The first
+half holds. The second does not, and it is worth writing down because the next module that reaches
+for qpdf recovery will assume the same thing.
+
+**`@neslinesli93/qpdf-wasm` 0.3.0 (qpdf 12.2.0) never reconstructs a cross-reference table.**
+Measured against five kinds of damage — `startxref` past the end of the file, `startxref 0`, no
+`startxref` at all, a corrupted `xref` keyword, and a file truncated at 70 % — every one comes back
+as exit code 2, one line of explanation, and no output file. A native qpdf warns "attempting to
+reconstruct cross-reference table" and carries on; this one never does. The cause looks structural
+rather than a bug: qpdf's recovery paths are all driven by catching its own exceptions, and this
+WebAssembly build does not catch them, so the first throw comes straight out of `main`.
+
+**PDFium does reconstruct**, which is what the corpus already recorded (`broken-xref.pdf`: "PDFium
+reconstructs"). So the repair is:
+
+1. Ask the engine to open the bytes. PDFium rebuilds the cross-reference table on the way in, and
+   saving the document back out writes a file with a correct one. Verified: the repaired
+   `broken-xref.pdf` comes back `qpdf --check` clean.
+2. If the engine refuses, try a qpdf rewrite — the two disagree about what is fatal, so a file
+   PDFium will not open is sometimes one qpdf will.
+3. If neither will read it, say so, with what qpdf said about it.
+
+Detection stays `qpdf --check`, and it is still the right tool for it: it reads a file PDFium has
+already opened happily and says what is wrong with it, which is exactly what "offer Repair on
+`qpdf --check` warnings" in the brief asks for.
 
 ### 2. `repair` — one optional service, consulted by `ViewerService`
 

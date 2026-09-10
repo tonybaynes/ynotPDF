@@ -289,10 +289,16 @@ for behaviour learned from Foxit's or Adobe's published documentation as a user 
     families metric-compatible with them (Arial, Helvetica, Times New Roman, Courier New and
     their bold/italic variants) may be unembedded; anything else keeps its font program and the
     reader is told why **(ISO 32000 §9.6.2.2 for the Standard 14; ours for the refusal)**.
-12. **Repair opens a repaired copy and never overwrites the original.** `qpdf --check` decides
-    whether there is anything to repair; the repair itself is a qpdf rewrite, which rebuilds the
-    cross-reference table and drops what it cannot parse. The reader is shown what qpdf said
-    before anything is written **(public docs for "repair on open"; ours for never overwriting)**.
+12. **Repair is PDFium’s work, not qpdf’s, and it never overwrites the original.**
+    The brief assumed a qpdf rewrite would reconstruct a broken cross-reference table. It does
+    not: measured against five kinds of damage, this build of qpdf-wasm reconstructs *nothing* —
+    its recovery paths are exception-driven and the WebAssembly does not catch exceptions, so the
+    first throw comes out as exit 2 with no output file. PDFium does reconstruct, so repair asks
+    the engine to open the bytes and writes the document back out; a file the engine refuses
+    falls back to a qpdf rewrite, and a file neither will read is said to be beyond repair rather
+    than quietly returned unchanged. Detection is still `qpdf --check`, which is exactly what the
+    brief asks for. The repaired copy is what opens; the original is left alone.
+    **(brief for the offer; measured, ADR 0019, for who does it)**
 13. **Repair on open is one optional service lookup in M11's `ViewerService`**, mirroring the
     `security` hook M70 already added there: when the engine refuses a file and a `repair` service
     is registered, it is offered. Without M100 in the build nothing changes. ADR 0019.
