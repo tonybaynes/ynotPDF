@@ -263,6 +263,10 @@
     "render": ["a2b0c40000000000"],
     "text": "Heading in Helvetica 24 pt The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. Sphinx of  black quartz, judge my vow. How vexingly quick daft zebras jump! Monospaced:"
   },
+  "urls.pdf": {
+    "render": ["d0b0c00000000000", "90e0000000000000"],
+    "text": "Our site is https://example.com and the docs are at https://docs.example.com/a_b. A trailing full stop belongs to the sentence: https://example.org/page. In brackets (https://example.net/x) and in quo"
+  },
   "xfa.pdf": {
     "render": ["c080000000000000"],
     "text": "AcroForm fallback for an XFA form"
