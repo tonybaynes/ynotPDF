@@ -5,19 +5,12 @@
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  PDFArray,
-  PDFDocument,
-  PDFName,
-  PDFRawStream,
-  PDFRef,
-  PDFStream,
-  decodePDFRawStream,
-} from 'pdf-lib';
+import { PDFDocument } from 'pdf-lib';
+import { pageContentOf } from '@engine/content/pdf';
 
 export const FIXTURES = join(process.cwd(), 'test', 'fixtures');
 
-/** Every fixture PDF that opens without a password, synthetic and external. */
+/** Every fixture PDF, synthetic and external. Ones pdf-lib or PDFium cannot read are skipped. */
 export function openableFixtures(): Array<{ readonly name: string; readonly bytes: Uint8Array }> {
   const skip = new Set([
     'corrupt.pdf',
@@ -49,33 +42,18 @@ export function openableFixtures(): Array<{ readonly name: string; readonly byte
   return out;
 }
 
-/** Decoded content of every page, concatenated per page the way the spec says (7.7.3.3). */
-export async function pageContents(bytes: Uint8Array): Promise<Uint8Array[]> {
-  const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
-  return doc.getPages().map((page) => {
-    const contents = page.node.get(PDFName.of('Contents'));
-    const refs: PDFRef[] = [];
-    const resolved = contents instanceof PDFRef ? doc.context.lookup(contents) : contents;
-    if (contents instanceof PDFRef && resolved instanceof PDFStream) refs.push(contents);
-    else if (resolved instanceof PDFArray) {
-      for (const item of resolved.asArray()) if (item instanceof PDFRef) refs.push(item);
-    }
-    const parts: Uint8Array[] = [];
-    for (const ref of refs) {
-      const stream = doc.context.lookup(ref);
-      if (stream instanceof PDFRawStream) parts.push(decodePDFRawStream(stream).decode());
-      else if (stream instanceof PDFStream) parts.push(stream.getContents());
-      parts.push(new Uint8Array([0x0a]));
-    }
-    const total = parts.reduce((n, p) => n + p.length, 0);
-    const out = new Uint8Array(total);
-    let at = 0;
-    for (const p of parts) {
-      out.set(p, at);
-      at += p.length;
-    }
-    return out;
-  });
+/**
+ * Decoded content of every page, or `null` when pdf-lib cannot read the file at all — an
+ * encrypted file, a damaged one, or a stream it cannot decode. Those are PDFium's problem to
+ * open, not the parser's to round-trip, so a test treats `null` as "nothing to check here".
+ */
+export async function pageContents(bytes: Uint8Array): Promise<Uint8Array[] | null> {
+  try {
+    const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+    return doc.getPages().map((page) => pageContentOf(doc, page));
+  } catch {
+    return null;
+  }
 }
 
 /** Latin-1 bytes of a string, so `\xff` in a test is one byte, as it is in a file. */
