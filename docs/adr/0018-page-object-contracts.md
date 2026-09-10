@@ -44,10 +44,13 @@ and M71:
 
 ### 2. Engine mutations (additive to `PdfEngine`)
 
-`setObjectMatrix`, `removeObject`, `insertObject`, `reorderObjects`, `objectAsPdf`
-and `generateContent`, implemented in `src/engine/pdfium/objects.ts` over PDFium's
-page-object API. All are additive: `NotImplementedEngine` rejects them and the RPC
-list grows by six names.
+`pageContent`, `transformObject`, `setObjectMatrix`, `removeObject`, `restoreObject`,
+`insertObject`, `reorderObjects`, `objectAsPdf`, `setObjectStyle` and `objectPath`,
+implemented in `src/engine/pdfium/objects.ts` over PDFium's page-object API. All are
+additive: `NotImplementedEngine` rejects them and the RPC list grows by ten names.
+`removeObject` hands back a token and `restoreObject` takes it, because
+`FPDFPage_RemoveObject` returns ownership of the object and keeping it aside is what
+lets an undo put _the same_ object back rather than a form-XObject copy of it.
 
 `objectAsPdf(doc, page, index)` returns a **one-page PDF containing only that object**,
 made by importing the page into a scratch document and destroying every other object.
@@ -57,26 +60,36 @@ another document without hunting for them.
 
 ### 3. The split that keeps unknown operators: the engine renders, the writer writes
 
-**The object mutations deliberately do not call `FPDFPage_GenerateContent`.** PDFium
-renders from its parsed object list, so a matrix change is visible in the very next
-render; but the bytes `PdfEngine.save()` produces still carry the _original_ content
-stream. The edit reaches the file through the writer instead, which replays it onto
-those original bytes with the parser above — so every operator PDFium does not model
-survives the save.
+**Every object mutation calls `FPDFPage_GenerateContent`**, so the engine's page is
+self-consistent: M20's annotation methods unload and reload pages freely, and an edit
+that lived only in PDFium's parsed object list would vanish under them. The price is
+that the bytes `PdfEngine.save()` produces carry PDFium's _regenerated_ stream for
+that page — with every resource renamed (`/FXX1`, `/FXF1`, …) and every operator
+PDFium does not model gone.
 
-One exception, and it is explicit. Z-order and grouping rewrite the _order_ of
-objects, and re-establishing each moved object's full graphics state from the outside
-is exactly the reconstruction that loses things. Those go the other way: the engine
-reorders its object list and **does** generate content for that page, and the writer
-plans nothing for it. So per page there is one path, never two:
+So the renderer captures the page's **original content stream and `/Resources`**
+(`PdfEngine.pageContent`) before the first edit on that page, keeps them in
+`Document.custom('M50')`, and the writer puts both back and replays the edits onto the
+original operators with the parser above. The resources travel as pdf-lib's
+serialisation of the dictionary; the indirect references in it name objects that
+PDFium's save and pdf-lib's both keep under their original numbers, which the writer
+checks rather than assumes (a reference that no longer resolves leaves the page as the
+engine wrote it, with a warning). Every operator PDFium does not model therefore
+survives the save, and a full undo saves the file's own bytes for that page.
 
-| Page has                           | Path                                  | Unknown operators |
-| ---------------------------------- | ------------------------------------- | ----------------- |
-| transforms, deletions, pastes only | writer replays onto original bytes    | preserved         |
-| any z-order or group change        | PDFium regenerates that page's stream | lost on that page |
+One exception, and it is explicit. Z-order rewrites the _order_ of objects, and
+re-establishing each moved object's full graphics state from the outside is exactly
+the reconstruction that loses things. A reordered page goes the other way: PDFium's
+regenerated stream stands and the writer plans nothing for it. Grouping has no PDF
+representation at all and touches neither. So per page there is one path, never two:
 
-`buildWritePlan` decides which, and `SaveService` asks the engine to generate content
-for the pages on the second row before it reads the base bytes.
+| Page has                                   | Path                                             | Unknown operators |
+| ------------------------------------------ | ------------------------------------------------ | ----------------- |
+| transforms, deletions, styles, pastes only | writer restores the original and replays onto it | preserved         |
+| any z-order change still in effect         | PDFium's regenerated stream stands               | lost on that page |
+
+`buildWritePlan` decides which from the live order alone (`isReordered`), so undoing
+the z-order change puts the page back on the first row.
 
 ### 4. Writer contracts (additive)
 
