@@ -151,6 +151,10 @@ export function mountNavPane(host: HTMLElement, services: ShellServices): NavPan
     root.hidden = list.length === 0;
     if (!spec) return;
     title.textContent = spec.title;
+    // Panels are mounted once and cached, so mounting before `registry.activateAll()` would
+    // cache a panel built against services that do not exist yet — M12's Pages panel came up
+    // as "the navigation panels are not available" and stayed that way (2026-09-10).
+    if (!registry.isActivated) return;
     for (const [id, m] of mounted) m.element.hidden = id !== spec.id;
     if (!mounted.has(spec.id)) {
       const element = el('div.panel', {

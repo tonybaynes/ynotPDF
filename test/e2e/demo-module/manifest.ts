@@ -6,6 +6,7 @@
  */
 
 import { createStore } from '@core/Store';
+import type { Registry } from '@core/Registry';
 import type { Selection } from '@core/Selection';
 import { defineModule, type ServiceContext } from '@shared/module';
 import type { Dialogs } from '@app/dialog/Dialogs';
@@ -25,7 +26,10 @@ interface DemoState {
   readonly lastArgs: Readonly<Record<string, unknown>>;
 }
 
-export const demoState = createStore<DemoState>({
+export /** What the first panel mount saw: panels must never be built before modules activate. */
+let alphaMountSawActivated: boolean | null = null;
+
+const demoState = createStore<DemoState>({
   bold: false,
   shape: 'rectangle',
   colour: 'var(--annot-highlight)',
@@ -383,6 +387,17 @@ export default defineModule({
       run: () => demoState.get(),
     },
     {
+      // The shell mounts before `registry.activateAll()`, and the nav pane caches a panel the
+      // first time it mounts one. A panel mounted in that window is built against services no
+      // module has provided yet — that is how M12's Pages panel came up permanently dead
+      // (2026-09-10). This reports what the panel saw, on the real startup path.
+      id: 'demo.panelMountedActivated',
+      label: 'Demo: was the registry activated when the panel mounted?',
+      category: 'Developer',
+      hidden: true,
+      run: () => alphaMountSawActivated,
+    },
+    {
       id: 'demo.nonModal',
       label: 'Demo: Non-modal dialog',
       category: 'Developer',
@@ -601,7 +616,8 @@ export default defineModule({
       dock: 'left',
       icon: 'layers',
       order: 1,
-      mount: (host) => {
+      mount: (host, ctx) => {
+        alphaMountSawActivated = ctx.service<Registry>('registry').isActivated;
         host.append(
           Object.assign(document.createElement('p'), {
             textContent: 'Alpha panel content',

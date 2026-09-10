@@ -35,6 +35,15 @@ test('launches to the empty shell', async () => {
   expect(clippedAbove).toBeGreaterThanOrEqual(0);
 });
 
+// A panel mounted before `registry.activateAll()` is built against services that do not exist
+// yet, and the nav pane caches it: M12's Pages panel came up as "the navigation panels are not
+// available" and never recovered, so no thumbnail ever appeared (2026-09-10).
+test('the panel open at startup is mounted after the modules activate', async () => {
+  expect(await app.run('demo.panelMountedActivated')).toBe(true);
+  await expect(app.page.locator('#pane-left .nav-empty')).toHaveCount(0);
+  await expect(app.page.locator('#pane-left .panel-error')).toHaveCount(0);
+});
+
 test('registers the core commands', async () => {
   const ids = await app.commands();
   for (const id of [

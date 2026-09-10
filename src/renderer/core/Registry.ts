@@ -94,6 +94,11 @@ export class Registry {
     this.notify();
   }
 
+  /** True once `activateAll` has run: before that, module services do not exist yet. */
+  get isActivated(): boolean {
+    return this.activated;
+  }
+
   /** Calls every manifest's `activate` once the shell is mounted. */
   activateAll(): void {
     if (this.activated) return;
@@ -102,6 +107,9 @@ export class Registry {
       const d = m.activate?.(this.context());
       if (d) this.disposers.push(d);
     }
+    // The shell is built before this runs, so anything it drew against a world with no module
+    // services must now redraw — the nav pane defers mounting its panels until this fires.
+    this.notify();
   }
 
   /** Runs all disposers returned by `activate`. */
