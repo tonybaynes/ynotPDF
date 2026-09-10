@@ -13,15 +13,7 @@
  * document; no colour literals here (theme/ owns colours).
  */
 
-export const LAYER_NAMES = [
-  'raster',
-  'text',
-  'annot',
-  'link',
-  'widget',
-  'object',
-  'tool',
-] as const;
+export const LAYER_NAMES = ['raster', 'text', 'annot', 'link', 'widget', 'object', 'tool'] as const;
 export type LayerName = (typeof LAYER_NAMES)[number];
 
 export interface PageLayers {

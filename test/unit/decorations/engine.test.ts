@@ -279,10 +279,7 @@ describe('the writer', () => {
 });
 
 /** Ink in the top and bottom tenths of a page as it is displayed. */
-async function inkBands(
-  doc: DocHandle,
-  page: number,
-): Promise<{ top: number; bottom: number }> {
+async function inkBands(doc: DocHandle, page: number): Promise<{ top: number; bottom: number }> {
   const render = await pdfium.renderRaw(doc, page, 1);
   const band = Math.max(1, Math.round(render.height * 0.1));
   return {

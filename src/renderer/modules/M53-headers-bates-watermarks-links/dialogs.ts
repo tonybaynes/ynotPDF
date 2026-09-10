@@ -22,7 +22,12 @@ import {
   type WatermarkSpec,
   type ZoneName,
 } from '@engine/decorations/types';
-import { checkbox, lengthField, select, type LengthField } from '@modules/M41-merge-split-crop/fields';
+import {
+  checkbox,
+  lengthField,
+  select,
+  type LengthField,
+} from '@modules/M41-merge-split-crop/fields';
 import type { Unit } from '@view/units';
 import { openDecorationDialog, type DecorationDialogResult } from './decorationDialog';
 
@@ -197,7 +202,7 @@ export async function openHeaderFooterDialog(
     existing: options.existing,
     units: deps.units,
     presets: deps.presets,
-    savePresets: deps.savePresets,
+    savePresets: (json) => deps.savePresets(json),
     build: ({ body, changed, units }) => {
       const zones = el('div.decoration-zones');
       zones.append(el('h4.decoration-subheading', null, 'What goes where'));
@@ -216,7 +221,10 @@ export async function openHeaderFooterDialog(
         zoneInputs.set(zone, input);
         grid.append(field({ label: ZONE_LABELS[zone], input }));
       }
-      zones.append(grid, macroBar(() => lastFocused ?? zoneInputs.get('footer-centre') ?? null, changed));
+      zones.append(
+        grid,
+        macroBar(() => lastFocused ?? zoneInputs.get('footer-centre') ?? null, changed),
+      );
       body.append(zones);
 
       const fontSelect = select({
@@ -224,7 +232,7 @@ export async function openHeaderFooterDialog(
         value: font,
         choices: FONT_CHOICES,
         onChange: (value) => {
-          font = value as HeaderFooterSpec['font'];
+          font = value;
           changed();
         },
       });
@@ -255,7 +263,9 @@ export async function openHeaderFooterDialog(
           changed();
         },
       });
-      setColour = colourInput.set;
+      setColour = (value) => {
+        colourInput.set(value);
+      };
       body.append(
         el(
           'div.decoration-grid',
@@ -391,22 +401,8 @@ export async function openBatesDialog(
     existing: options.existing,
     units: deps.units,
     presets: deps.presets,
-    savePresets: deps.savePresets,
+    savePresets: (json) => deps.savePresets(json),
     build: ({ body, changed, units }) => {
-      const text = (
-        label: string,
-        value: string,
-        set: (v: string) => void,
-      ): HTMLInputElement => {
-        const input = el('input.input', { type: 'text', value, spellcheck: 'false' });
-        input.addEventListener('input', () => {
-          set(input.value);
-          paintSample();
-          changed();
-        });
-        body.append(field({ label, input }));
-        return input;
-      };
       const grid = el('div.decoration-grid');
       body.append(grid);
       const prefixInput = el('input.input', {
@@ -461,7 +457,6 @@ export async function openBatesDialog(
       );
       body.append(sample);
       paintSample();
-      void text;
 
       const zoneSelect = select<ZoneName>({
         label: 'Where',
@@ -477,7 +472,7 @@ export async function openBatesDialog(
         value: font,
         choices: FONT_CHOICES,
         onChange: (value) => {
-          font = value as BatesSpec['font'];
+          font = value;
           changed();
         },
       });
@@ -584,7 +579,7 @@ export async function openWatermarkDialog(
 ): Promise<DecorationDialogResult<WatermarkSpec>> {
   let spec = options.spec;
   const set = (patch: Partial<WatermarkSpec>): void => {
-    spec = { ...spec, ...patch } as WatermarkSpec;
+    spec = { ...spec, ...patch };
   };
   const setters: Array<(s: WatermarkSpec) => void> = [];
 
@@ -599,7 +594,7 @@ export async function openWatermarkDialog(
     existing: options.existing,
     units: deps.units,
     presets: deps.presets,
-    savePresets: deps.savePresets,
+    savePresets: (json) => deps.savePresets(json),
     build: ({ body, changed, units }) => {
       // ---- what it is made of
       const textInput = el('input.input', {
@@ -680,7 +675,7 @@ export async function openWatermarkDialog(
         value: spec.font,
         choices: FONT_CHOICES,
         onChange: (value) => {
-          set({ font: value as WatermarkSpec['font'] });
+          set({ font: value });
           changed();
         },
       });

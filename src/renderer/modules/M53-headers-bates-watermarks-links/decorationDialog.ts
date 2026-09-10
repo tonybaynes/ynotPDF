@@ -13,7 +13,6 @@
  */
 
 import { field } from '@app/dialog/Dialogs';
-import type { DialogHandle } from '@app/dialog/Dialogs';
 import type { ShellServices } from '@app/services';
 import { el } from '@app/dom';
 import type { Document } from '@core/Document';
@@ -73,7 +72,12 @@ export interface DecorationFormContext<S extends DecorationSpec> {
 }
 
 export type DecorationDialogResult<S extends DecorationSpec> =
-  | { readonly action: 'apply'; readonly spec: S; readonly pages: ReadonlyArray<number>; readonly range: string }
+  | {
+      readonly action: 'apply';
+      readonly spec: S;
+      readonly pages: ReadonlyArray<number>;
+      readonly range: string;
+    }
   | { readonly action: 'remove' }
   | { readonly action: 'cancel' };
 
@@ -97,14 +101,16 @@ export async function openDecorationDialog<S extends DecorationSpec>(
 
   let rangeInput: RangeField | undefined;
   const preview = new DecorationPreview(doc, options.kind);
-  let handle: DialogHandle | null = null;
   let custom = readCustomPresets(options.presets);
 
   const presetSelect = el('select.input', { 'data-testid': 'decoration-presets' });
   const repaintPresets = (): void => {
     presetSelect.replaceChildren();
     presetSelect.append(el('option', { value: '' }, 'Choose a preset…'));
-    for (const preset of [...builtInFor(options.kind), ...custom.filter((p) => p.kind === options.kind)]) {
+    for (const preset of [
+      ...builtInFor(options.kind),
+      ...custom.filter((p) => p.kind === options.kind),
+    ]) {
       presetSelect.append(
         el('option', { value: preset.id }, preset.custom ? `${preset.name} (yours)` : preset.name),
       );
@@ -117,8 +123,7 @@ export async function openDecorationDialog<S extends DecorationSpec>(
     title: options.title,
     width: 880,
     className: 'decoration-dialog',
-    content: (body, h) => {
-      handle = h;
+    content: (body) => {
       const columns = el('div.decoration-columns');
       const settings = el('div.decoration-settings');
       const previewColumn = el('div.decoration-preview-column');
@@ -205,9 +210,7 @@ export async function openDecorationDialog<S extends DecorationSpec>(
     },
     buttons: [
       { id: 'apply', label: options.existing ? 'Update' : 'Add', primary: true },
-      ...(options.existing
-        ? [{ id: 'remove', label: 'Remove', danger: true }]
-        : []),
+      ...(options.existing ? [{ id: 'remove', label: 'Remove', danger: true }] : []),
       { id: 'cancel', label: 'Cancel' },
     ],
   });
@@ -216,7 +219,6 @@ export async function openDecorationDialog<S extends DecorationSpec>(
 
   const result = await dialog.result;
   preview.dispose();
-  void handle;
   if (result === 'remove') return { action: 'remove' };
   if (result !== 'apply') return { action: 'cancel' };
   const pages = rangeInput?.pages() ?? null;
@@ -315,10 +317,7 @@ class DecorationPreview {
     }
   }
 
-  private async render(
-    spec: DecorationSpec,
-    pages: ReadonlyArray<number> | null,
-  ): Promise<void> {
+  private async render(spec: DecorationSpec, pages: ReadonlyArray<number> | null): Promise<void> {
     const doc = this.doc;
     const index = this.page();
     const modelPage = doc.state.pages[index];

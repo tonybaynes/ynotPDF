@@ -38,8 +38,8 @@ export interface DetectOptions {
  * A URL with a scheme. Deliberately conservative about the last character: a URL at the end of a
  * sentence should not swallow the full stop, and one in brackets should not swallow the bracket.
  */
-const SCHEME_URL = /\bhttps?:\/\/[^\s<>"'()\[\]{}|\\^`]+/gi;
-const BARE_URL = /\bwww\.[^\s<>"'()\[\]{}|\\^`]+/gi;
+const SCHEME_URL = /\bhttps?:\/\/[^\s<>"'()[\]{}|\\^`]+/gi;
+const BARE_URL = /\bwww\.[^\s<>"'()[\]{}|\\^`]+/gi;
 const EMAIL = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
 
 /** Trailing characters that are punctuation of the sentence rather than part of the address. */

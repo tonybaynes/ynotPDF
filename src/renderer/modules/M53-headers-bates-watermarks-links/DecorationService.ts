@@ -130,7 +130,7 @@ export class DecorationService implements DecorationApplier {
   async reapply(doc: Document, alsoPages: ReadonlyArray<number> = []): Promise<void> {
     if (this.disposed || doc.isClosed) return;
     const state = this.state(doc);
-    const document = documentContext(doc, this.now());
+    const document = documentContext(doc);
     const sizes = sourceSizes(doc.custom(XOBJECTS_NAMESPACE));
     const sources = this.sources(doc);
 
@@ -166,7 +166,10 @@ export class DecorationService implements DecorationApplier {
     } finally {
       progress?.close();
     }
-    this.repaint(doc, [...pages.keys()].map((id) => doc.enginePage(id)));
+    this.repaint(
+      doc,
+      [...pages.keys()].map((id) => doc.enginePage(id)),
+    );
   }
 
   private async applyToPage(
@@ -301,10 +304,7 @@ export class DecorationService implements DecorationApplier {
    * on each page, and the engine's replace-everything call takes the file's own ones off at the
    * same time. This is that call for the pages the model does not mention at all.
    */
-  private async clearFound(
-    doc: Document,
-    found: ReadonlyArray<ExistingDecoration>,
-  ): Promise<void> {
+  private async clearFound(doc: Document, found: ReadonlyArray<ExistingDecoration>): Promise<void> {
     const pages = new Set<number>();
     for (const item of found) for (const page of item.pages) pages.add(page);
     for (const page of pages) {
@@ -327,7 +327,10 @@ export class DecorationService implements DecorationApplier {
     const cached = this.discovered.get(doc.id);
     if (cached) return cached;
     const ours = new Set(this.state(doc).items.map((d) => d.id));
-    const byId = new Map<string, { kind: FoundDecoration['kind']; pages: number[]; spec: string | null }>();
+    const byId = new Map<
+      string,
+      { kind: FoundDecoration['kind']; pages: number[]; spec: string | null }
+    >();
     const count = doc.state.pages.length;
     const progress =
       count > 200

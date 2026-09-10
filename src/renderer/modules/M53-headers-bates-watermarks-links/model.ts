@@ -41,6 +41,15 @@ export interface ModelDecoration {
   readonly range: string;
   /** The pages it is on, as model ids, in document order at the time it was applied. */
   readonly pages: ReadonlyArray<ModelId>;
+  /**
+   * When the reader applied it, ISO 8601.
+   *
+   * The clock is read **once**, here, rather than every time the decoration is drawn. That is
+   * what keeps `buildWritePlan` a pure function of the document (M21's own promise), keeps a
+   * `<<Time>>` in a footer saying the same thing on every page, and makes a recovery or a batch
+   * run reproduce the file the reader saw.
+   */
+  readonly appliedAt: string;
   readonly spec: DecorationSpec;
 }
 
@@ -62,6 +71,9 @@ export interface DecorationsState {
 }
 
 export const EMPTY_DECORATIONS: DecorationsState = { items: [], pages: {}, seq: 1 };
+
+/** What a decoration with no recorded moment falls back to, so a date macro is never `Invalid`. */
+const EPOCH = '1970-01-01T00:00:00.000Z';
 
 // ---- reading back (a recovery record, a marker in a file someone else made) --------------------
 
@@ -167,7 +179,7 @@ export function readSpec(value: unknown): DecorationSpec | null {
       }
       return {
         kind: 'header-footer',
-        zones: zones as HeaderFooterSpec['zones'],
+        zones: zones,
         font: font(value['font']),
         size: n(value['size'], 10),
         colour: n(value['colour'], 0x000000),
@@ -226,7 +238,14 @@ function readDecoration(value: unknown): ModelDecoration | null {
   const pages = Array.isArray(value['pages'])
     ? value['pages'].filter((v): v is ModelId => typeof v === 'string')
     : [];
-  return { id, kind: kind as DecorationKind, range: str(value['range']), pages, spec };
+  return {
+    id,
+    kind: kind as DecorationKind,
+    range: str(value['range']),
+    pages,
+    appliedAt: str(value['appliedAt'], EPOCH),
+    spec,
+  };
 }
 
 /** The module's state as stored, validated. */
@@ -281,8 +300,8 @@ export function shrinkFor(state: DecorationsState, pageId: ModelId): number {
   return smallest === 1 ? 0 : smallest;
 }
 
-/** The document facts the macros can name. */
-export function documentContext(doc: Document, now: string): DocumentContext {
+/** The document facts the macros can name, apart from the moment, which is per decoration. */
+export function documentContext(doc: Document, now = EPOCH): DocumentContext {
   const state = doc.state;
   const path = state.path ?? '';
   const separator = path.includes('\\') ? '\\' : '/';
@@ -338,13 +357,13 @@ export function drawsForPage(
     const ordinal = item.pages.indexOf(page.id) + 1;
     if (ordinal === 0) continue;
     const bates = batesOf(state);
-    const withBates: DocumentContext =
-      bates && bates.spec.kind === 'bates'
-        ? {
-            ...document,
-            bates: batesFor(bates.spec, Math.max(1, bates.pages.indexOf(page.id) + 1)),
-          }
-        : document;
+    const withBates: DocumentContext = {
+      ...document,
+      now: item.appliedAt,
+      ...(bates?.spec.kind === 'bates'
+        ? { bates: batesFor(bates.spec, Math.max(1, bates.pages.indexOf(page.id) + 1)) }
+        : {}),
+    };
     const context = pageContextFor(doc, page, ordinal, item.pages.length, withBates);
     const { draw } = drawDecoration(item.id, item.spec, { page: context, sources });
     if (draw) out.push(draw);
@@ -377,9 +396,7 @@ export function plannedDecorationsFor(
 }
 
 /** Natural sizes of the picture and PDF sources a document holds, by key. */
-export function sourceSizes(
-  bag: Readonly<Record<string, unknown>>,
-): Record<string, SourceSize> {
+export function sourceSizes(bag: Readonly<Record<string, unknown>>): Record<string, SourceSize> {
   const out: Record<string, SourceSize> = {};
   for (const [key, value] of Object.entries(bag)) {
     if (!isRecord(value)) continue;

@@ -27,7 +27,7 @@ export function readPresets(value: unknown, custom: boolean): DecorationPreset[]
   const list = Array.isArray(value)
     ? value
     : Array.isArray((value as { presets?: unknown } | null)?.presets)
-      ? ((value as { presets: unknown[] }).presets)
+      ? (value as { presets: unknown[] }).presets
       : [];
   const out: DecorationPreset[] = [];
   for (const raw of list) {
@@ -71,7 +71,11 @@ export function withPreset(
 
 /** A preset id from a name, unique against what is already there. */
 export function presetId(name: string, taken: ReadonlyArray<DecorationPreset>): string {
-  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'preset';
+  const base =
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'preset';
   const ids = new Set(taken.map((p) => p.id));
   if (!ids.has(base)) return base;
   let n = 2;

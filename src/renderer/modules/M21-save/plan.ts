@@ -37,6 +37,7 @@ import type {
   PlannedAttachment,
   PlannedAnnotationProperties,
   PlannedBoxes,
+  PlannedDecorations,
   PlannedDestination,
   PlannedField,
   PlannedLayer,
@@ -53,6 +54,11 @@ import type {
 } from '@engine/Writer';
 import { plannedObjectsFor } from '@modules/M50-object-model/model';
 import { plannedFormFor } from '@modules/M60-forms/plan';
+import {
+  documentContext,
+  plannedDecorationsFor,
+  sourceSizes,
+} from '@modules/M53-headers-bates-watermarks-links/model';
 
 /** What the plan could not express, for the caller to tell the user about. */
 export interface PlanResult {
@@ -65,6 +71,14 @@ export function buildWritePlan(doc: Document): PlanResult {
   const intents = new Set(state.writeIntents);
   const warnings: string[] = [];
   const touched = touchedEntities(doc);
+
+  /*
+   * The decorations are drawn from the same pure functions the live pages were drawn from, so
+   * the file and the screen cannot disagree. Nothing here reads a clock: each decoration carries
+   * the moment it was applied, so this stays a pure function of the document.
+   */
+  const decorationDocument = documentContext(doc);
+  const decorationSources = sourceSizes(doc.custom(XOBJECTS_NAMESPACE));
 
   const pages: PlannedPage[] = [];
   state.pages.forEach((page) => {
@@ -79,6 +93,7 @@ export function buildWritePlan(doc: Document): PlanResult {
       boxes?: PlannedBoxes;
       annotations?: PlannedAnnotation[];
       objects?: PlannedObjects;
+      decorations?: PlannedDecorations;
     } = { source };
     if (intents.has('page-labels')) planned.label = page.label;
     if (intents.has('page-boxes')) {
@@ -90,6 +105,13 @@ export function buildWritePlan(doc: Document): PlanResult {
     // Page-object edits replayed onto the original content stream (M50, ADR 0018).
     const objects = plannedObjectsFor(doc, page.id);
     if (objects) planned.objects = objects;
+    // Headers, footers, Bates numbers, watermarks and backgrounds (M53, ADR 0020). Only when the
+    // session actually changed them, so a document opened with decorations on it and saved
+    // untouched still round-trips.
+    if (intents.has('decorations')) {
+      const decorations = plannedDecorationsFor(doc, page, decorationDocument, decorationSources);
+      if (decorations) planned.decorations = decorations;
+    }
     pages.push(planned);
   });
 
@@ -265,15 +287,60 @@ function plannedAnnotations(
       insert?: boolean;
       properties?: PlannedAnnotationProperties;
       appearance?: { input: AppearanceInput; replace: boolean };
+      dest?: PlannedDestination | null;
     } = { index, subtype: annotation.subtype, rect: annotation.rect };
     if (insert) entry.insert = true;
     if (wasChanged) {
       entry.properties = changedProperties(annotation, (id) => doc.annotation(id)?.name ?? null);
+      /*
+       * A link's `/Dest` (M53, ADR 0020 §5). The model holds the target as a page id; only the
+       * plan can see both that and the page's place in the finished document, so it resolves it
+       * here. A link that names no page inside the document says `null`, which removes any `/Dest`
+       * the file had — the reader changed it to a URL.
+       */
+      if (annotation.subtype === 'Link') entry.dest = plannedLinkDest(doc, annotation);
     }
-    entry.appearance = { input, replace: wasChanged };
+    // A Link has no appearance of its own: viewers draw its border from `/Border` and `/H`, and
+    // an `/AP` we invented would replace that with a picture of a rectangle.
+    if (annotation.subtype !== 'Link') entry.appearance = { input, replace: wasChanged };
     out.push(entry);
   });
   return out;
+}
+
+/**
+ * Where a link goes inside this document, as the writer wants it (M53, ADR 0020 §5).
+ *
+ * `extra.linkDest` holds a **model page id**; the plan indexes `WritePlan.pages`, so a link still
+ * points at the right page after a reorder. A target page that is no longer in the document
+ * resolves to `null`, which removes the `/Dest` rather than pointing it at whatever is now in
+ * that position.
+ */
+function plannedLinkDest(doc: Document, annotation: ModelAnnotation): PlannedDestination | null {
+  const raw = annotation.extra['linkDest'];
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Record<string, unknown>;
+  const pageId = record['page'];
+  if (typeof pageId !== 'string') return null;
+  const index = doc.state.pages.findIndex((p) => p.id === pageId);
+  if (index < 0) return null;
+  const fit = typeof record['fit'] === 'string' ? record['fit'] : 'fit';
+  const allowed: ReadonlyArray<PlannedDestination['fit']> = [
+    'xyz',
+    'fit',
+    'fitH',
+    'fitV',
+    'fitR',
+    'fitB',
+    'fitBH',
+    'fitBV',
+  ];
+  return {
+    page: index,
+    fit: (allowed as ReadonlyArray<string>).includes(fit)
+      ? (fit as PlannedDestination['fit'])
+      : 'fit',
+  };
 }
 
 /**

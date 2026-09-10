@@ -59,6 +59,8 @@ export class LinkLayer {
   private handlers: LinkLayerHandlers = {};
   private frame = 0;
   private disposed = false;
+  /** The rectangle being dragged out right now, if any. */
+  private draft: { page: number; rect: PdfRect } | null = null;
 
   /** Follows a pane: a scroll or a resize repaints the links on the pages it shows. */
   attach(view: DocumentView): () => void {
@@ -120,6 +122,12 @@ export class LinkLayer {
     this.schedule();
   }
 
+  /** The rectangle a drag is making, drawn as a dashed outline until the pointer comes up. */
+  setDraft(draft: { readonly page: number; readonly rect: PdfRect } | null): void {
+    this.draft = draft ? { page: draft.page, rect: draft.rect } : null;
+    this.schedule();
+  }
+
   setSelection(page: number, ids: ReadonlySet<string>): void {
     const state = this.pages.get(page) ?? { links: [], selected: new Set<string>() };
     this.pages.set(page, { ...state, selected: ids });
@@ -160,7 +168,7 @@ export class LinkLayer {
       // A page that scrolled out of view keeps its DOM; clearing it costs nothing and stops a
       // stale outline reappearing when it scrolls back before the next read.
       for (const page of this.pages.keys()) {
-        if (drawn.has(page)) continue;
+        if (drawn.has(page) || this.draft?.page === page) continue;
         const pageView = pane.view.pageView(page);
         if (pageView) pageView.layers.link.replaceChildren();
       }
@@ -177,8 +185,18 @@ export class LinkLayer {
     const layer = pageView.layers.link;
     layer.replaceChildren();
     const state = this.pages.get(page);
-    if (!state || state.links.length === 0) return;
     layer.dataset['mode'] = this.mode;
+    if (this.draft?.page === page) {
+      const box = pageView.transform.rectToDevice(this.draft.rect);
+      const draft = document.createElementNS(SVG_NS, 'rect');
+      draft.setAttribute('x', String(box.left));
+      draft.setAttribute('y', String(box.top));
+      draft.setAttribute('width', String(Math.max(1, box.width)));
+      draft.setAttribute('height', String(Math.max(1, box.height)));
+      draft.setAttribute('class', 'link-draft');
+      layer.append(draft);
+    }
+    if (!state || state.links.length === 0) return;
     for (const link of state.links) {
       const box = pageView.transform.rectToDevice(link.rect);
       const rect = document.createElementNS(SVG_NS, 'rect');

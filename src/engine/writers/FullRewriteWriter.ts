@@ -218,7 +218,7 @@ export class FullRewriteWriter implements Writer {
       let done = 0;
       for (const { page, ref } of withAnnotations) {
         if (ref) {
-          this.writeAnnotations(doc, ref, page.annotations ?? [], state, xobjects);
+          this.writeAnnotations(doc, ref, page.annotations ?? [], state, xobjects, pageRefAt);
         }
         done++;
         state.phase('annotations', done / withAnnotations.length);
@@ -348,6 +348,7 @@ export class FullRewriteWriter implements Writer {
     planned: ReadonlyArray<PlannedAnnotation>,
     state: WriteState,
     xobjects: EmbeddedXObjects,
+    pageRefAt: PageRefAt,
   ): void {
     const ctx = doc.context;
     const leaf = ctx.lookupMaybe(pageRef, PDFDict);
@@ -383,6 +384,21 @@ export class FullRewriteWriter implements Writer {
         continue;
       }
       if (entry.properties) applyAnnotationProperties(doc, dict, entry, state, references);
+      /*
+       * `/Dest` — a link's destination inside this document (M53, ADR 0020 §5). It is written
+       * here rather than through `properties.entries` because its first element is a *reference*
+       * to a page, and the plan carries values. `null` removes it, which is what a link that
+       * became a URL means.
+       */
+      if (entry.dest !== undefined) {
+        if (entry.dest === null) {
+          dict.delete(PDFName.of('Dest'));
+        } else {
+          const array = destinationArray(ctx, entry.dest, pageRefAt);
+          if (array) dict.set(PDFName.of('Dest'), array);
+          else state.warn('A link points at a page that is no longer in the document');
+        }
+      }
       if (entry.appearance) {
         const has = dict.get(PDFName.of('AP')) !== undefined;
         if (!has || entry.appearance.replace) {
