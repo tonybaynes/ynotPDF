@@ -3,8 +3,13 @@
 Cross-platform PDF editor (Electron + TypeScript, PDFium engine). Target:
 Foxit PDF Editor 14 feature parity. Four themes, dark ("Graphite") default.
 
+**Who you are working for: Tony.** Call him Tony — in replies, in commit
+messages, in briefs and in comments. Not "the operator" (2026-09-11). Older
+text throughout this repository still says "the operator"; that is history,
+and it is not being rewritten. New writing uses his name.
+
 **Every session:** read `PLAN.md` §0 (progress) and §12 (parallel
-protocol). If the operator names a module, open `docs/modules/<Mid>-*.md`
+protocol). If Tony names a module, open `docs/modules/<Mid>-*.md`
 and follow the **"Your task"** section at the top — it is the complete
 brief. Otherwise pick the next unchecked module whose dependencies are ☑.
 
@@ -12,7 +17,7 @@ brief. Otherwise pick the next unchecked module whose dependencies are ☑.
 - TypeScript everywhere. No frontend framework — vanilla DOM plus the
   in-house store. Node 26.
 - Colours only through theme tokens (`src/renderer/theme/`). Never a literal.
-- **Operator accessibility:** colourblind (red and black read the same — no
+- **Tony's accessibility needs:** colourblind (red and black read the same — no
   red/green or gold/green differentiation), low vision. Text ≥ 4.5:1,
   icons ≥ 3:1, no grey-on-dark text, status = word + icon. Modals/overlays
   fully opaque: no `rgba()` alpha < 1, no `opacity` < 1, no `backdrop-filter`.
@@ -25,7 +30,7 @@ brief. Otherwise pick the next unchecked module whose dependencies are ☑.
   module's folders; shared-file edits minimal, additive, and called out.
   **After the merge, remove the worktree and the local branch**
   (`git worktree remove ../ynotPDF-<Mid>` then `git branch -d mod/<Mid>-<name>`) —
-  a finished module leaves no folder behind (operator, 2026-09-10).
+  a finished module leaves no folder behind (Tony, 2026-09-10).
 - Installing build toolchains (Rust, C++, emsdk) is pre-approved — record it
   in `docs/adr/` and `README.md`. **Never Docker**, build or runtime: the
   installer must be self-contained.
@@ -33,11 +38,11 @@ brief. Otherwise pick the next unchecked module whose dependencies are ☑.
 ## Toolchain
 `npm run dev` · `npm test` · `npm run e2e` · `npm run build` · `npm run lint`
 
-**Sample PDFs:** the operator's real-world test files are in `test/fixtures/local/`
+**Sample PDFs:** Tony's real-world test files are in `test/fixtures/local/`
 (git-ignored — personal data; only its README is committed): three boarding passes and
 `Sample Portfolio.pdf`, a Foxit PDF Portfolio containing them. Use them for manual checks;
 tests may open them only behind `existsSync` skips. Never commit or quote their contents.
-— all defined by M00. Replies to the operator: short, plain — eyesight.
+— all defined by M00. Replies to Tony: short, plain — eyesight.
 
 **Foxit is the feature reference, nothing more.** Never copy Foxit's icons, artwork, wording,
 help text or documentation — icons are Lucide first, then Tabler/Phosphor (MIT), Fluent, Material/Remix (Apache-2.0), or our
@@ -49,5 +54,5 @@ Never open, read, extract or decompile files from an installed Foxit/Adobe/Tungs
 learn their behaviour as a user only. Design decisions in each brief record where behaviour
 came from (public docs, ISO 32000, our own choice): that is the provenance record.
 
-**E2E windows are invisible** (off-screen, transparent, inactive) so a run never interrupts the
-operator's machine. `YNOT_E2E_VISIBLE=1` shows them when you need to watch one.
+**E2E windows are invisible** (off-screen, transparent, inactive) so a run never interrupts
+Tony's machine. `YNOT_E2E_VISIBLE=1` shows them when you need to watch one.
