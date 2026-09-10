@@ -227,3 +227,26 @@ test('M92 — Export is found on the Convert tab, and its dialog offers what it 
 
   await expectWindowSound(app.page);
 });
+
+// ---- M100 ------------------------------------------------------------------------------------
+
+test('M100 — Reduce File Size is pressed on the Convert tab, and says what it would save', async () => {
+  const j = journey(app);
+  await j.openDocument(stage('bloated.pdf', 'optimise.pdf'));
+
+  await j.clickRibbon('convert', 'Reduce File Size…');
+  const dialog = app.page.locator('#optimise-dialog');
+  await expect(dialog, 'Reduce File Size did not open its dialog').toBeVisible({ timeout: 30_000 });
+  await expectNothingClipped(dialog);
+  await expectReadable(dialog);
+
+  // The reader's question is "how much smaller?", and the dialog has to answer it in words
+  // before they commit to anything.
+  await expect(dialog, 'the dialog should say what the saving would be').toContainText(
+    /\d+(\.\d+)?\s*(KB|MB|bytes)/i,
+  );
+  await j.clickDialogButton('#optimise-dialog', 'Cancel');
+  await expect(dialog).toBeHidden();
+
+  await expectWindowSound(app.page);
+});

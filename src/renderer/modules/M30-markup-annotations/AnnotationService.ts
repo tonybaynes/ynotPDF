@@ -718,14 +718,17 @@ export class AnnotationService {
         const selectFind = this.selectFind();
         const ready = selectFind ? pagesOf(selectFind.selection).length > 0 : false;
         if (!ready && performance.now() < deadline) {
-          requestAnimationFrame(attempt);
+          // A timer, not `requestAnimationFrame`: this is a wait for a *selection*, not for a
+          // paint, and Chromium drops rAF to one frame a second in a window it thinks nobody is
+          // looking at — which would spend the whole 500 ms on a single try.
+          setTimeout(attempt, 16);
           return;
         }
         this.pendingMarkup = null;
         if (!ready) return;
         void this.createMarkup(pending.kind, pending.tool);
       };
-      requestAnimationFrame(attempt);
+      setTimeout(attempt, 0);
     };
     window.addEventListener('pointerup', onUp, true);
     this.disposers.push(() => {

@@ -124,13 +124,22 @@ function seedSettings(userData: string, settings: Readonly<Record<string, unknow
   writeFileSync(join(userData, 'settings.json'), JSON.stringify(unflatten(record), null, 2));
 }
 
-/** Waits for two animation frames — one for a change to land, one for the layout it causes. */
+/**
+ * Waits for two animation frames — one for a change to land, one for the layout it causes.
+ *
+ * With a deadline, because an invisible window is one Chromium may decide nobody is looking at,
+ * and a backgrounded renderer runs `requestAnimationFrame` once a second. The launch switches
+ * are meant to stop that; this makes sure a regression there costs a test its accuracy rather
+ * than the whole run its time.
+ */
 async function settle(page: Page): Promise<void> {
   await page.evaluate(
     () =>
       new Promise<void>((done) => {
+        const timer = setTimeout(done, 500);
         requestAnimationFrame(() =>
           requestAnimationFrame(() => {
+            clearTimeout(timer);
             done();
           }),
         );
