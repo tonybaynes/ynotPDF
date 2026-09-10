@@ -163,16 +163,22 @@ export function mountNavPane(host: HTMLElement, services: ShellServices): NavPan
         'aria-labelledby': 'nav-title',
       });
       panelHost.append(element);
-      let dispose = (): void => undefined;
+      // Claim the slot *before* mounting. A panel's `mount` may change UI state as it draws —
+      // M12's Pages panel sizes the pane to one column — and `ui.set` re-enters `refresh()`
+      // synchronously. With the entry recorded afterwards, the re-entrant pass still saw
+      // `mounted.has(spec.id) === false` and mounted a second copy of the panel on top of the
+      // first: on the real startup path (no demo module) the reader got two Pages panels
+      // stacked in the nav host (M04, 2026-09-10).
+      const entry = { element, dispose: (): void => undefined };
+      mounted.set(spec.id, entry);
       try {
-        dispose = spec.mount(element, registry.context());
+        entry.dispose = spec.mount(element, registry.context());
       } catch (error) {
         console.error(`panel ${spec.id} failed to mount`, error);
         element.append(
           el('p.panel-error', null, icon('octagon-x'), ' Error: this panel failed to load.'),
         );
       }
-      mounted.set(spec.id, { element, dispose });
     }
   };
 
