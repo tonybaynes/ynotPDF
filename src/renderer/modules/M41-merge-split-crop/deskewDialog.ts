@@ -262,7 +262,12 @@ function headerRow(): HTMLElement {
 
 function paneFor(caption: string, image: HTMLElement): HTMLElement {
   const pane = el('figure.ops-skew-pane', { role: 'img' });
-  const frame = el('div.ops-skew-frame');
+  // A fixed-size window onto a picture: the "Straightened" preview is the same image under a
+  // rotation, so its corners reach past the frame by a few pixels and the frame trims them.
+  // Declared so M04's layout assertions read it as a viewport, not as a clipped control.
+  const frame = el('div.ops-skew-frame', {
+    'data-allow-clip': 'a fixed preview window; the rotated preview is trimmed at its corners',
+  });
   frame.append(image);
   pane.append(frame, el('figcaption', null, caption));
   return pane;

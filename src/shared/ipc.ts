@@ -483,6 +483,16 @@ export interface IpcInvokeMap {
    * dialogs, so the OS chrome follows the active theme (M01).
    */
   'theme:setNative': { args: [scheme: 'dark' | 'light']; result: void };
+  /**
+   * The renderer has finished booting: modules registered, shell mounted, IPC listeners
+   * installed. Main holds anything it must push at the renderer — a PDF from the command line,
+   * a file association — until this arrives (M04).
+   *
+   * `did-finish-load` is not this. It fires when the document has loaded, and the renderer's
+   * entry module then still has several `await`s to go before it listens for anything, so a file
+   * pushed at that moment went nowhere and the app opened empty (2026-09-10).
+   */
+  'app:ready': { args: []; result: void };
   'app:info': { args: []; result: AppInfo };
   'app:quit': { args: []; result: void };
   'window:minimize': { args: []; result: void };
@@ -611,6 +621,13 @@ export interface YnotBridge {
   readonly platform: Platform;
   /** True when launched with `YNOT_E2E=1` (see test/e2e/harness.ts). */
   readonly e2e: boolean;
+  /**
+   * Whether the e2e demo module should be registered (M04). False under `YNOT_E2E_NO_DEMO=1`,
+   * which is how a test takes the *real* startup path: the demo module registers panels that
+   * sort before M12's, so a fresh profile opened a demo panel and the Pages panel's own startup
+   * path went untested for a month (defect 2, 2026-09-10). Always false outside an e2e run.
+   */
+  readonly e2eDemoModule: boolean;
 }
 
 /** Full list of invoke channels, used by the preload script to whitelist and by tests. */
@@ -656,6 +673,7 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'settings:path',
   'fonts:list',
   'theme:setNative',
+  'app:ready',
   'app:info',
   'app:quit',
   'window:minimize',

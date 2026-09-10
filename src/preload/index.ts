@@ -15,8 +15,10 @@ import {
 const invokeSet = new Set<string>(INVOKE_CHANNELS);
 const eventSet = new Set<string>(EVENT_CHANNELS);
 
-// Main passes `--ynot-e2e` in `additionalArguments` only when YNOT_E2E=1 (see src/main/window.ts).
+// Main passes `--ynot-e2e` in `additionalArguments` only when YNOT_E2E=1 (see src/main/window.ts),
+// and `--ynot-e2e-no-demo` on top of it under YNOT_E2E_NO_DEMO=1 (M04).
 const e2e = process.argv.includes('--ynot-e2e');
+const e2eDemoModule = e2e && !process.argv.includes('--ynot-e2e-no-demo');
 
 const bridge: YnotBridge = {
   invoke(channel, ...args) {
@@ -37,6 +39,7 @@ const bridge: YnotBridge = {
   },
   platform: process.platform,
   e2e,
+  e2eDemoModule,
 };
 
 contextBridge.exposeInMainWorld('ynot', bridge);

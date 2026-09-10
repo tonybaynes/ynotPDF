@@ -19,6 +19,12 @@
   width: auto;
 }
 
+/*
+ * The strip scrolls when it has to. Eleven panel buttons at 2.3rem each need 414 px at 200 %
+ * UI scale, which is more than a 600 px-high window has left over: without this the last two
+ * panels were drawn below the pane's own bottom edge, inside `overflow: hidden`, and could not
+ * be reached at all (M04, 2026-09-10).
+ */
 .pane-strip {
   display: flex;
   flex-direction: column;
@@ -27,6 +33,9 @@
   border-right: var(--border-width) solid var(--border);
   background: var(--bg-ribbon);
   flex: none;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .pane-collapsed .pane-strip {

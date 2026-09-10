@@ -85,16 +85,18 @@ export function mountPropertiesPane(
         'aria-labelledby': 'props-title',
       });
       panelHost.append(element);
-      let dispose = (): void => undefined;
+      // Claim the slot before mounting: `mount` may change UI state, which re-enters `refresh`
+      // synchronously and would otherwise mount a second copy. Same hole as NavPane's (M04).
+      const entry = { element, dispose: (): void => undefined };
+      mounted.set(spec.id, entry);
       try {
-        dispose = spec.mount(element, registry.context());
+        entry.dispose = spec.mount(element, registry.context());
       } catch (error) {
         console.error(`panel ${spec.id} failed to mount`, error);
         element.append(
           el('p.panel-error', null, icon('octagon-x'), ' Error: this panel failed to load.'),
         );
       }
-      mounted.set(spec.id, { element, dispose });
     }
   };
 

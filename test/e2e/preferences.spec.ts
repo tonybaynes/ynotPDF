@@ -17,6 +17,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchApp, type App } from './harness';
+import { expectReadable } from './layout';
 import { formatShortcut } from '../../src/renderer/core/Registry';
 
 const FIXTURES = join(process.cwd(), 'test', 'fixtures');
@@ -567,35 +568,12 @@ test.describe('language', () => {
 // ---- accessibility ------------------------------------------------------------------------------
 
 test.describe('the dialog obeys the operator’s rules', () => {
-  test('nothing in it is translucent', async () => {
+  test('nothing in it is translucent, and every word in it is readable', async () => {
     await openPreferences();
-    // The same walk M02's shell suite uses: fully transparent is fine (an element with no
-    // background of its own); *partly* transparent is what the rule forbids.
-    const bad = await app.page.evaluate(() => {
-      const offenders: string[] = [];
-      const alpha = (colour: string): number | null => {
-        const match = /rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(?:,\s*([\d.]+))?\s*\)/.exec(
-          colour,
-        );
-        if (!match) return null;
-        return match[1] === undefined ? 1 : Number(match[1]);
-      };
-      const root = document.getElementById('preferences-dialog');
-      if (!root) return ['no dialog'];
-      for (const element of [root, ...root.querySelectorAll<HTMLElement>('*')]) {
-        const style = getComputedStyle(element);
-        const name = `${element.tagName.toLowerCase()}.${(element.getAttribute('class') ?? '').slice(0, 40)}`;
-        if (Number.parseFloat(style.opacity) < 1)
-          offenders.push(`${name} opacity ${style.opacity}`);
-        const a = alpha(style.backgroundColor);
-        if (a !== null && a > 0 && a < 1) offenders.push(`${name} background`);
-        if (style.backdropFilter && style.backdropFilter !== 'none') {
-          offenders.push(`${name} backdrop-filter`);
-        }
-      }
-      return offenders;
-    });
-    expect(bad).toEqual([]);
+    // M04's shared check, rather than a fifth copy of the walk: no `opacity < 1`, no `rgba()`
+    // alpha, no `backdrop-filter` — fully transparent is fine, *partly* transparent is what the
+    // rule forbids — plus 4.5:1 on every piece of text.
+    await expectReadable(dialog());
   });
 
   test('every control is reachable by keyboard and shows a focus ring', async () => {

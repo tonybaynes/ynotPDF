@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readComments } from '../../src/engine/xfdf';
 import { launchApp, type App } from './harness';
+import { expectReadable } from './layout';
 
 const FIXTURES = join(process.cwd(), 'test', 'fixtures');
 
@@ -628,35 +629,12 @@ test.describe('the panel is readable and reachable', () => {
     await app.page.locator('[data-action="comments-filter"]').click();
     await app.page.waitForTimeout(250);
 
-    const offenders = await app.page.evaluate(() => {
-      const bad: string[] = [];
-      const alpha = (value: string): number | null => {
-        const m = /\(([^)]*)\)/.exec(value);
-        if (!m) return null;
-        const parts = (m[1] ?? '').split(/[,/]/).map((p) => p.trim());
-        if (parts.length < 4) return null;
-        const last = parts[parts.length - 1] ?? '1';
-        const n = last.endsWith('%') ? Number.parseFloat(last) / 100 : Number.parseFloat(last);
-        return Number.isNaN(n) ? null : n;
-      };
-      const roots = document.querySelectorAll(
-        '.comments-list, .comments-list *, .comments-searchrow, .comments-searchrow *, ' +
-          '.comments-popup, .comments-popup *',
-      );
-      for (const el of roots) {
-        const style = getComputedStyle(el);
-        if (Number.parseFloat(style.opacity) < 1) bad.push(`${el.className}: opacity`);
-        if (style.backdropFilter && style.backdropFilter !== 'none') {
-          bad.push(`${el.className}: backdrop-filter`);
-        }
-        for (const prop of ['color', 'background-color', 'border-top-color', 'fill', 'stroke']) {
-          const a = alpha(style.getPropertyValue(prop));
-          if (a !== null && a > 0 && a < 1) bad.push(`${el.className}: ${prop}`);
-        }
-      }
-      return bad;
-    });
-    expect(offenders).toEqual([]);
+    // M04's shared check rather than another copy of the walk (test/e2e/layout.ts).
+    for (const scope of ['.comments-list', '.comments-searchrow', '.comments-popup']) {
+      const region = app.page.locator(scope);
+      if ((await region.count()) === 0) continue;
+      await expectReadable(region.first());
+    }
     await app.page.keyboard.press('Escape');
   });
 

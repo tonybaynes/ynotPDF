@@ -138,9 +138,11 @@ function markupCommand(spec: {
       const s = service(ctx);
       const made = await s.createMarkup(spec.subtype, spec.tool);
       if (made.length === 0) {
-        // Nothing was selected: leave the reader in the tool that selects text, which is what
-        // they need next, rather than saying "nothing happened".
+        // Nothing was selected: put the reader in the tool that selects text, and *remember what
+        // they asked for* so the drag they make next marks it up. Switching tools alone left the
+        // button doing nothing visible at all (M04, 2026-09-10).
         ctx.service<{ activate(id: string): void }>(SERVICE.tools).activate('tool.selectText');
+        s.armMarkup(spec.subtype, spec.tool);
       }
       return made;
     },

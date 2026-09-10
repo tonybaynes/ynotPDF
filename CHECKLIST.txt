@@ -124,7 +124,7 @@ WAVE 3
 
 WAVE 4
 ------
-[ ] M04  UI-journey and layout test harness
+[✔] M04  UI-journey and layout test harness
       model:  Fable 5.1  (hard - use the strongest model)
       needs: M02 M11 M12 M13 M30
       prompt: Read D:\Projects\ynotPDF\docs\modules\M04-ui-journey-tests.md and carry out the "Your task" section in full.

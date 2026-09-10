@@ -15,7 +15,13 @@
 
 import type { CommentRow } from './rows';
 
-/** Heights in CSS pixels at 100 % UI scale. The stylesheet uses the same numbers. */
+/**
+ * Heights in CSS pixels **at 100 % UI scale**. The stylesheet uses the same numbers, in rem, so
+ * everything the browser draws doubles at 200 % while these constants do not: `options.scale`
+ * is what puts the two back in step. Without it every row was a fixed 100 %-height box holding
+ * 200 %-sized text, and the whole list clipped — at 150 %, which is the scale the operator runs
+ * (M04, 2026-09-10).
+ */
 export const GROUP_ROW_HEIGHT = 26;
 export const COMMENT_HEADER_HEIGHT = 38;
 export const REPLY_HEADER_HEIGHT = 20;
@@ -42,11 +48,14 @@ export function lineCount(text: string, width: number, fontSize: number): number
 }
 
 export interface RowMetricsOptions {
-  /** Usable width of a row's text, in CSS pixels. */
+  /** Usable width of a row's text, in CSS pixels — measured, so already at the reader's scale. */
   readonly width: number;
+  /** Text size at 100 % UI scale. */
   readonly fontSize: number;
   /** The row the reader has selected, which shows its whole text. */
   readonly expanded: string | null;
+  /** The reader's UI scale, 1 = 100 %. Every constant above is a length at scale 1. */
+  readonly scale?: number;
 }
 
 export interface RowMetrics {
@@ -58,19 +67,29 @@ export interface RowMetrics {
 
 /** The height one row wants. */
 export function heightOf(row: CommentRow, options: RowMetricsOptions): number {
-  if (row.kind === 'group') return GROUP_ROW_HEIGHT;
+  const scale = options.scale ?? 1;
+  if (row.kind === 'group') return GROUP_ROW_HEIGHT * scale;
   const expanded = options.expanded === row.id;
   const cap = expanded ? EXPANDED_LINES : CLAMPED_LINES;
-  const indent = row.kind === 'reply' ? 18 : 0;
+  const indent = row.kind === 'reply' ? 18 * scale : 0;
   const lines =
     row.entry.text === ''
       ? 0
       : Math.min(
           cap,
-          lineCount(row.entry.text, Math.max(40, options.width - indent), options.fontSize),
+          lineCount(
+            row.entry.text,
+            Math.max(40 * scale, options.width - indent),
+            options.fontSize * scale,
+          ),
         );
-  const header = row.kind === 'reply' ? REPLY_HEADER_HEIGHT : COMMENT_HEADER_HEIGHT;
-  return header + lines * LINE_HEIGHT + ROW_PADDING + (expanded ? EXPANDED_EXTRA : 0);
+  const header = (row.kind === 'reply' ? REPLY_HEADER_HEIGHT : COMMENT_HEADER_HEIGHT) * scale;
+  return (
+    header +
+    lines * LINE_HEIGHT * scale +
+    ROW_PADDING * scale +
+    (expanded ? EXPANDED_EXTRA * scale : 0)
+  );
 }
 
 export function rowMetrics(

@@ -7,11 +7,9 @@
   "type": "module",
   "main": "./out/main/index.js",
   "author": {
-    "name": "Ynot Apps",
-    "email": "tonybaynes@gmail.com",
-    "url": "https://ynot-apps.com"
+    "name": "Tony Baynes",
+    "email": "tonybaynes@gmail.com"
   },
-  "homepage": "https://ynot-apps.com",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=26"

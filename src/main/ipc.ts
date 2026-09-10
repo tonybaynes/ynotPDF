@@ -20,7 +20,6 @@ import type { FileKind, IpcHandlers, IpcInvokeChannel, SaveDialogOptions } from 
 import type { PrintJobs } from './print';
 import type { FolderSearches } from './search';
 import { hostArch, targetArch } from './arch';
-import { appVersion } from './version';
 import { readFileForRenderer, readFolder, writeBytes, writeInto, writeTempFile } from './files';
 import { systemFontFamilies } from './fonts';
 import { probeFile, writeAtomic } from './fs/atomic';
@@ -41,6 +40,8 @@ import { allWindows, broadcast, getMainWindow } from './window';
 
 export interface IpcDeps {
   onOpenPath(path: string): Promise<void>;
+  /** The renderer has finished booting and is listening (M04). */
+  onRendererReady(win: BrowserWindow | null): void;
   rebuildMenu(): void;
   /** Opens another app window, optionally loading `path` into it once ready (M02). */
   openWindow(path: string | undefined, from: BrowserWindow | null): void;
@@ -289,9 +290,12 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     'theme:setNative': (_e, scheme) => {
       nativeTheme.themeSource = scheme;
     },
+    'app:ready': (e) => {
+      deps.onRendererReady(windowOf(e));
+    },
     'app:info': () => ({
       name: app.getName(),
-      version: appVersion(),
+      version: app.getVersion(),
       electron: process.versions.electron ?? '',
       chrome: process.versions.chrome ?? '',
       node: process.versions.node,
