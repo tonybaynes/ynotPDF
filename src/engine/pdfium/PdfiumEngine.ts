@@ -54,6 +54,7 @@ import {
   type OutlineItem,
   type PageObject,
   type PageObjectKind,
+  type PageObjectPath,
   type PdfEngine,
   type Permissions,
   type ProgressCallback,
@@ -233,6 +234,105 @@ function run<T>(fn: () => T): Promise<T> {
   } catch (error) {
     return Promise.reject(error instanceof Error ? error : new Error(String(error)));
   }
+}
+
+// ---- path outlines (M33, ADR 0018) ---------------------------------------------------------------
+
+/** `FPDFPathSegment_GetType`. `-1` is PDFium's "unknown". */
+const SEGMENT = { LINETO: 0, BEZIERTO: 1, MOVETO: 2 } as const;
+
+/** How many straight pieces one Bézier becomes. 16 is under a tenth of a point at any real zoom. */
+const BEZIER_STEPS = 16;
+
+const IDENTITY_MATRIX: PdfMatrix = [1, 0, 0, 1, 0, 0];
+
+/** `a` applied after `b`: the matrix that maps a child's space through its parent's. */
+function composeMatrix(parent: PdfMatrix, child: PdfMatrix): PdfMatrix {
+  const [a1, b1, c1, d1, e1, f1] = child;
+  const [a2, b2, c2, d2, e2, f2] = parent;
+  return [
+    a1 * a2 + b1 * c2,
+    a1 * b2 + b1 * d2,
+    c1 * a2 + d1 * c2,
+    c1 * b2 + d1 * d2,
+    e1 * a2 + f1 * c2 + e2,
+    e1 * b2 + f1 * d2 + f2,
+  ];
+}
+
+function applyMatrix(m: PdfMatrix, x: number, y: number): PdfPoint {
+  return { x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] };
+}
+
+/** One cubic Bézier as `BEZIER_STEPS` straight pieces, the start point already emitted. */
+function flattenBezier(
+  into: PdfPoint[],
+  from: PdfPoint,
+  c1: PdfPoint,
+  c2: PdfPoint,
+  to: PdfPoint,
+): void {
+  for (let i = 1; i <= BEZIER_STEPS; i++) {
+    const t = i / BEZIER_STEPS;
+    const u = 1 - t;
+    const w0 = u * u * u;
+    const w1 = 3 * u * u * t;
+    const w2 = 3 * u * t * t;
+    const w3 = t * t * t;
+    into.push({
+      x: w0 * from.x + w1 * c1.x + w2 * c2.x + w3 * to.x,
+      y: w0 * from.y + w1 * c1.y + w2 * c2.y + w3 * to.y,
+    });
+  }
+}
+
+/**
+ * A path object's segments as polylines in the space `matrix` maps into. A closed subpath repeats
+ * its first point, so a caller walking consecutive pairs sees the closing edge too.
+ */
+function readSubpaths(ffi: Ffi, obj: number, matrix: PdfMatrix, pt: number): PdfPoint[][] {
+  const count = ffi.call('FPDFPath_CountSegments', obj);
+  if (count <= 0) return [];
+  const subpaths: PdfPoint[][] = [];
+  let current: PdfPoint[] = [];
+  // Bézier controls arrive as two ordinary segments before the end point.
+  let pending: PdfPoint[] = [];
+  const finish = (close: boolean): void => {
+    const first = current[0];
+    if (current.length >= 2) {
+      if (close && first) current.push({ x: first.x, y: first.y });
+      subpaths.push(current);
+    }
+    current = [];
+  };
+  for (let i = 0; i < count; i++) {
+    const seg = ffi.call('FPDFPath_GetPathSegment', obj, i);
+    if (seg === 0) continue;
+    if (!ffi.call('FPDFPathSegment_GetPoint', seg, pt, pt + 4)) continue;
+    const point = applyMatrix(matrix, ffi.f32(pt, 0), ffi.f32(pt, 1));
+    const type = ffi.call('FPDFPathSegment_GetType', seg);
+    const closes = ffi.call('FPDFPathSegment_GetClose', seg) !== 0;
+    if (type === SEGMENT.MOVETO) {
+      finish(false);
+      pending = [];
+      current = [point];
+    } else if (type === SEGMENT.BEZIERTO) {
+      pending.push(point);
+      if (pending.length === 3) {
+        const from = current[current.length - 1];
+        const [c1, c2, to] = pending;
+        if (from && c1 && c2 && to) flattenBezier(current, from, c1, c2, to);
+        else current.push(point);
+        pending = [];
+      }
+    } else {
+      pending = [];
+      current.push(point);
+    }
+    if (closes) finish(true);
+  }
+  finish(false);
+  return subpaths;
 }
 
 export class PdfiumEngine implements PdfEngine, CancellableEngine {
@@ -1535,6 +1635,61 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
     return out;
   }
 
+  /**
+   * The outlines of a page's paths, in page space (M33, ADR 0018).
+   *
+   * PDFium reports a path as a list of segments in the object's own space, so every point goes
+   * through the object's matrix; a Bézier arrives as three consecutive `BEZIERTO` segments —
+   * two controls and an end point — and is subdivided here. Form objects are walked one level,
+   * with the child's matrix composed on to the parent's, because a stamped logo's outline is
+   * exactly what a reader wants to snap to.
+   *
+   * Returns an empty list rather than throwing when the wasm build lacks the path exports: the
+   * method is optional on `PdfEngine` and every caller has a fallback.
+   */
+  pageObjectPaths(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<PageObjectPath>> {
+    const ffi = this.ffi;
+    const needed = [
+      'FPDFPath_CountSegments',
+      'FPDFPath_GetPathSegment',
+      'FPDFPathSegment_GetPoint',
+      'FPDFPathSegment_GetType',
+      'FPDFPathSegment_GetClose',
+    ];
+    if (!needed.every((name) => ffi.has(name))) return Promise.resolve([]);
+    const d = this.doc(doc);
+    const p = this.loadPage(d, page);
+    const out: PageObjectPath[] = [];
+    ffi.scope((s) => {
+      const f = s.alloc(4 * 6);
+      const pt = s.alloc(4 * 2);
+      const walk = (obj: number, matrix: PdfMatrix, index: number, depth: number): void => {
+        const type = ffi.call('FPDFPageObj_GetType', obj);
+        const own = ffi.call('FPDFPageObj_GetMatrix', obj, f)
+          ? composeMatrix(matrix, readMatrix(ffi, f))
+          : matrix;
+        if (type === PAGEOBJ.PATH) {
+          const subpaths = readSubpaths(ffi, obj, own, pt);
+          if (subpaths.length > 0) out.push({ index, subpaths });
+          return;
+        }
+        if (type === PAGEOBJ.FORM && depth < 2) {
+          const children = ffi.call('FPDFFormObj_CountObjects', obj);
+          for (let c = 0; c < Math.min(children, 500); c++) {
+            const child = ffi.call('FPDFFormObj_GetObject', obj, c);
+            if (child !== 0) walk(child, own, index, depth + 1);
+          }
+        }
+      };
+      const n = ffi.call('FPDFPage_CountObjects', p.page);
+      for (let i = 0; i < n; i++) {
+        const obj = ffi.call('FPDFPage_GetObject', p.page, i);
+        if (obj !== 0) walk(obj, IDENTITY_MATRIX, i, 0);
+      }
+    });
+    return Promise.resolve(out);
+  }
+
   async annotations(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<Annotation>> {
     const { annotations, missingColors } = this.annotationsSync(doc, page);
     if (missingColors.length === 0) return annotations;
@@ -1556,6 +1711,14 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         if (c.lineEndings) extra['lineEndings'] = c.lineEndings;
         if (c.cloudy !== undefined) extra['cloudy'] = c.cloudy;
         if (c.dashArray) extra['dashArray'] = c.dashArray;
+        // A measurement's scale and its dimension line (M33, ADR 0018).
+        if (c.measure) extra['measure'] = c.measure;
+        if (c.leaderLength !== undefined) extra['leaderLength'] = c.leaderLength;
+        if (c.leaderExtend !== undefined) extra['leaderExtend'] = c.leaderExtend;
+        if (c.leaderOffset !== undefined) extra['leaderOffset'] = c.leaderOffset;
+        if (c.caption !== undefined) extra['caption'] = c.caption;
+        if (c.captionPosition !== undefined) extra['captionPosition'] = c.captionPosition;
+        if (c.captionOffset) extra['captionOffset'] = c.captionOffset;
         out[index] = {
           ...a,
           ...optional('color', a.color ?? c.color),

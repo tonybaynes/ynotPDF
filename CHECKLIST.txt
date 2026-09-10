@@ -160,7 +160,7 @@ WAVE 4
 
 WAVE 5
 ------
-[ ] M33  Measuring tools — distance, perimeter, area, calibration
+[✔] M33  Measuring tools — distance, perimeter, area, calibration
       model:  Opus
       needs: M31
       prompt: Read D:\Projects\ynotPDF\docs\modules\M33-measuring-tools.md and carry out the "Your task" section in full.

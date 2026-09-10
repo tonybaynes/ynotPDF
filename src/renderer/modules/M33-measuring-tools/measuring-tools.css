@@ -1,0 +1,189 @@
+/*
+ * M33 — measuring tools: the gesture preview and its snap marker on the page, and the
+ * Measurements panel.
+ *
+ * The same two rules as M30 and M31: colours come from theme tokens, except a measurement's own
+ * colour, which is document content and is set by the code that knows it; and nothing is
+ * translucent (CLAUDE.md). The snap markers differ in *shape* as well as in lightness, because
+ * the operator cannot tell them apart by colour.
+ */
+
+/* ---- the gesture preview on the page ---------------------------------------------------------- */
+
+.viewer-content .page .layer-annot .measure-preview {
+  pointer-events: none;
+}
+
+.viewer-content .page .layer-annot .measure-preview-path {
+  fill: none;
+  stroke: var(--focus);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.viewer-content .page .layer-annot .measure-preview-label {
+  fill: var(--fg);
+  stroke: var(--bg-panel);
+  stroke-width: 4;
+  paint-order: stroke fill;
+  font-family: var(--font-ui, system-ui, sans-serif);
+  font-size: 12px;
+  font-weight: var(--fw-heading, 600);
+}
+
+/* The snap marker: opaque, and a different outline per kind. */
+.viewer-content .page .layer-annot .measure-snap-shape {
+  fill: var(--bg-panel);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.viewer-content .page .layer-annot .measure-snap-intersections,
+.viewer-content .page .layer-annot .measure-snap-paths {
+  fill: none;
+}
+
+.viewer-content .page .layer-annot .measure-snap-paths {
+  stroke-dasharray: 3 2;
+}
+
+/* ---- the Measurements panel -------------------------------------------------------------------- */
+
+.measure-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 8px;
+}
+
+.measure-live {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-panel);
+}
+
+.measure-live-label {
+  color: var(--fg-muted);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.measure-live-value {
+  color: var(--fg);
+  font-size: 1.4em;
+  font-weight: var(--fw-heading, 600);
+}
+
+.measure-live-detail,
+.measure-scale {
+  margin: 0;
+  color: var(--fg);
+  font-size: 0.9em;
+}
+
+.measure-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.measure-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.measure-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-panel);
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.measure-row:hover {
+  background: var(--bg-hover, var(--bg-app));
+}
+
+.measure-row:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.measure-row-icon {
+  display: flex;
+  flex: 0 0 auto;
+  color: var(--icon);
+}
+
+.measure-row-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.measure-row-value {
+  font-weight: var(--fw-heading, 600);
+}
+
+.measure-row-meta,
+.measure-empty,
+.measure-total {
+  color: var(--fg);
+  font-size: 0.9em;
+}
+
+.measure-empty {
+  margin: 0;
+  padding: 8px;
+}
+
+.measure-totals {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.measure-total {
+  margin: 0;
+}
+
+.measure-field-label {
+  margin: 0 0 2px;
+  color: var(--fg-muted);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ---- the properties sections ------------------------------------------------------------------- */
+
+.measure-value {
+  margin: 0;
+  color: var(--fg);
+  font-size: 1.3em;
+  font-weight: var(--fw-heading, 600);
+}
+
+.measure-preview {
+  margin: 8px 0 0;
+  color: var(--fg);
+  font-size: 0.95em;
+}

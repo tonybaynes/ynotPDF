@@ -146,6 +146,28 @@ polygon and press Enter. Hold `Shift` for a square, a circle or a 45° line.
 
 While drawing a polygon, `Backspace` takes the last corner back and `Escape` abandons it.
 
+The measuring tools (M33) measure the page in real-world units. Draw a distance with a drag; click
+each corner for a perimeter or an area and press `Enter` to finish. Every point snaps to what is
+drawn on the page — an end, a middle, a crossing or anywhere along a line — and the marker says
+which in words.
+
+| Keys        | Command                  | What it does                                                |
+| ----------- | ------------------------ | ----------------------------------------------------------- |
+| `Mod+Alt+L` | `measure.distance`       | Distance — drag between two points; `Shift` keeps it to 45° |
+| —           | `measure.perimeter`      | Perimeter — click each corner, `Enter` to finish            |
+| `Mod+Alt+A` | `measure.area`           | Area — click each corner and close the shape                |
+| —           | `measure.calibrate`      | Calibrate — draw a line whose real length you know          |
+| —           | `measure.scale`          | Measurement Scale — set the ratio by hand                   |
+| —           | `measure.clearPageScale` | Use the document's scale on this page again                 |
+| —           | `measure.snap`           | Snap while measuring, on or off                             |
+| —           | `measure.snapKind`       | Snap to endpoints, midpoints, intersections or paths        |
+| —           | `measure.results`        | Show or hide the Measurements panel                         |
+| —           | `measure.copy`           | Copy every measurement to the clipboard                     |
+| —           | `measure.export`         | Export every measurement as CSV                             |
+
+While measuring a perimeter or an area, `Backspace` takes the last corner back and `Escape`
+abandons it, exactly as the drawing tools do.
+
 With a comment selected, in the page area:
 
 | Keys                        | Command                                    | What it does                                        |
@@ -170,6 +192,10 @@ With a comment selected, in the page area:
 | —    | `tool.typewriter.activate`       | Typewriter                                           |
 | —    | `tool.textbox.activate`          | Text Box                                             |
 | —    | `tool.callout.activate`          | Callout                                              |
+| —    | `tool.measureDistance.activate`  | Distance                                             |
+| —    | `tool.measurePerimeter.activate` | Perimeter                                            |
+| —    | `tool.measureArea.activate`      | Area                                                 |
+| —    | `tool.calibrate.activate`        | Calibrate                                            |
 
 With **Select Text** active: drag to select, double-click a word, triple-click a paragraph,
 `Shift`-click to extend, `Alt`-drag to take a column, and the arrow keys, `Home` and `End` move

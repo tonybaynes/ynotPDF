@@ -215,6 +215,10 @@
     "render": ["0080000000000000", "00c0000000000000"],
     "text": "Visit example.com Go to page 2"
   },
+  "measure.pdf": {
+    "render": ["a080c080c40c0400"],
+    "text": "Measuring geometry: 100 mm line, 50x20 mm box, 3-4-5 triangle, a crossing"
+  },
   "mixed-boxes.pdf": {
     "render": ["0000000000000000", "000000c080000000", "8000000000000000"],
     "text": "CropBox origin (50, 100) Outside the crop box"

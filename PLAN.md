@@ -35,7 +35,7 @@ commit. Sub-conversations working in parallel follow **§12**.
 | 4 | M72 Document properties, metadata & XMP, initial view | [M72-properties-metadata.md](docs/modules/M72-properties-metadata.md) | ☑ |
 | 4 | M130 Preferences, keyboard shortcuts editor, ribbon/QAT customisation, UI scale, i18n framework | [M130-preferences.md](docs/modules/M130-preferences.md) | ☐ |
 | | **MILESTONE 1 — usable viewer & annotator (v0.1)** — open, view, search, print, annotate, comment, organise pages, merge/split, deskew scans, save, encrypt, create PDFs, preferences | | |
-| 5 | M33 Measuring tools — distance, perimeter, area, calibration | [M33-measuring-tools.md](docs/modules/M33-measuring-tools.md) | ☐ |
+| 5 | M33 Measuring tools — distance, perimeter, area, calibration | [M33-measuring-tools.md](docs/modules/M33-measuring-tools.md) | ☑ |
 | 5 | M50 Page-object model — select, move, resize, align, arrange | [M50-object-model.md](docs/modules/M50-object-model.md) | ☑ |
 | 5 | M60 Form fill & AcroForm field designer | [M60-forms.md](docs/modules/M60-forms.md) | ☐ |
 | 5 | M92 Export to images, text, HTML & RTF | [M92-export.md](docs/modules/M92-export.md) | ☐ |

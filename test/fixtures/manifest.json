@@ -189,6 +189,14 @@
     "corrupt.pdf": { "error": "corrupt" },
     "huge-page-count.pdf": { "pages": 1000, "size": [200, 280], "text": "1", "renderPages": 1 },
     "scanned.pdf": { "pages": 1, "text": "", "objects": ["image"] },
+    "measure.pdf": {
+      "pages": 1,
+      "size": [595.28, 841.89],
+      "text": "Measuring geometry",
+      "annotations": 0,
+      "objects": ["path", "text"],
+      "notes": "M33: a 100 mm line, a 50x20 mm rectangle (1000 mm2), a 3-4-5 triangle (180 mm perimeter, 1350 mm2) and two lines crossing at exactly (150, 100) mm"
+    },
     "skewed.pdf": {
       "pages": 4,
       "size": [595.28, 841.89],
