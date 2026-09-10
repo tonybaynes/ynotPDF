@@ -46,6 +46,9 @@ export default defineConfig({
         // are gated. `codecs/installBuffer.ts` is the exception below — it is one assignment
         // that only matters in a browser.
         'src/engine/export/**/*.ts',
+        // M100's optimise pipeline: pure over bytes, apart from the qpdf façade, which is proved
+        // against a real qpdf rather than by line count.
+        'src/engine/optimise/**/*.ts',
         // M32's exchange and summary halves: both pure over text, bytes and sizes.
         'src/engine/xfdf/**/*.ts',
         'src/engine/summary/**/*.ts',
@@ -322,6 +325,23 @@ export default defineConfig({
         'src/engine/appearance/content.ts': { lines: 90, functions: 85, statements: 90 },
         'src/engine/appearance/metrics.ts': { lines: 95, functions: 95, statements: 95 },
         'src/engine/appearance/index.ts': { lines: 90, functions: 90, statements: 90 },
+        // M100. The pipeline decides what a smaller file still contains, so the passes that
+        // change the document are held high; the CCITT encoder and the sfnt surgery higher
+        // still, because a mistake in either is a file that opens and is quietly wrong.
+        'src/engine/optimise/optimise.ts': { lines: 80, functions: 85, statements: 80 },
+        'src/engine/optimise/audit.ts': { lines: 90, functions: 95, statements: 85 },
+        'src/engine/optimise/discard.ts': { lines: 90, functions: 95, statements: 90 },
+        'src/engine/optimise/dedupe.ts': { lines: 90, functions: 95, statements: 85 },
+        'src/engine/optimise/presets.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/optimise/repair.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/optimise/images/ccitt.ts': { lines: 90, functions: 95, statements: 90 },
+        'src/engine/optimise/images/resample.ts': { lines: 95, functions: 95, statements: 90 },
+        'src/engine/optimise/images/codecs.ts': { lines: 80, functions: 85, statements: 80 },
+        'src/engine/optimise/images/pipeline.ts': { lines: 78, functions: 90, statements: 72 },
+        'src/engine/optimise/images/placement.ts': { lines: 78, functions: 70, statements: 72 },
+        'src/engine/optimise/fonts/sfnt.ts': { lines: 85, functions: 95, statements: 80 },
+        'src/engine/optimise/fonts/pipeline.ts': { lines: 80, functions: 90, statements: 75 },
+        'src/engine/optimise/qpdf/structure.ts': { lines: 90, functions: 85, statements: 90 },
         // M12's pure half. The tree is what a bookmark edit is, and the grid is the operator's
         // layout rule, so both are held high.
         'src/renderer/modules/M12-navigation-panels/bookmarks/tree.ts': {
