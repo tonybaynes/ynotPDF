@@ -61,6 +61,22 @@ async function windowIsSound(app: App, where: string): Promise<void> {
   });
 }
 
+/**
+ * Resizes, and checks the window really is the size that was asked for.
+ *
+ * A matrix that silently tests one size three times is worse than no matrix — and a virtual
+ * screen smaller than the size under test is exactly how that happens (CI's xvfb screen is set
+ * to 1920x1080 for this reason). If a platform ever refuses, this says so instead of passing.
+ */
+async function resizeTo(app: App, size: WindowSize & { readonly name: string }): Promise<void> {
+  await app.resize(size);
+  const got = await app.viewportSize();
+  expect(
+    got,
+    `the window would not become ${size.name} — the matrix would have tested the wrong size`,
+  ).toEqual({ width: size.width, height: size.height });
+}
+
 for (const scale of SCALES) {
   test.describe(`UI scale ${scale}%`, () => {
     let app: App;
@@ -80,7 +96,7 @@ for (const scale of SCALES) {
 
     test('the start page survives all three window sizes', async () => {
       for (const size of SIZES) {
-        await app.resize(size);
+        await resizeTo(app, size);
         await expect(app.page.locator('#empty-state')).toBeVisible();
         await windowIsSound(app, `start page at ${scale}% in ${size.name}`);
         await expectReadable(app.page.locator('#empty-state'));
@@ -109,7 +125,7 @@ for (const scale of SCALES) {
       expect(tabs.length).toBeGreaterThan(8);
 
       for (const size of SIZES) {
-        await app.resize(size);
+        await resizeTo(app, size);
         await windowIsSound(app, `document with both panes at ${scale}% in ${size.name}`);
         // Defect 3 exactly: the pane is a fixed width, its contents are in rem, and at 150 %
         // the labels run off the right edge of a box that never grew.

@@ -14,7 +14,7 @@
  */
 
 import type { RibbonGroupSpec } from '@shared/module';
-import { el, button, srOnly, isVisible, uiScaleFactor } from '../dom';
+import { el, button, srOnly, isVisible } from '../dom';
 import { makeRoving } from '../focus';
 import { icon } from '../icons';
 import { closeAllPopups, openPopup } from '../popup';
@@ -290,25 +290,27 @@ export function mountRibbon(host: HTMLElement, services: ShellServices): RibbonH
   };
 
   /**
-   * Width of a collapsed group **at scale 1**. It is multiplied by `--ui-scale` on the way into
-   * the arithmetic below: the button itself is sized in rem and doubles at 200 %, so a bare 72
-   * made `fitGroups` stop collapsing while the groups still needed another two hundred pixels,
-   * and the ribbon clipped its last buttons off the right edge (M04, 2026-09-10 — the same
-   * mistake as the pane widths in `d1edee4`).
+   * Collapses groups from the right until the row fits — **measuring** after each one rather
+   * than predicting the width a collapsed group will take.
+   *
+   * It used to subtract a flat 72 px per collapsed group, which is its width at 100 % UI scale
+   * and nothing like its width at 150 % or 200 %, where everything in it is sized in rem. The
+   * arithmetic then stopped collapsing while the groups still needed another two hundred pixels
+   * and the ribbon clipped its last buttons off the right edge — the same mistake as the pane
+   * widths in `d1edee4`, and scaling the constant only moved the error rather than removing it
+   * (M04, 2026-09-10). The DOM knows the answer, so ask it.
+   *
+   * The measurement is a forced reflow per collapsed group, bounded by the number of groups on
+   * a tab and only on a rebuild or a resize; the common case — everything fits — costs one.
    */
-  const COLLAPSED_WIDTH = 72;
   const fitGroups = (): void => {
     if (groups.length === 0 || !isVisible(body)) return;
-    const available = body.clientWidth - 8;
-    if (available <= 0) return;
-    const collapsedWidth = COLLAPSED_WIDTH * uiScaleFactor();
+    if (body.clientWidth <= 0) return;
     for (const g of groups) expandGroup(g);
-    let total = groups.reduce((sum, g) => sum + g.naturalWidth, 0);
-    for (let i = groups.length - 1; i >= 0 && total > available; i--) {
+    for (let i = groups.length - 1; i >= 0; i--) {
+      if (body.scrollWidth <= body.clientWidth) break;
       const g = groups[i];
-      if (!g) continue;
-      total -= g.naturalWidth - collapsedWidth;
-      collapseGroup(g);
+      if (g) collapseGroup(g);
     }
     bodyRoving.refresh();
   };

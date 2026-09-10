@@ -42,10 +42,17 @@ export interface App {
   commands(): Promise<string[]>;
   /** Whether a command's `when` clause and permission allow it right now (M70). */
   isEnabled(commandId: string): Promise<boolean>;
-  /** Resizes the window's *content* area and waits for the renderer to lay out again (M04). */
+  /**
+   * Resizes until the renderer's viewport is exactly `size`, and waits for the layout (M04).
+   *
+   * The viewport, not the window: `setContentSize` and `getContentBounds` disagree by the frame
+   * on some platforms — asking for 1280x800 here gives a renderer 1294x836 — and the number the
+   * layout actually uses is `window.innerWidth`. A matrix that quietly tests a size nobody asked
+   * for is worse than no matrix.
+   */
   resize(size: WindowSize): Promise<void>;
-  /** The window's current content size (M04). */
-  contentSize(): Promise<WindowSize>;
+  /** The size the renderer's layout sees — `window.innerWidth` × `innerHeight` (M04). */
+  viewportSize(): Promise<WindowSize>;
   close(): Promise<void>;
 }
 
@@ -157,7 +164,10 @@ export async function launchApp(options: LaunchOptions = {}): Promise<App> {
     timeout: 30_000,
   });
 
-  const resize = async (size: WindowSize): Promise<void> => {
+  const viewport = (): Promise<WindowSize> =>
+    page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+
+  const setContentSize = async (size: WindowSize): Promise<void> => {
     await app.evaluate(({ BrowserWindow }, wanted) => {
       const win = BrowserWindow.getAllWindows()[0];
       if (!win) throw new Error('no window to resize');
@@ -165,6 +175,26 @@ export async function launchApp(options: LaunchOptions = {}): Promise<App> {
     }, size);
     await settle(page);
     await page.waitForTimeout(150);
+  };
+
+  /**
+   * Asks for a content size, sees what the renderer got, and corrects by the difference.
+   *
+   * `setContentSize(1280, 800)` leaves a 1294x836 viewport here — the window frame, which
+   * `getContentBounds` then reports as content anyway. Rather than assume a frame size per
+   * platform, this measures the error once and takes it off the next request.
+   */
+  const resize = async (size: WindowSize): Promise<void> => {
+    let ask = size;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await setContentSize(ask);
+      const got = await viewport();
+      if (got.width === size.width && got.height === size.height) return;
+      ask = {
+        width: ask.width + (size.width - got.width),
+        height: ask.height + (size.height - got.height),
+      };
+    }
   };
   if (options.window) await resize(options.window);
 
@@ -193,13 +223,7 @@ export async function launchApp(options: LaunchOptions = {}): Promise<App> {
         return api ? api.commands() : [];
       }),
     resize,
-    contentSize: () =>
-      app.evaluate(({ BrowserWindow }) => {
-        const win = BrowserWindow.getAllWindows()[0];
-        if (!win) throw new Error('no window to measure');
-        const [width, height] = win.getContentSize();
-        return { width: width ?? 0, height: height ?? 0 };
-      }),
+    viewportSize: viewport,
     close: () => app.close(),
   };
 }
