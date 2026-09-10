@@ -296,7 +296,10 @@ public help, **ours** = our own choice.
    XObject — in the live view through `FPDF_NewXObjectFromPage`, in the file through
    pdf-lib's `embedPdf`. Both produce the same thing, which is why the render matches
    before and after a save. *(ours; the alternative — copying resource dictionaries by
-   hand — is what makes cross-document paste fragile in other editors.)*
+   hand — is what makes cross-document paste fragile in other editors. The service also
+   keeps the last payload in memory: Windows' clipboard can wedge — writes report
+   success, reads come back empty, as M30 found — and a paste in the same session then
+   still works; it never overrides a clipboard that holds something else.)*
 8. **Resize means scale about the opposite handle; rotation is a matrix, not a
    property.** Every geometric change is one `PdfMatrix` premultiplied onto the object,
    so move, resize, rotate and flip are the same command with different maths and merge

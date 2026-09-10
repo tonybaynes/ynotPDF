@@ -139,6 +139,12 @@ export class ObjectService {
   private readonly disposers: Array<() => void> = [];
   private settingsValue: ObjectSettings = DEFAULT_OBJECT_SETTINGS;
   private filterValue: ObjectFilter = 'all';
+  /**
+   * The last payload we put on the OS clipboard. Windows' clipboard can wedge — writes report
+   * success and reads come back empty — so a paste in the same session falls back to this when
+   * the OS hands back nothing at all (never when it holds something else).
+   */
+  private memoryClipboard: string | null = null;
   private disposed = false;
 
   constructor(options: ObjectServiceOptions) {
@@ -829,7 +835,9 @@ export class ObjectService {
     if (!info) return false;
     const items = await this.clipboardObjects(info);
     if (items.length === 0) return false;
-    return await writeText(`${CLIPBOARD_MARKER}\n${JSON.stringify(items)}`);
+    const text = `${CLIPBOARD_MARKER}\n${JSON.stringify(items)}`;
+    this.memoryClipboard = text;
+    return await writeText(text);
   }
 
   async cut(): Promise<boolean> {
@@ -840,7 +848,9 @@ export class ObjectService {
 
   /** Pastes in place, on the current page, on top. Returns how many objects arrived. */
   async paste(): Promise<number> {
-    const items = decodeClipboard(await readText());
+    let text = await readText();
+    if (text.trim() === '' && this.memoryClipboard !== null) text = this.memoryClipboard;
+    const items = decodeClipboard(text);
     if (items.length === 0) return 0;
     const page = this.activeTab()?.page ?? this.activeViewer()?.state.page ?? 0;
     return await this.insertAll(items, page, [1, 0, 0, 1, 0, 0], 'Paste object');
