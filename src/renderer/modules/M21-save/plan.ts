@@ -52,6 +52,7 @@ import type {
   WritePlan,
 } from '@engine/Writer';
 import { plannedObjectsFor } from '@modules/M50-object-model/model';
+import { plannedFormFor } from '@modules/M60-forms/plan';
 
 /** What the plan could not express, for the caller to tell the user about. */
 export interface PlanResult {
@@ -117,6 +118,14 @@ export function buildWritePlan(doc: Document): PlanResult {
       intents.has('attachments') && portfolio === null ? plannedAttachments(state) : null,
     portfolio,
     xobjects: plannedXObjects(doc),
+    // The designed form (M60, ADR 0019). `fields` above still covers a save that only filled a
+    // form in; this rebuilds `/AcroForm` and every widget, and is on only when the structure
+    // changed.
+    form: intents.has('form')
+      ? plannedFormFor(doc, (message) => {
+          warnings.push(message);
+        })
+      : null,
   };
   return { plan, warnings };
 }

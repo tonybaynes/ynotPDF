@@ -115,6 +115,7 @@ import {
 } from './objects';
 import { FontRegistry, type SubstitutionTable } from './fonts';
 import { readRawInfo, type RawInfo } from './rawdoc';
+import { readRawForm, type RawForm } from './rawform';
 import { addFunction, instantiatePdfium, removeFunction } from './wasm';
 import { yieldMacrotask } from '../yield';
 
@@ -179,6 +180,8 @@ interface OpenDoc {
   readonly encrypted: boolean;
   readonly pages: Map<number, LoadedPage>;
   raw: Promise<RawInfo> | null;
+  /** The form's design, read from the same bytes (M60, ADR 0019). */
+  rawForm: Promise<RawForm> | null;
   /**
    * True once anything has been changed (M20). `bytes` is then the file as it was *opened*, not
    * as it is now, so the raw catalogue pass has to re-serialise instead of re-reading them.
@@ -490,6 +493,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       encrypted: ffi.call('FPDF_GetSecurityHandlerRevision', doc) !== -1,
       pages: new Map(),
       raw: null,
+      rawForm: null,
       mutated: false,
       hiddenLayerNames: new Set(),
       objectStash: createObjectStash(),
@@ -522,6 +526,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         encrypted: false,
         pages: new Map(),
         raw: null,
+        rawForm: null,
         // There are no bytes to re-read, so every raw pass must serialise what is here now.
         mutated: true,
         hiddenLayerNames: new Set(),
@@ -1078,6 +1083,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         const bytes = patch.bytes ?? this.readAttachment(att);
         this.ffi.call('FPDFDoc_DeleteAttachment', d.doc, index);
         d.raw = null;
+        d.rawForm = null;
         d.mutated = true;
         return this.addAttachmentSync(d, doc, {
           name: patch.name,
@@ -1090,6 +1096,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       }
       this.writeAttachment(d, att, patch);
       d.raw = null;
+      d.rawForm = null;
       d.mutated = true;
       const after = this.attachmentsSync(doc).find((a) => a.id === attachmentId);
       if (!after) throw new EngineError('internal', `attachment ${attachmentId} vanished`);
@@ -1109,6 +1116,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         throw new EngineError('internal', `PDFium would not delete ${attachmentId}`);
       }
       d.raw = null;
+      d.rawForm = null;
       d.mutated = true;
     });
   }
@@ -1151,6 +1159,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       ...optional('created', file.created),
     });
     d.raw = null;
+    d.rawForm = null;
     d.mutated = true;
     const index = this.attachmentIndexOf(d, file.name);
     const found = this.attachmentsSync(doc).find((a) => a.id === `att.${index}`);
@@ -2259,7 +2268,59 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
     }
   }
 
-  formFields(doc: DocHandle): Promise<ReadonlyArray<FormField>> {
+  /**
+   * The fields as PDFium sees them, merged with the design the raw pass read (M60, ADR 0019).
+   *
+   * PDFium's form API answers a name, a type, a value and two flags; `/DA`, `/MK`, `/Opt`'s
+   * export values and everything else a properties dialog edits are sub-dictionaries it cannot
+   * reach, so `rawform.ts` reads them from the bytes and they are joined here on the field's
+   * fully-qualified name. A backend with no raw pass simply reports no design, which every
+   * caller copes with.
+   */
+  async formFields(doc: DocHandle): Promise<ReadonlyArray<FormField>> {
+    const list = await this.formFieldsSync(doc);
+    if (list.length === 0) return list;
+    const design = await this.rawForm(this.doc(doc));
+    if (design.fields.length === 0) return list;
+    const byName = new Map(design.fields.map((f) => [f.name, f]));
+    return list.map((field) => {
+      const raw = byName.get(field.name);
+      if (!raw) return field;
+      // PDFium enumerates widgets page by page and, inside a page, in `/Annots` order — which is
+      // exactly the order the raw widgets sort into, so the two lists zip.
+      const ordered = [...raw.widgets].sort((a, b) => a.page - b.page || a.index - b.index);
+      const widgets = field.widgets.map((w, i) => {
+        const rawWidget = ordered[i];
+        return rawWidget?.page === w.page
+          ? { ...w, index: rawWidget.index, appearance: rawWidget.appearance }
+          : w;
+      });
+      return {
+        ...field,
+        design: raw.design,
+        widgets,
+        ...optional('options', raw.design.options.length > 0 ? raw.design.options : field.options),
+      };
+    });
+  }
+
+  /** The raw form design, parsed once per mutation. */
+  private rawForm(d: OpenDoc): Promise<RawForm> {
+    if (!d.rawForm) {
+      let bytes = d.bytes;
+      if (d.encrypted || d.mutated) {
+        try {
+          bytes = this.saveCopy(d, d.encrypted ? SAVE.REMOVE_SECURITY : 0);
+        } catch {
+          bytes = d.bytes;
+        }
+      }
+      d.rawForm = readRawForm(bytes);
+    }
+    return d.rawForm;
+  }
+
+  private formFieldsSync(doc: DocHandle): Promise<ReadonlyArray<FormField>> {
     return run(() => {
       const d = this.doc(doc);
       const ffi = this.ffi;
@@ -2267,6 +2328,8 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         string,
         { field: FormField; widgets: Array<{ page: PageIndex; rect: PdfRect }> }
       >();
+      // `field` is replaced rather than mutated when a later widget turns out to be the chosen
+      // one, so the entry is a plain mutable record.
       if (d.form === 0) return [];
       const pages = ffi.call('FPDF_GetPageCount', d.doc);
       ffi.scope((s) => {
@@ -2289,6 +2352,22 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
               const existing = fields.get(name);
               if (existing) {
                 existing.widgets.push({ page: pi, rect });
+                /*
+                 * A radio group is one field with a widget per button, and PDFium answers
+                 * `FPDFAnnot_GetFormFieldValue` per *widget* — so the group's value came from
+                 * whichever button happened to be enumerated first, and a group whose second or
+                 * third button is the chosen one read as "Off" (M60). Whichever button is
+                 * checked is the field's value.
+                 */
+                if (
+                  existing.field.type === 'radio' &&
+                  ffi.call('FPDFAnnot_IsChecked', d.form, annot)
+                ) {
+                  const chosen = ffi.utf16Call((buf, len) =>
+                    ffi.call('FPDFAnnot_GetFormFieldExportValue', d.form, annot, buf, len),
+                  );
+                  existing.field = { ...existing.field, value: chosen || 'Yes' };
+                }
                 continue;
               }
               const type = this.fieldType(ffi.call('FPDFAnnot_GetFormFieldType', d.form, annot));
@@ -2407,12 +2486,14 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
     for (const p of d.pages.values()) this.unloadPage(d, p);
     d.pages.clear();
     d.raw = null;
+    d.rawForm = null;
     d.mutated = true;
   }
 
   /** Drops one cached page (after an edit that changes what it draws). */
   private invalidatePage(d: OpenDoc, index: PageIndex): void {
     d.raw = null;
+    d.rawForm = null;
     d.mutated = true;
     const p = d.pages.get(index);
     if (!p) return;
@@ -2750,14 +2831,35 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
             break;
           case FORMFIELD.COMBOBOX:
           case FORMFIELD.LISTBOX: {
-            const index = this.optionIndex(d, annot, value);
-            if (index >= 0) {
-              this.ffi.call('FORM_SetIndexSelected', d.form, loaded.page, index, 1);
-            } else if (type === FORMFIELD.COMBOBOX) {
-              // An editable combo box accepts free text; a list box does not.
-              this.replaceText(d, loaded.page, value);
-            } else {
-              throw new EngineError('invalid-argument', `${fieldName} has no option "${value}"`);
+            /*
+             * The value *replaces* the selection rather than adding to it.
+             * `FORM_SetIndexSelected` only ever turns one option on, so setting a list box that
+             * already had a choice used to leave both selected and report the older one back
+             * (M60). A multi-select list is passed as newline-separated values, which is how the
+             * model carries one.
+             */
+            const wanted = value === '' ? [] : value.split('\n').filter((v) => v !== '');
+            const count = this.ffi.call('FPDFAnnot_GetOptionCount', d.form, annot);
+            const indexes = wanted.map((v) => this.optionIndex(d, annot, v));
+            const unknown = wanted.filter((_v, i) => (indexes[i] ?? -1) < 0);
+            if (unknown.length > 0) {
+              if (type === FORMFIELD.COMBOBOX) {
+                // An editable combo box accepts free text; a list box does not.
+                this.replaceText(d, loaded.page, value);
+                break;
+              }
+              throw new EngineError(
+                'invalid-argument',
+                `${fieldName} has no option "${unknown[0] ?? ''}"`,
+              );
+            }
+            const chosen = new Set(indexes);
+            for (let i = 0; i < count; i++) {
+              const on = chosen.has(i);
+              if ((this.ffi.call('FORM_IsIndexSelected', d.form, loaded.page, i) !== 0) === on) {
+                continue;
+              }
+              this.ffi.call('FORM_SetIndexSelected', d.form, loaded.page, i, on ? 1 : 0);
             }
             break;
           }
@@ -2780,6 +2882,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       }
       d.mutated = true;
       d.raw = null;
+      d.rawForm = null;
     });
   }
 
@@ -3075,6 +3178,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
 
   private afterObjectEdit(d: OpenDoc): void {
     d.raw = null;
+    d.rawForm = null;
     d.mutated = true;
   }
 

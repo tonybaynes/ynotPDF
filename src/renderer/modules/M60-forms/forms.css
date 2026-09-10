@@ -1,0 +1,537 @@
+/*
+ * M60 — the form-widget layer, the Fields panel, the field properties panel and the tab-order
+ * dialog.
+ *
+ * Two vocabularies live here and they are kept apart on purpose.
+ *
+ * A **field's own appearance** is document content: its border, its fill and its ink are the
+ * colours the file carries, and they arrive as the custom properties `--widget-border-colour`,
+ * `--widget-fill`, `--widget-ink`, `--widget-font` and `--widget-size`, set on each widget box by
+ * `FormLayer`. Nothing here invents them. That is the same rule M30 set for annotation colours: a
+ * theme colours the interface, a highlight colours the page.
+ *
+ * The **chrome around a field** — the highlight box, the required outline, the selection, the
+ * handles, the tab numbers — is theme tokens, and nothing is translucent (CLAUDE.md).
+ */
+
+/* ---- the widget layer ---------------------------------------------------------------------- */
+
+/*
+ * In fill mode the widget layer sits **above** the tool layer.
+ *
+ * The layer stack puts the tool layer on top, which is right for every tool that draws on the
+ * page — and wrong for a form, because the tool layer would swallow the click meant for the
+ * field underneath it and a reader could never get a caret into one. Raising the layer fixes
+ * that without costing the tools anything: the layer itself never takes a pointer event, only
+ * the field boxes on it do, so a click anywhere but on a field still reaches the active tool and
+ * the hand still pans the page.
+ */
+.viewer-content .page .layer-widget[data-mode='fill'] {
+  pointer-events: none;
+  overflow: visible;
+  z-index: 1;
+}
+
+/*
+ * In design mode the tool layer wins instead: `FormController` owns the pointer there, because a
+ * drag has to keep producing coordinates after it leaves the page it began on. Nothing on the
+ * widget layer takes an event, so a field is dragged rather than typed into.
+ */
+.viewer-content .page .layer-widget[data-mode='design'] {
+  pointer-events: none;
+  overflow: visible;
+}
+
+.viewer-content .page .layer-widget[data-mode='design'] .form-widget {
+  pointer-events: none;
+}
+
+.viewer-content .page .layer-widget .form-chrome {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/*
+ * The controls render in the *page's* colour scheme, not the app's.
+ *
+ * A check box, a radio and a select are drawn by the browser, and it draws them for the scheme
+ * it is told to use. Under the app's dark scheme they come out dark — a black-filled radio on
+ * white paper, which reads as "chosen" whether or not it is. The page is white unless Night Mode
+ * has darkened it, so the layer follows the page.
+ */
+.viewer-content .page .layer-widget {
+  color-scheme: light only;
+}
+
+[data-night-mode] .viewer-content .page .layer-widget {
+  color-scheme: dark only;
+}
+
+.viewer-content .page .layer-widget .form-widget {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  pointer-events: auto;
+  background: var(--widget-fill, transparent);
+  border: var(--widget-border, 0) solid var(--widget-border-colour, transparent);
+}
+
+/* A dashed or underlined border is drawn the way the file asks for it. */
+.viewer-content .page .layer-widget .form-widget[data-border='dashed'] {
+  border-style: dashed;
+}
+
+.viewer-content .page .layer-widget .form-widget[data-border='underline'] {
+  border-width: 0 0 var(--widget-border, 0) 0;
+}
+
+.viewer-content .page .layer-widget .form-widget[data-border='beveled'] {
+  border-style: outset;
+}
+
+.viewer-content .page .layer-widget .form-widget[data-border='inset'] {
+  border-style: inset;
+}
+
+/* The control fills its box and inherits the field's own type. */
+.viewer-content .page .layer-widget .form-control {
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 var(--widget-pad, 1px);
+  border: 0;
+  background: transparent;
+  color: var(--widget-ink);
+  font-family: var(--widget-font);
+  font-size: var(--widget-size);
+  line-height: 1.15;
+  text-align: var(--widget-align, left);
+}
+
+.viewer-content .page .layer-widget textarea.form-control {
+  resize: none;
+  overflow: auto;
+  padding: var(--widget-pad, 1px);
+}
+
+.viewer-content .page .layer-widget select.form-control {
+  appearance: auto;
+}
+
+.viewer-content .page .layer-widget button.form-control {
+  cursor: pointer;
+  text-align: center;
+}
+
+.viewer-content .page .layer-widget .form-widget[data-kind='checkbox'] .form-control,
+.viewer-content .page .layer-widget .form-widget[data-kind='radio'] .form-control {
+  appearance: auto;
+  accent-color: var(--widget-ink);
+  width: 100%;
+  height: 100%;
+  padding: 0;
+}
+
+.viewer-content .page .layer-widget .form-widget[data-kind='barcode'] .form-control,
+.viewer-content .page .layer-widget .form-widget[data-kind='signature'] .form-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.viewer-content .page .layer-widget .form-barcode {
+  width: 100%;
+  height: 100%;
+}
+
+.viewer-content .page .layer-widget .form-barcode path {
+  fill: var(--widget-ink);
+}
+
+/*
+ * The highlight: an outline drawn *inside* the widget, so it never covers the page content a
+ * transparent field is meant to show. It is `--info` (blue) and the required outline is
+ * `--warning` (yellow) — the blue-to-yellow axis the operator can separate, and heavier and
+ * doubled as well as differently coloured. "Required" is also in the field's accessible name and
+ * as a word in the Fields panel, so nothing here is told apart by colour alone.
+ */
+.layer-widget.form-highlight .form-widget {
+  outline: 2px solid var(--info);
+  outline-offset: -2px;
+}
+
+.layer-widget.form-highlight .form-widget.required {
+  outline: 3px double var(--warning);
+  outline-offset: -3px;
+}
+
+.layer-widget.form-highlight .form-widget.read-only {
+  outline-style: dotted;
+}
+
+/* Design mode: the controls are scenery, the box on the tool layer is the thing you grab. */
+.viewer-content .page .layer-widget[data-mode='design'] .form-control {
+  pointer-events: none;
+  user-select: none;
+}
+
+/*
+ * A disabled control keeps the field's own ink. The browser's grey is the one place a native
+ * control would put low-contrast text on the page, and CLAUDE.md leaves no room for that; the
+ * dotted outline and the words in the Fields panel are what say "read-only".
+ */
+.viewer-content .page .layer-widget .form-control:disabled {
+  color: var(--widget-ink);
+}
+
+.viewer-content .page .layer-widget .form-control:disabled option {
+  color: var(--widget-ink);
+}
+
+.viewer-content .page .layer-widget .form-widget.hovered {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+
+/*
+ * The selection is two rings, for the reason the theme's own focus ring is: `--focus` is white in
+ * the dark themes and a white ring on white paper is no ring at all. The outer ring sits on the
+ * page, the inner one against the field, and between them one is always visible.
+ */
+.viewer-content .page .layer-widget .form-widget.selected {
+  outline: 2px solid var(--focus);
+  outline-offset: 0;
+  box-shadow: inset 0 0 0 2px var(--focus-contrast);
+}
+
+.viewer-content .page .layer-widget .form-chrome .form-bounds-back {
+  fill: none;
+  stroke: var(--focus-contrast);
+  stroke-width: 4;
+  stroke-dasharray: 5 3;
+}
+
+.viewer-content .page .layer-widget .form-chrome .form-bounds {
+  fill: none;
+  stroke: var(--focus);
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
+}
+
+.viewer-content .page .layer-widget .form-chrome .form-handle {
+  fill: var(--bg-panel);
+  stroke: var(--focus);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.viewer-content .page .layer-widget .form-chrome .form-tab-number rect {
+  fill: var(--accent);
+  stroke: var(--fg-on-accent);
+  stroke-width: 1;
+}
+
+.viewer-content .page .layer-widget .form-chrome .form-tab-number text {
+  fill: var(--fg-on-accent);
+  font-size: 11px;
+  font-weight: var(--fw-heading);
+}
+
+/* Cursors while a form tool is active. */
+.viewer[data-form-drag='move'] .layer-tool {
+  cursor: move;
+}
+
+.viewer[data-form-drag='crosshair'] .layer-tool {
+  cursor: crosshair;
+}
+
+.viewer[data-form-drag='nwse'] .layer-tool {
+  cursor: nwse-resize;
+}
+
+.viewer[data-form-drag='nesw'] .layer-tool {
+  cursor: nesw-resize;
+}
+
+.viewer[data-form-drag='ns'] .layer-tool {
+  cursor: ns-resize;
+}
+
+.viewer[data-form-drag='ew'] .layer-tool {
+  cursor: ew-resize;
+}
+
+/* ---- the Fields panel ----------------------------------------------------------------------- */
+
+.fields-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  min-height: 0;
+}
+
+.fields-search {
+  width: 100%;
+}
+
+.fields-tree {
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+
+.fields-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.4rem;
+  padding-inline-start: calc(0.4rem + var(--depth, 0) * 1rem);
+  border-radius: 3px;
+  cursor: default;
+}
+
+.fields-row.selected {
+  background: var(--bg-selected);
+  border: 1px solid var(--border-strong);
+}
+
+.fields-row.synthetic {
+  font-style: italic;
+}
+
+.fields-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fields-kind,
+.fields-flag {
+  flex: 0 0 auto;
+  font-size: 0.85em;
+  color: var(--fg-muted);
+}
+
+.fields-flag {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 0.3rem;
+}
+
+.fields-rename {
+  flex: 1 1 auto;
+}
+
+.fields-problem {
+  color: var(--danger);
+  font-size: 0.9em;
+}
+
+.fields-empty {
+  color: var(--fg-muted);
+  margin: 0;
+}
+
+.fields-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* ---- the field properties panel -------------------------------------------------------------- */
+
+.field-props {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  min-height: 0;
+  overflow: auto;
+}
+
+.field-props-empty,
+.field-props-hint {
+  color: var(--fg-muted);
+  margin: 0.2rem 0 0;
+  font-size: 0.9em;
+}
+
+.field-props-what {
+  margin: 0;
+  font-weight: var(--fw-heading);
+}
+
+.field-props-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.field-props-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  padding: 0.25rem 0.5rem;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.field-props-tab[aria-selected='true'] {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  font-weight: var(--fw-heading);
+}
+
+.field-props-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.field-props-section h4 {
+  margin: 0.4rem 0 0;
+  font-size: 0.95em;
+}
+
+.field-props-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+}
+
+.field-props-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.field-props-check {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.field-props-check .field-props-hint {
+  grid-column: 2;
+}
+
+.field-props-colour {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.field-props-colour input[type='color'] {
+  width: 2rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+}
+
+.field-props-hexvalue {
+  width: 8ch;
+}
+
+.field-props-none {
+  white-space: nowrap;
+}
+
+.field-props-problem {
+  color: var(--danger);
+  margin: 0.2rem 0 0;
+}
+
+.field-choices,
+.field-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.field-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto auto auto;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.field-action {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.5fr auto;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+/* ---- the tab-order dialog --------------------------------------------------------------------- */
+
+.tab-order-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.tab-order-mode {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.tab-order-hint {
+  color: var(--fg-muted);
+  margin: 0.2rem 0;
+  font-size: 0.9em;
+}
+
+.tab-order-list {
+  max-height: 16rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  padding: 0.2rem;
+}
+
+.tab-order-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.35rem;
+  cursor: grab;
+}
+
+.tab-order-row.selected {
+  background: var(--bg-selected);
+}
+
+.tab-order-number {
+  min-width: 2ch;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-heading);
+}
+
+.tab-order-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-order-empty {
+  color: var(--fg-muted);
+  margin: 0.4rem;
+}
+
+.tab-order-buttons {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}

@@ -45,6 +45,7 @@ const MODULE_PATHS = [
   '@modules/M91-create-pdf/manifest',
   '@modules/M42-portfolios/manifest',
   '@modules/M50-object-model/manifest',
+  '@modules/M60-forms/manifest',
   '@modules/M130-preferences/manifest',
 ];
 
