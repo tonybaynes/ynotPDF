@@ -550,7 +550,9 @@ To make that safe:
    a git worktree (`git worktree add ../ynotPDF-M11 mod/M11-viewer`) so
    sessions never share a working directory. Merge to `main` via a PR (or
    fast-forward merge if no PR flow) only when the acceptance test passes in
-   CI; then tick §0 in the same commit.
+   CI; then tick §0 in the same commit. **Then remove the worktree and the local
+   branch** (`git worktree remove ../ynotPDF-M11`, `git branch -d mod/M11-viewer`):
+   a finished module leaves no folder behind (operator, 2026-09-10).
 3. **Own your folder.** A module writes only inside
    `src/renderer/modules/<Mid>-<name>/`, its engine adapter file(s) under
    `src/engine/`, its tests, its `docs/modules/` spec and `resources/` data.
