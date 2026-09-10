@@ -311,4 +311,114 @@ is colourblind: black and red read as the same colour):**
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-10 on `mod/M33-measuring-tools` (worktree `../ynotPDF-M33`).**
+
+### What shipped
+
+- **Three measuring tools** — Distance (drag; Shift keeps it to 45°), Perimeter and Area (a click
+  per corner, `Enter` or the first corner to finish, `Backspace` to take one back, `Escape` to
+  abandon) — writing a `Line`, a `PolyLine` and a `Polygon` with `/IT /LineDimension`,
+  `/PolyLineDimension` and `/PolygonDimension`, a full `/Measure` dictionary each, `/LL`, `/LLE`,
+  `/LLO`, `/Cap`, `/CP` and `/CO` on a dimension line, and the value in `/Contents` as well as on
+  the page. The gesture shows its value beside the pointer as it is drawn.
+- **`/Measure` as Acrobat reads it** — RectilinearMeasure, `/R` in words, a `/Type /NumberFormat`
+  on all five axes written in full (`/U`, `/C`, `/F`, `/D`, `/FD`, `/RD`, `/RT`, `/PS`, `/SS`,
+  `/O`), the area format's factor squared and its label carrying the `²`. Read back the same way,
+  so a file written by Acrobat measures the same here.
+- **Ten units** (pt, pc, in, ft, yd, mi, mm, cm, m, km), decimals to six places or fractions to
+  halves, quarters, eighths and sixteenths, formatted through `Intl` at en-GB.
+- **Calibration** — draw a line whose real length is known, type it, and the scale is stored for
+  the page or the document as an undoable `SetCustomCommand`; the same dialog with no line sets the
+  ratio by hand. Every measurement the calibration covers is re-measured, its `/Measure` replaced
+  and its caption rewritten.
+- **Snapping** to endpoints, midpoints, intersections and any point on a path, each with its own
+  toggle and a tolerance in screen pixels; an opaque marker whose _shape_ says which kind and whose
+  accessible name says it in words. The geometry comes from a new engine method (below) and is
+  cached per page and document revision.
+- **The Measurements panel** — the live value while a tool draws, every measurement in the document
+  by page as a button that selects it and goes there, totals kept apart by kind and by unit, and
+  Copy (tab-separated) and Export CSV (RFC 4180, CRLF, BOM).
+- **The properties sections** — the value and the ruler it was measured with, the line colour,
+  width and dash, the three leader entries, and whether the value is drawn, where and how big.
+- **`src/engine/appearance/measure.ts`** — one list of drawings per measurement that the overlay
+  paints and the writer bakes, so the screen and the file cannot drift apart.
+
+### The things that were not as expected
+
+- **`providerFor` took the _first_ provider that claimed an annotation**, and M31's claims every
+  shape — so M33's would never have been asked about a measurement. `AnnotationProvider.priority`
+  (ADR 0018) is the whole fix; M33 registers at 10.
+- **`/Measure` is an array of dictionaries**, which `DictValue` could not say, and `/Cap` is a
+  boolean, which it could not say either. Two new kinds, `array` and `bool`, close the last gaps in
+  the table: everything PDF's object model has except streams and references can now be planned.
+- **The baked appearance was drawn slightly smaller than the overlay.** Found by screenshotting a
+  real page before and after a save: a viewer maps an appearance's `/BBox` on to the annotation's
+  `/Rect` (PDF 12.5.5), and ours differed by the stroke padding — invisible on an outline, a
+  caption that has moved by two points. A measurement's rect is now _exactly_ its bbox, computed
+  once by `measureBounds` for both, and a test pins it for all four shapes.
+- **`PdfEngine` gained its first optional method.** `pageObjectPaths` needs PDFium's `FPDFPath_*`
+  exports, which a wasm build need not have, and the in-memory `FakeEngine` the model tests use has
+  no path data at all. Making it optional meant `Parameters<PdfEngine[M]>` in `EngineClient` no
+  longer compiled (a union with `undefined` in it), so the proxy narrows with `NonNullable`, and
+  the Worker now answers `not-implemented` rather than failing three frames deep.
+- **A boolean mapping did not need an `encode`.** `dictEntries` only treats `null`, `''` and an
+  `empty()` value as removals, so `false` reaches the coercion intact — which is what "a caption
+  turned off has to be _said_" requires. The encode was deleted as duplication.
+- **`Intl` will happily print `-0.0`.** A tiny negative rounded to the shown precision reads as a
+  mistake; `formatMeasureNumber` snaps anything under half the last digit to zero.
+
+### Shared files touched (PLAN.md §12.3, all additive except where noted)
+
+- `src/engine/PdfEngine.ts` — `PageObjectPath`, the optional `pageObjectPaths`, its entry in
+  `ENGINE_METHODS`, and a stub on `NotImplementedEngine`.
+- `src/engine/EngineClient.ts` — the `EngineFn<M>` alias, so an optional method still types.
+- `src/engine/worker.ts` — **one behaviour change:** a method the backend does not implement is
+  answered with `not-implemented` instead of throwing.
+- `src/engine/pdfium/{PdfiumEngine,rawdoc}.ts` — `pageObjectPaths` and its path flattening; the raw
+  pass reads `/Measure`, `/LL`, `/LLE`, `/LLO`, `/Cap`, `/CP` and `/CO`.
+- `src/engine/appearance/{dict,index}.ts` — two `DictValue` kinds, seven mappings, the exports, and
+  `Line`/`Polygon`/`PolyLine` registered through `measureAware` so a file's captions survive a save
+  made by a build without this module in it.
+- `src/engine/writers/FullRewriteWriter.ts` — `dictValue` handles `bool`, `array` and a nested
+  `dict`; an array member that can only resolve at the top level is skipped.
+- `src/renderer/modules/M30-markup-annotations/AnnotationService.ts` —
+  `AnnotationProvider.priority` and the highest-wins `providerFor`.
+- `src/renderer/main.ts`, `src/renderer/index.html`, `vitest.config.ts`, `scripts/make-fixtures.ts`
+  (`measure.pdf`), `test/fixtures/{manifest.json,hashes/*.json}`,
+  `resources/annotations/colours.json` (four tool colours), `docs/shortcuts.md`, `PLAN.md` §0, and
+  `test/unit/annotations/appearance.test.ts` (the closed key list grew by seven).
+
+### Tests
+
+Green on Windows locally: lint (eslint, prettier, the colour/opacity rules, `tsc` on both
+projects), the unit suite with the coverage gates (11 new files, 159 tests in
+`test/unit/measure/`), and the Playwright suite (`test/e2e/measure.spec.ts`, 15 tests, one per
+acceptance line, plus every earlier module's spec — 368 in all).
+
+**The hands-on check the conventions ask for, recorded.** `test/unit/measure/real-files.test.ts`
+measures a distance, a perimeter and an area on the first page of each of the operator's own files
+in `test/fixtures/local/`, saves through the real pipeline and reopens, and separately asks the
+snapper to land on the real geometry of each; it skips itself on any machine without them. All six
+files round-trip with every measurement inside the page's crop box, carrying its own `/Measure` and
+an appearance stream, and measuring the same value it was made with. Nothing about their contents
+is read, quoted or asserted. Two screenshots of a boarding pass — one of the overlay, one after a
+save and reopen, so PDFium is drawing our own streams — are what found the `/BBox` bug above; at a
+pinned zoom they are now pixel-identical.
+
+### Deferred, and why
+
+- **3D measurement** is Parked by the brief and by PLAN.md §1.
+- **An angle tool.** `/Measure` carries a `/T` angle format and this module writes one, so the file
+  is ready for it, but neither the brief nor Foxit's Measure group has an angle tool and inventing
+  one would be scope of my own.
+- **`/CO`, the caption's nudge, has no handle.** It is written, read and honoured, and the panel
+  can set the leaders and the caption's place and size — but dragging the caption itself needs a
+  handle set the annotation layer does not have, and one more `HandleSet` for one nudge is a poor
+  trade until something else needs it.
+- **Snapping to a form XObject nested more than one level deep.** The walk stops at depth two and
+  at 500 children per form; a drawing with a logo inside a logo inside a stamp snaps to the outer
+  two.
+- **Cumulative measuring in the Foxit sense** — clicking to keep adding to one running distance
+  without ending it. The perimeter tool is that, with the total shown as it is drawn and each
+  segment visible; a second gesture that did the same thing without leaving an annotation behind
+  would be a second way to do one thing.
