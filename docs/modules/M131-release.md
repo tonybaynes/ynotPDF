@@ -101,6 +101,11 @@ App stores (MS Store / Mac App Store) — later if wanted.
 
 ## Design notes & constraints
 
+- **The brand facts live in `src/shared/brand.ts`** — product name, company
+  (**Ynot Apps**), website (**ynot-apps.com**), copyright line. The About
+  dialog, installers (`electron-builder.yml` copyright/publisherName) and
+  `package.json` already read from or match it. Help, first-run and the
+  download page must use it too; never retype any of them.
 - **Windows on ARM (M03):** ship NSIS + MSI for both `x64` and `arm64`;
   the auto-update feed must serve the matching architecture
   (electron-updater does this from the `-arm64` artifact suffix — verify);

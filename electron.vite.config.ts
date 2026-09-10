@@ -1,5 +1,20 @@
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig } from 'electron-vite';
+
+/**
+ * The app's own version, baked in at build time.
+ *
+ * `app.getVersion()` answers with **Electron's** version whenever the app is not packaged — the
+ * About dialog claimed to be ynotPDF 44.2.0 (2026-09-10) — and `app.getAppPath()` points at
+ * `out/main` when Electron is launched with a file, so there is no package.json to read at run
+ * time either. Reading it here is the one place that is true in every launch mode.
+ */
+const appVersion: string = (
+  JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf8')) as {
+    version: string;
+  }
+).version;
 
 /**
  * Three build entries (main, preload, renderer). The PDF engine Worker
@@ -23,6 +38,7 @@ const aliases = {
 
 export default defineConfig({
   main: {
+    define: { __APP_VERSION__: JSON.stringify(appVersion) },
     resolve: { alias: aliases },
     build: {
       externalizeDeps: true,

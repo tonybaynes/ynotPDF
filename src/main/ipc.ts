@@ -20,6 +20,7 @@ import type { FileKind, IpcHandlers, IpcInvokeChannel, SaveDialogOptions } from 
 import type { PrintJobs } from './print';
 import type { FolderSearches } from './search';
 import { hostArch, targetArch } from './arch';
+import { appVersion } from './version';
 import { readFileForRenderer, readFolder, writeBytes, writeInto, writeTempFile } from './files';
 import { systemFontFamilies } from './fonts';
 import { probeFile, writeAtomic } from './fs/atomic';
@@ -273,7 +274,7 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     },
     'app:info': () => ({
       name: app.getName(),
-      version: app.getVersion(),
+      version: appVersion(),
       electron: process.versions.electron ?? '',
       chrome: process.versions.chrome ?? '',
       node: process.versions.node,
