@@ -715,6 +715,44 @@ export interface PdfEngine {
   ): Promise<void>;
   setLayerVisible(doc: DocHandle, layerId: string, visible: boolean): Promise<void>;
 
+  // ---- page objects (M50, ADR 0018) ------------------------------------------------------------
+
+  /**
+   * The page's content stream as the engine holds it now: every `/Contents` piece decoded and
+   * concatenated. The renderer captures this before the first object edit on a page so the writer
+   * can replay the edits onto the original operators (ADR 0018 §3).
+   */
+  pageContent(doc: DocHandle, page: PageIndex): Promise<Uint8Array>;
+  /** Moves object `index` by `delta` in page space (post-multiplied onto its matrix). */
+  transformObject(doc: DocHandle, page: PageIndex, index: number, delta: PdfMatrix): Promise<void>;
+  /** Replaces object `index`'s matrix. Refused for an object whose matrix is not invertible. */
+  setObjectMatrix(doc: DocHandle, page: PageIndex, index: number, matrix: PdfMatrix): Promise<void>;
+  /**
+   * Removes object `index` from the page and keeps it aside. Returns a token that
+   * {@link restoreObject} takes to put the same object back; later indexes shift down by one.
+   */
+  removeObject(doc: DocHandle, page: PageIndex, index: number): Promise<number>;
+  /** Puts a removed object back at `at` (`at === count` appends). */
+  restoreObject(doc: DocHandle, page: PageIndex, token: number, at: number): Promise<void>;
+  /**
+   * Inserts the object a one-page PDF carries (from {@link objectAsPdf}, possibly of another
+   * document) as a form XObject placed under `matrix`, at `at` (appended when absent). Returns
+   * the new object's index.
+   */
+  insertObject(
+    doc: DocHandle,
+    page: PageIndex,
+    source: { readonly pdf: Uint8Array; readonly matrix: PdfMatrix },
+    at?: number,
+  ): Promise<number>;
+  /** Rewrites z-order: `order[i]` is the current index of the object that ends up at `i`. */
+  reorderObjects(doc: DocHandle, page: PageIndex, order: ReadonlyArray<number>): Promise<void>;
+  /**
+   * A one-page PDF containing only object `index`, with the resources it needs — the clipboard
+   * payload, and what {@link insertObject} and the writer take.
+   */
+  objectAsPdf(doc: DocHandle, page: PageIndex, index: number): Promise<Uint8Array>;
+
   /** Serialises the current state. Returns a fresh buffer owned by the caller. */
   save(doc: DocHandle, options?: SaveOptions, progress?: ProgressCallback): Promise<Uint8Array>;
 }
@@ -806,6 +844,30 @@ export class NotImplementedEngine implements PdfEngine {
   }
   pageObjects(..._args: unknown[]): Promise<ReadonlyArray<PageObject>> {
     return Promise.reject(new NotImplementedError('pageObjects'));
+  }
+  pageContent(..._args: unknown[]): Promise<Uint8Array> {
+    return Promise.reject(new NotImplementedError('pageContent'));
+  }
+  transformObject(..._args: unknown[]): Promise<void> {
+    return Promise.reject(new NotImplementedError('transformObject'));
+  }
+  setObjectMatrix(..._args: unknown[]): Promise<void> {
+    return Promise.reject(new NotImplementedError('setObjectMatrix'));
+  }
+  removeObject(..._args: unknown[]): Promise<number> {
+    return Promise.reject(new NotImplementedError('removeObject'));
+  }
+  restoreObject(..._args: unknown[]): Promise<void> {
+    return Promise.reject(new NotImplementedError('restoreObject'));
+  }
+  insertObject(..._args: unknown[]): Promise<number> {
+    return Promise.reject(new NotImplementedError('insertObject'));
+  }
+  reorderObjects(..._args: unknown[]): Promise<void> {
+    return Promise.reject(new NotImplementedError('reorderObjects'));
+  }
+  objectAsPdf(..._args: unknown[]): Promise<Uint8Array> {
+    return Promise.reject(new NotImplementedError('objectAsPdf'));
   }
   annotations(..._args: unknown[]): Promise<ReadonlyArray<Annotation>> {
     return Promise.reject(new NotImplementedError('annotations'));
@@ -924,6 +986,14 @@ export const ENGINE_METHODS = [
   'setFieldValue',
   'setMetadata',
   'setLayerVisible',
+  'pageContent',
+  'transformObject',
+  'setObjectMatrix',
+  'removeObject',
+  'restoreObject',
+  'insertObject',
+  'reorderObjects',
+  'objectAsPdf',
   'save',
 ] as const satisfies ReadonlyArray<keyof PdfEngine>;
 
