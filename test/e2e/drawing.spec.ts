@@ -483,6 +483,45 @@ test.describe('custom stamp from a PNG is embedded once for 10 placements', () =
     expect((await drawingState()).stamps.some((s) => s.id === stampId)).toBe(false);
   });
 
+  // The operator's own journey, which nothing covered: make a stamp, click its tile, click the
+  // page. Everything before this drove `draw.stamp` with coordinates, so the whole pointer path
+  // — and the fact that a stamp the reader made is placeable at all — went untested (2026-09-10).
+  test('a stamp the reader made is placed by clicking its tile and then the page', async () => {
+    await openPath(stage('text.pdf', 'own-stamp.pdf'));
+    const stampId = (await app.run('draw.stampCustom', {
+      label: 'Screen clipping',
+      png: Array.from(PNG),
+      width: 900,
+      height: 500,
+    })) as string;
+
+    await app.run('draw.stamps');
+    const panel = app.page.locator('#stamp-panel');
+    await expect(panel).toBeVisible();
+
+    // The reader's own stamps come first: the Custom group is the first group in the list.
+    const firstGroup = panel.locator('.stamp-group-title').first();
+    await expect(firstGroup).toHaveText('Custom');
+
+    const tile = panel.locator(`.stamp-tile[data-stamp="${stampId}"]`);
+    await expect(tile).toHaveCount(1);
+    await tile.click();
+    await app.page.waitForTimeout(150);
+    expect((await drawingState('stamp')).defaults.stampId).toBe(stampId);
+    expect((await selection()).activeTool).toBe('tool.stamp');
+
+    const box = await pageBox();
+    await app.page.mouse.click(box.x + 160, box.y + 220);
+    await app.page.waitForTimeout(400);
+
+    const placed = (await drawings()).filter((r) => r.subtype === 'Stamp');
+    expect(placed.length).toBe(1);
+    const rect = must(placed[0], 'the placed stamp').rect;
+    // It has real size and it is on the page, not a degenerate or off-page box.
+    expect(rect.x1 - rect.x0).toBeGreaterThan(10);
+    expect(rect.y1 - rect.y0).toBeGreaterThan(10);
+  });
+
   test('the palette lists the catalogue, picks a stamp up, stars a favourite, and turns a placed one', async () => {
     await openPath(stage('text.pdf', 'palette.pdf'));
     await app.run('draw.stamps');

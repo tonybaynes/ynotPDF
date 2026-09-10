@@ -627,7 +627,22 @@ export class DrawingService {
   ): Promise<ModelId | null> {
     const entry = this.stampEntry(stampId);
     const found = await this.target(page);
-    if (!entry || !found) return null;
+    // Say so rather than doing nothing: a stamp that will not go on the page looked to the
+    // operator like a click that did not register at all (2026-09-10).
+    if (!entry) {
+      this.shell.toasts.show({
+        kind: 'error',
+        text: `That stamp is no longer in the palette, so it could not be placed.`,
+      });
+      return null;
+    }
+    if (!found) {
+      this.shell.toasts.show({
+        kind: 'error',
+        text: `Page ${page + 1} could not be reached, so the stamp was not placed.`,
+      });
+      return null;
+    }
     const { document, pageId } = found;
     const defaults = this.defaults('stamp');
     let key: string;

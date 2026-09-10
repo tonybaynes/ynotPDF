@@ -104,14 +104,8 @@ export function mountStampPanel(host: HTMLElement, service: DrawingService): () 
     scroll.replaceChildren();
     const all = service.allStamps();
     const chosen = service.defaults('stamp').stampId;
-    const favourites = all.filter((e) => service.isFavourite(stampEntryId(e)));
-    if (favourites.length > 0) scroll.append(group('Favourites', favourites));
-    for (const category of service.catalogue.categories) {
-      const entries = all.filter(
-        (e) => e.kind === 'catalogue' && e.definition.category === category.id,
-      );
-      if (entries.length > 0) scroll.append(group(category.label, entries));
-    }
+    // The reader's own stamps come first, always — they are the ones they made and the ones
+    // they reach for (operator, 2026-09-10). Then favourites, then the catalogue.
     const custom = all.filter((e) => e.kind === 'custom');
     scroll.append(
       group(
@@ -122,6 +116,14 @@ export function mountStampPanel(host: HTMLElement, service: DrawingService): () 
           : null,
       ),
     );
+    const favourites = all.filter((e) => service.isFavourite(stampEntryId(e)));
+    if (favourites.length > 0) scroll.append(group('Favourites', favourites));
+    for (const category of service.catalogue.categories) {
+      const entries = all.filter(
+        (e) => e.kind === 'catalogue' && e.definition.category === category.id,
+      );
+      if (entries.length > 0) scroll.append(group(category.label, entries));
+    }
 
     function group(
       title: string,
