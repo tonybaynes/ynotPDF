@@ -377,6 +377,20 @@ export interface IpcInvokeMap {
   /** Writes one persisted setting. `undefined` deletes the key. */
   'settings:set': { args: [key: string, value: unknown]; result: void };
   /**
+   * Every persisted setting as flat dotted keys (M130, ADR 0018) — what Export writes and what
+   * the preferences dialog reads once instead of a round trip per setting.
+   */
+  'settings:all': { args: []; result: Record<string, unknown> };
+  /** Writes many settings at once (Import, and a page's Reset). `undefined` deletes a key. */
+  'settings:setMany': { args: [values: Record<string, unknown>]; result: void };
+  /**
+   * Deletes settings. With `prefixes`, only keys equal to or under those dotted prefixes ("reset
+   * this page"); with none, every setting ("reset everything"). The schema version survives both.
+   */
+  'settings:reset': { args: [prefixes?: string[]]; result: void };
+  /** Absolute path of `settings.json`, shown in Preferences so it can be found or backed up. */
+  'settings:path': { args: []; result: string };
+  /**
    * Font families installed on this machine, sorted (M30, ADR 0013). Read once from the OS font
    * directories and cached for the life of the process; an empty list simply means the free-text
    * picker offers only the base families, which is a fine outcome rather than an error.
@@ -550,6 +564,10 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'recent:remove',
   'settings:get',
   'settings:set',
+  'settings:all',
+  'settings:setMany',
+  'settings:reset',
+  'settings:path',
   'fonts:list',
   'theme:setNative',
   'app:info',

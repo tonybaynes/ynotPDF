@@ -20,7 +20,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "lint": "eslint . && prettier --check . && node scripts/check-styles.ts && node scripts/make-icon.ts && npm run typecheck",
+    "lint": "eslint . && prettier --check . && node scripts/check-styles.ts && node scripts/extract-i18n.ts --check && node scripts/make-icon.ts && npm run typecheck",
     "format": "prettier --write .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
@@ -35,7 +35,8 @@
     "gallery": "vite src/renderer/theme --host 127.0.0.1 --port 5199 --strictPort --open /gallery.html",
     "fetch-fixtures": "node scripts/fetch-fixtures.ts",
     "bench": "node scripts/bench-engine.ts",
-    "hashes": "node scripts/update-render-hashes.ts"
+    "hashes": "node scripts/update-render-hashes.ts",
+    "i18n": "node scripts/extract-i18n.ts"
   },
   "dependencies": {
     "@hyzyla/pdfium": "2.1.13",

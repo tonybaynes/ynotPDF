@@ -363,26 +363,91 @@ export interface SettingsSchema {
   /** Settings key prefix, usually the module id or feature name. */
   readonly namespace: string;
   readonly properties: Readonly<Record<string, SettingSpec>>;
+  /**
+   * Page name in Preferences (M130, ADR 0018). Absent means the module's `name` is used, which
+   * is what every module built before M130 gets. Two modules may share a `namespace` (M02 and
+   * M12 both write `ui.*`) — the page is per module, never per namespace.
+   */
+  readonly title?: string;
+  /** Lucide icon for the page in the categories list. */
+  readonly icon?: string;
+  /** Lower first in the categories list; ties break on the title. */
+  readonly order?: number;
+}
+
+/**
+ * Fields any setting may carry, whatever its type (M130, ADR 0018). All optional, so every
+ * schema written before M130 is still valid.
+ */
+export interface SettingCommon {
+  /** Label beside the control. */
+  readonly title: string;
+  /** A sentence under the control. Say what changes, not what the control is. */
+  readonly description?: string;
+  /** Extra words Preferences search should match — the reader's words, not the author's. */
+  readonly keywords?: ReadonlyArray<string>;
+  /**
+   * Heading this setting sits under on its module's page. Settings with no section come first,
+   * then each section in the order its first setting is declared. A page with one section's worth
+   * of settings simply names nothing and gets no headings.
+   */
+  readonly section?: string;
+  /** Hidden until "Show advanced settings" is ticked. */
+  readonly advanced?: boolean;
+  /**
+   * The owning module applies this without a restart. Preferences says so in words when it is
+   * false, so the reader is never left wondering why nothing happened.
+   */
+  readonly live?: boolean;
 }
 
 /** One setting. `default` must match `type`. */
 export type SettingSpec =
-  | { readonly type: 'boolean'; readonly title: string; readonly default: boolean }
-  | {
+  | (SettingCommon & { readonly type: 'boolean'; readonly default: boolean })
+  | (SettingCommon & {
       readonly type: 'number';
-      readonly title: string;
       readonly default: number;
       readonly min?: number;
       readonly max?: number;
       readonly step?: number;
-    }
-  | { readonly type: 'string'; readonly title: string; readonly default: string }
-  | {
+      /**
+       * Suffix shown after the field — "MB", "pt", "%". A label, not a conversion: the stored
+       * number is already in this unit.
+       */
+      readonly unit?: string;
+    })
+  | (SettingCommon & { readonly type: 'string'; readonly default: string })
+  | (SettingCommon & {
       readonly type: 'enum';
-      readonly title: string;
       readonly default: string;
       readonly options: ReadonlyArray<{ readonly value: string; readonly label: string }>;
-    };
+    })
+  /**
+   * A colour (M130, ADR 0018). The value is a **theme token name** (`"accent"`, `"warning"`) so
+   * interface colour keeps coming from the theme; `allowCustom` additionally permits an
+   * `#rrggbb` literal, which is only ever right for colour that ends up inside a PDF.
+   */
+  | (SettingCommon & {
+      readonly type: 'colour';
+      readonly default: string;
+      readonly tokens?: ReadonlyArray<string>;
+      readonly allowCustom?: boolean;
+    })
+  /** An absolute path, with a Browse button (M130, ADR 0018). Empty string means "not set". */
+  | (SettingCommon & {
+      readonly type: 'path';
+      readonly default: string;
+      readonly pathKind?: 'file' | 'directory';
+      /** Dialog filters when `pathKind` is `"file"`. */
+      readonly extensions?: ReadonlyArray<string>;
+    })
+  /** An ordered list of strings — add, remove, move (M130, ADR 0018). */
+  | (SettingCommon & {
+      readonly type: 'list';
+      readonly default: ReadonlyArray<string>;
+      /** Placeholder for the "add an item" field. */
+      readonly itemLabel?: string;
+    });
 
 /** Status-bar slot. */
 export type StatusSlot = 'left' | 'centre' | 'right';

@@ -1,0 +1,570 @@
+/*
+ * M130 — Preferences, the shortcut editor and the ribbon customiser.
+ *
+ * Colours are theme tokens only; nothing here is transparent and nothing carries meaning by
+ * colour alone (CLAUDE.md). Every size is in rem so the whole dialog follows the UI-scale
+ * setting it contains — a scale slider that did not scale its own dialog would be a joke.
+ */
+
+.preferences-dialog {
+  max-width: min(96vw, 62rem);
+}
+
+.prefs-top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+
+.prefs-search-field {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex: 1 1 18rem;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-input);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.prefs-search-field svg {
+  color: var(--icon);
+  flex: 0 0 auto;
+}
+
+.prefs-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  padding: var(--sp-1) 0;
+}
+
+.prefs-search:focus-visible {
+  /* The ring belongs on the whole field, not on the bare input inside it. */
+  outline: none;
+  box-shadow: none;
+}
+
+.prefs-search-field:focus-within {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+  box-shadow: 0 0 0 var(--focus-width) var(--focus-contrast);
+}
+
+.prefs-advanced {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  white-space: nowrap;
+}
+
+.prefs-search-summary {
+  margin: 0 0 var(--sp-3);
+  min-height: 1.2em;
+  color: var(--fg);
+}
+
+.prefs-body {
+  display: grid;
+  grid-template-columns: minmax(11rem, 16rem) 1fr;
+  gap: var(--sp-5);
+  align-items: start;
+  min-height: 26rem;
+  max-height: min(66vh, 40rem);
+}
+
+.prefs-cats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  overflow-y: auto;
+  max-height: min(66vh, 40rem);
+  padding-right: var(--sp-2);
+  border-right: var(--border-width) solid var(--border);
+}
+
+.prefs-cats-heading {
+  margin: var(--sp-4) 0 var(--sp-2);
+  font-size: var(--fs-2);
+  font-weight: var(--fw-heading);
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.prefs-cats-heading:first-child {
+  margin-top: 0;
+}
+
+.prefs-cat {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.prefs-cat:hover {
+  background: var(--bg-hover);
+}
+
+/* The current page is marked by a filled background *and* a left bar, never by hue alone. */
+.prefs-cat[aria-current='page'] {
+  background: var(--bg-selected);
+  border-color: var(--border-strong);
+  font-weight: var(--fw-heading);
+  box-shadow: inset 3px 0 0 0 var(--accent);
+}
+
+.prefs-cat svg {
+  color: var(--icon);
+  flex: 0 0 auto;
+}
+
+.prefs-page {
+  overflow-y: auto;
+  max-height: min(66vh, 40rem);
+  padding-right: var(--sp-3);
+}
+
+.prefs-title {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-5);
+  font-weight: var(--fw-heading);
+}
+
+.prefs-section {
+  margin: var(--sp-6) 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  font-size: var(--fs-4);
+  font-weight: var(--fw-heading);
+  border-bottom: var(--border-width) solid var(--border);
+}
+
+.prefs-lede,
+.prefs-hidden-note,
+.prefs-file-note {
+  margin: 0 0 var(--sp-4);
+  color: var(--fg-muted);
+}
+
+.prefs-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.prefs-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: var(--sp-5) 0;
+  color: var(--fg);
+}
+
+.prefs-result-group {
+  margin-bottom: var(--sp-6);
+}
+
+.prefs-result-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: none;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  font: inherit;
+  font-weight: var(--fw-heading);
+  cursor: pointer;
+}
+
+.prefs-result-heading:hover {
+  background: var(--bg-hover);
+}
+
+.prefs-page-actions,
+.prefs-file-actions,
+.customise-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-6);
+  padding-top: var(--sp-4);
+  border-top: var(--border-width) solid var(--border);
+}
+
+.prefs-file-path {
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-3);
+  background: var(--bg-input);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+/* ---- one setting ------------------------------------------------------------------------- */
+
+.pref-field {
+  margin: 0;
+}
+
+.pref-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  cursor: pointer;
+}
+
+.pref-check input {
+  margin-top: 0.15em;
+  flex: 0 0 auto;
+}
+
+/* "Changed" is a word and an icon; the border is a second, redundant signal, never the only one. */
+.pref-changed {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 0;
+  padding: var(--sp-1) var(--sp-3);
+  border-left: 3px solid var(--info);
+  color: var(--fg);
+  font-size: var(--fs-2);
+}
+
+.pref-changed svg {
+  color: var(--icon);
+  flex: 0 0 auto;
+}
+
+.pref-number-row,
+.pref-path-row,
+.pref-list-entry-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.pref-number {
+  width: 8ch;
+}
+
+.pref-slider {
+  flex: 1 1 12rem;
+  min-width: 8rem;
+  accent-color: var(--accent);
+}
+
+.pref-unit {
+  color: var(--fg);
+  font-weight: var(--fw-heading);
+}
+
+.pref-text {
+  width: 100%;
+  min-width: 0;
+}
+
+.pref-path-row .pref-path {
+  flex: 1 1 auto;
+}
+
+.pref-colours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.pref-colour {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-input);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pref-colour.is-chosen {
+  border-width: 2px;
+  border-color: var(--accent);
+  font-weight: var(--fw-heading);
+}
+
+.pref-colour-chip {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: 2px;
+}
+
+.pref-colour-custom-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.pref-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  list-style: none;
+}
+
+.pref-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-panel);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+}
+
+.pref-list-text {
+  overflow-wrap: anywhere;
+}
+
+.pref-list-controls,
+.customise-move {
+  display: flex;
+  gap: var(--sp-1);
+  flex: 0 0 auto;
+}
+
+.pref-list-empty,
+.customise-empty,
+.shortcut-empty {
+  margin: 0;
+  padding: var(--sp-3);
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+/* ---- the shortcut editor ------------------------------------------------------------------ */
+
+.shortcut-top {
+  margin-bottom: var(--sp-3);
+}
+
+.shortcut-search-field {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-input);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.shortcut-search-field:focus-within {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+  box-shadow: 0 0 0 var(--focus-width) var(--focus-contrast);
+}
+
+.shortcut-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+}
+
+.shortcut-search:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.shortcut-status {
+  margin: 0 0 var(--sp-3);
+  min-height: 1.2em;
+  color: var(--fg);
+}
+
+.shortcut-category {
+  margin: var(--sp-5) 0 var(--sp-2);
+  padding-bottom: var(--sp-1);
+  font-size: var(--fs-4);
+  font-weight: var(--fw-heading);
+  border-bottom: var(--border-width) solid var(--border);
+}
+
+.shortcut-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: var(--border-width) solid var(--border);
+}
+
+.shortcut-row:hover {
+  background: var(--bg-hover);
+}
+
+.shortcut-name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1em;
+  min-width: 0;
+}
+
+.shortcut-label {
+  overflow-wrap: anywhere;
+}
+
+.shortcut-id {
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  color: var(--fg-muted);
+}
+
+.shortcut-changed {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-1);
+  color: var(--fg);
+}
+
+.shortcut-key kbd,
+.shortcut-recording {
+  display: inline-block;
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--bg-input);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.shortcut-recording {
+  border-width: 2px;
+  border-style: dashed;
+  border-color: var(--accent);
+  font-family: var(--font-ui);
+  font-style: italic;
+}
+
+.shortcut-none {
+  color: var(--fg-muted);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.shortcut-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.shortcut-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: var(--border-width) solid var(--border);
+}
+
+/* ---- the ribbon customiser ---------------------------------------------------------------- */
+
+.customise-status {
+  margin: 0 0 var(--sp-3);
+  min-height: 1.2em;
+}
+
+.customise-heading {
+  margin: var(--sp-6) 0 var(--sp-2);
+  font-size: var(--fs-4);
+  font-weight: var(--fw-heading);
+}
+
+.customise-lede {
+  margin: 0 0 var(--sp-3);
+  color: var(--fg-muted);
+}
+
+.customise-tab-label {
+  margin: var(--sp-5) 0 var(--sp-2);
+  font-size: var(--fs-3);
+  font-weight: var(--fw-heading);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+}
+
+.customise-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: var(--border-width) solid var(--border);
+}
+
+.customise-row:hover {
+  background: var(--bg-hover);
+}
+
+.customise-check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.customise-items {
+  margin-left: var(--sp-6);
+  border-left: var(--border-width) solid var(--border);
+}
+
+.customise-qat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  list-style: none;
+}
+
+.customise-qat-label {
+  flex: 1 1 auto;
+}
+
+.customise-qat-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.customise-qat-picker {
+  flex: 1 1 16rem;
+  min-width: 0;
+}

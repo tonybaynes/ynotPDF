@@ -1,0 +1,66 @@
+{
+  "$comment": "UI font choices (M130). `files` names faces in resources/fonts, fetched by `npm run fetch-binaries` from the Liberation (OFL 1.1) and DejaVu (Bitstream Vera / public-domain additions) families that M10 already bundles and credits — no new download and no new licence. A build without the fetched fonts simply falls back to `stack`, so nothing here can break the interface. `stack` is the CSS list used when the bundled face is unavailable, and is always the last word for characters the face has no glyph for.",
+  "version": 1,
+  "fonts": [
+    {
+      "id": "system",
+      "label": "System default",
+      "note": "Whatever this computer uses for its own menus and dialogs.",
+      "family": null,
+      "files": null,
+      "stack": "system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    },
+    {
+      "id": "liberation-sans",
+      "label": "Liberation Sans",
+      "note": "A plain sans-serif with wide, open letters. The same on all three systems.",
+      "family": "ynot Liberation Sans",
+      "files": {
+        "regular": "LiberationSans-Regular.ttf",
+        "bold": "LiberationSans-Bold.ttf",
+        "italic": "LiberationSans-Italic.ttf",
+        "boldItalic": "LiberationSans-BoldItalic.ttf"
+      },
+      "stack": "'Liberation Sans', Arial, system-ui, sans-serif"
+    },
+    {
+      "id": "dejavu-sans",
+      "label": "DejaVu Sans",
+      "note": "Larger and rounder than Liberation Sans at the same size — often easier to read.",
+      "family": "ynot DejaVu Sans",
+      "files": {
+        "regular": "DejaVuSans.ttf",
+        "bold": "DejaVuSans-Bold.ttf",
+        "italic": "DejaVuSans-Oblique.ttf",
+        "boldItalic": "DejaVuSans-BoldOblique.ttf"
+      },
+      "stack": "'DejaVu Sans', Verdana, system-ui, sans-serif"
+    },
+    {
+      "id": "liberation-serif",
+      "label": "Liberation Serif",
+      "note": "A serif face, if you find serifs easier to follow along a line.",
+      "family": "ynot Liberation Serif",
+      "files": {
+        "regular": "LiberationSerif-Regular.ttf",
+        "bold": "LiberationSerif-Bold.ttf",
+        "italic": "LiberationSerif-Italic.ttf",
+        "boldItalic": "LiberationSerif-BoldItalic.ttf"
+      },
+      "stack": "'Liberation Serif', 'Times New Roman', Georgia, serif"
+    },
+    {
+      "id": "dejavu-mono",
+      "label": "DejaVu Sans Mono",
+      "note": "Every character the same width. Distinguishes 1, l and I clearly.",
+      "family": "ynot DejaVu Sans Mono",
+      "files": {
+        "regular": "DejaVuSansMono.ttf",
+        "bold": "DejaVuSansMono-Bold.ttf",
+        "italic": "DejaVuSansMono-Oblique.ttf",
+        "boldItalic": "DejaVuSansMono-BoldOblique.ttf"
+      },
+      "stack": "'DejaVu Sans Mono', ui-monospace, Consolas, monospace"
+    }
+  ]
+}

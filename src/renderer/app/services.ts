@@ -44,4 +44,6 @@ export const SERVICE = {
   focus: 'focus',
   shortcuts: 'shortcuts',
   windowState: 'windowState',
+  /** M130's settings hub: read, write, reset, import/export and live apply (ADR 0018). */
+  settings: 'settings',
 } as const;

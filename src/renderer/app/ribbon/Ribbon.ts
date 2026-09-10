@@ -13,6 +13,7 @@
  * tips: type a tab's letters, then a control's letters; Escape backs out.
  */
 
+import type { RibbonGroupSpec } from '@shared/module';
 import { el, button, srOnly, isVisible } from '../dom';
 import { makeRoving } from '../focus';
 import { icon } from '../icons';
@@ -55,16 +56,41 @@ interface GroupView {
   collapsed: boolean;
 }
 
+/**
+ * Optional service (M130, ADR 0018) that rewrites the group list before it is drawn: hidden and
+ * reordered groups and buttons, stored as a diff over the manifests. With nothing registered
+ * under {@link RIBBON_CUSTOMISATION} the ribbon is exactly what the manifests say.
+ */
+export interface RibbonCustomisation {
+  apply(groups: ReadonlyArray<RibbonGroupSpec>): ReadonlyArray<RibbonGroupSpec>;
+}
+
+export const RIBBON_CUSTOMISATION = 'ribbonCustomisation';
+
 export function mountRibbon(host: HTMLElement, services: ShellServices): RibbonHandle {
   const { registry, ui } = services;
   // The File tab's groups are built by the shell from the backstage slots modules fill.
   const recent = new RecentCache();
   recent.start();
+  const customise = (groups: ReadonlyArray<RibbonGroupSpec>): ReadonlyArray<RibbonGroupSpec> => {
+    if (!registry.hasService(RIBBON_CUSTOMISATION)) return groups;
+    try {
+      return registry.service<RibbonCustomisation>(RIBBON_CUSTOMISATION).apply(groups);
+    } catch (error) {
+      // A broken customisation must cost the reader their customisation, never their ribbon.
+      console.warn(
+        'ribbon: customisation failed; showing the ribbon as the modules declare it',
+        error,
+      );
+      return groups;
+    }
+  };
   const source = {
-    ribbonGroups: () => [
-      ...registry.ribbonGroups(),
-      ...fileTabGroups({ registry, recent, dialogs: services.dialogs }),
-    ],
+    ribbonGroups: () =>
+      customise([
+        ...registry.ribbonGroups(),
+        ...fileTabGroups({ registry, recent, dialogs: services.dialogs }),
+      ]),
     ribbonTabs: () => registry.ribbonTabs(),
     get: (id: string) => registry.get(id),
     context: () => registry.context(),

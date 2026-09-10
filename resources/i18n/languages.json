@@ -1,0 +1,16 @@
+{
+  "$comment": "Languages ynotPDF ships (M130). en-GB is the source language: every fallback string in the code is written in it. A language listed here without a matching <id>.json catalogue is simply not offered, so adding one is: write the catalogue, add the line. Generated variants (see spelling-*.json) are produced by `node scripts/extract-i18n.ts`.",
+  "version": 1,
+  "languages": [
+    {
+      "id": "en-GB",
+      "label": "English (United Kingdom)",
+      "note": "The language the application is written in."
+    },
+    {
+      "id": "en-US",
+      "label": "English (United States)",
+      "note": "The same words with American spelling — colour becomes color, customise becomes customize."
+    }
+  ]
+}

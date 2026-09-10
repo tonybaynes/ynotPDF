@@ -39,6 +39,8 @@ export default defineConfig({
         'src/engine/xfdf/**/*.ts',
         'src/engine/summary/**/*.ts',
         'src/shared/pageSizes.ts',
+        // M130's settings contract: versions, migrations and the exported file's shape.
+        'src/shared/settings.ts',
         'scripts/lib/**/*.ts',
         'src/renderer/theme/**/*.ts',
         'src/renderer/modules/**/*.ts',
@@ -237,6 +239,24 @@ export default defineConfig({
         'src/renderer/modules/M33-measuring-tools/CalibrateDialog.ts',
         'src/renderer/modules/M33-measuring-tools/ResultsPanel.ts',
         'src/renderer/modules/M33-measuring-tools/tools.ts',
+        /*
+         * M130's DOM and shell half, for the same reason again: the Preferences dialog, the
+         * controls it renders, the shortcut editor, the ribbon customiser and the service that
+         * wires them to the Registry, the ThemeManager and the settings IPC all need a running
+         * application, and are proved by Playwright in `test/e2e/preferences.spec.ts` — which is
+         * where "the find bar opens on the new key" belongs. Everything they are built out of —
+         * the page model and search, the settings hub, the shortcut rules, the customisation
+         * algebra, the cheat sheet, i18n and the units — is pure and gated below. `fonts.ts` is
+         * excluded because registering a `FontFace` needs a document; its pure half (`uiFont`,
+         * `fontStack`) is unit-tested all the same.
+         */
+        'src/renderer/modules/M130-preferences/PreferencesDialog.ts',
+        'src/renderer/modules/M130-preferences/PreferencesService.ts',
+        'src/renderer/modules/M130-preferences/controls.ts',
+        'src/renderer/modules/M130-preferences/customise/page.ts',
+        'src/renderer/modules/M130-preferences/fonts.ts',
+        'src/renderer/modules/M130-preferences/manifest.ts',
+        'src/renderer/modules/M130-preferences/shortcuts/editor.ts',
       ],
       reporter: ['text', 'lcov'],
       thresholds: {
@@ -630,6 +650,48 @@ export default defineConfig({
           functions: 60,
           statements: 80,
         },
+        /*
+         * M130. The page model decides whether a setting is reachable at all and the shortcut
+         * rules decide what a key runs, so both are held high; the settings hub is what stands
+         * between a preferences write and the module that owns it.
+         */
+        'src/renderer/modules/M130-preferences/model.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M130-preferences/SettingsService.ts': {
+          lines: 75,
+          functions: 65,
+          statements: 75,
+        },
+        'src/renderer/modules/M130-preferences/i18n.ts': {
+          lines: 80,
+          functions: 75,
+          statements: 80,
+        },
+        'src/renderer/modules/M130-preferences/units.ts': {
+          lines: 90,
+          functions: 90,
+          statements: 90,
+        },
+        'src/renderer/modules/M130-preferences/shortcuts/model.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M130-preferences/shortcuts/cheatsheet.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/renderer/modules/M130-preferences/customise/model.ts': {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+        },
+        'src/shared/settings.ts': { lines: 90, functions: 90, statements: 90 },
+        'scripts/lib/i18n-extract.ts': { lines: 95, functions: 95, statements: 95 },
       },
     },
   },

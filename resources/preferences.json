@@ -1,0 +1,58 @@
+{
+  "$comment": "Preferences dialog data (M130). Everything here can change without touching code, per PLAN.md 4.4. `pages` gives each module's page its order, icon and — where the manifest's own name is not the word the operator would look for — its label; a module with no entry still gets a page, named after its manifest and sorted last. `aliases` maps a key a module DECLARES in its schema to the key its code actually reads, for the few places the two drifted apart; the dialog writes both. `synonyms` are extra search words per key: the reader's vocabulary, not the module author's.",
+  "version": 1,
+  "pages": [
+    { "module": "M130", "label": "General", "icon": "settings", "order": 10 },
+    { "module": "M01", "label": "Appearance", "icon": "palette", "order": 20 },
+    { "module": "M02", "label": "Ribbon and window", "icon": "app-window", "order": 30 },
+    { "module": "M11", "label": "Page display", "icon": "file-text", "order": 40 },
+    { "module": "M12", "label": "Panels", "icon": "panel-left", "order": 50 },
+    { "module": "M13", "label": "Reading, search and print", "icon": "search", "order": 60 },
+    { "module": "M21", "label": "Documents and saving", "icon": "save", "order": 70 },
+    { "module": "M30", "label": "Commenting", "icon": "message-square", "order": 80 },
+    { "module": "M31", "label": "Drawing and stamps", "icon": "pen-tool", "order": 85 },
+    { "module": "M32", "label": "Comments panel", "icon": "list", "order": 90 },
+    { "module": "M40", "label": "Organise pages", "icon": "files", "order": 100 },
+    { "module": "M41", "label": "Scan and combine", "icon": "scan", "order": 105 },
+    { "module": "M42", "label": "Portfolios", "icon": "folder", "order": 110 },
+    { "module": "M70", "label": "Security", "icon": "shield", "order": 120 },
+    { "module": "M72", "label": "Document properties", "icon": "file-cog", "order": 130 },
+    { "module": "M91", "label": "Create PDF", "icon": "file-plus", "order": 140 },
+    { "module": "M50", "label": "Page objects", "icon": "move", "order": 145 },
+    { "module": "M33", "label": "Measuring", "icon": "ruler", "order": 150 },
+    { "module": "M60", "label": "Forms", "icon": "text-cursor-input", "order": 160 },
+    { "module": "M90", "label": "OCR", "icon": "scan", "order": 170 },
+    { "module": "M111", "label": "Accessibility", "icon": "eye", "order": 180 }
+  ],
+  "aliases": {
+    "$comment": "M01 declares theme.scale and theme.nightMode; its ThemeManager reads ui.scale and view.nightMode. M130 declares its identity settings under its own app.* namespace, while M30 reads them as identity.*. Until those are tidied up the dialog writes both sides, so the setting the reader changes is the setting the app obeys.",
+    "theme.scale": "ui.scale",
+    "theme.nightMode": "view.nightMode",
+    "app.identity.name": "identity.name",
+    "app.identity.initials": "identity.initials",
+    "app.identity.email": "identity.email",
+    "app.identity.organisation": "identity.organisation"
+  },
+  "prefixAliases": {
+    "$comment": "A module whose schema uses namespace as a page label rather than as the first segment of its keys: M41 declares documentOps and stores combine.toNewTab, split.namePattern, scan.autoDeskew and the rest without it. One line here covers every setting that module has; an exact alias above still wins where both apply.",
+    "documentOps.": ""
+  },
+  "synonyms": {
+    "viewer.cache.megabytes": ["tile cache", "tiles", "memory", "ram", "render cache"],
+    "viewer.rulers.units": ["units", "measurement", "inches", "millimetres", "centimetres"],
+    "app.units": ["units", "measurement", "ruler units", "crop units", "measuring"],
+    "ui.leftPaneOnOpen": ["thumbnails", "navigation pane", "startup panel", "left pane"],
+    "ui.thumbnailSize": ["thumbnails", "page previews"],
+    "theme.name": ["colour theme", "color theme", "dark mode", "appearance", "graphite"],
+    "theme.scale": ["ui scale", "zoom the interface", "bigger text", "magnify", "large"],
+    "theme.nightMode": ["night mode", "invert", "darken the page"],
+    "app.uiFont": ["font", "typeface", "interface font", "readability"],
+    "app.language": ["language", "locale", "spelling", "english"],
+    "app.identity.name": ["author", "who am i", "name on comments", "signature name"],
+    "app.identity.initials": ["initials", "stamp initials"],
+    "app.identity.organisation": ["company", "organization", "employer"],
+    "save.backup": ["backup", "bak", "previous version"],
+    "annot.keepToolSelected": ["sticky tools", "keep tool"],
+    "scan.autoDeskew": ["deskew", "straighten", "crooked scan", "skew"]
+  }
+}
