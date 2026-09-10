@@ -336,6 +336,9 @@ export class FormLayer {
 
     const bounds = this.selectionBounds(pageView.index);
     if (bounds && this.mode === 'design') {
+      // Two rings, drawn one over the other: `--focus` is white in the dark themes, and a white
+      // dashed box on white paper is no box at all.
+      chrome.append(rectEl(pageView, bounds, 'form-bounds-back'));
       chrome.append(rectEl(pageView, bounds, 'form-bounds'));
       const half = HANDLE_SIZE / 2;
       for (const handle of BOX_HANDLES) {
@@ -524,7 +527,13 @@ export class FormLayer {
       if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) {
         control.readOnly = !interactive;
       } else {
-        control.disabled = !interactive;
+        /*
+         * A select or a button is only *disabled* when the field itself is read-only. In design
+         * mode nothing on this layer takes a pointer or a tab stop anyway, and leaving the
+         * control enabled keeps its text at the field's own contrast rather than the browser's
+         * grey.
+         */
+        control.disabled = this.mode === 'fill' && readOnly;
       }
       control.tabIndex = this.mode === 'design' ? -1 : 0;
       control.setAttribute('aria-readonly', String(!interactive));

@@ -329,7 +329,7 @@ export function readForm(doc: PDFDocument): RawForm {
       downCaption: inherited.isButton ? (textOf(resolve(mk?.get(PDFName.of('AC')))) ?? null) : null,
       layout: buttonLayoutOf(numberOf(resolve(mk?.get(PDFName.of('TP')))) ?? 0),
       iconKey: iconRef === undefined ? null : `field-icon-${ref?.objectNumber ?? 0}`,
-      exportValue: exportValueOf(dict, resolve),
+      exportValue: exportValueOf(dict, resolve, inherited.options),
       highlight: highlightOf(nameOf(resolve(dict.get(PDFName.of('H'))))),
       hidden: (flagsValue & 2) !== 0,
       noPrint: (flagsValue & 4) === 0,
@@ -363,16 +363,21 @@ export function readForm(doc: PDFDocument): RawForm {
       const ft = nameOf(resolve(inheritedGet(ctx, dict, 'FT')));
       const flags = numberOf(resolve(inheritedGet(ctx, dict, 'Ff'))) ?? 0;
       const isButton = ft === 'Btn' && hasFlag(flags, BUTTON_FLAGS.pushButton);
+      const declared = optionsOf(dict.lookupMaybe(PDFName.of('Opt'), PDFArray), resolve);
+      const inherited: InheritedWidget = {
+        isButton,
+        options: declared.map((o) => o.value),
+      };
       const widgets: RawWidget[] = [];
       if (kids && kids.size() > 0) {
         for (const kid of kids.asArray()) {
           const kidDict = ctx.lookupMaybe(kid, PDFDict);
           if (kidDict) {
-            widgets.push(readWidget(kidDict, kid instanceof PDFRef ? kid : null, { isButton }));
+            widgets.push(readWidget(kidDict, kid instanceof PDFRef ? kid : null, inherited));
           }
         }
       } else {
-        widgets.push(readWidget(dict, ref, { isButton }));
+        widgets.push(readWidget(dict, ref, inherited));
       }
 
       const actions = actionsOf(dict.lookupMaybe(PDFName.of('AA'), PDFDict), resolve);
@@ -397,7 +402,7 @@ export function readForm(doc: PDFDocument): RawForm {
                 value: w.appearance.exportValue,
                 label: w.appearance.exportValue,
               }))
-            : optionsOf(dict.lookupMaybe(PDFName.of('Opt'), PDFArray), resolve),
+            : declared,
         maxLength: numberOf(resolve(inheritedGet(ctx, dict, 'MaxLen'))) ?? null,
         align: (numberOf(resolve(inheritedGet(ctx, dict, 'Q'))) ?? acroQ ?? 0) as FieldAlign,
         font: parsed.font,
@@ -421,6 +426,12 @@ export function readForm(doc: PDFDocument): RawForm {
 
 interface InheritedWidget {
   readonly isButton: boolean;
+  /**
+   * The field's `/Opt`, when it has one. A radio group may name its appearance states by their
+   * *index* into `/Opt` rather than by the value they export — PDF 12.7.4.2.1, and what pdf-lib
+   * writes — so a widget whose state is `/2` exports `Opt[2]`, not the string "2".
+   */
+  readonly options: ReadonlyArray<string>;
 }
 
 /** `/FT`, `/Ff`, `/DA`, `/Q` and `/MaxLen` are inheritable through `/Parent` (PDF 12.7.3.1). */
@@ -450,18 +461,31 @@ function defaultValueOf(value: unknown): string | null {
  * The export value one widget stands for: the key of its `/AP /N` sub-dictionary that is not
  * `/Off`. `/AS` says which state is showing, not which one the widget *is*, so the appearance
  * dictionary is the honest source — a radio kid whose `/AS` is `/Off` still exports "green".
+ *
+ * A radio group may name its states by their index into the field's `/Opt` instead, in which case
+ * the exported value is the string that index picks out. Reading the index as the value would
+ * make a group of three buttons export "0", "1" and "2" — which is what the file says and not
+ * what the form means.
  */
-function exportValueOf(dict: PDFDict, resolve: (v: PDFObject | undefined) => unknown): string {
+function exportValueOf(
+  dict: PDFDict,
+  resolve: (v: PDFObject | undefined) => unknown,
+  options: ReadonlyArray<string>,
+): string {
+  const through = (state: string): string => {
+    if (options.length === 0 || !/^\d+$/.test(state)) return state;
+    return options[Number(state)] ?? state;
+  };
   const ap = dict.lookupMaybe(PDFName.of('AP'), PDFDict);
   const normal = ap ? resolve(ap.get(PDFName.of('N'))) : undefined;
   if (normal instanceof PDFDict) {
     for (const [key] of normal.entries()) {
       const name = key.decodeText();
-      if (name !== 'Off') return name;
+      if (name !== 'Off') return through(name);
     }
   }
   const as = nameOf(resolve(dict.get(PDFName.of('AS'))));
-  if (as && as !== 'Off') return as;
+  if (as && as !== 'Off') return through(as);
   return DEFAULT_WIDGET_APPEARANCE.exportValue;
 }
 

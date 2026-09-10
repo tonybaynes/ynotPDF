@@ -53,6 +53,22 @@
   pointer-events: none;
 }
 
+/*
+ * The controls render in the *page's* colour scheme, not the app's.
+ *
+ * A check box, a radio and a select are drawn by the browser, and it draws them for the scheme
+ * it is told to use. Under the app's dark scheme they come out dark — a black-filled radio on
+ * white paper, which reads as "chosen" whether or not it is. The page is white unless Night Mode
+ * has darkened it, so the layer follows the page.
+ */
+.viewer-content .page .layer-widget {
+  color-scheme: light only;
+}
+
+[data-night-mode] .viewer-content .page .layer-widget {
+  color-scheme: dark only;
+}
+
 .viewer-content .page .layer-widget .form-widget {
   position: absolute;
   box-sizing: border-box;
@@ -162,14 +178,40 @@
   user-select: none;
 }
 
+/*
+ * A disabled control keeps the field's own ink. The browser's grey is the one place a native
+ * control would put low-contrast text on the page, and CLAUDE.md leaves no room for that; the
+ * dotted outline and the words in the Fields panel are what say "read-only".
+ */
+.viewer-content .page .layer-widget .form-control:disabled {
+  color: var(--widget-ink);
+}
+
+.viewer-content .page .layer-widget .form-control:disabled option {
+  color: var(--widget-ink);
+}
+
 .viewer-content .page .layer-widget .form-widget.hovered {
   outline: 2px dashed var(--accent);
   outline-offset: -2px;
 }
 
+/*
+ * The selection is two rings, for the reason the theme's own focus ring is: `--focus` is white in
+ * the dark themes and a white ring on white paper is no ring at all. The outer ring sits on the
+ * page, the inner one against the field, and between them one is always visible.
+ */
 .viewer-content .page .layer-widget .form-widget.selected {
   outline: 2px solid var(--focus);
-  outline-offset: -2px;
+  outline-offset: 0;
+  box-shadow: inset 0 0 0 2px var(--focus-contrast);
+}
+
+.viewer-content .page .layer-widget .form-chrome .form-bounds-back {
+  fill: none;
+  stroke: var(--focus-contrast);
+  stroke-width: 4;
+  stroke-dasharray: 5 3;
 }
 
 .viewer-content .page .layer-widget .form-chrome .form-bounds {

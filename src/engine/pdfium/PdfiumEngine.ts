@@ -2056,6 +2056,8 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         string,
         { field: FormField; widgets: Array<{ page: PageIndex; rect: PdfRect }> }
       >();
+      // `field` is replaced rather than mutated when a later widget turns out to be the chosen
+      // one, so the entry is a plain mutable record.
       if (d.form === 0) return [];
       const pages = ffi.call('FPDF_GetPageCount', d.doc);
       ffi.scope((s) => {
@@ -2078,6 +2080,22 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
               const existing = fields.get(name);
               if (existing) {
                 existing.widgets.push({ page: pi, rect });
+                /*
+                 * A radio group is one field with a widget per button, and PDFium answers
+                 * `FPDFAnnot_GetFormFieldValue` per *widget* — so the group's value came from
+                 * whichever button happened to be enumerated first, and a group whose second or
+                 * third button is the chosen one read as "Off" (M60). Whichever button is
+                 * checked is the field's value.
+                 */
+                if (
+                  existing.field.type === 'radio' &&
+                  ffi.call('FPDFAnnot_IsChecked', d.form, annot)
+                ) {
+                  const chosen = ffi.utf16Call((buf, len) =>
+                    ffi.call('FPDFAnnot_GetFormFieldExportValue', d.form, annot, buf, len),
+                  );
+                  existing.field = { ...existing.field, value: chosen || 'Yes' };
+                }
                 continue;
               }
               const type = this.fieldType(ffi.call('FPDFAnnot_GetFormFieldType', d.form, annot));
