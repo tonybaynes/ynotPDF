@@ -25,6 +25,7 @@ import {
   measurementOf,
   midpointAlong,
   readableAngle,
+  shapeDrawings,
   type AppearanceInput,
 } from '@engine/appearance';
 import type { PdfPoint } from '@shared/pdf';
@@ -147,6 +148,8 @@ describe('the style an annotation carries', () => {
   });
 });
 
+const service = createAppearanceService();
+
 describe('what a dimension draws', () => {
   const from = { x: 100, y: 100 };
   const to = { x: 300, y: 100 };
@@ -256,6 +259,51 @@ describe('what a dimension draws', () => {
     expect(measureDrawings(input({ subtype: 'Square', extra: { ...scaled } }))).toBeNull();
   });
 
+  it('gives the stream a /BBox equal to the /Rect, so no viewer scales the caption', () => {
+    /*
+     * A viewer maps an appearance's `/BBox` on to the annotation's `/Rect` (PDF 12.5.5). The two
+     * disagreeing by a point scales everything the stream draws — invisible on a plain outline,
+     * but a caption that has moved. So the rect the model stores *is* the bbox the stream carries.
+     */
+    for (const source of [
+      input(base),
+      input({ ...base, extra: { ...base.extra, captionPosition: 'Inline' } }),
+      input({
+        subtype: 'Polygon',
+        vertices: [
+          { x: 0, y: 0 },
+          { x: 120, y: 0 },
+          { x: 120, y: 80 },
+          { x: 0, y: 80 },
+        ],
+        extra: { ...scaled, intent: MEASURE_INTENTS.Polygon },
+      }),
+      input({
+        subtype: 'PolyLine',
+        vertices: [
+          { x: 0, y: 0 },
+          { x: 120, y: 0 },
+          { x: 120, y: 80 },
+        ],
+        extra: { ...scaled, intent: MEASURE_INTENTS.PolyLine },
+      }),
+    ]) {
+      const rect = measureRectFor(source, source.rect, shapeDrawings);
+      const stream = service.generate({ ...source, rect });
+      expect(stream, source.subtype).not.toBeNull();
+      for (const key of ['x0', 'y0', 'x1', 'y1'] as const) {
+        expect(stream?.bbox[key], `${source.subtype}.${key}`).toBeCloseTo(rect[key], 9);
+      }
+      // And the measured points are inside it, as a reader expects of `/L` and `/Vertices`.
+      for (const point of source.vertices) {
+        expect(point.x, source.subtype).toBeGreaterThanOrEqual(rect.x0);
+        expect(point.x, source.subtype).toBeLessThanOrEqual(rect.x1);
+        expect(point.y, source.subtype).toBeGreaterThanOrEqual(rect.y0);
+        expect(point.y, source.subtype).toBeLessThanOrEqual(rect.y1);
+      }
+    }
+  });
+
   it('grows the rect to hold the leaders and the caption', () => {
     const source = input(base);
     const tight = { x0: 100, y0: 100, x1: 300, y1: 100 };
@@ -269,8 +317,6 @@ describe('what a dimension draws', () => {
 });
 
 describe('the appearance stream', () => {
-  const service = createAppearanceService();
-
   it('draws a dimension with its caption, and a plain line without one', () => {
     const dimension = service.generate(
       input({

@@ -11,7 +11,7 @@
  */
 
 import type { ModelAnnotation, AnnotationPatch } from '@core/model';
-import { measureRectFor, shapeRectFor } from '@engine/appearance';
+import { measureRectFor, shapeDrawings, shapeRectFor } from '@engine/appearance';
 import type { PdfPoint, PdfRect } from '@shared/pdf';
 import { toAppearanceInput } from '@modules/M21-save/plan';
 import { vertexIndexOf } from '@view/AnnotationLayer';
@@ -22,7 +22,11 @@ import { isMeasureAnnotation, toLayerAnnotation } from './overlay';
 import { describeMeasurement, measurePanel } from './panel';
 import { MEASURE_TOOL_IDS } from './tools';
 
-/** The `/Rect` a measurement needs: what the shape needs, grown to hold the leaders and caption. */
+/**
+ * The `/Rect` a measurement needs: exactly the box its appearance stream will declare, so that a
+ * viewer's BBox → Rect mapping neither scales nor shifts the caption (ADR 0018). The shape's own
+ * rect is only the starting point, and only for the outline a polygon or a polyline draws.
+ */
 export function measurementRect(a: ModelAnnotation, vertices: ReadonlyArray<PdfPoint>): PdfRect {
   if (a.family !== 'shape') return a.rect;
   const base = shapeRectFor(
@@ -31,7 +35,7 @@ export function measurementRect(a: ModelAnnotation, vertices: ReadonlyArray<PdfP
     a.borderWidth ?? 1,
     a.extra,
   );
-  return measureRectFor({ ...toAppearanceInput(a), vertices, rect: base }, base);
+  return measureRectFor({ ...toAppearanceInput(a), vertices, rect: base }, base, shapeDrawings);
 }
 
 /** A move: the rect and the measured points travel together, so the value does not change. */

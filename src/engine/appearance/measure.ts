@@ -707,6 +707,44 @@ function union(a: PdfRect, b: PdfRect): PdfRect {
   };
 }
 
+/**
+ * The box a measurement occupies: everything it draws, grown by half its widest stroke.
+ *
+ * Deliberately **not** unioned with the annotation's own `/Rect`, the way an ordinary shape's
+ * bbox is. A viewer maps an appearance's `/BBox` on to the annotation's `/Rect` (PDF 12.5.5), so
+ * the two disagreeing by even a point *scales* the drawing — which for a plain outline is
+ * invisible and for a caption is a number that has moved. `measureRectFor` computes this same
+ * box, so the rect the model stores and the bbox the stream carries are the same rectangle and
+ * the mapping is the identity.
+ */
+export function measureBounds(
+  drawings: ReadonlyArray<ShapeDrawing>,
+  caption: MeasureCaption | null,
+  points: ReadonlyArray<PdfPoint> = [],
+): PdfRect | null {
+  // The measured points themselves, which `/LLO` can leave just outside everything drawn: a
+  // reader expects `/Rect` to contain what `/L` or `/Vertices` names.
+  let box: PdfRect | null = null;
+  for (const p of points) {
+    box = box
+      ? union(box, { x0: p.x, y0: p.y, x1: p.x, y1: p.y })
+      : { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+  }
+  let pad = 0.5;
+  for (const d of drawings) {
+    pad = Math.max(pad, d.width / 2 + 0.5);
+    const bounds = opsBounds(d.ops);
+    if (bounds) box = box ? union(box, bounds) : bounds;
+  }
+  if (caption) {
+    const bounds = captionBounds(caption);
+    box = box ? union(box, bounds) : bounds;
+  }
+  return box === null
+    ? null
+    : { x0: box.x0 - pad, y0: box.y0 - pad, x1: box.x1 + pad, y1: box.y1 + pad };
+}
+
 /** Paints drawings and a caption into one stream. Shared by the three measurement generators. */
 export function paintMeasurement(
   input: AppearanceInput,
@@ -749,16 +787,8 @@ export function paintMeasurement(
   }
   b.restore();
   if (b.isEmpty) return null;
-  let box = input.rect;
-  let pad = 0.5;
-  for (const d of drawings) {
-    pad = Math.max(pad, d.width / 2 + 0.5);
-    const bounds = opsBounds(d.ops);
-    if (bounds) box = union(box, bounds);
-  }
-  if (caption) box = union(box, captionBounds(caption));
   return {
-    bbox: { x0: box.x0 - pad, y0: box.y0 - pad, x1: box.x1 + pad, y1: box.y1 + pad },
+    bbox: measureBounds(drawings, caption, input.vertices) ?? input.rect,
     content: b.build(),
     resources: b.resources,
   };
@@ -787,24 +817,22 @@ export function measureAware(
 }
 
 /**
- * The `/Rect` a measurement needs: what the shape needs, grown to hold the leaders and the
- * caption. The tools and the provider call it whenever the geometry or the style changes.
+ * The `/Rect` a measurement needs: exactly the box its appearance stream will declare as its
+ * `/BBox`, so a viewer's BBox → Rect mapping neither scales nor shifts anything (see
+ * {@link measureBounds}). The tools and the provider call it whenever the geometry, the style or
+ * the scale changes.
+ *
+ * `outline` is how the caller draws a polygon's or a polyline's own outline — the same
+ * `shapeDrawings` the generator uses — so the two lists are identical by construction.
  */
-export function measureRectFor(input: AppearanceInput, base: PdfRect): PdfRect {
+export function measureRectFor(
+  input: AppearanceInput,
+  base: PdfRect,
+  outline: (input: AppearanceInput) => ReadonlyArray<ShapeDrawing> = () => [],
+): PdfRect {
   const drawn = measureDrawings(input);
   if (!drawn) return base;
-  let box = base;
-  for (const d of drawn.paths) {
-    const bounds = opsBounds(d.ops);
-    if (bounds) {
-      box = union(box, {
-        x0: bounds.x0 - d.width / 2,
-        y0: bounds.y0 - d.width / 2,
-        x1: bounds.x1 + d.width / 2,
-        y1: bounds.y1 + d.width / 2,
-      });
-    }
-  }
-  if (drawn.caption) box = union(box, captionBounds(drawn.caption));
-  return box;
+  const paths =
+    input.subtype === 'Line' ? drawn.paths : [...outline({ ...input, rect: base }), ...drawn.paths];
+  return measureBounds(paths, drawn.caption, input.vertices) ?? base;
 }
