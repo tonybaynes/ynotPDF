@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -109,7 +109,7 @@ modules) — M02 ships a demo manifest used only by tests.
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -271,8 +271,9 @@ colourblind: black and red read as the same colour):**
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
 - **Tony is who you are working for — call him Tony, not "the operator"**
-  (2026-09-11). Older text across this repository still says "the operator";
-  that is history and is not being rewritten, but new writing uses his name.
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
 - Replies to Tony: short and plain (eyesight). Never leave him a to-do you
   could do yourself.
 
@@ -382,7 +383,7 @@ colourblind: black and red read as the same colour):**
   M00's `file.openBytes` / `file.close` now go through the `documents` service, `package.json`
   (`lucide`, `axe-core` devDependencies).
 
-**Changed after operator review (2026-09-07):** the operator uses Foxit daily — File is now a
+**Changed after Tony's review (2026-09-07):** Tony uses Foxit daily — File is now a
 normal tab with a horizontal ribbon (Open · Recent ▾ · New ▾ · Save · Save As · Print ·
 Properties · Preferences · Exit) built by the shell from the backstage slots
 (`app/ribbon/fileTab.ts`), and the ribbon body is Foxit's compact single row of icon buttons by

@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -109,7 +109,7 @@ optionally `src/main/engine/**`, `scripts/fetch-binaries.ts`,
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -270,8 +270,9 @@ colourblind: black and red read as the same colour):**
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
 - **Tony is who you are working for — call him Tony, not "the operator"**
-  (2026-09-11). Older text across this repository still says "the operator";
-  that is history and is not being rewritten, but new writing uses his name.
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
 - Replies to Tony: short and plain (eyesight). Never leave him a to-do you
   could do yourself.
 
@@ -334,7 +335,7 @@ colourblind: black and red read as the same colour):**
 ## Build log (fill in at merge)
 
 **Built 2026-09-07 on `mod/M10-engine-layer` (worktree `../ynotPDF-M10`); pushed and merged
-via PR on 2026-09-08** once the operator made the repository public (GitHub Actions minutes had
+via PR on 2026-09-08** once Tony made the repository public (GitHub Actions minutes had
 run out on the private repo the day before). Green locally on Windows: lint, 949 unit tests,
 50 Playwright tests.
 

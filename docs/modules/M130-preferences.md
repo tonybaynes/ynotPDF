@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -76,7 +76,7 @@ Cloud sync of settings.
 - Scan page carries `scan.autoDeskew` ("Straighten scanned pages automatically
   when importing images", default off) registered by M41; M91 reads it.
 - **View page must carry `ui.leftPaneOnOpen`** (Pages / Bookmarks / Last
-  used / Closed — default Pages), registered by M12. The operator relies
+  used / Closed — default Pages), registered by M12. Tony relies
   on the thumbnail pane; it must be settable here in words, not only from
   the pane's context menu.
 - Settings live in one `electron-store` with schema versions and
@@ -89,7 +89,7 @@ Cloud sync of settings.
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -245,8 +245,9 @@ colourblind: black and red read as the same colour):**
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
 - **Tony is who you are working for — call him Tony, not "the operator"**
-  (2026-09-11). Older text across this repository still says "the operator";
-  that is history and is not being rewritten, but new writing uses his name.
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
 - Replies to Tony: short and plain (eyesight). Never leave him a to-do you
   could do yourself.
 
@@ -274,7 +275,7 @@ colourblind: black and red read as the same colour):**
   the `UiState` store, then tells its own listeners. No other module's folder is touched.
 - **Search is over title + description + keywords + the key itself, plus a synonym table in
   `resources/preferences.json`.** "tile cache" finds `viewer.cache.megabytes` because the synonym
-  table says so — the operator's words, not the module author's, and data rather than code.
+  table says so — Tony's words, not the module author's, and data rather than code.
 - **Shortcuts are stored as overrides, not as a full table** (`shortcuts.bindings`, a map of
   command id → key or `null` for "unbound"). A module that changes its own default binding is
   then still obeyed for every command the reader has not touched, and Reset is deleting a key.

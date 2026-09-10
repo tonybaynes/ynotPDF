@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -82,7 +82,7 @@ tests.
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -237,8 +237,9 @@ colourblind: black and red read as the same colour):**
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
 - **Tony is who you are working for — call him Tony, not "the operator"**
-  (2026-09-11). Older text across this repository still says "the operator";
-  that is history and is not being rewritten, but new writing uses his name.
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
 - Replies to Tony: short and plain (eyesight). Never leave him a to-do you
   could do yourself.
 
@@ -277,7 +278,7 @@ for behaviour learned from Foxit's or Adobe's published documentation as a user 
    to do **(ours)**.
 6. **The audit's chart is a donut whose slices are told apart by hatch pattern, not by colour**,
    with the table of word, bytes and share beside it and the largest slice named on the chart
-   itself. The brief asks for a pie of bytes by category with words and values; the operator is
+   itself. The brief asks for a pie of bytes by category with words and values; Tony is
    colourblind and this project forbids differentiating by colour alone, so the slices carry
    solid / diagonal / cross / dotted / horizontal / vertical fills in `--accent` on `--bg-modal`,
    separated by `--border-strong` **(ours)**.
@@ -355,7 +356,7 @@ for behaviour learned from Foxit's or Adobe's published documentation as a user 
 - **Presets** — Lossless, Standard, Small, Smallest in `resources/optimise-presets.json`, plus the
   reader's own, saved from the dialog.
 
-### Measured, on the operator's own files (Standard preset)
+### Measured, on Tony's own files (Standard preset)
 
 | File | Before | After | Saved |
 |---|---|---|---|
@@ -396,7 +397,7 @@ Page count, page sizes and text identical in every one.
   command, the e2e harness and M120's batch read back; a checker that only answers once somebody
   has pressed OK is a checker nothing can drive. The Repair it offers is chained off the dialog.
 - **The audit's chart is told apart by hatch pattern, not colour** — six SVG fills in two theme
-  tokens, with the same figures in words beside it. The brief asked for a pie; the operator is
+  tokens, with the same figures in words beside it. The brief asked for a pie; Tony is
   colourblind, and a colour-keyed one would have been unreadable to him.
 - **jpeg-js needs a global `Buffer`** and a renderer Worker has not got one; `installBuffer.ts` puts
   a two-method stand-in where it looks, the same trick `installPako.ts` already uses for utif.
@@ -419,7 +420,7 @@ Page count, page sizes and text identical in every one.
   re-protecting the same save: a qpdf rewrite without `--linearize` is not linearised, so a file
   cannot come out of one pipeline both password protected and linearised. ADR 0019 §3.
 
-### One thing the operator may want to know
+### One thing Tony may want to know
 
 The **Small** preset can produce a slightly *larger* file than **Standard** on a document with
 almost no images — 66 kB against 67 kB on one of the boarding passes. That is fast web view: Small

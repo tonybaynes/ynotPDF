@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -98,7 +98,7 @@ freetext,note}.ts`, tests.
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -258,8 +258,9 @@ colourblind: black and red read as the same colour):**
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
 - **Tony is who you are working for — call him Tony, not "the operator"**
-  (2026-09-11). Older text across this repository still says "the operator";
-  that is history and is not being rewritten, but new writing uses his name.
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
 - Replies to Tony: short and plain (eyesight). Never leave him a to-do you
   could do yourself.
 
@@ -400,8 +401,8 @@ colourblind: black and red read as the same colour):**
   that finished had its value quietly replaced by the stored one. Every write now waits for the
   first read.
 - **`Mod+Alt+N` and `Mod+Alt+T` were already taken** by Night Mode and the theme switcher, and the
-  Registry's rule is last-binding-wins — so binding them here would have stolen two keys the
-  operator uses daily. The comment tools use `Mod+Alt+M` and `Mod+Alt+W`, and a unit test now
+  Registry's rule is last-binding-wins — so binding them here would have stolen two keys 
+  Tony uses daily. The comment tools use `Mod+Alt+M` and `Mod+Alt+W`, and a unit test now
   checks the whole app's bindings for a clash.
 - **A quad over text at 30° was half again too large.** The engine reports each character as an
   axis-aligned box, which for rotated text contains the glyph rather than being it. The two are
@@ -470,7 +471,7 @@ reader, and a **full save-and-reopen round trip** through the real engine, M21's
 E2E: `test/e2e/annotations.spec.ts`, 23 tests, one per acceptance line, in the built app.
 
 **The hands-on check the conventions ask for, recorded.** `test/unit/annotations/real-files.test.ts`
-runs the module against the operator's own files in `test/fixtures/local/` — three boarding passes
+runs the module against Tony's own files in `test/fixtures/local/` — three boarding passes
 from three different producers (our own pdf-lib writer, an unknown one, and Edge's Skia
 print-to-PDF, which is tagged) and the Foxit portfolio — and skips itself on any machine without
 them, as CLAUDE.md requires. For each: a highlight over the page's *own* first line of text, so the

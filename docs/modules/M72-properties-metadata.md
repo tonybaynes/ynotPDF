@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -83,7 +83,7 @@ additive engine `fonts()`, tests.
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -240,8 +240,9 @@ colourblind: black and red read as the same colour):**
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
 - **Tony is who you are working for — call him Tony, not "the operator"**
-  (2026-09-11). Older text across this repository still says "the operator";
-  that is history and is not being rewritten, but new writing uses his name.
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
 - Replies to Tony: short and plain (eyesight). Never leave him a to-do you
   could do yourself.
 
@@ -285,11 +286,11 @@ colourblind: black and red read as the same colour):**
   and the opening page through M11's `ViewerService` when the viewer for a tab appears. A setting
   (`properties.applyInitialView`, on) turns it off for a reader who would rather keep their own
   view.
-- **The one thing it does not apply is `/PageMode`, and that is the operator's own rule.** M12
+- **The one thing it does not apply is `/PageMode`, and that is Tony's own rule.** M12
   records it three times: the left pane opens on whatever `ui.leftPaneOnOpen` says, and
   "bookmarks-on-open never overrides it, even for documents whose `/PageMode` is `/UseOutlines`".
   This brief's acceptance test asks for the opposite ("Bookmarks panel" applied on open), and
-  where two briefs disagree the operator's stated requirement wins. So the page mode is read,
+  where two briefs disagree Tony's stated requirement wins. So the page mode is read,
   shown in the dialog, written back to the file exactly as set, and reported in words — "the
   document asks to open with the bookmarks panel; which panel opens is your own setting" — and
   the pane is left alone. The acceptance test checks the other two thirds (fit page, page 3) and
@@ -312,7 +313,7 @@ colourblind: black and red read as the same colour):**
 - **A properties edit normalises the two dates to UTC.** The writer's `isoToPdfDate` writes
   `D:…Z00'00'`, so a file whose `/CreationDate` said `+01:00` comes back saying `Z` — the same
   instant, one hour different on the clock face and not at all in what a reader is shown, because
-  the dialog formats from the instant. Checked against the operator's own files, where it is the
+  the dialog formats from the instant. Checked against Tony's own files, where it is the
   only difference a title change makes besides the title.
 - **Dates are shown in the reader's locale and stored in UTC.** Created and modified are
   `Intl.DateTimeFormat` in en-GB by default (PLAN §9); what goes into `/CreationDate` and
@@ -371,10 +372,10 @@ colourblind: black and red read as the same colour):**
 
 ### Decisions worth knowing about
 
-- **`/PageMode` is stored, shown and written back — and never obeyed.** M12 carries the operator's
+- **`/PageMode` is stored, shown and written back — and never obeyed.** M12 carries Tony's
   requirement, stated three times, that `ui.leftPaneOnOpen` decides which navigation panel opens
   "even for documents whose `/PageMode` is `/UseOutlines`". This brief's acceptance test asks for
-  the opposite. Where two briefs disagree the operator's stated requirement wins, so the file's
+  the opposite. Where two briefs disagree Tony's stated requirement wins, so the file's
   request is read, written back exactly as set, and reported in words — "the document asks to open
   with the bookmarks panel; which panel opens is your own setting" — while the pane is left alone.
 - **The XMP packet is patched, never regenerated**, and a superseded packet is now removed from
@@ -388,7 +389,7 @@ colourblind: black and red read as the same colour):**
   entry whose value is not text, because the model never showed it and so cannot have been asked.
 - **A properties edit normalises the two dates to UTC.** `+01:00` comes back as `Z`: the same
   instant, and the dialog formats from the instant, so nothing a reader sees changes. Checked
-  against the operator's own files, where it is the only difference a title change makes besides
+  against Tony's own files, where it is the only difference a title change makes besides
   the title itself.
 - **The window options are honest about what they do.** Hide toolbar, hide menu bar and hide
   window UI are stored, written and applied when the reader allows it; fit window and centre

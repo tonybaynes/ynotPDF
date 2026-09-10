@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -52,7 +52,7 @@ annotations" option).
 
 ## Scope — build all of this
 
-- **Deskew — straighten scanned pages (operator requirement, 2026-09-09:
+- **Deskew — straighten scanned pages (Tony's requirement, 2026-09-09:
   "a lot of the files we work with are scanned and need to be
   straightened slightly").**
   - *Detect:* estimate each page's skew angle from a downsampled,
@@ -113,7 +113,7 @@ split,crop,flatten}.ts`, tests.
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -137,7 +137,7 @@ None new.
   the image XObject bytes are unchanged (no re-encoding); an annotation
   on the page stays over the same word; undo restores the original stream.
 - Deskew on a real local scan (`test/fixtures/local/`, skip if absent):
-  operator judges the before/after preview straight — record in Build log.
+  Tony judges the before/after preview straight — record in Build log.
 - Combine the whole fixture corpus → page count equals sum; bookmarks per
   file present; split back by bookmark ⇒ per-file page counts match
   originals.
@@ -279,8 +279,9 @@ colourblind: black and red read as the same colour):**
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
 - **Tony is who you are working for — call him Tony, not "the operator"**
-  (2026-09-11). Older text across this repository still says "the operator";
-  that is history and is not being rewritten, but new writing uses his name.
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
 - Replies to Tony: short and plain (eyesight). Never leave him a to-do you
   could do yourself.
 
@@ -330,7 +331,7 @@ thousands of adds rather than half a million.
 
 The profile is scored by the **sum of squared differences between adjacent
 rows**, not by its variance. The textbook criterion is the variance — the sum
-of the squared bucket counts — and it fails on the operator's own files: a
+of the squared bucket counts — and it fails on Tony's own files: a
 boarding pass carries a barcode, a block of bars is a denser thing to
 concentrate than a page of writing, and the variance therefore peaks wherever
 the bars line up and declares a perfectly straight pass to lean by fifteen
@@ -428,7 +429,7 @@ needs.
 - **The preference M130 renders and M91 reads**, `scan.autoDeskew`, is declared
   here in this module's settings schema.
 
-**What the operator should know.**
+**What Tony should know.**
 
 - Straightening or flattening a page **replaces** it, so the page keeps its
   place but becomes a new page inside the app. Bookmarks and named destinations
@@ -456,7 +457,7 @@ needs.
   but nothing offers it in the UI yet: the dialog is where a ratio belongs and it
   is already the tallest of the five. It is one select away when it is wanted.
 
-**Three bugs the tests found, and one the operator's files found.**
+**Three bugs the tests found, and one Tony's files found.**
 
 - pdf-lib's `lookupMaybe` *throws* on a type mismatch rather than answering
   nothing, so reading a `/Dest` that is a name — one of its three legal

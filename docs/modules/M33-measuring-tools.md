@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -81,7 +81,7 @@ measurements, export results.
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -237,8 +237,9 @@ colourblind: black and red read as the same colour):**
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
 - **Tony is who you are working for — call him Tony, not "the operator"**
-  (2026-09-11). Older text across this repository still says "the operator";
-  that is history and is not being rewritten, but new writing uses his name.
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
 - Replies to Tony: short and plain (eyesight). Never leave him a to-do you
   could do yourself.
 
@@ -328,7 +329,7 @@ colourblind: black and red read as the same colour):**
   change the value — a separate handle says that, where a ninth box handle would not.
   `AnnotationLayer.extraHandles` (additive) lets a provider name handles of its own beside the set
   it asks for; M33 uses one, `caption`, and it is drawn round where every other handle is square,
-  because the operator cannot tell two handles apart by colour. It sits just past the end of the
+  because Tony cannot tell two handles apart by colour. It sits just past the end of the
   text: nine pixels of opaque chrome on top of the number the reader came for would hide a digit.
   `/CO` is a *nudge*, and its frame differs by kind — along a distance's own line and across it,
   plain page space for a polygon — so the offset is worked out by asking where the caption would
@@ -440,7 +441,7 @@ projects), the unit suite with the coverage gates (11 new files, 172 tests in
 acceptance line, plus every earlier module's spec).
 
 **The hands-on check the conventions ask for, recorded.** `test/unit/measure/real-files.test.ts`
-measures a distance, a perimeter and an area on the first page of each of the operator's own files
+measures a distance, a perimeter and an area on the first page of each of Tony's own files
 in `test/fixtures/local/`, saves through the real pipeline and reopens, and separately asks the
 snapper to land on the real geometry of each; it skips itself on any machine without them. All six
 files round-trip with every measurement inside the page's crop box, carrying its own `/Measure` and
@@ -464,7 +465,7 @@ pinned zoom they are now pixel-identical.
 
 ### Added after the merge (2026-09-10)
 
-Three of the items above were reconsidered on the operator's reading and are now done, on
+Three of the items above were reconsidered on Tony's reading and are now done, on
 `fix/M33-caption-and-nesting`:
 
 - **The caption is draggable.** `AnnotationLayer.extraHandles` is the additive layer change that

@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -92,7 +92,7 @@ engine object mutations, tests.
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -251,8 +251,9 @@ colourblind: black and red read as the same colour):**
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
 - **Tony is who you are working for — call him Tony, not "the operator"**
-  (2026-09-11). Older text across this repository still says "the operator";
-  that is history and is not being rewritten, but new writing uses his name.
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
 - Replies to Tony: short and plain (eyesight). Never leave him a to-do you
   could do yourself.
 
@@ -318,14 +319,14 @@ public help, **ours** = our own choice.
 9. **Snapping is opaque lines, never colour alone.** Smart guides draw as solid
    `--accent` lines with a 2 px core; the status bar names what was snapped to
    ("Left edges", "Page centre") in words. Grid, guides and object snapping are three
-   independent toggles, each a command. *(operator accessibility rules in CLAUDE.md.)*
+   independent toggles, each a command. *(Tony's accessibility rules in CLAUDE.md.)*
 10. **Align and distribute have two references: the selection, or the page.** With two
     or more objects selected, "align left" moves them to the selection's left edge;
     with the page reference chosen it uses the CropBox. Distribute needs three and
     spaces centres evenly. *(Foxit, Edit ▸ Arrange.)*
 11. **Opacity is not editable.** The brief marks it ✗ and CLAUDE.md forbids
     translucent chrome; the panel *reports* a fill/stroke alpha the file carries but
-    offers no control. *(operator rule.)*
+    offers no control. *(Tony's rule.)*
 12. **Everything is a command.** `object.*` ids, all in the palette, with the shortcuts
     Foxit uses where they do not collide: arrows nudge (Shift ×10), `Mod+Shift+O`
     picks up the tool, `Mod+Shift+G`/`Mod+Shift+U` group and ungroup, `Mod+[`/`Mod+]`
@@ -345,7 +346,7 @@ public help, **ours** = our own choice.
   Op spans tile the source, so an untouched stream round-trips byte-identical
   (asserted over every fixture page, synthetic and external); the scan agrees with
   PDFium's `pageObjects()` on every readable fixture. Edits: transform (a text object
-  gets an explicit `Tm` and the operators after it are repaired from PDFium's
+  gets an explicit `Tm` and Tonys after it are repaired from PDFium's
   recorded matrices), style, remove, insert.
 - Engine (`src/engine/pdfium/objects.ts`, additive to `PdfEngine`): `pageContent`,
   `transformObject`, `setObjectMatrix`, `removeObject`/`restoreObject` (stash, so undo

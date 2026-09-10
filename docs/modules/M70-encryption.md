@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -90,7 +90,7 @@ RMS/AIP (Parked).
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -248,8 +248,9 @@ colourblind: black and red read as the same colour):**
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
 - **Tony is who you are working for — call him Tony, not "the operator"**
-  (2026-09-11). Older text across this repository still says "the operator";
-  that is history and is not being rewritten, but new writing uses his name.
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
 - Replies to Tony: short and plain (eyesight). Never leave him a to-do you
   could do yourself.
 
@@ -369,7 +370,7 @@ colourblind: black and red read as the same colour):**
 - **"Encrypt only file attachments"** — the `/EFF` arrangement, which qpdf also has no option for:
   the document reads without a password and only its embedded files are protected.
 - **Remove security**, with the owner password, saying plainly what it costs before it happens.
-- **The Protect dialog** — Foxit's options with the operator's requirements over the top: a
+- **The Protect dialog** — Foxit's options with Tony's requirements over the top: a
   strength meter that is a word, an icon and a sentence rather than a coloured bar; every caution
   stated in words *before* it happens; both password fields always present, always keyboard
   reachable, each with a show/hide toggle.

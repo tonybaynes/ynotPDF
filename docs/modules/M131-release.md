@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -51,9 +51,9 @@ Foxit's installer/updater/help/about equivalents.
   file associations (.pdf, .fdf, .xfdf), context-menu verbs ("Open with
   ynotPDF", "Combine with ynotPDF"); macOS DMG universal, notarised, Quick
   Look-free; Linux AppImage + .deb + .rpm with desktop entry and MIME.
-- Code signing: Windows Authenticode (operator's certificate — EV or OV,
+- Code signing: Windows Authenticode (Tony's certificate — EV or OV,
   HSM/cloud-signing step), Apple Developer ID + notarisation; secrets in
-  GitHub Actions only. Document exactly what the operator must provide.
+  GitHub Actions only. Document exactly what Tony must provide.
 - Auto-update: electron-updater with GitHub Releases (private repo needs a
   token strategy — evaluate a public release repo or a generic HTTPS
   server; ADR), channels stable/beta, check-on-launch + manual, release
@@ -63,7 +63,7 @@ Foxit's installer/updater/help/about equivalents.
 - Help: `docs/help/**` markdown rendered in-app (opaque window) with
   search; F1 context → topic; About dialog with versions/licences
   (generated third-party notices file from `license-checker`).
-- **Open-source acknowledgements — operator requirement, in these words:**
+- **Open-source acknowledgements — Tony's requirement, in these words:**
   *"It's great to have open-source libraries to draw on, but it is very
   important to give credit to the hard work that went into it, and to
   thank the contributors."* Build a **Help → "Open-source software"**
@@ -264,8 +264,9 @@ colourblind: black and red read as the same colour):**
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
 - **Tony is who you are working for — call him Tony, not "the operator"**
-  (2026-09-11). Older text across this repository still says "the operator";
-  that is history and is not being rewritten, but new writing uses his name.
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
 - Replies to Tony: short and plain (eyesight). Never leave him a to-do you
   could do yourself.
 
