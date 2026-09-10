@@ -377,6 +377,22 @@ is colourblind: black and red read as the same colour):**
   the non-zero winding rule that PDF's `f` and SVG's default `fill-rule` both use — and the unit
   test rasterises it the same way, so a mistake in the path parser or the y-flip cannot hide.
 
+### Merged into, after M04 landed
+
+M04 (UI journey tests) merged while this branch was open, and its `coverage.spec.ts` reads the
+ticks out of `PLAN.md` §0: the module gets a journey the moment its row is ticked, and the journey
+may not drive the action under test through `app.run`. Two things followed.
+
+- **`test/e2e/journeys/forms.spec.ts`** — filling a form and designing one the way a person does:
+  press "Fill In Form" on the Form tab by its visible label, click the field on the page, type,
+  tick the box, choose from the combo; then draw a text field with the tool and read it back out
+  of the Fields panel. Not one `form.*` command in it.
+- **The probes were renamed.** They were `form.probe.fields`, `form.probe.selection` and
+  `form.probe.tabOrder`, which is not what any other module calls a probe — M11 has
+  `dev.viewerState`, M30 `dev.annotations`, M13 `dev.selection`. They are now `dev.formFields`,
+  `dev.formSelection` and `dev.formTabOrder`: the house convention, and what M04's setup
+  allow-list is written against.
+
 ### What was deferred, and why
 
 - **Choosing the picture for an image field** waits for M61's data path; the field, its box, its
@@ -399,4 +415,5 @@ write intent), `src/renderer/core/Document.ts` (`addFieldRecord`, `insertFieldRe
 `src/renderer/modules/M11-viewer/ViewerService.ts` (`setFormsVisible`),
 `src/renderer/modules/M11-viewer/Viewer.ts` (the typing-target guard), `src/renderer/main.ts`
 (registers the manifest), `test/unit/roundtrip.ts` (fields compare their design), `package.json`
-(bwip-js, and `@zxing/library` for the tests only).
+(bwip-js, and `@zxing/library` for the tests only), `test/e2e/journeys/forms.spec.ts` (M04's
+folder — one new file, no edit to an existing journey).
