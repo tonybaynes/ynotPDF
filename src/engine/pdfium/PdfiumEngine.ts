@@ -38,6 +38,8 @@ import {
   type PdfCollection,
   type Destination,
   type DocHandle,
+  type EmbeddedImage,
+  type EmbeddedImageEncoding,
   type FontUsage,
   type FormField,
   type FormFieldType,
@@ -225,6 +227,19 @@ export function parseAnnotationId(id: string): { page: PageIndex; index: number 
 
 function optional<K extends string, V>(key: K, value: V | undefined): Partial<Record<K, V>> {
   return value === undefined ? {} : ({ [key]: value } as Record<K, V>);
+}
+
+/**
+ * How many stored pixels there are per inch of page (M92, ADR 0019).
+ *
+ * PDFium reports a DPI of its own, but it is 0 for an image drawn by a matrix it cannot reduce to
+ * a scale — so the drawn size is the fallback, and an image drawn at nothing at all reports 0
+ * rather than an infinity.
+ */
+function dpiOf(reported: number, pixels: number, drawnPoints: number): number {
+  if (Number.isFinite(reported) && reported > 0) return Math.round(reported);
+  if (!(drawnPoints > 0) || !(pixels > 0)) return 0;
+  return Math.round((pixels * 72) / drawnPoints);
 }
 
 /** Runs a synchronous body so that a throw becomes a rejection, as the contract promises. */
@@ -1646,6 +1661,175 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       }
     }
     return out;
+  }
+
+  /**
+   * The image XObjects drawn on a page, with their own bytes (M92, ADR 0019).
+   *
+   * The rule for `data` is the whole point of the method: an image stream whose **only** filter
+   * is `DCTDecode` or `JPXDecode` is already a JPEG / JPEG 2000 file, so the raw stream is handed
+   * over untouched and "export all images" writes the picture that is in the PDF. Anything else —
+   * Flate, CCITT, a filter chain, a crypt filter — has raw bytes that are not an image file at
+   * all, so the pixels are decoded instead through `FPDFImageObj_GetRenderedBitmap`, which also
+   * applies the `/SMask` and hands back straight RGBA.
+   *
+   * Returns an empty list rather than throwing when the wasm build lacks the image exports.
+   */
+  async pageImages(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<EmbeddedImage>> {
+    const ffi = this.ffi;
+    if (!ffi.has('FPDFImageObj_GetImageMetadata')) return [];
+    const d = this.doc(doc);
+    const p = this.loadPage(d, page);
+    const n = ffi.call('FPDFPage_CountObjects', p.page);
+    const out: EmbeddedImage[] = [];
+    for (let i = 0; i < n; i++) {
+      const obj = ffi.call('FPDFPage_GetObject', p.page, i);
+      if (obj === 0 || ffi.call('FPDFPageObj_GetType', obj) !== PAGEOBJ.IMAGE) continue;
+      const image = this.readImageObject(d, p, obj, i);
+      if (image) out.push(image);
+      // A page of a hundred photographs is a hundred decodes; let a cancel be seen between them.
+      if ((i & 7) === 7) await yieldMacrotask();
+    }
+    return out;
+  }
+
+  /** One image object's metadata, filters and bytes. `null` when it has no usable pixels. */
+  private readImageObject(
+    d: OpenDoc,
+    p: LoadedPage,
+    obj: number,
+    index: number,
+  ): EmbeddedImage | null {
+    const ffi = this.ffi;
+    // FPDF_IMAGEOBJ_METADATA: width, height, horizontal_dpi, vertical_dpi, bits_per_pixel,
+    // colorspace, marked_content_id — seven 4-byte fields.
+    const meta = ffi.scope((s) => {
+      const m = s.alloc(28);
+      if (!ffi.call('FPDFImageObj_GetImageMetadata', obj, p.page, m)) return null;
+      return {
+        width: ffi.u32(m, 0),
+        height: ffi.u32(m, 1),
+        dpiX: ffi.f32(m, 2),
+        dpiY: ffi.f32(m, 3),
+      };
+    });
+    if (!meta || meta.width <= 0 || meta.height <= 0) return null;
+    const rect = ffi.scope((s) => {
+      const f = s.alloc(4 * 4);
+      if (!ffi.call('FPDFPageObj_GetBounds', obj, f, f + 4, f + 8, f + 12)) {
+        return { x0: 0, y0: 0, x1: 0, y1: 0 };
+      }
+      return normalizeRect({
+        x0: ffi.f32(f, 0),
+        y0: ffi.f32(f, 1),
+        x1: ffi.f32(f, 2),
+        y1: ffi.f32(f, 3),
+      });
+    });
+    const filters = this.imageFilters(obj);
+    const last = filters[filters.length - 1];
+    const direct: EmbeddedImageEncoding | null =
+      filters.length === 1 && last === 'DCTDecode'
+        ? 'jpeg'
+        : filters.length === 1 && last === 'JPXDecode'
+          ? 'jp2'
+          : null;
+    if (direct !== null && ffi.has('FPDFImageObj_GetImageDataRaw')) {
+      const data = ffi.bytesCall((buf, len) =>
+        ffi.call('FPDFImageObj_GetImageDataRaw', obj, buf, len),
+      );
+      if (data.byteLength > 0) {
+        return {
+          page: p.index,
+          index,
+          width: meta.width,
+          height: meta.height,
+          rect,
+          dpiX: dpiOf(meta.dpiX, meta.width, rect.x1 - rect.x0),
+          dpiY: dpiOf(meta.dpiY, meta.height, rect.y1 - rect.y0),
+          filters,
+          encoding: direct,
+          data,
+        };
+      }
+    }
+    const decoded = this.renderedImage(d, p, obj);
+    if (!decoded) return null;
+    return {
+      page: p.index,
+      index,
+      width: decoded.width,
+      height: decoded.height,
+      rect,
+      dpiX: dpiOf(meta.dpiX, decoded.width, rect.x1 - rect.x0),
+      dpiY: dpiOf(meta.dpiY, decoded.height, rect.y1 - rect.y0),
+      filters,
+      encoding: 'rgba',
+      data: decoded.rgba,
+    };
+  }
+
+  /** The stream's filter chain as PDF names, outermost last. */
+  private imageFilters(obj: number): string[] {
+    const ffi = this.ffi;
+    if (!ffi.has('FPDFImageObj_GetImageFilterCount')) return [];
+    const count = ffi.call('FPDFImageObj_GetImageFilterCount', obj);
+    const names: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const name = ffi.utf8Call((buf, len) =>
+        ffi.call('FPDFImageObj_GetImageFilter', obj, i, buf, len),
+      );
+      if (name) names.push(name);
+    }
+    return names;
+  }
+
+  /** An image object's pixels as RGBA rows, soft mask applied. `null` when PDFium cannot. */
+  private renderedImage(
+    d: OpenDoc,
+    p: LoadedPage,
+    obj: number,
+  ): { width: number; height: number; rgba: Uint8Array } | null {
+    const ffi = this.ffi;
+    if (!ffi.has('FPDFImageObj_GetRenderedBitmap')) return null;
+    const bitmap = ffi.call('FPDFImageObj_GetRenderedBitmap', d.doc, p.page, obj);
+    if (bitmap === 0) return null;
+    try {
+      const width = ffi.call('FPDFBitmap_GetWidth', bitmap);
+      const height = ffi.call('FPDFBitmap_GetHeight', bitmap);
+      const stride = ffi.call('FPDFBitmap_GetStride', bitmap);
+      const format = ffi.call('FPDFBitmap_GetFormat', bitmap);
+      const buffer = ffi.call('FPDFBitmap_GetBuffer', bitmap);
+      if (width <= 0 || height <= 0 || buffer === 0) return null;
+      // PDFium's own byte order is B,G,R,(A) — this is not the REVERSE_BYTE_ORDER render path,
+      // so the channels are swapped here rather than by a render flag.
+      const rgba = new Uint8Array(width * height * 4);
+      const heap = ffi.m.HEAPU8;
+      const step = format === BITMAP.GRAY ? 1 : format === BITMAP.BGR ? 3 : 4;
+      const opaque = format !== BITMAP.BGRA;
+      for (let y = 0; y < height; y++) {
+        let src = buffer + y * stride;
+        let dst = y * width * 4;
+        for (let x = 0; x < width; x++) {
+          if (step === 1) {
+            const g = heap[src] ?? 0;
+            rgba[dst] = g;
+            rgba[dst + 1] = g;
+            rgba[dst + 2] = g;
+          } else {
+            rgba[dst] = heap[src + 2] ?? 0;
+            rgba[dst + 1] = heap[src + 1] ?? 0;
+            rgba[dst + 2] = heap[src] ?? 0;
+          }
+          rgba[dst + 3] = opaque ? 255 : (heap[src + 3] ?? 255);
+          src += step;
+          dst += 4;
+        }
+      }
+      return { width, height, rgba };
+    } finally {
+      ffi.call('FPDFBitmap_Destroy', bitmap);
+    }
   }
 
   /**

@@ -180,6 +180,35 @@ export interface PageObjectPath {
   readonly subpaths: ReadonlyArray<ReadonlyArray<PdfPoint>>;
 }
 
+/**
+ * How an {@link EmbeddedImage} carries its pixels (M92, ADR 0019).
+ *
+ * `jpeg` and `jp2` mean `data` is the image stream exactly as the PDF stores it, which is already
+ * a `.jpg` / `.jp2` file. `rgba` means it has been decoded — rows top-down, four bytes a pixel,
+ * the soft mask already applied — because the stream was in some other filter, or in more than
+ * one, and its raw bytes would not be an image file.
+ */
+export type EmbeddedImageEncoding = 'jpeg' | 'jp2' | 'rgba';
+
+/** One image XObject drawn on a page, with its own bytes (M92, ADR 0019). */
+export interface EmbeddedImage {
+  readonly page: PageIndex;
+  /** Index into `pageObjects(page)`, so a caller can tie it back to the object it came from. */
+  readonly index: number;
+  /** The image's **stored** pixel size, not the size it is drawn at. */
+  readonly width: number;
+  readonly height: number;
+  /** Where it is drawn, in page space. */
+  readonly rect: PdfRect;
+  /** Effective resolution on the page: stored pixels over the drawn size, in dots per inch. */
+  readonly dpiX: number;
+  readonly dpiY: number;
+  /** The stream's filter chain as PDF names, outermost last (`["DCTDecode"]`). */
+  readonly filters: ReadonlyArray<string>;
+  readonly encoding: EmbeddedImageEncoding;
+  readonly data: Uint8Array;
+}
+
 /** Annotation subtypes (PDF 12.5.6). */
 export type AnnotationSubtype =
   | 'Text'
@@ -689,6 +718,17 @@ export interface PdfEngine {
    * data at all. Where it is missing, fall back to `pageObjects`' bounding boxes.
    */
   pageObjectPaths?(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<PageObjectPath>>;
+  /**
+   * The image XObjects drawn on a page, with their **own** bytes (M92, ADR 0019).
+   *
+   * This is not a render: `data` is the stream as the file stores it whenever that stream is
+   * directly a JPEG or a JPEG 2000, and decoded pixels otherwise. See {@link EmbeddedImage}.
+   *
+   * **Optional, and callers must cope with its absence** — a backend without PDFium's
+   * `FPDFImageObj_*` exports simply does not declare it, and "export all images" then says so
+   * rather than writing something that is not the picture in the file.
+   */
+  pageImages?(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<EmbeddedImage>>;
   annotations(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<Annotation>>;
   formFields(doc: DocHandle): Promise<ReadonlyArray<FormField>>;
   /** Links on a page with their destination / URI resolved (ADR 0005). */
@@ -1028,6 +1068,7 @@ export const ENGINE_METHODS = [
   'textRuns',
   'pageObjects',
   'pageObjectPaths',
+  'pageImages',
   'annotations',
   'formFields',
   'links',
