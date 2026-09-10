@@ -48,8 +48,15 @@ interface Offence {
   readonly detail: string;
 }
 
-function report(title: string, offences: ReadonlyArray<Offence>): string[] {
-  return offences.map((o) => `${title}: ${o.where} — ${o.what} (${o.detail})`);
+/**
+ * Turns the browser side's answer into lines and asserts there are none.
+ *
+ * The array is the assertion, so the diff names every offender; the joined message is what
+ * Playwright puts at the top of the failure, where it is read first.
+ */
+function expectNone(title: string, offences: ReadonlyArray<Offence>): void {
+  const lines = offences.map((o) => `${title}: ${o.where} — ${o.what} (${o.detail})`);
+  expect(lines, lines.join('\n')).toEqual([]);
 }
 
 // ---- clipping ----------------------------------------------------------------------------------
@@ -195,7 +202,7 @@ export async function expectNothingClipped(
     },
     { slack: SLACK, allowClip: ALLOW_CLIP, ignore: options.ignore ?? [] },
   );
-  expect(report('clipped', offences), report('clipped', offences).join('\n')).toEqual([]);
+  expectNone('clipped', offences);
 }
 
 // ---- inside the window --------------------------------------------------------------------------
@@ -269,7 +276,7 @@ export async function expectInsideWindow(scope: Locator, options: ClipOptions = 
     },
     { slack: SLACK, allowClip: ALLOW_CLIP, ignore: options.ignore ?? [] },
   );
-  expect(report('outside', offences), report('outside', offences).join('\n')).toEqual([]);
+  expectNone('outside', offences);
 }
 
 // ---- no overlap ---------------------------------------------------------------------------------
@@ -460,7 +467,7 @@ export async function expectReadable(scope: Locator, options: ReadableOptions = 
       ignore: options.ignore ?? [],
     },
   );
-  expect(report('unreadable', offences), report('unreadable', offences).join('\n')).toEqual([]);
+  expectNone('unreadable', offences);
 }
 
 /**
