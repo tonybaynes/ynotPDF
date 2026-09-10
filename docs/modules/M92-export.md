@@ -373,6 +373,16 @@ and 1-bit DeviceGray — and falls back to the rendered bitmap for everything el
 - The first acceptance test asserted A4 for all three pages of `multipage.pdf`, which is mixed
   sizes on purpose; page 3 is US Letter. It now asks the engine for each page's own size, which is
   what "page size × dpi" actually means.
+- **Every `style="..."` attribute in the exported HTML was closing early.** `fontStack` quoted a
+  family name with double quotes, which ends the attribute and turns the rest of the line into
+  stray markup. The reading-order test could not see it — the words were all still there and still
+  in order, just no longer in a positioned box — and neither could looking at the file, until the
+  markup was read line by line. Font names are single-quoted now, every attribute value goes
+  through an attribute-specific escape, and two tests were added that would have caught it: one
+  reads the raw markup for a quote inside an attribute value, and one asks a real Chromium what it
+  *computed* for the first line (`position`, `left`, `top`, `font-family`, `font-size`).
+- A rotated line was written as `rotate(-330deg)`. It renders identically to `rotate(30deg)`, but
+  it is not what anyone means; the angle is normalised into (−180°, 180°] now.
 
 **The manual checks the brief asks for, recorded.**
 
