@@ -1,0 +1,186 @@
+/*
+ * M50 — page objects: the overlay's chrome and the properties panel.
+ *
+ * Colours are theme tokens only, and nothing is translucent (CLAUDE.md). The selection uses the
+ * focus colour like M30's, so the two kinds of selection read the same way; smart guides are
+ * accent-coloured solid lines with a 2 px core, never a tint.
+ */
+
+/* ---- the SVG overlay ---------------------------------------------------------------------- */
+
+.viewer-content .page .layer-object .obj-hover {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 2;
+}
+
+.viewer-content .page .layer-object .obj-outline {
+  fill: none;
+  stroke: var(--focus);
+  stroke-width: 1;
+}
+
+.viewer-content .page .layer-object .obj-bounds {
+  fill: none;
+  stroke: var(--focus);
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
+}
+
+.viewer-content .page .layer-object .obj-handle {
+  fill: var(--bg-panel);
+  stroke: var(--focus);
+  stroke-width: 2;
+}
+
+.viewer-content .page .layer-object .obj-handle-rotate {
+  fill: var(--accent);
+  stroke: var(--fg-on-accent);
+}
+
+.viewer-content .page .layer-object .obj-rotate-stem {
+  stroke: var(--focus);
+  stroke-width: 2;
+}
+
+.viewer-content .page .layer-object .obj-preview {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 6 3;
+}
+
+.viewer-content .page .layer-object .obj-guide {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.viewer-content .page .layer-object .obj-marquee {
+  fill: none;
+  stroke: var(--focus);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+/* Cursors while the Edit Object tool is active. */
+.viewer[data-tool-cursor='default'] .layer-tool {
+  cursor: default;
+}
+
+.viewer[data-object-drag='move'] .layer-tool {
+  cursor: move;
+}
+
+.viewer[data-object-drag='rotate'] .layer-tool {
+  cursor: grabbing;
+}
+
+.viewer[data-object-drag='nwse'] .layer-tool {
+  cursor: nwse-resize;
+}
+
+.viewer[data-object-drag='nesw'] .layer-tool {
+  cursor: nesw-resize;
+}
+
+.viewer[data-object-drag='ns'] .layer-tool {
+  cursor: ns-resize;
+}
+
+.viewer[data-object-drag='ew'] .layer-tool {
+  cursor: ew-resize;
+}
+
+/* ---- the properties panel ------------------------------------------------------------------ */
+
+.obj-props {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  color: var(--fg);
+}
+
+.obj-props-what {
+  font-weight: var(--fw-heading);
+}
+
+.obj-props-empty,
+.obj-props-note {
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+.obj-props-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.obj-props-section > h4 {
+  margin: 0;
+  font-size: inherit;
+  font-weight: var(--fw-heading);
+}
+
+.obj-props-grid {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  gap: 6px 8px;
+  align-items: center;
+}
+
+.obj-props-grid label {
+  color: var(--fg-muted);
+}
+
+.obj-props-grid input[type='number'],
+.obj-props-grid input[type='text'],
+.obj-props-grid select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.obj-props-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.obj-props-row button {
+  flex: 1 1 auto;
+}
+
+.obj-props-colour {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.obj-props-colour input[type='color'] {
+  width: 44px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--bg-input, var(--bg-panel));
+}
+
+.obj-props dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  margin: 0;
+}
+
+.obj-props dt {
+  color: var(--fg-muted);
+}
+
+.obj-props dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

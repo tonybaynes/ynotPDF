@@ -32,6 +32,7 @@ import documentOpsManifest from '@modules/M41-merge-split-crop/manifest';
 import securityManifest from '@modules/M70-encryption/manifest';
 import propertiesManifest from '@modules/M72-properties-metadata/manifest';
 import createManifest from '@modules/M91-create-pdf/manifest';
+import objectManifest from '@modules/M50-object-model/manifest';
 import { ThemeManager } from '@theme/ThemeManager';
 
 /**
@@ -82,6 +83,7 @@ registry.register(securityManifest);
 registry.register(propertiesManifest);
 registry.register(createManifest);
 registry.register(portfolioManifest);
+registry.register(objectManifest);
 
 const e2e = hasBridge() && getBridge().e2e;
 if (e2e) {

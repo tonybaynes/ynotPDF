@@ -42,6 +42,7 @@ import type {
   PlannedLayer,
   PlannedMetadata,
   PlannedNamedDestination,
+  PlannedObjects,
   PlannedOutlineItem,
   PlannedPage,
   PlannedView,
@@ -50,6 +51,7 @@ import type {
   PlannedPortfolioFile,
   WritePlan,
 } from '@engine/Writer';
+import { plannedObjectsFor } from '@modules/M50-object-model/model';
 
 /** What the plan could not express, for the caller to tell the user about. */
 export interface PlanResult {
@@ -75,6 +77,7 @@ export function buildWritePlan(doc: Document): PlanResult {
       label?: string;
       boxes?: PlannedBoxes;
       annotations?: PlannedAnnotation[];
+      objects?: PlannedObjects;
     } = { source };
     if (intents.has('page-labels')) planned.label = page.label;
     if (intents.has('page-boxes')) {
@@ -83,6 +86,9 @@ export function buildWritePlan(doc: Document): PlanResult {
     }
     const annotations = plannedAnnotations(doc, page, touched.annotations);
     if (annotations.length > 0) planned.annotations = annotations;
+    // Page-object edits replayed onto the original content stream (M50, ADR 0018).
+    const objects = plannedObjectsFor(doc, page.id);
+    if (objects) planned.objects = objects;
     pages.push(planned);
   });
 
