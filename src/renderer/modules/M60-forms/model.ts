@@ -167,7 +167,10 @@ function sortByBand(widgets: ReadonlyArray<WidgetRef>, mode: 'row' | 'column'): 
       : [...items].sort((a, b) => b.rect.y1 - a.rect.y1 || a.rect.x0 - b.rect.x0);
   const bands: Array<Array<(typeof sorted)[number]>> = [];
   for (const item of sorted) {
-    const span = mode === 'column' ? { lo: item.rect.x0, hi: item.rect.x1 } : { lo: item.rect.y0, hi: item.rect.y1 };
+    const span =
+      mode === 'column'
+        ? { lo: item.rect.x0, hi: item.rect.x1 }
+        : { lo: item.rect.y0, hi: item.rect.y1 };
     const last = bands[bands.length - 1];
     const prevItem = last?.[last.length - 1];
     if (last && prevItem) {

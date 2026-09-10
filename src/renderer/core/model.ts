@@ -464,10 +464,7 @@ export function fieldDesignOf(field: ModelField): FieldDesign {
 }
 
 /** The appearance a widget has, or the role's default when the backend reported none (M60). */
-export function widgetAppearanceOf(
-  widget: ModelWidget,
-  design: FieldDesign,
-): WidgetAppearance {
+export function widgetAppearanceOf(widget: ModelWidget, design: FieldDesign): WidgetAppearance {
   return widget.appearance ?? defaultWidgetAppearance(design.role);
 }
 

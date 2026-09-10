@@ -56,20 +56,20 @@ take, what the model stores and what the write plan carries — one declaration,
 things PDFium's API cannot reach are read from the (decrypted) bytes with pdf-lib's object parser.
 `RawInfo` gains `formFields`, keyed by fully-qualified name.
 
-### 2. Three field *roles* that AcroForm has no `/FT` for
+### 2. Three field _roles_ that AcroForm has no `/FT` for
 
 Foxit offers an image field, a date field and a barcode field; ISO 32000 defines none of them.
 Each is a standard field wearing a hat, and the hat is recorded so a reopen finds it again:
 
-| Role | Written as | Recognised on reopen by |
-|---|---|---|
-| `image` | `/FT /Btn` push button, `/MK /TP 1` (icon only), `/MK /I` the picture | `/YNOTRole /image`, else a captionless icon-only push button |
-| `date` | `/FT /Tx` plus `/AA /F` `AFDate_FormatEx("…")` | `/YNOTRole /date`, else the `AFDate_FormatEx` argument |
-| `barcode` | `/FT /Tx` whose `/AP` **is** the barcode | `/YNOTRole /barcode` + `/YNOTBarcode << … >>` |
+| Role      | Written as                                                            | Recognised on reopen by                                      |
+| --------- | --------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `image`   | `/FT /Btn` push button, `/MK /TP 1` (icon only), `/MK /I` the picture | `/YNOTRole /image`, else a captionless icon-only push button |
+| `date`    | `/FT /Tx` plus `/AA /F` `AFDate_FormatEx("…")`                        | `/YNOTRole /date`, else the `AFDate_FormatEx` argument       |
+| `barcode` | `/FT /Tx` whose `/AP` **is** the barcode                              | `/YNOTRole /barcode` + `/YNOTBarcode << … >>`                |
 
 `/YNOTRole` and `/YNOTBarcode` are private keys in the field dictionary. A second-class name
 should carry a registered prefix; `YNOT` is ours and every reader ignores what it does not know,
-so a file we write opens correctly everywhere and opens *as a designed form* here. The barcode's
+so a file we write opens correctly everywhere and opens _as a designed form_ here. The barcode's
 picture is a real appearance stream, so Acrobat and Chrome show the barcode itself whatever they
 make of the private keys — which is the whole point of generating appearances ourselves.
 
@@ -107,7 +107,7 @@ into a form and saved. `form` is the designer's path, and when it is present the
 4. keeps `/AcroForm /DR` and merges the fonts our streams used into it.
 
 A rebuild is safe here and nowhere else: the plan is built from `doc.state.fields`, which came
-from the engine's read of *every* field in the file, so nothing that was there is missing from
+from the engine's read of _every_ field in the file, so nothing that was there is missing from
 it. The two exceptions are stated out loud rather than papered over — a signature field whose
 `/V` holds a real signature keeps its `/V` object by reference and the save warns that the
 signature no longer covers the file (a full rewrite already broke it, ADR 0010), and an XFA form

@@ -59,7 +59,7 @@ function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
 
-function rgb(r: number, g: number, b: number): number {
+function packRgb(r: number, g: number, b: number): number {
   const c = (v: number): number => Math.round(clamp01(v) * 255);
   return (c(r) << 16) | (c(g) << 8) | c(b);
 }
@@ -99,17 +99,17 @@ export function parseDefaultAppearance(
         break;
       case 'g': {
         const v = numbers[numbers.length - 1] ?? 0;
-        color = rgb(v, v, v);
+        color = packRgb(v, v, v);
         break;
       }
       case 'rg': {
         const [r = 0, g = 0, b = 0] = numbers.slice(-3);
-        color = rgb(r, g, b);
+        color = packRgb(r, g, b);
         break;
       }
       case 'k': {
         const [c = 0, m = 0, y = 0, k = 0] = numbers.slice(-4);
-        color = rgb((1 - c) * (1 - k), (1 - m) * (1 - k), (1 - y) * (1 - k));
+        color = packRgb((1 - c) * (1 - k), (1 - m) * (1 - k), (1 - y) * (1 - k));
         break;
       }
       default:

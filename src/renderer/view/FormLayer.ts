@@ -219,7 +219,8 @@ export class FormLayer {
   /** Widgets whose rectangle intersects `rect` — the marquee's answer. */
   widgetsWithin(page: number, rect: PdfRect): LayerWidget[] {
     return (this.pages.get(page)?.widgets ?? []).filter(
-      (w) => w.rect.x0 < rect.x1 && w.rect.x1 > rect.x0 && w.rect.y0 < rect.y1 && w.rect.y1 > rect.y0,
+      (w) =>
+        w.rect.x0 < rect.x1 && w.rect.x1 > rect.x0 && w.rect.y0 < rect.y1 && w.rect.y1 > rect.y0,
     );
   }
 
@@ -554,9 +555,7 @@ export class FormLayer {
     style.setProperty('--widget-font', cssFont(widget.design));
     const content = contentBox(widget.rect, appearance);
     const fontSize =
-      widget.design.fontSize > 0
-        ? widget.design.fontSize
-        : autoFontSize(widget, content);
+      widget.design.fontSize > 0 ? widget.design.fontSize : autoFontSize(widget, content);
     style.setProperty('--widget-size', `${Math.max(1, fontSize * scale)}px`);
     style.setProperty('--widget-pad', `${TEXT_PADDING * scale}px`);
     style.setProperty(
@@ -596,7 +595,8 @@ export class FormLayer {
       const selected = new Set(
         control.multiple ? widget.value.split('\n').filter((v) => v !== '') : [widget.value],
       );
-      for (const option of Array.from(control.options)) option.selected = selected.has(option.value);
+      for (const option of Array.from(control.options))
+        option.selected = selected.has(option.value);
       entry.lastValue = widget.value;
       return;
     }
@@ -604,10 +604,16 @@ export class FormLayer {
       control.textContent = widget.appearance.caption ?? '';
       return;
     }
-    if (control instanceof HTMLInputElement && (control.type === 'checkbox' || control.type === 'radio')) {
+    if (
+      control instanceof HTMLInputElement &&
+      (control.type === 'checkbox' || control.type === 'radio')
+    ) {
       control.checked = widget.on;
       control.value = widget.appearance.exportValue;
-      control.style.setProperty('--widget-glyph', `'${CHECK_STYLE_GLYPH[widget.appearance.checkStyle]}'`);
+      control.style.setProperty(
+        '--widget-glyph',
+        `'${CHECK_STYLE_GLYPH[widget.appearance.checkStyle]}'`,
+      );
       entry.root.dataset['check'] = widget.appearance.checkStyle;
       return;
     }

@@ -34,6 +34,7 @@ import securityManifest from '@modules/M70-encryption/manifest';
 import propertiesManifest from '@modules/M72-properties-metadata/manifest';
 import createManifest from '@modules/M91-create-pdf/manifest';
 import objectManifest from '@modules/M50-object-model/manifest';
+import formsManifest from '@modules/M60-forms/manifest';
 import preferencesManifest from '@modules/M130-preferences/manifest';
 import { ThemeManager } from '@theme/ThemeManager';
 
@@ -87,6 +88,7 @@ registry.register(propertiesManifest);
 registry.register(createManifest);
 registry.register(portfolioManifest);
 registry.register(objectManifest);
+registry.register(formsManifest);
 // Last: M130 captures the shortcut bindings every other manifest declared, so it must see them all.
 registry.register(preferencesManifest);
 

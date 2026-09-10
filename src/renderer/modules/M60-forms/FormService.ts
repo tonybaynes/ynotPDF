@@ -23,12 +23,7 @@ import type { ModelId } from '@core/Ids';
 import { CompositeCommand } from '@core/Command';
 import { SetCustomCommand } from '@core/commands';
 import type { Registry } from '@core/Registry';
-import {
-  fieldDesignOf,
-  widgetAppearanceOf,
-  type ModelField,
-  type ModelWidget,
-} from '@core/model';
+import { fieldDesignOf, widgetAppearanceOf, type ModelField, type ModelWidget } from '@core/model';
 import { SetFieldValueCommand } from '@core/commands';
 import {
   defaultFieldDesign,
@@ -50,11 +45,7 @@ import { FormLayer, type FormMode, type LayerWidget } from '@view/FormLayer';
 import type { Viewer } from '@modules/M11-viewer/Viewer';
 import { VIEWER_SERVICE, type ViewerService } from '@modules/M11-viewer/ViewerService';
 import { DOCUMENT_SERVICE, type DocumentService } from '@modules/M20-document-model/manifest';
-import {
-  alignDelta,
-  distributeDeltas,
-  type AlignEdge,
-} from '@modules/M50-object-model/geometry';
+import { alignDelta, distributeDeltas, type AlignEdge } from '@modules/M50-object-model/geometry';
 import {
   AddFieldCommand,
   FormValueCommand,
@@ -298,7 +289,10 @@ export class FormService {
     state.layer.setHighlight(this.settingsValue.highlightFields);
     document.state.pages.forEach((page, index) => {
       const refs = widgetsOnPage(document, page.id);
-      state.layer.setWidgets(index, refs.map((ref) => toLayerWidget(ref, index)));
+      state.layer.setWidgets(
+        index,
+        refs.map((ref) => toLayerWidget(ref, index)),
+      );
       state.layer.setSelection(index, state.selection);
       state.layer.setTabNumbers(
         index,
@@ -590,7 +584,12 @@ export class FormService {
       partialName: partialName(name),
       parentId: null,
       childIds: [],
-      type: design.role === 'image' ? 'button' : design.role === 'date' || design.role === 'barcode' ? 'text' : design.role,
+      type:
+        design.role === 'image'
+          ? 'button'
+          : design.role === 'date' || design.role === 'barcode'
+            ? 'text'
+            : design.role,
       value: '',
       defaultValue: null,
       readOnly: false,
@@ -696,12 +695,15 @@ export class FormService {
 
   /** Moves or resizes the selected widgets. */
   async moveSelection(dx: number, dy: number): Promise<void> {
-    await this.transformSelection((rect) => ({
-      x0: rect.x0 + dx,
-      y0: rect.y0 + dy,
-      x1: rect.x1 + dx,
-      y1: rect.y1 + dy,
-    }), 'Move field');
+    await this.transformSelection(
+      (rect) => ({
+        x0: rect.x0 + dx,
+        y0: rect.y0 + dy,
+        x1: rect.x1 + dx,
+        y1: rect.y1 + dy,
+      }),
+      'Move field',
+    );
   }
 
   /** Applies a rectangle transform to every selected widget, in one undo step. */
@@ -718,7 +720,9 @@ export class FormService {
       byField.set(ref.field.id, {
         ...current,
         widgets: current.widgets.map((w) =>
-          w.id === ref.widget.id ? { ...w, rect: this.snap(normaliseRect(transform(w.rect, ref))) } : w,
+          w.id === ref.widget.id
+            ? { ...w, rect: this.snap(normaliseRect(transform(w.rect, ref))) }
+            : w,
         ),
       });
     }
@@ -739,8 +743,8 @@ export class FormService {
    * of fields a row after a corner drag.
    */
   async resizeSelection(bounds: PdfRect, to: PdfRect): Promise<void> {
-    const sx = (bounds.x1 - bounds.x0) === 0 ? 1 : (to.x1 - to.x0) / (bounds.x1 - bounds.x0);
-    const sy = (bounds.y1 - bounds.y0) === 0 ? 1 : (to.y1 - to.y0) / (bounds.y1 - bounds.y0);
+    const sx = bounds.x1 - bounds.x0 === 0 ? 1 : (to.x1 - to.x0) / (bounds.x1 - bounds.x0);
+    const sy = bounds.y1 - bounds.y0 === 0 ? 1 : (to.y1 - to.y0) / (bounds.y1 - bounds.y0);
     await this.transformSelection(
       (rect) => ({
         x0: to.x0 + (rect.x0 - bounds.x0) * sx,
@@ -760,7 +764,12 @@ export class FormService {
     const reference = selection.bounds;
     await this.transformSelection((rect) => {
       const delta = alignDelta(rect, edge, reference);
-      return { x0: rect.x0 + delta[4], y0: rect.y0 + delta[5], x1: rect.x1 + delta[4], y1: rect.y1 + delta[5] };
+      return {
+        x0: rect.x0 + delta[4],
+        y0: rect.y0 + delta[5],
+        x1: rect.x1 + delta[4],
+        y1: rect.y1 + delta[5],
+      };
     }, 'Align fields');
   }
 
@@ -856,9 +865,7 @@ export class FormService {
       }
     }
     if (commands.length === 0) return 0;
-    await document.undo.push(
-      new CompositeCommand('form.duplicate', 'Duplicate fields', commands),
-    );
+    await document.undo.push(new CompositeCommand('form.duplicate', 'Duplicate fields', commands));
     this.refreshAll();
     return commands.length;
   }
@@ -951,7 +958,12 @@ export class FormService {
             partialName: partialName(fresh),
             parentId: null,
             childIds: [],
-            type: design.role === 'image' ? 'button' : design.role === 'date' || design.role === 'barcode' ? 'text' : design.role,
+            type:
+              design.role === 'image'
+                ? 'button'
+                : design.role === 'date' || design.role === 'barcode'
+                  ? 'text'
+                  : design.role,
             value: typeof entry['value'] === 'string' ? entry['value'] : '',
             defaultValue: design.defaultValue,
             readOnly: isReadOnly(design),
@@ -1042,9 +1054,7 @@ export class FormService {
   // ---- helpers -------------------------------------------------------------------------------
 
   /** A widget key back into the document, or null when it names nothing any more. */
-  resolve(
-    key: string,
-  ): { document: Document; field: ModelField; widget: ModelWidget } | null {
+  resolve(key: string): { document: Document; field: ModelField; widget: ModelWidget } | null {
     const document = this.activeDocument();
     const parts = splitWidgetKey(key);
     if (!document || !parts) return null;

@@ -54,10 +54,7 @@ function annotationFlags(hidden: boolean, noPrint: boolean): number {
  * The whole form, or null when the document has no fields at all — in which case the writer's
  * rebuild would only empty an `/AcroForm` that may still be doing something useful.
  */
-export function plannedFormFor(
-  doc: Document,
-  warn: (message: string) => void,
-): PlannedForm | null {
+export function plannedFormFor(doc: Document, warn: (message: string) => void): PlannedForm | null {
   const fields = doc.state.fields.filter((f) => !f.synthetic);
   if (fields.length === 0) return null;
 

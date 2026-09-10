@@ -2019,7 +2019,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       const ordered = [...raw.widgets].sort((a, b) => a.page - b.page || a.index - b.index);
       const widgets = field.widgets.map((w, i) => {
         const rawWidget = ordered[i];
-        return rawWidget && rawWidget.page === w.page
+        return rawWidget?.page === w.page
           ? { ...w, index: rawWidget.index, appearance: rawWidget.appearance }
           : w;
       });
