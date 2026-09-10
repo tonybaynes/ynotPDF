@@ -20,6 +20,9 @@ import saveManifest from '@modules/M21-save/manifest';
 import annotationManifest from '@modules/M30-markup-annotations/manifest';
 import drawingManifest from '@modules/M31-shapes-ink-stamps/manifest';
 import commentsManifest from '@modules/M32-comments-panel/manifest';
+import measuringManifest from '@modules/M33-measuring-tools/manifest';
+import documentOpsManifest from '@modules/M41-merge-split-crop/manifest';
+import objectManifest from '@modules/M50-object-model/manifest';
 import organiseManifest from '@modules/M40-organise-pages/manifest';
 import portfolioManifest from '@modules/M42-portfolios/manifest';
 import securityManifest from '@modules/M70-encryption/manifest';
@@ -37,6 +40,7 @@ import {
   searchPages,
   searchTerms,
   sectionsOf,
+  storageKeyFor,
   PREFERENCES_CONFIG,
   type PreferencesConfig,
 } from '@modules/M130-preferences/model';
@@ -52,11 +56,14 @@ const MANIFESTS: ReadonlyArray<ModuleManifest> = [
   annotationManifest,
   drawingManifest,
   commentsManifest,
+  measuringManifest,
   organiseManifest,
+  documentOpsManifest,
   securityManifest,
   propertiesManifest,
   createManifest,
   portfolioManifest,
+  objectManifest,
   preferencesManifest,
 ];
 
@@ -96,7 +103,12 @@ describe('buildPages', () => {
       },
     };
     const withExtra = buildPages([...MANIFESTS, extra]);
-    expect(withExtra[withExtra.length - 1]?.label).toBe('A Module From The Future');
+    const page = withExtra.find((p) => p.id === 'M999');
+    expect(page?.label).toBe('A Module From The Future');
+    // After every page the configuration names — not necessarily last of all, since another
+    // unconfigured module may sort after it by name.
+    const configured = withExtra.filter((p) => p.order < 10_000);
+    expect(withExtra.findIndex((p) => p.id === 'M999')).toBeGreaterThanOrEqual(configured.length);
   });
 
   it("lets a schema override the configuration's label, icon and order", () => {
@@ -121,11 +133,38 @@ describe('buildPages', () => {
     expect(scale?.key).toBe('ui.scale');
     const name = rows.find((r) => r.declaredKey === 'app.identity.name');
     expect(name?.key).toBe('identity.name');
-    // Everything else is stored under the key it declares.
+    // Every row's key is exactly what the resolver says — the dialog and the tests agree.
+    for (const row of rows) expect(row.key).toBe(storageKeyFor(row.declaredKey));
+  });
+
+  it("strips M41's namespace, which its schema uses as a label rather than a key prefix", () => {
+    const rows = allRows(pages).filter((r) => r.moduleId === 'M41');
+    expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
-      if (aliasMap().has(row.declaredKey)) continue;
-      expect(row.key).toBe(row.declaredKey);
+      expect(row.declaredKey.startsWith('documentOps.')).toBe(true);
+      expect(row.key.startsWith('documentOps.')).toBe(false);
     }
+    expect(rows.find((r) => r.declaredKey === 'documentOps.scan.autoDeskew')?.key).toBe(
+      'scan.autoDeskew',
+    );
+    expect(rows.find((r) => r.declaredKey === 'documentOps.combine.toNewTab')?.key).toBe(
+      'combine.toNewTab',
+    );
+  });
+
+  it('resolves a key: exact alias first, then the longest prefix alias, else itself', () => {
+    const cfg: PreferencesConfig = {
+      version: 1,
+      pages: [],
+      aliases: { 'a.exact': 'z.exact' },
+      prefixAliases: { 'a.': 'b.', 'a.deep.': 'c.' },
+      synonyms: {},
+    };
+    expect(storageKeyFor('a.exact', cfg)).toBe('z.exact');
+    expect(storageKeyFor('a.thing', cfg)).toBe('b.thing');
+    expect(storageKeyFor('a.deep.thing', cfg)).toBe('c.thing');
+    expect(storageKeyFor('viewer.grid', cfg)).toBe('viewer.grid');
+    expect(storageKeyFor('viewer.grid')).toBe('viewer.grid');
   });
 
   it('drops the $comment line from the alias table', () => {

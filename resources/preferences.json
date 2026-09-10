@@ -18,6 +18,7 @@
     { "module": "M70", "label": "Security", "icon": "shield", "order": 120 },
     { "module": "M72", "label": "Document properties", "icon": "file-cog", "order": 130 },
     { "module": "M91", "label": "Create PDF", "icon": "file-plus", "order": 140 },
+    { "module": "M50", "label": "Page objects", "icon": "move", "order": 145 },
     { "module": "M33", "label": "Measuring", "icon": "ruler", "order": 150 },
     { "module": "M60", "label": "Forms", "icon": "text-cursor-input", "order": 160 },
     { "module": "M90", "label": "OCR", "icon": "scan", "order": 170 },
@@ -31,6 +32,10 @@
     "app.identity.initials": "identity.initials",
     "app.identity.email": "identity.email",
     "app.identity.organisation": "identity.organisation"
+  },
+  "prefixAliases": {
+    "$comment": "A module whose schema uses namespace as a page label rather than as the first segment of its keys: M41 declares documentOps and stores combine.toNewTab, split.namePattern, scan.autoDeskew and the rest without it. One line here covers every setting that module has; an exact alias above still wins where both apply.",
+    "documentOps.": ""
   },
   "synonyms": {
     "viewer.cache.megabytes": ["tile cache", "tiles", "memory", "ram", "render cache"],

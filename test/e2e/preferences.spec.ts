@@ -17,8 +17,20 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchApp, type App } from './harness';
+import { formatShortcut } from '../../src/renderer/core/Registry';
 
 const FIXTURES = join(process.cwd(), 'test', 'fixtures');
+
+/**
+ * The app runs on the machine the test runs on, so `Mod` is Cmd on a Mac and Ctrl elsewhere —
+ * both for the chord Playwright presses and for the text the editor shows. Using the app's own
+ * formatter for the second means this file cannot drift from what the reader actually sees.
+ */
+const IS_MAC = process.platform === 'darwin';
+/** The modifier name Playwright's `keyboard.press` wants for `Mod`. */
+const MOD = IS_MAC ? 'Meta' : 'Control';
+/** A normalised binding as the shortcut editor displays it on this platform. */
+const shown = (key: string): string => formatShortcut(key, IS_MAC);
 
 let app: App;
 let scratch: string;
@@ -83,7 +95,7 @@ test.describe('the Preferences dialog', () => {
     await closePreferences();
 
     // The shortcut the manifest declares, pressed for real.
-    await app.page.keyboard.press('Control+K');
+    await app.page.keyboard.press(`${MOD}+K`);
     await expect(dialog()).toBeVisible();
     await closePreferences();
 
@@ -286,7 +298,7 @@ test.describe('the shortcut editor', () => {
     await dialog().locator('#shortcut-search').fill('Find');
     const row = dialog().locator('.shortcut-row[data-command="edit.find"]');
     await expect(row).toBeVisible();
-    await expect(row.locator('kbd')).toHaveText('Ctrl+F');
+    await expect(row.locator('kbd')).toHaveText(shown('Mod+F'));
   });
 
   test('the brief’s case: Ctrl+F becomes Ctrl+Shift+F, the conflict warns in words', async () => {
@@ -295,7 +307,7 @@ test.describe('the shortcut editor', () => {
     await dialog().locator('#shortcut-search').fill('Find');
     const row = dialog().locator('.shortcut-row[data-command="edit.find"]');
     await row.locator('button:has-text("Change")').click();
-    await app.page.keyboard.press('Control+Shift+F');
+    await app.page.keyboard.press(`${MOD}+Shift+F`);
 
     // Ctrl+Shift+F is M13's folder search, so the reader is told whose key they are taking.
     const warning = app.page.locator('.dlg-messagebox');
@@ -304,19 +316,19 @@ test.describe('the shortcut editor', () => {
     await expect(warning).toContainText('Search');
     await warning.locator('button:has-text("Use it here")').click();
 
-    await expect(row.locator('kbd')).toHaveText('Ctrl+Shift+F');
+    await expect(row.locator('kbd')).toHaveText(shown('Mod+Shift+F'));
     await expect(dialog().locator('.shortcut-status')).toContainText('now runs');
     await closePreferences();
 
     // The new key opens the find bar…
     await app.page.locator('#doc-area').click();
-    await app.page.keyboard.press('Control+Shift+F');
+    await app.page.keyboard.press(`${MOD}+Shift+F`);
     await expect(app.page.locator('#find-bar')).toBeVisible();
     await app.run('edit.findClose');
     await expect(app.page.locator('#find-bar')).toBeHidden();
 
     // …and the old one does nothing, because it was genuinely unbound.
-    await app.page.keyboard.press('Control+F');
+    await app.page.keyboard.press(`${MOD}+F`);
     await expect(app.page.locator('#find-bar')).toBeHidden();
 
     await app.run('app.tabs.closeAll');
@@ -329,7 +341,7 @@ test.describe('the shortcut editor', () => {
     await row.locator('button:has-text("Change")').click();
     await app.page.keyboard.press('Escape');
     await expect(dialog()).toBeVisible();
-    await expect(row.locator('kbd')).toHaveText('Ctrl+F');
+    await expect(row.locator('kbd')).toHaveText(shown('Mod+F'));
   });
 
   test('a rebinding survives a restart, and Reset all puts it back', async () => {
@@ -339,11 +351,11 @@ test.describe('the shortcut editor', () => {
     await openPreferences({ page: 'shortcuts' });
     await dialog().locator('#shortcut-search').fill('Find');
     await expect(dialog().locator('.shortcut-row[data-command="edit.find"] kbd')).toHaveText(
-      'Ctrl+Alt+Y',
+      shown('Mod+Alt+Y'),
     );
     await app.run('app.shortcuts.reset');
     await expect(dialog().locator('.shortcut-row[data-command="edit.find"] kbd')).toHaveText(
-      'Ctrl+F',
+      shown('Mod+F'),
     );
   });
 
@@ -375,7 +387,7 @@ test.describe('the shortcut editor', () => {
     await openPreferences({ page: 'shortcuts' });
     await dialog().locator('#shortcut-search').fill('Find');
     await expect(dialog().locator('.shortcut-row[data-command="edit.find"] kbd')).toHaveText(
-      'Ctrl+Alt+Y',
+      shown('Mod+Alt+Y'),
     );
   });
 });

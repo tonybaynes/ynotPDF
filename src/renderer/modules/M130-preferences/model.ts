@@ -24,6 +24,12 @@ export interface PreferencesConfig {
   }>;
   /** Declared key → the key the owning module's code actually reads. */
   readonly aliases: Readonly<Record<string, string>>;
+  /**
+   * Declared key *prefix* → stored prefix, for a module whose schema uses `namespace` as a page
+   * label rather than as the first segment of its keys (M41 declares `documentOps` and stores
+   * `combine.toNewTab`). One line covers every setting the module has. Absent means none.
+   */
+  readonly prefixAliases?: Readonly<Record<string, string>>;
   /** Extra search words per key. */
   readonly synonyms: Readonly<Record<string, ReadonlyArray<string>>>;
 }
@@ -39,6 +45,32 @@ export function aliasMap(cfg: PreferencesConfig = PREFERENCES_CONFIG): ReadonlyM
     out.set(from, to);
   }
   return out;
+}
+
+/** Prefix aliases, `$comment` stripped, longest prefix first so the most specific one wins. */
+export function prefixAliasMap(
+  cfg: PreferencesConfig = PREFERENCES_CONFIG,
+): ReadonlyArray<readonly [string, string]> {
+  return Object.entries(cfg.prefixAliases ?? {})
+    .filter(([from, to]) => !from.startsWith('$') && typeof to === 'string')
+    .sort((a, b) => b[0].length - a[0].length);
+}
+
+/**
+ * The key a declared key is read from and written to. An exact alias wins; then the longest
+ * matching prefix alias; otherwise the declared key is the stored key, which is the case for
+ * every module that uses `namespace` as the first segment of its keys.
+ */
+export function storageKeyFor(
+  declaredKey: string,
+  cfg: PreferencesConfig = PREFERENCES_CONFIG,
+): string {
+  const exact = aliasMap(cfg).get(declaredKey);
+  if (exact !== undefined) return exact;
+  for (const [from, to] of prefixAliasMap(cfg)) {
+    if (declaredKey.startsWith(from)) return to + declaredKey.slice(from.length);
+  }
+  return declaredKey;
 }
 
 /** One setting, as the dialog needs it. */
@@ -89,7 +121,6 @@ export function buildPages(
   manifests: ReadonlyArray<ModuleManifest>,
   cfg: PreferencesConfig = PREFERENCES_CONFIG,
 ): ReadonlyArray<PreferencesPage> {
-  const aliases = aliasMap(cfg);
   const configured = new Map(cfg.pages.map((p) => [p.module, p]));
   const pages: PreferencesPage[] = [];
   for (const manifest of manifests) {
@@ -98,7 +129,7 @@ export function buildPages(
     const rows: SettingRow[] = [];
     for (const [name, spec] of Object.entries(schema.properties)) {
       const declaredKey = `${schema.namespace}.${name}`;
-      const key = aliases.get(declaredKey) ?? declaredKey;
+      const key = storageKeyFor(declaredKey, cfg);
       rows.push({
         declaredKey,
         key,

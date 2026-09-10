@@ -306,7 +306,10 @@ is colourblind: black and red read as the same colour):**
 - **M01's schema and its storage disagree**, and the alias table is the patch, not the fix: M01
   declares `theme.scale` and `theme.nightMode` while its `ThemeManager` reads `ui.scale` and
   `view.nightMode`. Preferences writes both sides so the setting the reader changes is the one the
-  app obeys. M01 should tidy this when it is next opened; the alias line can go with it.
+  app obeys. M01 should tidy this when it is next opened; the alias line can go with it. M41 drifts the
+  other way — its schema names `documentOps` as a namespace but stores every key without it —
+  and a *prefix* alias in the same table (`documentOps.` → nothing) covers all fourteen of its
+  settings at once.
 - **i18n covers M130's own interface, and nothing else yet.** `t()` needs a literal key at the call
   site so the extractor can find it, which rules out translating another module's setting titles
   from here. Each module adopts `t()` when it is next touched; until then a switched language
@@ -356,11 +359,11 @@ is colourblind: black and red read as the same colour):**
   switch that redraws, and `--check` wired into `npm run lint` so the catalogues cannot drift.
 - **Data, not code**: `resources/preferences.json` (page order, icons, labels, key aliases, search
   synonyms), `resources/ui-fonts.json`, `resources/shortcuts/cheatsheet.json`, `resources/i18n/**`.
-- **Tests**: 7 new unit files, 189 tests (page model and search against the *real* manifests, the
+- **Tests**: 7 new unit files, 175 tests (page model and search against the *real* manifests, the
   settings contract and hub, the shortcut rules and the cheat sheet, the customisation algebra,
-  i18n and the extractor, units and fonts, the manifest and the two Registry additions) — 3008 unit
+  i18n and the extractor, units and fonts, the manifest and the two Registry additions) — 3487 unit
   tests green. `test/e2e/preferences.spec.ts` adds 34 Playwright tests covering every acceptance
-  line; 361 e2e green locally.
+  line; 407 e2e green locally.
 
 **Three real bugs the tests found, all fixed:**
 
@@ -376,6 +379,14 @@ is colourblind: black and red read as the same colour):**
   acts only on those, and the dialog re-reads the file when it opens.
 - **`view.uiScale.set` already existed** (M01's), so registering it here threw at boot. Caught by
   the manifest test that registers the whole application; M130 uses M01's command instead.
+
+**After the first CI run (M33, M41 and M50 had landed meanwhile):** macOS failed on the e2e
+spec alone — it pressed `Control+K` and asserted the text `Ctrl+F` where a Mac binds `⌘K` and
+the editor rightly shows `⌘+F`. The spec now presses `Meta` on darwin and formats expectations
+with the app's own `formatShortcut`, so it cannot drift from what the reader sees. Rebasing also
+surfaced that M41 declares its schema under `documentOps` but stores every key without that
+prefix; a data-driven *prefix alias* in `resources/preferences.json` covers all fourteen settings
+in one line, and M50 gained its page entry there.
 
 **Deferred, and why:**
 

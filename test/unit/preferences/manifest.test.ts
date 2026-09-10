@@ -37,11 +37,14 @@ const MODULE_PATHS = [
   '@modules/M30-markup-annotations/manifest',
   '@modules/M31-shapes-ink-stamps/manifest',
   '@modules/M32-comments-panel/manifest',
+  '@modules/M33-measuring-tools/manifest',
   '@modules/M40-organise-pages/manifest',
+  '@modules/M41-merge-split-crop/manifest',
   '@modules/M70-encryption/manifest',
   '@modules/M72-properties-metadata/manifest',
   '@modules/M91-create-pdf/manifest',
   '@modules/M42-portfolios/manifest',
+  '@modules/M50-object-model/manifest',
   '@modules/M130-preferences/manifest',
 ];
 
