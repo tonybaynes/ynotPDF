@@ -236,7 +236,75 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+Written before the code, kept current as it was built. Provenance is marked: **(public docs)**
+for behaviour learned from Foxit's or Adobe's published documentation as a user would,
+**(ISO 32000)** for the file format itself, **(ours)** for a choice this project made.
+
+1. **Optimising produces a file; it never rewrites the open document underneath its model.**
+   The engine owns bytes and the `Document` owns intent, and `Document.handle` is `readonly`
+   with every model page bound to an engine index — so swapping optimised bytes under a live
+   model is not something the contract allows, and faking it would cost the reader their undo
+   history without saying so. Foxit's Reduce File Size and Advanced Optimization both end in a
+   Save As **(public docs)**, so this is also what the reference does. Consequence: M100 makes no
+   document change and therefore registers no undoable `Command`. Writing over the document's own
+   path is allowed, and reloads that tab after saying in words that undo history is lost **(ours)**.
+2. **qpdf runs in the main process, reusing M70's runner** (ADR 0011): a renderer cannot host this
+   build of qpdf-wasm without dying. `QpdfTasks` (`src/engine/optimise/qpdf/tasks.ts`) is the
+   `Security`-shaped façade — structure, linearise, check, repair — and four additive
+   `optimise:*` IPC channels mirror `security:*`. ADR 0019.
+3. **Everything else is a pure function over bytes in `src/engine/optimise/`**, run in a module
+   Worker exactly as M41's ops are: no Node, no Electron, no DOM. That is what lets M120's batch
+   and M121's command line optimise a file with no window open.
+4. **Pipeline order: discard → images → fonts → duplicates → qpdf structure → linearise.**
+   Duplicates are merged *after* recompression so that two copies of one picture that arrived in
+   different encodings still merge; the qpdf pass is last because object streams and
+   unreferenced-object removal want the finished object graph **(ours)**.
+5. **The space audit is measured, not estimated.** Every indirect object is serialised once and
+   its length attributed to the category of whatever refers to it; an object several categories
+   share is split between them, and what nothing claims is "document structure". The alternative —
+   summing stream `/Length` values — misses object headers, xref entries and everything
+   uncompressed, and would not add up to the file size, which is the one thing a space audit has
+   to do **(ours)**.
+6. **The audit's chart is a donut whose slices are told apart by hatch pattern, not by colour**,
+   with the table of word, bytes and share beside it and the largest slice named on the chart
+   itself. The brief asks for a pie of bytes by category with words and values; the operator is
+   colourblind and this project forbids differentiating by colour alone, so the slices carry
+   solid / diagonal / cross / dotted / horizontal / vertical fills in `--accent` on `--bg-modal`,
+   separated by `--border-strong` **(ours)**.
+7. **Presets are data, not code:** `resources/optimise-presets.json` holds Lossless, Standard,
+   Small and Smallest; the reader's own presets are saved beside them in settings **(ours)**.
+8. **Lossless presets are provably lossless.** They touch no image sample and no font program —
+   only object streams, flate recompression, unreferenced objects and duplicate merging — so the
+   render-diff tolerance for them is exactly zero, and the acceptance test asserts zero rather
+   than "small" **(ours)**.
+9. **Mono images go to CCITT Group 4, encoded here** (~200 lines, ISO 32000 §7.4.6 / ITU-T T.6)
+   rather than by adding a dependency. **JBIG2 and JPEG 2000 encoding are out of scope** and the
+   dialog says so in words where the option would have been, instead of hiding it **(brief)**.
+10. **Font subsetting reads glyph usage from the content streams** with M50's parser (`Tf` to
+    know which font is current, `Tj`/`TJ`/`'`/`"` for the codes) and cuts the font program down
+    with fontkit. A font fontkit cannot rebuild — Type 3, a CID-keyed CFF whose charset we cannot
+    map — is **left exactly as it was** and named in the report. A silently broken font is worse
+    than a large one **(ours)**.
+11. **Unembedding refuses a font a reader might not have.** Only the Standard 14 and the
+    families metric-compatible with them (Arial, Helvetica, Times New Roman, Courier New and
+    their bold/italic variants) may be unembedded; anything else keeps its font program and the
+    reader is told why **(ISO 32000 §9.6.2.2 for the Standard 14; ours for the refusal)**.
+12. **Repair opens a repaired copy and never overwrites the original.** `qpdf --check` decides
+    whether there is anything to repair; the repair itself is a qpdf rewrite, which rebuilds the
+    cross-reference table and drops what it cannot parse. The reader is shown what qpdf said
+    before anything is written **(public docs for "repair on open"; ours for never overwriting)**.
+13. **Repair on open is one optional service lookup in M11's `ViewerService`**, mirroring the
+    `security` hook M70 already added there: when the engine refuses a file and a `repair` service
+    is registered, it is offered. Without M100 in the build nothing changes. ADR 0019.
+14. **Fast Web View on save is a save-pipeline stage** (M21's `SavePipelineStage`, ADR 0012) at
+    order 50, off by default. It **skips, with a worded warning, when another stage owns the
+    document's protection**: M70 re-encrypts by running qpdf again, and a qpdf rewrite without
+    `--linearize` is not linearised — so a file cannot come out of this pipeline both password
+    protected and linearised, and saying so is better than quietly producing one of the two **(ours)**.
+15. **The before/after preview is the real thing, on a copy.** The preview runs the whole pipeline
+    over a copy of the document's saved bytes and reports the size it actually produced, then
+    keeps those bytes so pressing Optimise does not do the work twice. Estimating would be
+    cheaper and would be wrong for exactly the files where the number matters **(ours)**.
 
 ## Build log (fill in at merge)
 
