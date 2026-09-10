@@ -26,6 +26,7 @@ import type { ObjectStyle, PageIndex, PdfMatrix, PdfPoint, PdfRect } from '@shar
 import type { AnnotationSubtype, Destination, ProgressCallback } from './PdfEngine';
 import type { AppearanceInput, AppearanceResources, AppearanceStream } from './appearance/types';
 import type { DictValue } from './appearance/dict';
+import type { DecorationDraw } from './decorations/types';
 
 /** One page of the finished document. */
 export interface PlannedPage {
@@ -76,27 +77,13 @@ export interface PlannedDecorations {
 }
 
 /**
- * One decoration drawn on one page. Structurally `DecorationDraw` from
- * `src/engine/decorations/types.ts`, restated here so `Writer.ts` keeps its place as the
- * contract every writer implements without importing a feature's own types.
+ * One decoration drawn on one page (M53, ADR 0020) — a content stream, the box it is drawn in,
+ * where it goes on the page, and the marker's own fields.
+ *
+ * The same object the live engine takes, deliberately: one drawing description with two
+ * consumers is what keeps the page on screen and the page in the file the same page.
  */
-export interface PlannedDecoration {
-  /** The marker's `Id`, stable for the life of the decoration. */
-  readonly id: string;
-  /** The marker's `Kind`. */
-  readonly kind: string;
-  readonly bbox: PdfRect;
-  readonly matrix: PdfMatrix;
-  readonly content: string;
-  readonly resources: AppearanceResources;
-  /** Under the page's own content rather than over it. */
-  readonly behind: boolean;
-  /** `/Print` and `/View` on the marked content. */
-  readonly print: boolean;
-  readonly screen: boolean;
-  /** The decoration's settings as JSON, carried in the marker so a reopened file is editable. */
-  readonly spec: string;
-}
+export type PlannedDecoration = DecorationDraw;
 
 /** One page-object edit, in the terms of `src/engine/content/edit.ts` (M50, ADR 0018). */
 export type PlannedObjectEdit =

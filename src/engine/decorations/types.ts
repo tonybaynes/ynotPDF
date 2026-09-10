@@ -170,15 +170,6 @@ export interface WatermarkSpec {
 /** Every decoration spec. Discriminated by `kind`, which is also the marker's `Kind`. */
 export type DecorationSpec = HeaderFooterSpec | BatesSpec | WatermarkSpec;
 
-/** A decoration in the model: a spec, the pages it is on, and an id that outlives the session. */
-export interface Decoration {
-  readonly id: string;
-  readonly kind: DecorationKind;
-  /** The page range as the reader typed it (M40's dialect). Empty means every page. */
-  readonly range: string;
-  readonly spec: DecorationSpec;
-}
-
 /**
  * One finished piece of content for one page.
  *

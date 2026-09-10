@@ -183,6 +183,23 @@ export function asPlannedXObject(value: unknown): PlannedXObject | null {
         width: r['width'],
         height: r['height'],
       };
+    // One page of another PDF: a watermark or a background made from a file (M53, ADR 0020 §4).
+    case 'pdf':
+      if (
+        typeof r['data'] !== 'string' ||
+        typeof r['page'] !== 'number' ||
+        typeof r['width'] !== 'number' ||
+        typeof r['height'] !== 'number'
+      ) {
+        return null;
+      }
+      return {
+        kind: 'pdf',
+        data: r['data'],
+        page: r['page'],
+        width: r['width'],
+        height: r['height'],
+      };
     default:
       return null;
   }

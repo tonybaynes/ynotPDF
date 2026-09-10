@@ -13,7 +13,15 @@
  * document; no colour literals here (theme/ owns colours).
  */
 
-export const LAYER_NAMES = ['raster', 'text', 'annot', 'widget', 'object', 'tool'] as const;
+export const LAYER_NAMES = [
+  'raster',
+  'text',
+  'annot',
+  'link',
+  'widget',
+  'object',
+  'tool',
+] as const;
 export type LayerName = (typeof LAYER_NAMES)[number];
 
 export interface PageLayers {
@@ -21,6 +29,7 @@ export interface PageLayers {
   readonly raster: HTMLCanvasElement;
   readonly text: HTMLDivElement;
   readonly annot: SVGSVGElement;
+  readonly link: SVGSVGElement;
   readonly widget: HTMLDivElement;
   readonly object: SVGSVGElement;
   readonly tool: HTMLDivElement;
@@ -34,10 +43,11 @@ export function createPageLayers(root: HTMLElement): PageLayers {
   const raster = document.createElement('canvas');
   const text = document.createElement('div');
   const annot = document.createElementNS(SVG_NS, 'svg');
+  const link = document.createElementNS(SVG_NS, 'svg');
   const widget = document.createElement('div');
   const object = document.createElementNS(SVG_NS, 'svg');
   const tool = document.createElement('div');
-  const all: Record<LayerName, Element> = { raster, text, annot, widget, object, tool };
+  const all: Record<LayerName, Element> = { raster, text, annot, link, widget, object, tool };
   for (const name of LAYER_NAMES) {
     const el = all[name];
     el.classList.add('layer', `layer-${name}`);
@@ -45,7 +55,7 @@ export function createPageLayers(root: HTMLElement): PageLayers {
     root.append(el);
   }
   text.setAttribute('aria-hidden', 'true');
-  return { root, raster, text, annot, widget, object, tool };
+  return { root, raster, text, annot, link, widget, object, tool };
 }
 
 /**
@@ -58,7 +68,7 @@ export function createPageLayers(root: HTMLElement): PageLayers {
 export function resizeLayers(layers: PageLayers, widthPx: number, heightPx: number): void {
   layers.root.style.width = `${widthPx}px`;
   layers.root.style.height = `${heightPx}px`;
-  for (const svg of [layers.annot, layers.object]) {
+  for (const svg of [layers.annot, layers.link, layers.object]) {
     svg.setAttribute('viewBox', `0 0 ${widthPx} ${heightPx}`);
     svg.setAttribute('width', String(widthPx));
     svg.setAttribute('height', String(heightPx));
