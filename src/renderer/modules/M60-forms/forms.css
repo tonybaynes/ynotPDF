@@ -16,10 +16,34 @@
 
 /* ---- the widget layer ---------------------------------------------------------------------- */
 
-.viewer-content .page .layer-widget[data-mode='fill'],
+/*
+ * In fill mode the widget layer sits **above** the tool layer.
+ *
+ * The layer stack puts the tool layer on top, which is right for every tool that draws on the
+ * page — and wrong for a form, because the tool layer would swallow the click meant for the
+ * field underneath it and a reader could never get a caret into one. Raising the layer fixes
+ * that without costing the tools anything: the layer itself never takes a pointer event, only
+ * the field boxes on it do, so a click anywhere but on a field still reaches the active tool and
+ * the hand still pans the page.
+ */
+.viewer-content .page .layer-widget[data-mode='fill'] {
+  pointer-events: none;
+  overflow: visible;
+  z-index: 1;
+}
+
+/*
+ * In design mode the tool layer wins instead: `FormController` owns the pointer there, because a
+ * drag has to keep producing coordinates after it leaves the page it began on. Nothing on the
+ * widget layer takes an event, so a field is dragged rather than typed into.
+ */
 .viewer-content .page .layer-widget[data-mode='design'] {
   pointer-events: none;
   overflow: visible;
+}
+
+.viewer-content .page .layer-widget[data-mode='design'] .form-widget {
+  pointer-events: none;
 }
 
 .viewer-content .page .layer-widget .form-chrome {
@@ -132,14 +156,10 @@
   outline-style: dotted;
 }
 
-/* Design mode: the controls are scenery, the box is the thing you grab. */
+/* Design mode: the controls are scenery, the box on the tool layer is the thing you grab. */
 .viewer-content .page .layer-widget[data-mode='design'] .form-control {
   pointer-events: none;
   user-select: none;
-}
-
-.viewer-content .page .layer-widget[data-mode='design'] .form-widget {
-  cursor: move;
 }
 
 .viewer-content .page .layer-widget .form-widget.hovered {

@@ -213,10 +213,10 @@ export class FormService {
     if (!viewer || !document) return null;
     const layer = new FormLayer({
       onInput: (key, value) => {
-        this.previewValue(key, value);
+        this.typed(key, value);
       },
       onCommit: (key, value) => {
-        void this.commitValue(key, value);
+        void this.commitValue(key, value, true);
       },
       onFocus: (key) => {
         this.focusWidget(key);
@@ -430,18 +430,30 @@ export class FormService {
 
   // ---- filling ------------------------------------------------------------------------------
 
-  /** Shows a value as it is typed, without committing it to the undo stack yet. */
-  private previewValue(key: string, value: string): void {
+  /**
+   * A keystroke.
+   *
+   * The control itself is showing what was typed — it is a real `<input>` — so nothing is written
+   * to the model here. Two things do happen: a **word boundary commits**, which is what makes
+   * undo step back a word at a time rather than emptying the whole field, and a field that is now
+   * full hands the keyboard on when auto-tab is set.
+   */
+  private typed(key: string, value: string): void {
     const found = this.resolve(key);
     if (!found) return;
-    const { document, field } = found;
-    if (field.value === value) return;
-    document.setFieldValueRecord(field.id, value);
+    const design = fieldDesignOf(found.field);
     const settings = this.settingsValue;
-    const design = fieldDesignOf(field);
-    if (settings.autoTab && design.maxLength !== null && design.maxLength > 0) {
-      if (Array.from(value).length >= design.maxLength) this.focusNext(false);
+    const full =
+      design.maxLength !== null &&
+      design.maxLength > 0 &&
+      Array.from(value).length >= design.maxLength;
+    if (settings.autoTab && full) {
+      void this.commitValue(key, value).then(() => {
+        this.focusNext(false);
+      });
+      return;
     }
+    if (/\s$/.test(value)) void this.commitValue(key, value, true);
   }
 
   /**
@@ -450,23 +462,38 @@ export class FormService {
    * A field the file already had goes through M20's `SetFieldValueCommand`, which pushes the
    * value into PDFium so the engine's own bytes carry it; a field this session designed has no
    * engine counterpart, so it takes `FormValueCommand` and reaches the file through the rebuild.
+   * Both merge, so a word typed into a field is one undo step; `breakAfter` ends that step, which
+   * is how a space makes undo word-wise.
    */
-  async commitValue(key: string, value: string): Promise<void> {
+  async commitValue(key: string, value: string, breakAfter = false): Promise<void> {
     const found = this.resolve(key);
     if (!found) return;
     const { document, field } = found;
     const design = fieldDesignOf(field);
     if (!isFillable(design)) return;
-    // The model may already be showing the typed value from `previewValue`; the command needs the
-    // value that was there before the reader touched it, so it is undone to that.
-    const engineHasIt = document.state.fields.some((f) => f.id === field.id && !f.synthetic);
-    if (field.value === value && engineHasIt) return;
+    /*
+     * The model is the guard once a commit has settled, and `committing` is the guard while one
+     * is in flight. Both are needed: a control raises `change` and then `blur` with the same
+     * value, and without the second guard the blur would start its own command before the
+     * change's had reached the model — landing an undo step that undoes to the value it is
+     * already at, which reads to the reader as an undo that did nothing.
+     */
+    if ((this.committing.get(field.id) ?? field.value) === value) return;
     const command = this.isDesigned(document, field)
       ? new FormValueCommand(document, field.id, value)
       : new SetFieldValueCommand(document, field.id, value);
-    await document.apply(command);
+    this.committing.set(field.id, value);
+    try {
+      await document.apply(command);
+    } finally {
+      this.committing.delete(field.id);
+    }
+    if (breakAfter) document.breakMerge();
     this.refreshAll();
   }
+
+  /** Values whose command is in flight, by field id. See `commitValue`. */
+  private readonly committing = new Map<string, string>();
 
   /** Sets a check box or radio to an export value (or `"Off"`). */
   async setChecked(key: string, on: boolean): Promise<void> {

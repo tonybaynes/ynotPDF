@@ -2541,14 +2541,35 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
             break;
           case FORMFIELD.COMBOBOX:
           case FORMFIELD.LISTBOX: {
-            const index = this.optionIndex(d, annot, value);
-            if (index >= 0) {
-              this.ffi.call('FORM_SetIndexSelected', d.form, loaded.page, index, 1);
-            } else if (type === FORMFIELD.COMBOBOX) {
-              // An editable combo box accepts free text; a list box does not.
-              this.replaceText(d, loaded.page, value);
-            } else {
-              throw new EngineError('invalid-argument', `${fieldName} has no option "${value}"`);
+            /*
+             * The value *replaces* the selection rather than adding to it.
+             * `FORM_SetIndexSelected` only ever turns one option on, so setting a list box that
+             * already had a choice used to leave both selected and report the older one back
+             * (M60). A multi-select list is passed as newline-separated values, which is how the
+             * model carries one.
+             */
+            const wanted = value === '' ? [] : value.split('\n').filter((v) => v !== '');
+            const count = this.ffi.call('FPDFAnnot_GetOptionCount', d.form, annot);
+            const indexes = wanted.map((v) => this.optionIndex(d, annot, v));
+            const unknown = wanted.filter((_v, i) => (indexes[i] ?? -1) < 0);
+            if (unknown.length > 0) {
+              if (type === FORMFIELD.COMBOBOX) {
+                // An editable combo box accepts free text; a list box does not.
+                this.replaceText(d, loaded.page, value);
+                break;
+              }
+              throw new EngineError(
+                'invalid-argument',
+                `${fieldName} has no option "${unknown[0] ?? ''}"`,
+              );
+            }
+            const chosen = new Set(indexes);
+            for (let i = 0; i < count; i++) {
+              const on = chosen.has(i);
+              if ((this.ffi.call('FORM_IsIndexSelected', d.form, loaded.page, i) !== 0) === on) {
+                continue;
+              }
+              this.ffi.call('FORM_SetIndexSelected', d.form, loaded.page, i, on ? 1 : 0);
             }
             break;
           }

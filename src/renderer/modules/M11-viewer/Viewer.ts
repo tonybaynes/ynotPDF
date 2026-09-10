@@ -9,6 +9,7 @@
  */
 
 import type { Document } from '@core/Document';
+import { isTypingTarget } from '@app/shortcuts';
 import { pageSizeOf } from '@core/model';
 import type { PageSize, Rotation } from '@shared/pdf';
 import type { ToolSpec } from '@shared/module';
@@ -558,6 +559,13 @@ export class Viewer {
 
     const onKey = (event: KeyboardEvent): void => {
       if (event.defaultPrevented) return;
+      /*
+       * Space and the page keys scroll the view — unless the focus is in something being typed
+       * into. Nothing focusable lived inside the scroller until M60 put real form controls there,
+       * and a Space that pages the document instead of typing a space is not a form (ADR 0019).
+       * The same test the shortcut manager uses, for the same reason.
+       */
+      if (isTypingTarget(event.target)) return;
       const tool = this.activeTool();
       if (tool?.onKeyDown?.(event)) {
         event.preventDefault();
