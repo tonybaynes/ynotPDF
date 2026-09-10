@@ -433,7 +433,9 @@ The point of the module, and the reason the diff touches product code at all.
 
 ### Shape of the work
 
-- `test/e2e/layout.ts` — four assertions, each naming the element and both numbers.
+- `test/e2e/layout.ts` — four assertions, each naming the element and both numbers, and
+  `test/e2e/layout-helpers.spec.ts`, which gives each of them the fault it exists for and checks
+  what it says. A check that never fires is worth nothing.
 - `test/e2e/journey.ts` — the helpers, each hit-testing before it clicks.
 - `test/e2e/journeys/` — 22 journeys over the 22 merged modules, plus `coverage.spec.ts`.
 - `test/e2e/startup.spec.ts` — 11 tests: a fresh profile with no demo module, a document on the
