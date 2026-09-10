@@ -50,17 +50,26 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
   const bounds = saved ?? DEFAULT_BOUNDS;
   const cascade =
     options.parent && !options.parent.isDestroyed() ? options.parent.getBounds() : null;
+  // A test run must not take over the machine. Playwright drives the renderer over the debug
+  // protocol, not through real OS input, so a test window needs no screen at all: it is parked
+  // off every display, made transparent, kept out of the taskbar, and shown *inactive* so it
+  // never steals the keyboard from whatever the operator is doing on whichever desktop they are
+  // on (2026-09-10). Set YNOT_E2E_VISIBLE=1 to watch a run instead.
+  const hidden = options.e2e && process.env['YNOT_E2E_VISIBLE'] !== '1';
   const win = new BrowserWindow({
     width: cascade?.width ?? bounds.width,
     height: cascade?.height ?? bounds.height,
-    ...(cascade
-      ? { x: cascade.x + 40, y: cascade.y + 40 }
-      : saved
-        ? { x: bounds.x, y: bounds.y }
-        : {}),
+    ...(hidden
+      ? { x: -32_000, y: -32_000 }
+      : cascade
+        ? { x: cascade.x + 40, y: cascade.y + 40 }
+        : saved
+          ? { x: bounds.x, y: bounds.y }
+          : {}),
     minWidth: 720,
     minHeight: 480,
     show: false,
+    skipTaskbar: hidden,
     title: 'ynotPDF',
     // There is no application menu off macOS (see main/menu.ts): the ribbon's tab row is the
     // only tab row. `true` keeps Alt from summoning a menu bar that should not exist.
@@ -80,6 +89,14 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
   if (options.settings && !options.parent) rememberWindowBounds(win, options.settings);
 
   win.once('ready-to-show', () => {
+    if (hidden) {
+      // Transparent as well as off-screen: a display the operator plugs in later must not
+      // suddenly show a test window. `showInactive` keeps the DOM focusable without taking the
+      // OS focus, which the focus-order tests still need.
+      win.setOpacity(0);
+      win.showInactive();
+      return;
+    }
     win.show();
   });
   // Unsaved work: the renderer is the only place that knows about it and the only place that can

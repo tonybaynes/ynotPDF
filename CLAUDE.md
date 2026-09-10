@@ -48,3 +48,6 @@ Pixabay. Never BY-SA / NC / ND, never Freepik/Flaticon/Vecteezy. Each item goes 
 Never open, read, extract or decompile files from an installed Foxit/Adobe/Tungsten product —
 learn their behaviour as a user only. Design decisions in each brief record where behaviour
 came from (public docs, ISO 32000, our own choice): that is the provenance record.
+
+**E2E windows are invisible** (off-screen, transparent, inactive) so a run never interrupts the
+operator's machine. `YNOT_E2E_VISIBLE=1` shows them when you need to watch one.

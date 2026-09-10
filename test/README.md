@@ -10,3 +10,19 @@
 - `e2e/` — Playwright driving the built Electron app through `harness.ts`
   (`launchApp()` → `run(commandId, args)`). Every module's UI test goes through this.
 - `fixtures/` — synthetic PDF corpus; see its README. The only place `.pdf` files may live.
+
+## Running the suite while you work
+
+E2E windows are **invisible by default**: parked off every display, transparent, kept out of the
+taskbar, and shown inactive, so a run never steals the keyboard or follows you between virtual
+desktops. Playwright drives the renderer over the debug protocol rather than real OS input, so
+nothing is lost — screenshots, focus order and pointer journeys all still work.
+
+To watch a run (debugging a journey, say):
+
+```bash
+YNOT_E2E_VISIBLE=1 npx playwright test test/e2e/<spec>.spec.ts
+```
+
+On Windows PowerShell: `$env:YNOT_E2E_VISIBLE=1; npx playwright test …` — and clear it after with
+`Remove-Item Env:YNOT_E2E_VISIBLE`.
