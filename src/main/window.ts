@@ -81,7 +81,13 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
       nodeIntegration: false,
       webSecurity: true,
       spellcheck: false,
-      additionalArguments: options.e2e ? ['--ynot-e2e'] : [],
+      // `--ynot-e2e-no-demo` leaves the demo module out so a run takes the real startup path
+      // (M04): the panel a fresh profile opens is then M12's, not the demo's.
+      additionalArguments: options.e2e
+        ? process.env['YNOT_E2E_NO_DEMO'] === '1'
+          ? ['--ynot-e2e', '--ynot-e2e-no-demo']
+          : ['--ynot-e2e']
+        : [],
     },
   });
   windows.add(win);
