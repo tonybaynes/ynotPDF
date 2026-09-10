@@ -185,6 +185,9 @@ export async function mountShell(root: HTMLElement, options: ShellOptions): Prom
   const docHost = el('div.doc-host', { id: 'doc-host' });
   docArea.append(docHost);
   const emptyState = mountEmptyState(docArea, services);
+  // `documents.subscribe` does not fire on subscription, so seed the host's visibility here:
+  // left visible with nothing open it still claims `flex: 1` and eats half the document area.
+  docHost.hidden = documents.tabs.length === 0;
   toasts.mount(docArea);
   const propertiesPane = mountPropertiesPane(root, services);
   const statusBar = mountStatusBar(root, services);

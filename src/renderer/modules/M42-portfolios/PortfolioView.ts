@@ -16,6 +16,7 @@
 import { el, button as domButton } from '@app/dom';
 import { icon } from '@app/icons';
 import type { ServiceContext } from '@shared/module';
+import type { ShellServices } from '@app/services';
 import {
   childFolders,
   columnValue,
@@ -107,6 +108,9 @@ export function mountPortfolioView(
 ): PortfolioViewHandle {
   const disposers: Array<() => void> = [];
   const thumbnails = new TileThumbnails(service);
+  const shell = ctx.service<ShellServices>('shellServices');
+  /** What the shell wants for the page host when this view is not using it. */
+  const shellWantsPageHostHidden = (): boolean => shell.documents.tabs.length === 0;
 
   const tabs = el('div.pf-tabs', { role: 'tablist', 'aria-label': 'Portfolio' });
   const filesTab = tabButton('Files', 'files', 'files');
@@ -146,8 +150,10 @@ export function mountPortfolioView(
     const showing = portfolio !== null;
     const pane = service.state.pane;
     host.hidden = !showing;
-    // The viewer keeps the area for the cover sheet; the grid takes it for the files.
-    pageHost.hidden = showing && pane === 'files';
+    // The viewer keeps the area for the cover sheet; the grid takes it for the files. With no
+    // portfolio showing the host is not ours to reveal — the shell hides it while nothing is
+    // open, and forcing it visible here left a dead black band above the start page (2026-09-10).
+    pageHost.hidden = showing ? pane === 'files' : shellWantsPageHostHidden();
     body.hidden = pane !== 'files';
     for (const tab of [filesTab, coverTab]) {
       const on = tab.dataset['pane'] === pane;
@@ -561,7 +567,7 @@ export function mountPortfolioView(
     dispose: () => {
       for (const d of disposers.splice(0)) d();
       host.remove();
-      pageHost.hidden = false;
+      pageHost.hidden = shellWantsPageHostHidden();
     },
   };
 }

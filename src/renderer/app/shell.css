@@ -274,7 +274,9 @@ mark {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* `safe` matters: with plain `center`, content taller than the box overflows equally at both
+     ends and the top half can never be scrolled to — it just slides under the top edge. */
+  justify-content: safe center;
   padding: var(--sp-6);
   color: var(--fg);
   overflow: auto;

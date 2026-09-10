@@ -21,6 +21,18 @@ test('launches to the empty shell', async () => {
   // Shortcut hints are rendered per platform, never as the raw "Mod" token.
   const hint = await app.page.locator('#empty-state kbd').first().textContent();
   expect(hint).toMatch(/^(Ctrl|⌘)\+O$/);
+  // The empty document host must not be laid out with nothing open: visible it claims `flex: 1`
+  // and pushes the tiles into the bottom half behind a dead black band (2026-09-10).
+  await expect(app.page.locator('#doc-host')).toBeHidden();
+  // …and the tiles must start at the top of the document area, not be centre-clipped above it.
+  const clippedAbove = await app.page.evaluate(() => {
+    const state = document.querySelector('#empty-state');
+    const first = document.querySelector('#empty-state .empty-title');
+    if (!state || !first) return null;
+    return first.getBoundingClientRect().top - state.getBoundingClientRect().top;
+  });
+  expect(clippedAbove).not.toBeNull();
+  expect(clippedAbove).toBeGreaterThanOrEqual(0);
 });
 
 test('registers the core commands', async () => {
