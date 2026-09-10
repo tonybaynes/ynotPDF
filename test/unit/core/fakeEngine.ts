@@ -40,8 +40,19 @@ import {
   type SignatureSummary,
   type TextRun,
   type Link,
+  type ObjectPath,
+  type PageContent,
 } from '@engine/PdfEngine';
-import type { PageBoxes, PageIndex, PageSize, PdfRect, Rotation } from '@shared/pdf';
+import type {
+  ObjectStyle,
+  PageBoxes,
+  PageIndex,
+  PageSize,
+  PdfMatrix,
+  PdfRect,
+  Rotation,
+} from '@shared/pdf';
+import { applyToRect, invert, multiply } from '@engine/content/matrix';
 
 /** Which mutations the fake claims to support. Anything false raises `NotImplementedError`. */
 export interface FakeSupport {
@@ -110,6 +121,8 @@ export interface FakeDocumentSpec {
   readonly height?: number;
   readonly labels?: ReadonlyArray<string>;
   readonly annotations?: Readonly<Record<number, ReadonlyArray<Omit<Annotation, 'id' | 'page'>>>>;
+  /** Page objects by page, in z-order (M50). */
+  readonly objects?: Readonly<Record<number, ReadonlyArray<Omit<PageObject, 'index'>>>>;
   readonly fields?: ReadonlyArray<FormField>;
   readonly outline?: ReadonlyArray<OutlineItem>;
   readonly layers?: ReadonlyArray<Layer>;
@@ -176,7 +189,7 @@ export class FakeEngine implements PdfEngine {
         cropBox: box(width, height),
         label: spec.labels?.[i] ?? String(i + 1),
         annotations: list.map((a, j) => ({ ...a, id: `a${i}.${j}`, page: i })),
-        objects: [],
+        objects: (spec.objects?.[i] ?? []).map((o, j) => ({ ...o, index: j })),
       });
     }
     const handle = this.next++ as DocHandle;
@@ -614,6 +627,160 @@ export class FakeEngine implements PdfEngine {
     d.attachments = d.attachments.filter((a) => a.id !== attachmentId);
     renumberAttachments(d);
     return Promise.resolve();
+  }
+
+  // ---- page objects (M50, ADR 0018) --------------------------------------------------------------
+
+  private readonly objectStash = new Map<number, PageObject>();
+  private nextToken = 1;
+
+  private reindex(p: FakePage): void {
+    p.objects = p.objects.map((o, i) => ({ ...o, index: i }));
+  }
+
+  /** A synthetic stream whose scan agrees with the object kinds, for the writer's guard. */
+  pageContent(doc: DocHandle, page: PageIndex): Promise<PageContent> {
+    this.note('pageContent');
+    const ops = this.page(doc, page).objects.map((o) => {
+      switch (o.kind) {
+        case 'text':
+          return 'BT /F1 12 Tf (x) Tj ET';
+        case 'path':
+          return '0 0 m 1 1 l S';
+        case 'shading':
+          return '/Sh sh';
+        default:
+          return '/X Do';
+      }
+    });
+    return Promise.resolve({ content: new TextEncoder().encode(ops.join('\n')), resources: '' });
+  }
+
+  transformObject(doc: DocHandle, page: PageIndex, index: number, delta: PdfMatrix): Promise<void> {
+    this.note('transformObject');
+    const p = this.page(doc, page);
+    const o = p.objects[index];
+    if (!o) return Promise.reject(new EngineError('invalid-argument', `no object ${index}`));
+    p.objects[index] = {
+      ...o,
+      matrix: multiply(o.matrix, delta),
+      rect: applyToRect(delta, o.rect),
+    };
+    return Promise.resolve();
+  }
+
+  setObjectMatrix(
+    doc: DocHandle,
+    page: PageIndex,
+    index: number,
+    matrix: PdfMatrix,
+  ): Promise<void> {
+    const o = this.page(doc, page).objects[index];
+    const inverse = o ? invert(o.matrix) : null;
+    if (!o || !inverse) {
+      return Promise.reject(new EngineError('invalid-argument', `no invertible object ${index}`));
+    }
+    return this.transformObject(doc, page, index, multiply(inverse, matrix));
+  }
+
+  removeObject(doc: DocHandle, page: PageIndex, index: number): Promise<number> {
+    this.note('removeObject');
+    const p = this.page(doc, page);
+    const [o] = p.objects.splice(index, 1);
+    if (!o) return Promise.reject(new EngineError('invalid-argument', `no object ${index}`));
+    this.reindex(p);
+    const token = this.nextToken++;
+    this.objectStash.set(token, o);
+    return Promise.resolve(token);
+  }
+
+  restoreObject(doc: DocHandle, page: PageIndex, token: number, at: number): Promise<void> {
+    this.note('restoreObject');
+    const o = this.objectStash.get(token);
+    if (!o) return Promise.reject(new EngineError('invalid-argument', `no stashed ${token}`));
+    const p = this.page(doc, page);
+    p.objects.splice(Math.min(at, p.objects.length), 0, o);
+    this.objectStash.delete(token);
+    this.reindex(p);
+    return Promise.resolve();
+  }
+
+  insertObject(
+    doc: DocHandle,
+    page: PageIndex,
+    source: { readonly pdf: Uint8Array; readonly matrix: PdfMatrix },
+    at?: number,
+  ): Promise<number> {
+    this.note('insertObject');
+    if (source.pdf.length < 4) {
+      return Promise.reject(new EngineError('invalid-argument', 'not a PDF'));
+    }
+    const p = this.page(doc, page);
+    const object: PageObject = {
+      index: 0,
+      kind: 'form',
+      rect: applyToRect(source.matrix, { x0: 0, y0: 0, x1: 100, y1: 100 }),
+      matrix: source.matrix,
+    };
+    const index = at ?? p.objects.length;
+    p.objects.splice(index, 0, object);
+    this.reindex(p);
+    return Promise.resolve(index);
+  }
+
+  reorderObjects(doc: DocHandle, page: PageIndex, order: ReadonlyArray<number>): Promise<void> {
+    this.note('reorderObjects');
+    const p = this.page(doc, page);
+    if (order.length !== p.objects.length || new Set(order).size !== order.length) {
+      return Promise.reject(new EngineError('invalid-argument', 'not a permutation'));
+    }
+    p.objects = order.map((i) => p.objects[i]).filter((o): o is PageObject => o !== undefined);
+    this.reindex(p);
+    return Promise.resolve();
+  }
+
+  objectAsPdf(doc: DocHandle, page: PageIndex, index: number): Promise<Uint8Array> {
+    this.note('objectAsPdf');
+    const o = this.page(doc, page).objects[index];
+    if (!o) return Promise.reject(new EngineError('invalid-argument', `no object ${index}`));
+    return Promise.resolve(new Uint8Array([0x25, 0x50, 0x44, 0x46, page, index]));
+  }
+
+  setObjectStyle(
+    doc: DocHandle,
+    page: PageIndex,
+    index: number,
+    style: ObjectStyle,
+  ): Promise<void> {
+    this.note('setObjectStyle');
+    const p = this.page(doc, page);
+    const o = p.objects[index];
+    if (!o) return Promise.reject(new EngineError('invalid-argument', `no object ${index}`));
+    p.objects[index] = {
+      ...o,
+      ...(style.fillColor !== undefined ? { fillColor: style.fillColor } : {}),
+      ...(style.strokeColor !== undefined ? { strokeColor: style.strokeColor } : {}),
+      ...(style.strokeWidth !== undefined ? { strokeWidth: style.strokeWidth } : {}),
+    };
+    return Promise.resolve();
+  }
+
+  objectPath(doc: DocHandle, page: PageIndex, index: number): Promise<ObjectPath> {
+    const o = this.page(doc, page).objects[index];
+    if (o?.kind !== 'path') {
+      return Promise.reject(new EngineError('invalid-argument', `object ${index} is not a path`));
+    }
+    const r = o.rect;
+    return Promise.resolve({
+      points: [
+        { x: r.x0, y: r.y0, type: 'move', close: false },
+        { x: r.x1, y: r.y0, type: 'line', close: false },
+        { x: r.x1, y: r.y1, type: 'line', close: false },
+        { x: r.x0, y: r.y1, type: 'line', close: true },
+      ],
+      fill: o.fillColor !== undefined,
+      stroke: o.strokeColor !== undefined,
+    });
   }
 
   save(doc: DocHandle): Promise<Uint8Array> {

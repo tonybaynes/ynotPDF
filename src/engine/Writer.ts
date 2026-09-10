@@ -22,7 +22,7 @@
  * pipeline.
  */
 
-import type { PageIndex, PdfPoint, PdfRect } from '@shared/pdf';
+import type { ObjectStyle, PageIndex, PdfMatrix, PdfPoint, PdfRect } from '@shared/pdf';
 import type { AnnotationSubtype, Destination, ProgressCallback } from './PdfEngine';
 import type { AppearanceInput, AppearanceResources } from './appearance/types';
 import type { DictValue } from './appearance/dict';
@@ -40,6 +40,54 @@ export interface PlannedPage {
   readonly boxes?: PlannedBoxes;
   /** Annotations on this page that need something the engine could not do. */
   readonly annotations?: ReadonlyArray<PlannedAnnotation>;
+  /**
+   * Page-object edits to replay onto the page's *original* content stream (M50, ADR 0018),
+   * replacing the one the engine regenerated. Absent for a page whose objects were reordered —
+   * that page keeps what PDFium wrote.
+   */
+  readonly objects?: PlannedObjects;
+}
+
+/** One page-object edit, in the terms of `src/engine/content/edit.ts` (M50, ADR 0018). */
+export type PlannedObjectEdit =
+  | {
+      readonly kind: 'transform';
+      /** Index in the original object list. */
+      readonly index: number;
+      /** The composed page-space delta. */
+      readonly matrix: PdfMatrix;
+    }
+  | { readonly kind: 'remove'; readonly index: number }
+  | {
+      /** A path's stroke and fill properties, as set in the properties panel. */
+      readonly kind: 'style';
+      readonly index: number;
+      readonly style: ObjectStyle;
+    }
+  | {
+      /** A pasted or duplicated object: a base64 one-page PDF (`PdfEngine.objectAsPdf`). */
+      readonly kind: 'insert';
+      readonly pdf: string;
+      readonly matrix: PdfMatrix;
+    };
+
+/**
+ * A page's object edits with what the applier needs to trust them (M50, ADR 0018): the content
+ * stream as it was before the first edit, PDFium's object kinds for it (checked against the
+ * applier's own scan, so an index can never land on the wrong object) and the page-space matrix
+ * of every text object as first read, which is what repositions a `Tj` exactly.
+ */
+export interface PlannedObjects {
+  /** Base64 of the original decoded content stream. */
+  readonly original: string;
+  /**
+   * The original `/Resources` in PDF syntax (`PdfEngine.pageContent`), put back beside the
+   * stream because PDFium's regeneration renamed every resource; `''` leaves them alone.
+   */
+  readonly resources: string;
+  readonly kinds: ReadonlyArray<string>;
+  readonly textMatrices: Readonly<Record<string, PdfMatrix>>;
+  readonly edits: ReadonlyArray<PlannedObjectEdit>;
 }
 
 export interface PlannedBoxes {
@@ -457,6 +505,7 @@ export const WRITE_PHASES = [
   'attachments',
   'portfolio',
   'annotations',
+  'objects',
   'fields',
   'serialise',
 ] as const;

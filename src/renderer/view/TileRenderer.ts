@@ -338,6 +338,33 @@ export class TileRenderer {
   }
 
   /** Drops every cached tile and pending render for a document (a tab closed). */
+  /**
+   * Drops every tile of one page of a document (M50): what an object edit needs, so the other
+   * pages repaint from cache rather than asking the engine again.
+   */
+  forgetPage(docKey: string, page: number): void {
+    const prefix = `${docKey}|${page}|`;
+    for (const [id, handle] of [...this.inFlight]) {
+      if (id.startsWith(prefix)) {
+        handle.cancel();
+        this.inFlight.delete(id);
+      }
+    }
+    for (const [viewport, wanted] of this.wantedBy) {
+      for (const [id, item] of wanted) {
+        if (item.request.docKey === docKey && item.request.page === page) wanted.delete(id);
+      }
+      if (wanted.size === 0) this.wantedBy.delete(viewport);
+    }
+    this.queue = this.queue.filter(
+      (q) => !(q.request.docKey === docKey && q.request.page === page),
+    );
+    this.cache.deleteWhere((key) => key.startsWith(prefix));
+    for (const key of [...this.imageRects.keys()]) {
+      if (key.startsWith(prefix)) this.imageRects.delete(key);
+    }
+  }
+
   forget(docKey: string): void {
     for (const [id, handle] of [...this.inFlight]) {
       if (id.startsWith(`${docKey}|`)) {

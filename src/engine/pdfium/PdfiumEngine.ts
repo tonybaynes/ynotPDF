@@ -47,7 +47,10 @@ import {
   type Metadata,
   type NamedDestination,
   type NewAnnotation,
+  type ObjectPath,
+  type ObjectStyle,
   type OpenOptions,
+  type PageContent,
   type OutlineItem,
   type PageObject,
   type PageObjectKind,
@@ -92,6 +95,21 @@ import {
   subtypeValue,
   writeAnnotation,
 } from './mutations';
+import { readPageContent } from '../content/pdf';
+import {
+  createObjectStash,
+  destroyObjectStash,
+  insertFromPdf,
+  objectAsPdf as objectAsPdfFrom,
+  removeObject as removePageObject,
+  reorderObjects as reorderPageObjects,
+  restoreObject as restorePageObject,
+  setObjectMatrix as setPageObjectMatrix,
+  transformObject as transformPageObject,
+  setObjectStyle as setPageObjectStyle,
+  readObjectPath,
+  type ObjectStash,
+} from './objects';
 import { FontRegistry, type SubstitutionTable } from './fonts';
 import { readRawInfo, type RawInfo } from './rawdoc';
 import { addFunction, instantiatePdfium, removeFunction } from './wasm';
@@ -169,6 +187,8 @@ interface OpenDoc {
    * that lives on the *loaded* page — so it is re-applied every time a page is loaded.
    */
   hiddenLayerNames: Set<string>;
+  /** Removed page objects waiting for an undo (M50, ADR 0018). */
+  readonly objectStash: ObjectStash;
 }
 
 /** Engines that can abort the request currently executing (used by the worker on `cancel`). */
@@ -443,6 +463,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       raw: null,
       mutated: false,
       hiddenLayerNames: new Set(),
+      objectStash: createObjectStash(),
     });
     return handle;
   }
@@ -475,6 +496,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         // There are no bytes to re-read, so every raw pass must serialise what is here now.
         mutated: true,
         hiddenLayerNames: new Set(),
+        objectStash: createObjectStash(),
       });
       return handle;
     });
@@ -491,6 +513,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
     if (!d) throw new EngineError('invalid-handle', `document handle ${handle} is not open`);
     for (const p of d.pages.values()) this.unloadPage(d, p);
     d.pages.clear();
+    destroyObjectStash(this.ffi, d.objectStash);
     if (d.form !== 0) this.ffi.call('FPDFDOC_ExitFormFillEnvironment', d.form);
     this.ffi.call('FPDF_CloseDocument', d.doc);
     this.ffi.free(d.formInfo);
@@ -2621,8 +2644,150 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
     });
   }
 
+  // ---- page objects (M50, ADR 0018) ------------------------------------------------------------
+
+  async pageContent(doc: DocHandle, page: PageIndex): Promise<PageContent> {
+    const d = this.doc(doc);
+    const count = this.ffi.call('FPDF_GetPageCount', d.doc);
+    if (!Number.isInteger(page) || page < 0 || page >= count) {
+      throw new EngineError('invalid-page', `page ${page} is out of range (0..${count - 1})`);
+    }
+    // The bytes as opened are only right while nothing has changed; an encrypted file has to be
+    // copied without its security or pdf-lib cannot decode the streams (as `rawInfo` does).
+    const bytes =
+      d.mutated || d.encrypted ? this.saveCopy(d, d.encrypted ? SAVE.REMOVE_SECURITY : 0) : d.bytes;
+    const content = await readPageContent(bytes, page);
+    if (!content) throw new EngineError('invalid-page', `page ${page} has no content stream`);
+    return content;
+  }
+
+  transformObject(doc: DocHandle, page: PageIndex, index: number, delta: PdfMatrix): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      const p = this.beforeObjectEdit(d, page);
+      transformPageObject(this.ffi, p.page, index, delta);
+      this.afterObjectEdit(d);
+    });
+  }
+
+  setObjectMatrix(
+    doc: DocHandle,
+    page: PageIndex,
+    index: number,
+    matrix: PdfMatrix,
+  ): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      const p = this.beforeObjectEdit(d, page);
+      setPageObjectMatrix(this.ffi, p.page, index, matrix);
+      this.afterObjectEdit(d);
+    });
+  }
+
+  removeObject(doc: DocHandle, page: PageIndex, index: number): Promise<number> {
+    return run(() => {
+      const d = this.doc(doc);
+      const p = this.beforeObjectEdit(d, page);
+      const token = removePageObject(this.ffi, p.page, index, d.objectStash);
+      this.afterObjectEdit(d);
+      return token;
+    });
+  }
+
+  restoreObject(doc: DocHandle, page: PageIndex, token: number, at: number): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      const p = this.beforeObjectEdit(d, page);
+      restorePageObject(this.ffi, p.page, d.objectStash, token, at);
+      this.afterObjectEdit(d);
+    });
+  }
+
+  insertObject(
+    doc: DocHandle,
+    page: PageIndex,
+    source: { readonly pdf: Uint8Array; readonly matrix: PdfMatrix },
+    at?: number,
+  ): Promise<number> {
+    return run(() => {
+      const d = this.doc(doc);
+      const p = this.beforeObjectEdit(d, page);
+      const index = insertFromPdf(this.ffi, d.doc, p.page, source.pdf, source.matrix, at);
+      this.afterObjectEdit(d);
+      return index;
+    });
+  }
+
+  reorderObjects(doc: DocHandle, page: PageIndex, order: ReadonlyArray<number>): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      const p = this.beforeObjectEdit(d, page);
+      reorderPageObjects(this.ffi, p.page, order);
+      this.afterObjectEdit(d);
+    });
+  }
+
+  objectAsPdf(doc: DocHandle, page: PageIndex, index: number): Promise<Uint8Array> {
+    return run(() => {
+      const d = this.doc(doc);
+      const count = this.ffi.call('FPDF_GetPageCount', d.doc);
+      if (!Number.isInteger(page) || page < 0 || page >= count) {
+        throw new EngineError('invalid-page', `page ${page} is out of range (0..${count - 1})`);
+      }
+      return objectAsPdfFrom(this.ffi, d.doc, page, index, (ptr) => this.saveDocPtr(ptr, 0));
+    });
+  }
+
+  setObjectStyle(
+    doc: DocHandle,
+    page: PageIndex,
+    index: number,
+    style: ObjectStyle,
+  ): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      const p = this.beforeObjectEdit(d, page);
+      setPageObjectStyle(this.ffi, p.page, index, style);
+      this.afterObjectEdit(d);
+    });
+  }
+
+  objectPath(doc: DocHandle, page: PageIndex, index: number): Promise<ObjectPath> {
+    return run(() => {
+      const d = this.doc(doc);
+      const p = this.loadPage(d, page);
+      return readObjectPath(this.ffi, p.page, index);
+    });
+  }
+
+  /**
+   * Loads the page for an object edit and drops what the edit will make stale: the text page
+   * (which points at the objects about to move) and the handle → index map. The page itself
+   * stays loaded — every edit regenerates the content stream, so a later reload sees the same
+   * thing.
+   */
+  private beforeObjectEdit(d: OpenDoc, page: PageIndex): LoadedPage {
+    const p = this.loadPage(d, page);
+    if (p.textPage !== 0) {
+      this.ffi.call('FPDFText_ClosePage', p.textPage);
+      p.textPage = 0;
+    }
+    p.objectIndex = null;
+    return p;
+  }
+
+  private afterObjectEdit(d: OpenDoc): void {
+    d.raw = null;
+    d.mutated = true;
+  }
+
   /** `FPDF_SaveAsCopy` through a `FPDF_FILEWRITE` callback (possible thanks to the table patch). */
   private saveCopy(d: OpenDoc, flags: number): Uint8Array {
+    return this.saveDocPtr(d.doc, flags);
+  }
+
+  /** The same, for a document PDFium holds that is not one of ours (a scratch document). */
+  private saveDocPtr(docPtr: number, flags: number): Uint8Array {
     const ffi = this.ffi;
     const chunks: Uint8Array[] = [];
     let total = 0;
@@ -2639,7 +2804,7 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
     try {
       ffi.setI32(fw, 1, 0);
       ffi.setI32(fw, write, 1);
-      const ok = ffi.call('FPDF_SaveAsCopy', d.doc, fw, flags);
+      const ok = ffi.call('FPDF_SaveAsCopy', docPtr, fw, flags);
       if (!ok) throw new EngineError('internal', 'PDFium could not serialise the document');
     } finally {
       ffi.free(fw);

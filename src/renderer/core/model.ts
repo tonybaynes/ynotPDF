@@ -628,6 +628,12 @@ export type WriteIntent =
    * the reader did not replace.
    */
   | 'portfolio'
+  /**
+   * Page objects were moved, resized, deleted, restyled or pasted (M50, ADR 0018). The engine
+   * took every edit for the live page; the writer replays them onto the original content stream
+   * so operators PDFium does not model survive the save.
+   */
+  | 'page-objects'
   | 'custom';
 
 /** Everything a module may hang off the document, one namespace per module id. */

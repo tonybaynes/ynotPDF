@@ -54,6 +54,7 @@ import {
   type Writer,
 } from '../Writer';
 import { writePortfolio } from './portfolio';
+import { writePageObjects } from './objects';
 import { defaultAppearanceService, type AppearanceService } from '../appearance';
 import { pageLabelNums } from '../pageLabels';
 import { num } from '../appearance/content';
@@ -227,6 +228,32 @@ export class FullRewriteWriter implements Writer {
         await state.checkpoint();
       }
       state.applied('annotations');
+    }
+
+    // ---- page objects (M50, ADR 0018) ---------------------------------------------------------
+    // The original content stream with the session's edits replayed, in place of the one the
+    // engine regenerated, so operators PDFium does not model survive the save.
+    const withObjects = plan.pages
+      .map((p, i) => ({ page: p, ref: finalPages.refs[i], number: i + 1 }))
+      .filter((entry) => entry.page.objects !== undefined);
+    if (withObjects.length > 0) {
+      state.phase('objects', 0);
+      let done = 0;
+      let written = false;
+      for (const { page, ref, number } of withObjects) {
+        if (ref && page.objects) {
+          const ok = await writePageObjects(doc, ref, page.objects, number, {
+            warn: (m) => {
+              state.warn(m);
+            },
+          });
+          written = written || ok;
+        }
+        done++;
+        state.phase('objects', done / withObjects.length);
+        await state.checkpoint();
+      }
+      if (written) state.applied('objects');
     }
 
     // ---- fields -------------------------------------------------------------------------------
