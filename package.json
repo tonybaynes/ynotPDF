@@ -43,6 +43,7 @@
   "dependencies": {
     "@hyzyla/pdfium": "2.1.13",
     "@neslinesli93/qpdf-wasm": "^0.3.0",
+    "bwip-js": "^4.11.4",
     "chokidar": "^4.0.3",
     "electron-store": "^11.0.2",
     "fast-xml-parser": "^5.11.1",

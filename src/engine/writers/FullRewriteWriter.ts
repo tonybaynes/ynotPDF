@@ -54,6 +54,8 @@ import {
   type Writer,
 } from '../Writer';
 import { writePortfolio } from './portfolio';
+import { writeForm } from './forms';
+import { daFontKey } from '../forms/da';
 import { writePageObjects } from './objects';
 import { defaultAppearanceService, type AppearanceService } from '../appearance';
 import { pageLabelNums } from '../pageLabels';
@@ -254,6 +256,33 @@ export class FullRewriteWriter implements Writer {
         await state.checkpoint();
       }
       if (written) state.applied('objects');
+    }
+
+    // ---- the designed form (M60, ADR 0019) ----------------------------------------------------
+    // The whole AcroForm, rebuilt from the plan: PDFium cannot create a widget annotation, so a
+    // form the designer touched is written here or not at all.
+    if (plan.form) {
+      state.phase('form', 0);
+      const usedFonts: AppearanceResources['fonts'][] = [];
+      const wrote = writeForm(doc, plan.form, pageRefAt, {
+        warn: (m) => {
+          state.warn(m);
+        },
+        attach: (dict, stream, formState) => {
+          attachAppearance(ctx, dict, stream, xobjects, formState);
+          state.countAppearance();
+        },
+        xobject: (key) => xobjects.get(key),
+        fonts: (stream) => {
+          usedFonts.push(stream.resources.fonts);
+        },
+      });
+      if (wrote) {
+        writeDefaultResources(doc, usedFonts);
+        state.applied('form');
+      }
+      state.phase('form', 1);
+      await state.checkpoint();
     }
 
     // ---- fields -------------------------------------------------------------------------------
@@ -1853,12 +1882,19 @@ function resourcesDict(
   return resources;
 }
 
-/** Writes a generated stream as the annotation's `/AP /N`. */
+/**
+ * Writes a generated stream as the annotation's `/AP /N`.
+ *
+ * `state` makes `/AP /N` a *dictionary of states* rather than one stream, which is what a check
+ * box and a radio need: `/N << /Yes 12 0 R /Off 13 0 R >>` with `/AS` naming the one showing
+ * (M60, ADR 0019). Without it the single-stream form is written and any stale `/AS` is removed.
+ */
 function attachAppearance(
   ctx: PDFContext,
   dict: PDFDict,
   stream: AppearanceStream,
   xobjects: EmbeddedXObjects,
+  state?: string,
 ): void {
   const resources = resourcesDict(ctx, stream.resources, xobjects);
   const bbox = stream.bbox;
@@ -1871,11 +1907,20 @@ function attachAppearance(
   form.dict.set(PDFName.of('Matrix'), ctx.obj([...(stream.matrix ?? [1, 0, 0, 1, 0, 0])]));
   form.dict.set(PDFName.of('Resources'), resources);
 
-  const ap = ctx.obj({});
-  ap.set(PDFName.of('N'), ctx.register(form));
+  const formRef = ctx.register(form);
+  const existing = dict.lookupMaybe(PDFName.of('AP'), PDFDict);
+  const ap = state !== undefined && existing ? existing : ctx.obj({});
+  if (state === undefined) {
+    ap.set(PDFName.of('N'), formRef);
+    dict.set(PDFName.of('AP'), ap);
+    // An `/AS` naming a state that our single `/N` stream does not have would hide the appearance.
+    dict.delete(PDFName.of('AS'));
+    return;
+  }
+  const normal = ap.lookupMaybe(PDFName.of('N'), PDFDict) ?? ctx.obj({});
+  normal.set(PDFName.of(state), formRef);
+  ap.set(PDFName.of('N'), normal);
   dict.set(PDFName.of('AP'), ap);
-  // An `/AS` naming a state that our single `/N` stream does not have would hide the appearance.
-  dict.delete(PDFName.of('AS'));
 }
 
 /**
@@ -1959,6 +2004,37 @@ function writeFieldValues(
     }
   }
   if (cleared) acroForm.set(PDFName.of('NeedAppearances'), ctx.obj(true));
+}
+
+/**
+ * Puts the fonts our appearance streams used into `/AcroForm /DR /Font`.
+ *
+ * A field's `/DA` names a font by a resource key (`/Helv`), and the key is looked up in the
+ * form's default resources rather than in the widget's own. Our streams carry their own
+ * `/Resources`, so they draw correctly whatever `/DR` says — but an editor that *re-generates* an
+ * appearance (Acrobat with `/NeedAppearances`, or a reader typing into the form) reads `/DR`, and
+ * a `/DA` naming a key that is not there falls back to Helvetica. So the fonts go in both places.
+ */
+function writeDefaultResources(
+  doc: PDFDocument,
+  used: ReadonlyArray<AppearanceResources['fonts']>,
+): void {
+  const ctx = doc.context;
+  const acro = doc.catalog.lookupMaybe(PDFName.of('AcroForm'), PDFDict);
+  if (!acro) return;
+  const wanted = new Map<string, AppearanceFont>();
+  for (const fonts of used) {
+    for (const font of Object.values(fonts)) wanted.set(daFontKey(font), font);
+  }
+  if (wanted.size === 0) return;
+  const dr = acro.lookupMaybe(PDFName.of('DR'), PDFDict) ?? ctx.obj({});
+  const fontDicts = dr.lookupMaybe(PDFName.of('Font'), PDFDict) ?? ctx.obj({});
+  for (const [key, font] of wanted) {
+    if (fontDicts.get(PDFName.of(key)) !== undefined) continue;
+    fontDicts.set(PDFName.of(key), ctx.register(fontDict(ctx, font)));
+  }
+  dr.set(PDFName.of('Font'), fontDicts);
+  acro.set(PDFName.of('DR'), dr);
 }
 
 function dropWidgetAppearances(ctx: PDFContext, field: PDFDict): void {

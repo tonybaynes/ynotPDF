@@ -14,6 +14,11 @@
  */
 
 import type {
+  FieldDesign as FieldDesignOf,
+  FormFieldType as FormFieldTypeOf,
+  WidgetAppearance as WidgetAppearanceOf,
+} from './forms/model';
+import type {
   ObjectStyle,
   PageBoxes,
   PageIndex,
@@ -266,15 +271,33 @@ export interface Annotation {
 /** Input for creating an annotation: everything except the engine-assigned id. */
 export type NewAnnotation = Omit<Annotation, 'id'>;
 
-/** AcroForm field types (PDF 12.7.4). */
-export type FormFieldType =
-  'text' | 'checkbox' | 'radio' | 'combobox' | 'listbox' | 'button' | 'signature' | 'unknown';
+/**
+ * AcroForm field types (PDF 12.7.4).
+ *
+ * Declared by `engine/forms/model.ts` since M60 (ADR 0019) and re-exported here, where every
+ * existing caller expects it: the same list has to be the engine's reading, the model's storage
+ * and the write plan's vocabulary, and one declaration is how they stay the same list.
+ */
+export type { FormFieldType, FieldDesign, WidgetAppearance } from './forms/model';
+
+/** One on-page appearance of a field. */
+export interface FormWidget {
+  readonly page: PageIndex;
+  readonly rect: PdfRect;
+  /**
+   * Position in the page's `/Annots`, so the widget can be found again in the file (M60,
+   * ADR 0019). Absent from a backend that cannot say.
+   */
+  readonly index?: number;
+  /** `/MK`, `/BS`, `/AS`, `/H` and `/F` for this one appearance (M60, ADR 0019). */
+  readonly appearance?: WidgetAppearanceOf;
+}
 
 /** A form field with its widget(s). */
 export interface FormField {
   /** Fully qualified field name (`/T` chain joined with dots). */
   readonly name: string;
-  readonly type: FormFieldType;
+  readonly type: FormFieldTypeOf;
   /** Current value (`/V`) as text; checkbox/radio use the export value or `"Off"`. */
   readonly value: string;
   readonly defaultValue?: string;
@@ -283,9 +306,15 @@ export interface FormField {
   /** Choice options for combobox/listbox. */
   readonly options?: ReadonlyArray<{ readonly value: string; readonly label: string }>;
   /** Widget rectangles, one per appearance on a page. */
-  readonly widgets: ReadonlyArray<{ readonly page: PageIndex; readonly rect: PdfRect }>;
+  readonly widgets: ReadonlyArray<FormWidget>;
   /** Tooltip (`/TU`). */
   readonly tooltip?: string;
+  /**
+   * Everything a designer edits about the field (M60, ADR 0019): `/Ff` in full, `/DA`, `/Q`,
+   * `/MaxLen`, `/Opt` with its export values, `/TI` and `/AA`. Absent from a backend that reads
+   * only what PDFium's form API exposes.
+   */
+  readonly design?: FieldDesignOf;
 }
 
 /** A destination inside the document (PDF 12.3.2). */

@@ -24,7 +24,7 @@
 
 import type { ObjectStyle, PageIndex, PdfMatrix, PdfPoint, PdfRect } from '@shared/pdf';
 import type { AnnotationSubtype, Destination, ProgressCallback } from './PdfEngine';
-import type { AppearanceInput, AppearanceResources } from './appearance/types';
+import type { AppearanceInput, AppearanceResources, AppearanceStream } from './appearance/types';
 import type { DictValue } from './appearance/dict';
 
 /** One page of the finished document. */
@@ -170,6 +170,117 @@ export interface PlannedField {
   /** Fully qualified field name (`/T` chain joined with dots). */
   readonly name: string;
   readonly value: string | null;
+}
+
+// ---- the designed form (M60, ADR 0019) ---------------------------------------------------------
+
+/**
+ * The whole AcroForm, as data.
+ *
+ * Non-null only when the session changed a form's *structure* — added, deleted, renamed, moved or
+ * restyled a field. {@link WritePlan.fields} is unchanged and still covers the common case of a
+ * reader typing into a form and saving; this is the designer's path, and when it is present the
+ * writer detaches every `Widget` annotation from every page, empties `/AcroForm /Fields` and
+ * writes the plan instead. That is only safe because the plan is built from the model's field
+ * list, which came from the engine's read of every field in the file.
+ */
+export interface PlannedForm {
+  readonly fields: ReadonlyArray<PlannedFormField>;
+  /** `/Tabs` per page index; `null` leaves the page's own value alone. */
+  readonly tabs: ReadonlyArray<PlannedTabOrder | null>;
+  /** `/AcroForm /DA` — the document-wide default appearance. */
+  readonly defaultAppearance: string | null;
+  /** `/AcroForm /Q`. */
+  readonly quadding: number | null;
+}
+
+/** `/Tabs`: `R` by row, `C` by column, `S` by structure. Manual order is `/Annots` order. */
+export type PlannedTabOrder = 'row' | 'column' | 'structure' | 'manual';
+
+/** One field of a planned form, named by its fully-qualified `/T` chain. */
+export interface PlannedFormField {
+  /** Dotted, fully qualified. The writer builds the `/Kids` hierarchy from it. */
+  readonly name: string;
+  /** `/FT`. */
+  readonly type: PlannedFieldType;
+  /** `/Ff`. */
+  readonly flags: number;
+  /** `/V`, or null for a field with no value. */
+  readonly value: string | null;
+  /** `/DV`. */
+  readonly defaultValue: string | null;
+  /** `/TU`. */
+  readonly tooltip: string | null;
+  /** `/DA`. */
+  readonly defaultAppearance: string | null;
+  /** `/Q`. */
+  readonly align: number | null;
+  /** `/MaxLen`. */
+  readonly maxLength: number | null;
+  /** `/TI`. */
+  readonly topIndex: number | null;
+  /** `/Opt`, as `[export, label]` pairs. */
+  readonly options: ReadonlyArray<{ readonly value: string; readonly label: string }>;
+  /** `/AA` entries by trigger key. */
+  readonly actions: ReadonlyArray<PlannedFieldAction>;
+  /** Private dictionary entries (`/YNOTRole`, `/YNOTBarcode`), which is how a role survives. */
+  readonly entries?: Readonly<Record<string, DictValue | null>>;
+  /**
+   * Keep the `/V` object the base file has for this field rather than writing `value`. Set for a
+   * signature field that already holds a signature, whose `/V` is a dictionary we cannot rebuild.
+   */
+  readonly keepValue?: boolean;
+  readonly widgets: ReadonlyArray<PlannedFormWidget>;
+}
+
+export type PlannedFieldType = 'Tx' | 'Btn' | 'Ch' | 'Sig';
+
+export interface PlannedFieldAction {
+  /** The `/AA` key: `K`, `F`, `V`, `C`, `U`, `D`, `E`, `X`, `Fo`, `Bl`. */
+  readonly trigger: string;
+  /** `/S`. */
+  readonly type: string;
+  readonly value: string;
+}
+
+/** One widget annotation of a planned field. Its position in the list is its tab position. */
+export interface PlannedFormWidget {
+  /** Index into {@link WritePlan.pages}. */
+  readonly page: number;
+  readonly rect: PdfRect;
+  /** `/F`, the annotation flag bit field. */
+  readonly flags: number;
+  /** `/MK /BC`, `0xRRGGBB`, or null for no border colour. */
+  readonly borderColor: number | null;
+  /** `/MK /BG`. */
+  readonly fillColor: number | null;
+  /** `/BS /W` and `/BS /S`. */
+  readonly borderWidth: number;
+  readonly borderStyle: 'solid' | 'dashed' | 'beveled' | 'inset' | 'underline';
+  readonly dashArray: ReadonlyArray<number>;
+  /** `/MK /R`. */
+  readonly rotation: number;
+  /** `/MK /CA`, `/RC`, `/AC` — the captions, or the check glyph for a check box. */
+  readonly caption: string | null;
+  readonly rolloverCaption: string | null;
+  readonly downCaption: string | null;
+  /** `/MK /TP`. */
+  readonly layout: number;
+  /** `WritePlan.xobjects` key of `/MK /I`. */
+  readonly iconKey: string | null;
+  /** `/H`. */
+  readonly highlight: 'none' | 'invert' | 'outline' | 'push';
+  /**
+   * `/AS` and the `/AP /N` sub-key this widget turns the field to. Only meaningful for a check
+   * box or radio, where `/AP /N` is a dictionary of states rather than one stream.
+   */
+  readonly exportValue: string;
+  /** True when this widget is the one currently on, for a check box or radio. */
+  readonly on: boolean;
+  /** The appearance to write, already generated. */
+  readonly appearance: AppearanceStream | null;
+  /** The `/Off` appearance of a check box or radio. */
+  readonly offAppearance?: AppearanceStream | null;
 }
 
 /**
@@ -445,6 +556,12 @@ export interface WritePlan {
    * `/Names /EmbeddedFiles` from it and leaves everything else alone.
    */
   readonly portfolio: PlannedPortfolio | null;
+
+  /**
+   * The whole AcroForm, rebuilt (M60, ADR 0019). Non-null only when this session designed a
+   * form; a save that only filled one in uses {@link WritePlan.fields} as it always did.
+   */
+  readonly form?: PlannedForm | null;
 }
 
 /** An empty plan over `pageCount` pages: a straight re-serialisation. */
@@ -478,6 +595,7 @@ export function planIsEmpty(plan: WritePlan): boolean {
     plan.fields === null &&
     plan.attachments === null &&
     plan.portfolio === null &&
+    (plan.form ?? null) === null &&
     plan.pages.every((p) => p.boxes === undefined && (p.annotations?.length ?? 0) === 0)
   );
 }
@@ -506,6 +624,7 @@ export const WRITE_PHASES = [
   'portfolio',
   'annotations',
   'objects',
+  'form',
   'fields',
   'serialise',
 ] as const;
