@@ -16,6 +16,13 @@ export default defineConfig({
   test: {
     include: ['test/unit/**/*.test.ts'],
     environment: 'node',
+    /*
+     * Vitest hands back an empty string for a CSS import unless CSS processing is on — including
+     * for `?raw`, which is how M92 loads the stylesheet every exported HTML file carries
+     * (`resources/export/html.css`). With this off, that export ships a `<style>` block with
+     * nothing in it and no test could tell.
+     */
+    css: true,
     testTimeout: 30_000,
     coverage: {
       provider: 'v8',
@@ -35,6 +42,10 @@ export default defineConfig({
         'src/engine/create/**/*.ts',
         // M41's document operations: pure over bytes and over pixels, so all of them are gated.
         'src/engine/ops/**/*.ts',
+        // M92's exporters and codecs: pure over pixels, text models and bytes, so all of them
+        // are gated. `codecs/installBuffer.ts` is the exception below — it is one assignment
+        // that only matters in a browser.
+        'src/engine/export/**/*.ts',
         // M32's exchange and summary halves: both pure over text, bytes and sizes.
         'src/engine/xfdf/**/*.ts',
         'src/engine/summary/**/*.ts',
@@ -143,6 +154,22 @@ export default defineConfig({
         'src/renderer/modules/M91-create-pdf/open.ts',
         'src/renderer/modules/M91-create-pdf/rasterDecoder.ts',
         'src/renderer/modules/M91-create-pdf/create.worker.ts',
+        /*
+         * M92's DOM and shell half, for the same reason again: `ExportService` orchestrates the
+         * engine, the export Worker, the progress dialog and the file dialogs; `dialogs.ts` *is*
+         * the five option dialogs; `manifest.ts` is the contribution points; and
+         * `export.worker.ts` is a Worker entry. All are proved by Playwright in
+         * `test/e2e/export.spec.ts` — which is where "a folder really has three PNGs of the
+         * right size in it" belongs — and everything they are built out of is pure and gated
+         * above (`src/engine/export/**`) and below. `ExportClient` is gated: its two paths are
+         * what a unit test can drive through a fake port.
+         */
+        'src/renderer/modules/M92-export/ExportService.ts',
+        'src/renderer/modules/M92-export/dialogs.ts',
+        'src/renderer/modules/M92-export/manifest.ts',
+        'src/renderer/modules/M92-export/export.worker.ts',
+        // One assignment, and only in a browser: Node already has `Buffer`.
+        'src/engine/export/codecs/installBuffer.ts',
         /*
          * M30's DOM and shell half, for the same reason again: the annotation layer's painting,
          * the pointer/keyboard controller, the inline editor, the popup note, the properties panel
@@ -606,6 +633,31 @@ export default defineConfig({
           lines: 75,
           functions: 80,
           statements: 75,
+        },
+        // M92. The four writers decide what an exported file *says*, byte for byte, so they are
+        // held as high as M21's writer; the colour pipeline and the naming decide what the reader
+        // gets and what it is called, so they are higher still.
+        'src/engine/export/codecs/png.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/export/codecs/tiff.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/export/codecs/bmp.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/export/codecs/jpeg.ts': { lines: 85, functions: 95, statements: 75 },
+        'src/engine/export/pixels.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/export/naming.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/export/images.ts': { lines: 85, functions: 75, statements: 85 },
+        'src/engine/export/embedded.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/export/text.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/engine/export/html.ts': { lines: 90, functions: 85, statements: 90 },
+        'src/engine/export/rtf.ts': { lines: 88, functions: 85, statements: 85 },
+        'src/engine/export/textModel.ts': { lines: 95, functions: 95, statements: 95 },
+        'src/renderer/modules/M92-export/ExportClient.ts': {
+          lines: 78,
+          functions: 75,
+          statements: 75,
+        },
+        'src/renderer/modules/M92-export/settings.ts': {
+          lines: 90,
+          functions: 85,
+          statements: 90,
         },
         // M32. The exchange formats decide what a reviewer sends and receives, so the readers,
         // the writers and the value conversions under them are held high; the summary layout

@@ -78,8 +78,15 @@ function destinationOf(args: CommandArgs): Destination {
   };
 }
 
-/** True when the caller gave enough to run without a dialog (a test, a batch, a shortcut). */
+/**
+ * True when the caller gave enough to run without a dialog (a test, a batch, a command line).
+ *
+ * Naming a destination is the usual way of saying "you have everything, get on with it", and
+ * `ask: false` says it outright. An explicit `ask: true` overrides both: it means "put the files
+ * *there*, but let me choose the rest", which is what a test of the dialog needs.
+ */
 function headless(args: CommandArgs): boolean {
+  if (args['ask'] === true) return false;
   return args['ask'] === false || args['directory'] !== undefined || args['path'] !== undefined;
 }
 

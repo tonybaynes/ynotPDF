@@ -11,7 +11,13 @@ modal dialog is open, so typing "z" into the page number does not switch tools. 
 live everywhere are marked **global**.
 
 Started by M11 (viewer); each later module adds its own rows. M21 added Save and Save As, M12 the
-navigation panels, M13 selection, copy, find, search and printing, and M30 the comment tools.
+navigation panels, M13 selection, copy, find, search and printing, M30 the comment tools, and
+M92 the export.
+
+The other four exports — all images, text, HTML and RTF — have no key of their own: they are on the
+Convert tab's **Export** menu and in the command palette as `convert.exportAllImages`,
+`convert.exportText`, `convert.exportHtml` and `convert.exportRtf`. Every one of them can be
+rebound in Preferences.
 
 ## Files and windows
 
@@ -26,6 +32,7 @@ navigation panels, M13 selection, copy, find, search and printing, and M30 the c
 | `Mod+Shift+N`                      | `app.window.new`       | New window                          |
 | `Mod+Tab` / `Ctrl+Tab`             | `app.tabs.next`        | Next document tab (**global**)      |
 | `Mod+Shift+Tab` / `Ctrl+Shift+Tab` | `app.tabs.previous`    | Previous document tab (**global**)  |
+| `Mod+Shift+E`                      | `convert.exportImages` | Export pages as images…             |
 | `Mod+Q`                            | `app.quit`             | Quit                                |
 | `F12`                              | `app.devTools`         | Developer tools                     |
 

@@ -72,6 +72,7 @@ import {
   ANNOT_FLAG,
   ANNOT_SUBTYPES,
   BITMAP,
+  COLORSPACE,
   DEST_VIEW,
   FIELDFLAG,
   FONT_FLAG,
@@ -1711,6 +1712,8 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         height: ffi.u32(m, 1),
         dpiX: ffi.f32(m, 2),
         dpiY: ffi.f32(m, 3),
+        bitsPerPixel: ffi.u32(m, 4),
+        colorSpace: ffi.i32(m, 5),
       };
     });
     if (!meta || meta.width <= 0 || meta.height <= 0) return null;
@@ -1753,6 +1756,30 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         };
       }
     }
+    // The stream's own samples, at the image's own resolution — the picture that is *in* the
+    // file. Only for the sample layouts that need no colour conversion; anything else falls
+    // through to the rendered bitmap below.
+    const stored = this.storedPixels(
+      obj,
+      meta.width,
+      meta.height,
+      meta.bitsPerPixel,
+      meta.colorSpace,
+    );
+    if (stored) {
+      return {
+        page: p.index,
+        index,
+        width: meta.width,
+        height: meta.height,
+        rect,
+        dpiX: dpiOf(meta.dpiX, meta.width, rect.x1 - rect.x0),
+        dpiY: dpiOf(meta.dpiY, meta.height, rect.y1 - rect.y0),
+        filters,
+        encoding: 'rgba',
+        data: stored,
+      };
+    }
     const decoded = this.renderedImage(d, p, obj);
     if (!decoded) return null;
     return {
@@ -1767,6 +1794,67 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       encoding: 'rgba',
       data: decoded.rgba,
     };
+  }
+
+  /**
+   * The image stream's own samples as RGBA, at the image's **stored** size (M92, ADR 0019).
+   *
+   * `FPDFImageObj_GetImageDataDecoded` undoes the byte filters (Flate, LZW, RunLength) and hands
+   * back the samples as the file stores them. Only three layouts are taken here — 24-bit
+   * DeviceRGB, 8-bit DeviceGray and 1-bit DeviceGray — because those need no colour conversion
+   * and are what the overwhelming majority of Flate-compressed images in real PDFs are. Anything
+   * else (CMYK, Indexed, ICCBased, Separation) returns `null` and the caller falls back to
+   * PDFium's rendered bitmap.
+   *
+   * The `/SMask` is deliberately **not** applied here. This is the picture the document stores;
+   * the transparency a page applies when it draws that picture is a property of the drawing, and
+   * "export all images" is asked for the picture. It is also what makes the same logo drawn on
+   * two hundred pages come out as two hundred identical byte strings, which is what lets the
+   * exporter write it once.
+   */
+  private storedPixels(
+    obj: number,
+    width: number,
+    height: number,
+    bitsPerPixel: number,
+    colorSpace: number,
+  ): Uint8Array | null {
+    const ffi = this.ffi;
+    if (!ffi.has('FPDFImageObj_GetImageDataDecoded')) return null;
+    const rgb = bitsPerPixel === 24 && colorSpace === COLORSPACE.DEVICERGB;
+    const grey8 = bitsPerPixel === 8 && colorSpace === COLORSPACE.DEVICEGRAY;
+    const grey1 = bitsPerPixel === 1 && colorSpace === COLORSPACE.DEVICEGRAY;
+    if (!rgb && !grey8 && !grey1) return null;
+    // PDF pads every row to a whole number of bytes (ISO 32000-1, 8.9.5.1).
+    const stride = Math.ceil((width * bitsPerPixel) / 8);
+    if (stride * height > 512 * 1024 * 1024) return null;
+    const samples = ffi.bytesCall((buf, len) =>
+      ffi.call('FPDFImageObj_GetImageDataDecoded', obj, buf, len),
+    );
+    if (samples.byteLength < stride * height) return null;
+    const rgba = new Uint8Array(width * height * 4);
+    for (let y = 0; y < height; y++) {
+      const row = y * stride;
+      for (let x = 0; x < width; x++) {
+        const at = (y * width + x) * 4;
+        if (rgb) {
+          rgba[at] = samples[row + x * 3] ?? 0;
+          rgba[at + 1] = samples[row + x * 3 + 1] ?? 0;
+          rgba[at + 2] = samples[row + x * 3 + 2] ?? 0;
+        } else {
+          const value = grey8
+            ? (samples[row + x] ?? 0)
+            : ((samples[row + (x >> 3)] ?? 0) >> (7 - (x & 7))) & 1
+              ? 255
+              : 0;
+          rgba[at] = value;
+          rgba[at + 1] = value;
+          rgba[at + 2] = value;
+        }
+        rgba[at + 3] = 255;
+      }
+    }
+    return rgba;
   }
 
   /** The stream's filter chain as PDF names, outermost last. */

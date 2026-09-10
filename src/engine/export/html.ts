@@ -23,6 +23,7 @@
  * ceiling on how much of that a file will carry, and a warning when it is reached.
  */
 
+import exportStylesheet from '../../../resources/export/html.css?raw';
 import { checkCancelled, type ExportContext, type ExportedFile, type ExportResult } from './types';
 import { lineText, styleAt, type ExportPage, type PageTextLike, type TextRect } from './textModel';
 
@@ -74,57 +75,9 @@ export function fontStack(fontName: string): string {
   return base === '' ? generic : `"${base}", ${generic}`;
 }
 
-const STYLESHEET = `:root {
-  --page-bg: #ffffff;
-  --page-edge: #b0b0b8;
-  --paper-ground: #6e6e78;
-  --ink: #101014;
-  --muted: #4a4a52;
-  --page-gap: 24px;
-}
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  background: var(--paper-ground);
-  color: var(--ink);
-  font-family: Georgia, "Times New Roman", serif;
-  line-height: 1.4;
-}
-.doc { padding: var(--page-gap) 0; }
-.page {
-  position: relative;
-  margin: 0 auto var(--page-gap);
-  background: var(--page-bg);
-  border: 1px solid var(--page-edge);
-  overflow: hidden;
-}
-.page-flow {
-  max-width: 46rem;
-  padding: 3rem 3.5rem;
-  border: 1px solid var(--page-edge);
-}
-.line { position: absolute; white-space: pre; transform-origin: 0 0; }
-.pic { position: absolute; }
-.pic img { width: 100%; height: 100%; display: block; }
-.page-label {
-  max-width: 46rem;
-  margin: 0 auto 0.5rem;
-  color: var(--muted);
-  font: 600 0.8rem/1.4 system-ui, sans-serif;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-p { margin: 0 0 0.8em; }
-@media print {
-  body { background: var(--page-bg); }
-  .page { border: 0; margin: 0; page-break-after: always; }
-  .page-label { display: none; }
-}
-`;
-
 /** The `<style>` block an exported file carries. Exported so a test can assert on it. */
 export function stylesheet(): string {
-  return STYLESHEET;
+  return exportStylesheet;
 }
 
 interface Budget {
@@ -247,7 +200,7 @@ export function htmlDocument(title: string, body: string): string {
     <meta name="generator" content="ynotPDF" />
     <title>${escapeHtml(title)}</title>
     <style>
-${STYLESHEET}    </style>
+${exportStylesheet}    </style>
   </head>
   <body>
     <div class="doc">
