@@ -19,6 +19,32 @@ import { broadcast, createMainWindow, getMainWindow, sendTo } from './window';
 import { cleanTempFiles, readFileForRenderer } from './files';
 
 const E2E = process.env['YNOT_E2E'] === '1';
+/** An e2e window is parked off-screen and transparent unless the operator asked to watch it. */
+const E2E_HIDDEN = E2E && process.env['YNOT_E2E_VISIBLE'] !== '1';
+
+/*
+ * A window nobody can see is a window Chromium stops drawing.
+ *
+ * Off-screen, transparent and never focused is exactly what its occlusion tracker looks for, and
+ * an occluded window has its renderer *backgrounded*: `requestAnimationFrame` drops to one frame
+ * a second and timers are coalesced. On Windows and macOS the tracker gives our test windows the
+ * benefit of the doubt; under X11 with no window manager — which is what a CI runner under Xvfb
+ * is — it does not, and the renderer runs at 1 fps.
+ *
+ * Every test that measures a frame rate, drags something, or waits for the viewer to paint then
+ * fails, and nothing says why: seven did on the Linux runner on 2026-09-10, reporting 1.19 fps
+ * where they wanted 30. So occlusion backgrounding is turned off for a test run. The window stays
+ * invisible; only Chromium's opinion about what that means changes.
+ *
+ * `test/e2e/app.spec.ts` has the guard that fails loudly if this ever comes undone.
+ */
+if (E2E_HIDDEN) {
+  // Both of these are switches Playwright and Puppeteer pass to every Chromium they launch, for
+  // this exact reason. Electron does not get them for free, because we launch an application
+  // rather than a browser.
+  app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+  app.commandLine.appendSwitch('disable-renderer-backgrounding');
+}
 
 // Files handed to us before the window is ready (argv on Windows/Linux, open-file on macOS).
 const pendingOpens: string[] = [];

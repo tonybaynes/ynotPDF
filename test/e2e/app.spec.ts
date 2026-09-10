@@ -11,6 +11,47 @@ test.afterAll(async () => {
   await app.close();
 });
 
+/**
+ * The guard on the invisible test windows.
+ *
+ * A run parks its windows off every display and makes them transparent so it cannot take over
+ * the operator's machine. Chromium's answer to a window nobody can see is to background its
+ * renderer: `requestAnimationFrame` drops to one frame a second and timers are coalesced. Every
+ * test that measures a frame rate, drags something or waits for a paint then fails, and none of
+ * them says why — seven did exactly that on the Linux runner on 2026-09-10, reporting 1.19 fps
+ * where they wanted 30.
+ *
+ * So this asks the renderer directly, and it asks first: the page must consider itself visible,
+ * and it must really turn frames over. Twenty a second is far below what any machine manages and
+ * far above the one a second a throttled renderer gives, so it separates the two without being a
+ * performance test of the runner.
+ */
+test('the renderer is not background-throttled, however the window is shown', async () => {
+  const measured = await app.page.evaluate(async () => {
+    const started = performance.now();
+    let frames = 0;
+    await new Promise<void>((resolve) => {
+      const tick = (): void => {
+        frames++;
+        if (performance.now() - started >= 600) resolve();
+        else requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    return {
+      fps: (frames * 1000) / (performance.now() - started),
+      hidden: document.hidden,
+      visibility: document.visibilityState,
+    };
+  });
+  expect(measured.hidden, 'the page thinks it is hidden').toBe(false);
+  expect(measured.visibility).toBe('visible');
+  expect(
+    measured.fps,
+    `animation frames are throttled (${String(Math.round(measured.fps))} fps)`,
+  ).toBeGreaterThan(20);
+});
+
 test('launches to the empty shell', async () => {
   await expect(app.page).toHaveTitle('ynotPDF');
   await expect(app.page.locator('#empty-state')).toBeVisible();

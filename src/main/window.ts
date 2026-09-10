@@ -81,6 +81,10 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
       nodeIntegration: false,
       webSecurity: true,
       spellcheck: false,
+      // A test window is off-screen and never focused, and Chromium's answer to that is to
+      // throttle the renderer's timers and animation frames. Playwright drives a *running*
+      // application, so this run keeps them. See the occlusion note in `main/index.ts`.
+      ...(options.e2e ? { backgroundThrottling: false } : {}),
       additionalArguments: options.e2e ? ['--ynot-e2e'] : [],
     },
   });
