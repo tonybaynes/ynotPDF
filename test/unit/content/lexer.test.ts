@@ -187,8 +187,9 @@ describe('serialise', () => {
 
   it('writes an inline image back with its payload', () => {
     const stream = parse(ascii('BI /W 1 /H 1 ID \xaa EI'));
-    const rebuilt = op('BI');
-    const withImage = { ...rebuilt, image: stream.ops[0]?.image };
+    const image = stream.ops[0]?.image;
+    if (!image) throw new Error('no inline image parsed');
+    const withImage = { ...op('BI'), image };
     const out = text(serialise(stream, [withImage]));
     expect(out.startsWith('BI /W 1 /H 1 ID ')).toBe(true);
     expect(out.endsWith('\nEI')).toBe(true);

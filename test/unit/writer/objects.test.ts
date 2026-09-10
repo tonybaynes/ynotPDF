@@ -10,7 +10,7 @@ import { applyEdits, parse, serialise } from '@engine/content';
 import { readPageContent } from '@engine/content/pdf';
 import { emptyWritePlan, type PlannedObjects, type WritePlan } from '@engine/Writer';
 import { FullRewriteWriter } from '@engine/writers/FullRewriteWriter';
-import type { PdfiumEngine } from '@engine/pdfium/PdfiumEngine';
+import type { PdfiumEngine, RawRender } from '@engine/pdfium/PdfiumEngine';
 import type { PageObject } from '@engine/PdfEngine';
 import type { PdfRect } from '@shared/pdf';
 import { engine, fixture, inkCoverage } from '../engine/helpers';
@@ -56,12 +56,7 @@ function around(a: PdfRect, b: PdfRect, pad = 2): PdfRect {
 }
 
 /** Pixels that differ between two renders, outside `rect` (page space). */
-function differsOutside(
-  a: { rgba: Uint8Array; width: number; height: number },
-  b: { rgba: Uint8Array; width: number; height: number },
-  rect: PdfRect,
-  pageHeight: number,
-): number {
+function differsOutside(a: RawRender, b: RawRender, rect: PdfRect, pageHeight: number): number {
   let count = 0;
   for (let y = 0; y < a.height; y++) {
     const py = pageHeight - y;
