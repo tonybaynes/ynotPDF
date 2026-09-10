@@ -14,6 +14,7 @@
  */
 
 import type {
+  ObjectStyle,
   PageBoxes,
   PageIndex,
   PageSize,
@@ -22,6 +23,25 @@ import type {
   PdfRect,
   Rotation,
 } from '@shared/pdf';
+
+export type { ObjectStyle } from '@shared/pdf';
+
+/** One point of a path object's geometry, in page space (M50, ADR 0018). */
+export interface PathPoint {
+  readonly x: number;
+  readonly y: number;
+  /** `move` starts a subpath; `line` and `bezier` continue it (a bézier is three points). */
+  readonly type: 'move' | 'line' | 'bezier';
+  /** Whether the subpath closes after this point. */
+  readonly close: boolean;
+}
+
+/** A path object's geometry and how it is painted, for hit-testing (M50, ADR 0018). */
+export interface ObjectPath {
+  readonly points: ReadonlyArray<PathPoint>;
+  readonly fill: boolean;
+  readonly stroke: boolean;
+}
 
 /** Opaque handle for an open document inside the engine. */
 export type DocHandle = number & { readonly __brand: 'DocHandle' };
@@ -752,6 +772,10 @@ export interface PdfEngine {
    * payload, and what {@link insertObject} and the writer take.
    */
   objectAsPdf(doc: DocHandle, page: PageIndex, index: number): Promise<Uint8Array>;
+  /** Sets a path object's stroke and fill properties; absent fields are left alone. */
+  setObjectStyle(doc: DocHandle, page: PageIndex, index: number, style: ObjectStyle): Promise<void>;
+  /** The geometry of a path object in page space, for precise hit-testing. */
+  objectPath(doc: DocHandle, page: PageIndex, index: number): Promise<ObjectPath>;
 
   /** Serialises the current state. Returns a fresh buffer owned by the caller. */
   save(doc: DocHandle, options?: SaveOptions, progress?: ProgressCallback): Promise<Uint8Array>;
@@ -868,6 +892,12 @@ export class NotImplementedEngine implements PdfEngine {
   }
   objectAsPdf(..._args: unknown[]): Promise<Uint8Array> {
     return Promise.reject(new NotImplementedError('objectAsPdf'));
+  }
+  setObjectStyle(..._args: unknown[]): Promise<void> {
+    return Promise.reject(new NotImplementedError('setObjectStyle'));
+  }
+  objectPath(..._args: unknown[]): Promise<ObjectPath> {
+    return Promise.reject(new NotImplementedError('objectPath'));
   }
   annotations(..._args: unknown[]): Promise<ReadonlyArray<Annotation>> {
     return Promise.reject(new NotImplementedError('annotations'));
@@ -994,6 +1024,8 @@ export const ENGINE_METHODS = [
   'insertObject',
   'reorderObjects',
   'objectAsPdf',
+  'setObjectStyle',
+  'objectPath',
   'save',
 ] as const satisfies ReadonlyArray<keyof PdfEngine>;
 

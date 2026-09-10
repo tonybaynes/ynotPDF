@@ -38,6 +38,17 @@ export interface PdfRect {
 /** A 2-D affine matrix `[a b c d e f]` as used in PDF content streams (`cm`). */
 export type PdfMatrix = readonly [a: number, b: number, c: number, d: number, e: number, f: number];
 
+/**
+ * The stroke and fill properties of a path object a reader may change (M50, ADR 0018). Colours
+ * are `0xRRGGBB`; an absent field is left as it is. The dash array is in points, `[]` for solid.
+ */
+export interface ObjectStyle {
+  readonly fillColor?: number;
+  readonly strokeColor?: number;
+  readonly strokeWidth?: number;
+  readonly dash?: ReadonlyArray<number>;
+}
+
 /** Colour in a device colour space. Components are 0..1. */
 export type PdfColor =
   | { readonly space: 'DeviceGray'; readonly g: number }

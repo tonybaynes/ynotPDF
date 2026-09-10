@@ -14,10 +14,12 @@
  * still says so. The stash is destroyed with the document.
  */
 
-import type { PdfMatrix } from '@shared/pdf';
-import { EngineError } from '../PdfEngine';
-import { invert, multiply } from '../content/matrix';
+import type { ObjectStyle, PdfMatrix } from '@shared/pdf';
+import { EngineError, type ObjectPath, type PathPoint } from '../PdfEngine';
+import { apply, invert, multiply } from '../content/matrix';
+import { PAGEOBJ } from './constants';
 import type { Ffi } from './ffi';
+import { unpackRgb } from './mutations';
 
 /** Removed objects waiting for an undo, by token. */
 export interface ObjectStash {
@@ -276,4 +278,70 @@ export function objectAsPdf(
   } finally {
     ffi.call('FPDF_CloseDocument', scratch);
   }
+}
+
+/** Sets a path's stroke and fill properties. Absent fields are left as they are. */
+export function setObjectStyle(ffi: Ffi, page: number, index: number, style: ObjectStyle): void {
+  const obj = objectHandle(ffi, page, index);
+  if (style.fillColor !== undefined) {
+    const [r, g, b] = unpackRgb(style.fillColor);
+    ffi.call('FPDFPageObj_SetFillColor', obj, r, g, b, 255);
+  }
+  if (style.strokeColor !== undefined) {
+    const [r, g, b] = unpackRgb(style.strokeColor);
+    ffi.call('FPDFPageObj_SetStrokeColor', obj, r, g, b, 255);
+  }
+  if (style.strokeWidth !== undefined) {
+    ffi.call('FPDFPageObj_SetStrokeWidth', obj, Math.max(0, style.strokeWidth));
+  }
+  if (style.dash !== undefined) {
+    const dash = style.dash;
+    ffi.scope((s) => {
+      const buf = s.alloc(Math.max(4, dash.length * 4));
+      dash.forEach((d, i) => {
+        ffi.setF32(buf, d, i);
+      });
+      ffi.call('FPDFPageObj_SetDashArray', obj, buf, dash.length, 0);
+    });
+  }
+  ffi.call('FPDFPage_GenerateContent', page);
+}
+
+/** PDFium's `FPDF_SEGMENT_*`. */
+const SEGMENT = { LINETO: 0, BEZIERTO: 1, MOVETO: 2 } as const;
+
+/** A path object's geometry in page space, and whether it is filled and stroked. */
+export function readObjectPath(ffi: Ffi, page: number, index: number): ObjectPath {
+  const obj = objectHandle(ffi, page, index);
+  if (ffi.call('FPDFPageObj_GetType', obj) !== PAGEOBJ.PATH) {
+    throw new EngineError('invalid-argument', `object ${index} is not a path`);
+  }
+  const matrix = readMatrix(ffi, obj) ?? [1, 0, 0, 1, 0, 0];
+  const count = ffi.call('FPDFPath_CountSegments', obj);
+  const points: PathPoint[] = [];
+  let fill = false;
+  let stroke = false;
+  ffi.scope((s) => {
+    const f = s.alloc(8);
+    const mode = s.alloc(8);
+    if (ffi.call('FPDFPath_GetDrawMode', obj, mode, mode + 4)) {
+      fill = ffi.u32(mode, 0) !== 0;
+      stroke = ffi.u32(mode, 1) !== 0;
+    }
+    for (let i = 0; i < count; i++) {
+      const segment = ffi.call('FPDFPath_GetPathSegment', obj, i);
+      if (segment === 0) continue;
+      if (!ffi.call('FPDFPathSegment_GetPoint', segment, f, f + 4)) continue;
+      const local = { x: ffi.f32(f, 0), y: ffi.f32(f, 1) };
+      const type = ffi.call('FPDFPathSegment_GetType', segment);
+      const p = apply(matrix, local);
+      points.push({
+        x: p.x,
+        y: p.y,
+        type: type === SEGMENT.MOVETO ? 'move' : type === SEGMENT.BEZIERTO ? 'bezier' : 'line',
+        close: ffi.call('FPDFPathSegment_GetClose', segment) !== 0,
+      });
+    }
+  });
+  return { points, fill, stroke };
 }

@@ -100,6 +100,7 @@ export async function writePageObjects(
   for (const e of planned.edits) {
     if (e.kind === 'transform') edits.push({ kind: 'transform', index: e.index, matrix: e.matrix });
     else if (e.kind === 'remove') edits.push({ kind: 'remove', index: e.index });
+    else if (e.kind === 'style') edits.push({ kind: 'style', index: e.index, style: e.style });
     else {
       let embedded: PDFRef;
       try {

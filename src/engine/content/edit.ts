@@ -20,7 +20,7 @@
  * producer left open so the new content starts from the page's own frame.
  */
 
-import type { PdfMatrix } from '@shared/pdf';
+import type { ObjectStyle, PdfMatrix } from '@shared/pdf';
 import { conjugate, invert, isIdentity, multiply } from './matrix';
 import {
   isShowTextOperator,
@@ -40,6 +40,12 @@ export type ContentEdit =
       readonly matrix: PdfMatrix;
     }
   | { readonly kind: 'remove'; readonly index: number }
+  | {
+      /** A path's stroke and fill properties. Refused for anything that is not a path. */
+      readonly kind: 'style';
+      readonly index: number;
+      readonly style: ObjectStyle;
+    }
   | {
       /** Ops appended at the top of the page, already wrapped and positioned by the caller. */
       readonly kind: 'insert';
@@ -121,18 +127,24 @@ export function applyEdits(
     return list;
   };
 
-  // Compose repeated transforms and let a removal win over them.
+  // Compose repeated transforms and styles per object, and let a removal win over both.
   const transforms = new Map<number, PdfMatrix>();
+  const styles = new Map<number, ObjectStyle>();
   const removals = new Set<number>();
   for (const e of edits) {
     if (e.kind === 'transform') {
       const current = transforms.get(e.index);
       transforms.set(e.index, current ? multiply(current, e.matrix) : e.matrix);
+    } else if (e.kind === 'style') {
+      styles.set(e.index, { ...styles.get(e.index), ...e.style });
     } else if (e.kind === 'remove') {
       removals.add(e.index);
     }
   }
-  for (const index of removals) transforms.delete(index);
+  for (const index of removals) {
+    transforms.delete(index);
+    styles.delete(index);
+  }
 
   const object = (index: number, what: string): ContentObject | null => {
     const o = scan.objects[index];
@@ -147,14 +159,22 @@ export function applyEdits(
     return o;
   };
 
-  for (const [index, delta] of transforms) {
-    const o = object(index, 'transform');
+  const wrapped = new Set<number>([...transforms.keys(), ...styles.keys()]);
+  for (const index of wrapped) {
+    const delta = transforms.get(index) ?? null;
+    const style = styles.get(index) ?? null;
+    const o = object(index, delta ? 'transform' : 'style');
     if (!o) continue;
-    if (isIdentity(delta)) {
-      applied++;
+    if (style && o.kind !== 'path') {
+      refused.push(`style: object ${index} is not a path`);
       continue;
     }
+    const moves = delta !== null && !isIdentity(delta);
     if (o.kind === 'text' && o.text) {
+      if (!moves) {
+        applied++;
+        continue;
+      }
       const reported = context.textMatrices?.get(index);
       if (!reported) {
         refused.push(`transform: text object ${index} has no recorded matrix`);
@@ -171,7 +191,14 @@ export function applyEdits(
       applied++;
       continue;
     }
-    at(plan.before, o.opStart).unshift(op('q'), cmOp(localDelta(delta, o.ctm)));
+    const inner: ContentOp[] = [];
+    if (moves) inner.push(cmOp(localDelta(delta, o.ctm)));
+    if (style) inner.push(...styleOps(style));
+    if (inner.length === 0) {
+      applied++;
+      continue;
+    }
+    at(plan.before, o.opStart).unshift(op('q'), ...inner);
     at(plan.after, o.opEnd - 1).push(op('Q'));
     applied++;
   }
@@ -265,6 +292,25 @@ function repairAfter(
       }
     }
   }
+}
+
+/** The graphics-state ops a style change needs, for the inside of the object's `q … Q`. */
+export function styleOps(style: ObjectStyle): ContentOp[] {
+  const out: ContentOp[] = [];
+  const rgb = (c: number): [number, number, number] => [
+    ((c >> 16) & 255) / 255,
+    ((c >> 8) & 255) / 255,
+    (c & 255) / 255,
+  ];
+  if (style.fillColor !== undefined) out.push(op('rg', ...rgb(style.fillColor)));
+  if (style.strokeColor !== undefined) out.push(op('RG', ...rgb(style.strokeColor)));
+  if (style.strokeWidth !== undefined) out.push(op('w', Math.max(0, style.strokeWidth)));
+  if (style.dash !== undefined) {
+    out.push(
+      op('d', { kind: 'array', items: style.dash.map((v) => ({ kind: 'number', value: v })) }, 0),
+    );
+  }
+  return out;
 }
 
 /** The ops that draw an XObject named `name` under `matrix`, self-contained in `q … Q`. */

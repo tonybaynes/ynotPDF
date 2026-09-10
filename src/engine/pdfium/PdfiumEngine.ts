@@ -47,6 +47,8 @@ import {
   type Metadata,
   type NamedDestination,
   type NewAnnotation,
+  type ObjectPath,
+  type ObjectStyle,
   type OpenOptions,
   type OutlineItem,
   type PageObject,
@@ -102,6 +104,8 @@ import {
   restoreObject as restorePageObject,
   setObjectMatrix as setPageObjectMatrix,
   transformObject as transformPageObject,
+  setObjectStyle as setPageObjectStyle,
+  readObjectPath,
   type ObjectStash,
 } from './objects';
 import { FontRegistry, type SubstitutionTable } from './fonts';
@@ -2567,6 +2571,28 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
         throw new EngineError('invalid-page', `page ${page} is out of range (0..${count - 1})`);
       }
       return objectAsPdfFrom(this.ffi, d.doc, page, index, (ptr) => this.saveDocPtr(ptr, 0));
+    });
+  }
+
+  setObjectStyle(
+    doc: DocHandle,
+    page: PageIndex,
+    index: number,
+    style: ObjectStyle,
+  ): Promise<void> {
+    return run(() => {
+      const d = this.doc(doc);
+      const p = this.beforeObjectEdit(d, page);
+      setPageObjectStyle(this.ffi, p.page, index, style);
+      this.afterObjectEdit(d);
+    });
+  }
+
+  objectPath(doc: DocHandle, page: PageIndex, index: number): Promise<ObjectPath> {
+    return run(() => {
+      const d = this.doc(doc);
+      const p = this.loadPage(d, page);
+      return readObjectPath(this.ffi, p.page, index);
     });
   }
 

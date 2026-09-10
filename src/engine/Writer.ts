@@ -22,7 +22,7 @@
  * pipeline.
  */
 
-import type { PageIndex, PdfMatrix, PdfPoint, PdfRect } from '@shared/pdf';
+import type { ObjectStyle, PageIndex, PdfMatrix, PdfPoint, PdfRect } from '@shared/pdf';
 import type { AnnotationSubtype, Destination, ProgressCallback } from './PdfEngine';
 import type { AppearanceInput, AppearanceResources } from './appearance/types';
 import type { DictValue } from './appearance/dict';
@@ -58,6 +58,12 @@ export type PlannedObjectEdit =
       readonly matrix: PdfMatrix;
     }
   | { readonly kind: 'remove'; readonly index: number }
+  | {
+      /** A path's stroke and fill properties, as set in the properties panel. */
+      readonly kind: 'style';
+      readonly index: number;
+      readonly style: ObjectStyle;
+    }
   | {
       /** A pasted or duplicated object: a base64 one-page PDF (`PdfEngine.objectAsPdf`). */
       readonly kind: 'insert';
