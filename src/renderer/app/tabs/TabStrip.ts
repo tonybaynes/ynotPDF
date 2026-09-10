@@ -29,6 +29,11 @@ export function mountTabStrip(host: HTMLElement, services: ShellServices): TabSt
     id: 'tabstrip',
     role: 'tablist',
     'aria-label': 'Open documents',
+    // A tab is laid out flush with the bottom of the strip and has no bottom border of its own,
+    // so its last pixel or two sit *under* the strip's border and are clipped by it. That is the
+    // seam: it is what makes the active tab read as joined to the document below. Declared so
+    // M04's layout assertions read it as design rather than as a cut-off control.
+    'data-allow-clip': 'tabs are flush with the strip and meet its border at the seam',
   });
   host.append(strip);
   const roving = makeRoving(strip, { selector: '[role="tab"]' });
