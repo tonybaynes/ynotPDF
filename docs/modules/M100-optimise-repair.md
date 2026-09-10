@@ -314,4 +314,104 @@ for behaviour learned from Foxit's or Adobe's published documentation as a user 
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-10 on `mod/M100-optimise-repair` (worktree `../ynotPDF-M100`).**
+
+### What shipped
+
+- **`src/engine/optimise/`** — the whole pipeline as pure functions over bytes, in the sense M41's
+  ops established: no Node, no Electron, no DOM, so a renderer Worker, a vitest module and M120's
+  batch all run the identical code. Discard → images → fonts → duplicates, then qpdf.
+- **Images** — decode (flate, LZW, ASCII85/Hex, run-length, baseline JPEG; predictors undone),
+  downsample by area-average against the resolution the picture is actually *drawn* at, re-encode
+  as JPEG, flate or CCITT Group 4, and put back with a dictionary that matches. Soft masks are
+  scaled in step with the image they mask. An image in a filter we cannot read, a CMYK image, or
+  one whose re-encoding came out bigger keeps exactly the bytes it had.
+- **Fonts** — glyph usage read from every content stream, form XObject and annotation appearance;
+  embedded TrueType cut down by **emptying unused outlines rather than renumbering glyphs**, so no
+  encoding, `/Widths` or `/CIDToGIDMap` needs rewriting; unembedding restricted to the Standard 14
+  and the faces metrically identical to them.
+- **Duplicates** — images, fonts and form XObjects merged by content hash *and* a byte-for-byte
+  comparison, with every reference repointed and the loser deleted.
+- **Space audit** — measured, not estimated: every indirect object is charged to whoever refers to
+  it, shared objects split between owners, and the remainder called structure, so the slices add up
+  to the file's own length.
+- **The dialog** — five tabs plus the audit, and one line of plain English: "1.4 MB → 620 kB, 56 %
+  smaller", produced by running the real pipeline over a copy and keeping those bytes, so pressing
+  Optimise writes exactly what was promised.
+- **Repair** — `qpdf --check` on demand, and quietly on open with a worded toast when it finds
+  something; the repair itself goes through PDFium and falls back to qpdf.
+- **Fast web view** — a save-pipeline stage at order 50, off by default, which says in words when it
+  cannot run.
+- **Presets** — Lossless, Standard, Small, Smallest in `resources/optimise-presets.json`, plus the
+  reader's own, saved from the dialog.
+
+### Measured, on the operator's own files (Standard preset)
+
+| File | Before | After | Saved |
+|---|---|---|---|
+| `bloated.pdf` (fixture) | 420 kB | 5 kB | 99 % (66 % with Lossless) |
+| `220909 Cemair AMB 4D.pdf` | 195 kB | 128 kB | 35 % (73 % with Smallest) |
+| `241109 B-Pass AMB.pdf` | 89 kB | 66 kB | 26 % |
+| `boarding_pass.pdf` | 162 kB | 123 kB | 24 % |
+| `Sample Portfolio.pdf` | 420 kB | 301 kB | 28 % |
+
+Page count, page sizes and text identical in every one.
+
+### Decisions worth knowing about
+
+- **This build of qpdf reconstructs nothing.** The brief assumed a qpdf rewrite would rebuild a
+  broken cross-reference table. Measured against five kinds of damage — `startxref` past the end,
+  `startxref 0`, no `startxref`, a corrupted `xref` keyword, a file truncated at 70 % — every one
+  comes back as exit 2 with one line and no output file. qpdf's recovery is exception-driven and
+  the WebAssembly does not catch exceptions. **PDFium does reconstruct**, so repair goes through
+  the engine first and falls back to qpdf for a file PDFium refuses but qpdf can read. Detection is
+  still `qpdf --check`, which is exactly what the brief asked for. ADR 0019 §1a.
+- **Glyph blanking, not glyph renumbering.** Every subsetting library renumbers glyphs, and inside
+  a PDF that is a trap: a simple font finds glyphs through `/Encoding`, `/Differences` and its own
+  `cmap`, a CID font through `/CIDToGIDMap`, and a renumbered font needs all of them rewritten in
+  step in a document whose text is already written. Get one wrong and letters swap places in a file
+  that still opens. So `loca` keeps all its entries, unused glyphs get length zero, and the saving
+  is the same one a renumbering subsetter gets, because it is `glyf` that is large.
+- **fontkit was not used, though the brief names it.** Its subsetting renumbers, which is the trap
+  above; the safe operation is 250 lines of sfnt surgery with no dependency, and it is tested by
+  rendering the result through PDFium. Recorded here rather than quietly.
+- **CCITT Group 4 is written here** (ITU-T T.6, ~200 lines of table and state machine) rather than
+  pulled in: JBIG2 and JPX are the encodings that would have needed a library, and they are parked.
+  Verified by rendering a G4 page and the same picture as raw bits through PDFium and requiring
+  identical hashes.
+- **A picture that grows falls back to flate at the reduced size before giving up.** A screenshot or
+  an indexed palette can be smaller as 200 px of flate than as 100 px of JPEG, and the naive rule
+  ("it grew, put it back") throws away a downsample that would have helped.
+- **`optimise.check` does not wait for its own dialog.** A command's return value is what another
+  command, the e2e harness and M120's batch read back; a checker that only answers once somebody
+  has pressed OK is a checker nothing can drive. The Repair it offers is chained off the dialog.
+- **The audit's chart is told apart by hatch pattern, not colour** — six SVG fills in two theme
+  tokens, with the same figures in words beside it. The brief asked for a pie; the operator is
+  colourblind, and a colour-keyed one would have been unreadable to him.
+- **jpeg-js needs a global `Buffer`** and a renderer Worker has not got one; `installBuffer.ts` puts
+  a two-method stand-in where it looks, the same trick `installPako.ts` already uses for utif.
+
+### What was deferred, and why
+
+- **JBIG2 and JPEG 2000 encoding** — out of scope in the brief. The dialog names them and says why
+  rather than leaving them out, and an image already in either is left strictly alone.
+- **PostScript-outline fonts (Type 1, CFF)** keep their full font program. Cutting a CFF charstring
+  index down safely is a second implementation of a different format; such a font is named in the
+  report rather than silently skipped.
+- **Optimising the open document in place.** Optimising produces a file. The engine owns bytes, the
+  `Document` owns intent, `Document.handle` is `readonly` and every model page is bound to an engine
+  index — so swapping optimised bytes under a live model is not something the contract allows, and
+  faking it would cost the reader their undo history without saying so. Foxit's Reduce File Size and
+  Advanced Optimization both end in a Save As. Consequence: M100 registers no undoable `Command`,
+  because it changes no document.
+- **A per-save "linearise" checkbox in the Save As dialog.** The OS dialog cannot carry one, so fast
+  web view is a setting (and a preset option) instead. It skips, with a worded warning, when M70 is
+  re-protecting the same save: a qpdf rewrite without `--linearize` is not linearised, so a file
+  cannot come out of one pipeline both password protected and linearised. ADR 0019 §3.
+
+### One thing the operator may want to know
+
+The **Small** preset can produce a slightly *larger* file than **Standard** on a document with
+almost no images — 66 kB against 67 kB on one of the boarding passes. That is fast web view: Small
+linearises and the hint tables cost a kilobyte or two. It is doing what it was asked; on a document
+where the pictures are the weight, Small is much the smaller of the two.
