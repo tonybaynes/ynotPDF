@@ -89,6 +89,34 @@ test.afterEach(async () => {
 // ---- the dialog ---------------------------------------------------------------------------------
 
 test.describe('the Preferences dialog', () => {
+  /**
+   * Closing and reopening without waiting in between, which is what a reader who double-takes
+   * does and what a slow machine does to any close.
+   *
+   * The close command looks the dialog up among the open ones by id. A dialog closed through the
+   * element's own `close()` leaves the DOM on the asynchronous `close` event, so reopening before
+   * that lands used to leave the old element behind in the open set — and the *next* close found
+   * that ghost first, closed it, and left the real dialog standing. It flaked on Windows and
+   * failed every time on the Linux runner, where everything is slower (2026-09-10).
+   */
+  test('closing and reopening at once still leaves one dialog, and it closes', async () => {
+    for (let i = 0; i < 3; i++) {
+      await openPreferences();
+      // Both commands inside one evaluation, so the close and the reopen are separated by a
+      // microtask and nothing more. The `close` event is a *task*, so it is still queued when
+      // the reopen runs — which is the race, forced, rather than waited for.
+      await app.page.evaluate(async () => {
+        const api = window.__ynot;
+        if (!api) throw new Error('window.__ynot missing (not an e2e build?)');
+        await api.run('app.preferences.close');
+        await api.run('app.preferences', {});
+      });
+      await expect(dialog()).toBeVisible();
+      expect(await app.page.locator('#preferences-dialog').count(), 'one dialog, not two').toBe(1);
+      await closePreferences();
+    }
+  });
+
   test('opens from the command, the shortcut and the File tab’s slot', async () => {
     await openPreferences();
     await expect(dialog().locator('.prefs-title')).toBeVisible();
