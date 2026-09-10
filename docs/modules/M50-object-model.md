@@ -326,4 +326,50 @@ public help, **ours** = our own choice.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Shipped (2026-09-10, branch `mod/M50-object-model`, ADR 0018).**
+
+- `src/engine/content/` — lexer, parser, serialiser, object scanner and editor.
+  Op spans tile the source, so an untouched stream round-trips byte-identical
+  (asserted over every fixture page, synthetic and external); the scan agrees with
+  PDFium's `pageObjects()` on every readable fixture. Edits: transform (a text object
+  gets an explicit `Tm` and the operators after it are repaired from PDFium's
+  recorded matrices), style, remove, insert.
+- Engine (`src/engine/pdfium/objects.ts`, additive to `PdfEngine`): `pageContent`,
+  `transformObject`, `setObjectMatrix`, `removeObject`/`restoreObject` (stash, so undo
+  puts the same object back), `insertObject` (a one-page PDF as a form XObject, across
+  documents too), `reorderObjects`, `objectAsPdf`, `setObjectStyle`, `objectPath`.
+- Writer: `PlannedPage.objects` restores the page's original content **and
+  resources** and replays the edits onto them; any doubt (kinds disagree, a
+  reference does not resolve, an edit refused) leaves the page as the engine wrote it
+  with a warning. `TileRenderer.forgetPage` so an edit re-renders one page.
+- Renderer module: Edit Object tools (All/Text/Image/Shape/Shading) on the Edit
+  tab; text blocks via M13's paragraph heuristic; bbox-then-precise hit-testing for
+  paths; hover outline, handles, rotate handle, marquee, drag ghost, smart guides
+  (solid accent lines, named in the status bar); move/resize (Shift proportional)/
+  rotate (Shift 15°)/flip; arrow nudges; align (selection or page)/distribute/
+  arrange/group/ungroup; cut/copy/paste (marker + JSON of one-page PDFs, so it works
+  between windows and documents)/duplicate; properties panel with live X/Y/W/H,
+  rotation, stroke/fill/width/dash for paths, image and text facts. Every change is
+  a `Command` with a journal codec; groups live in `Document.custom('M50')`.
+- Tests: 155 content, 17 engine, 6 writer, 36 module unit tests; 7 Playwright tests
+  including the five acceptance lines (the z-order and cross-document ones are proved
+  on the raster by the engine tests and on the app by the e2e).
+
+**Found on the way.** `FPDFPage_GenerateContent` renames every resource it writes
+and drops the original names, which is why the writer carries the original
+`/Resources` with the original stream — the first e2e save came back without its
+images. `Document.loadObjects` raises the same `page:changed` the commands raise, so
+the service tells the two apart by whether the objects are filled in.
+
+**Deferred, and why.**
+
+- Precise hit-testing uses PDFium's path geometry for paths; images, forms and
+  shadings hit by bounds (their geometry is a rectangle anyway).
+- Z-order through the content-stream path: a reordered page keeps PDFium's
+  regenerated stream. Reconstructing each moved object's graphics state is the
+  natural extension for M52 (ADR 0018 §3).
+- Opacity is reported, never edited (brief ✗, CLAUDE.md).
+- Text colour and content: M51. Image and path content: M52.
+- A "clipped" hint in the panel: PDFium exposes an object's clip path but not
+  whether it was set outside the object's own operators, so there is nothing honest
+  to say yet.
