@@ -177,13 +177,26 @@ export async function launchApp(options: LaunchOptions = {}): Promise<App> {
     page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
 
   const setContentSize = async (size: WindowSize): Promise<void> => {
+    const before = await viewport();
     await app.evaluate(({ BrowserWindow }, wanted) => {
       const win = BrowserWindow.getAllWindows()[0];
       if (!win) throw new Error('no window to resize');
       win.setContentSize(wanted.width, wanted.height);
     }, size);
+    // Wait for the *renderer* to report a different size, by polling rather than by counting
+    // frames: a window Chromium believes nobody is looking at runs `requestAnimationFrame` once
+    // a second, and two frames of patience then means reading a stale `innerWidth` and
+    // "correcting" by a delta that was never real. A size that does not change at all falls
+    // through on the timeout, and the caller tries again.
+    await page
+      .waitForFunction(
+        (was: { w: number; h: number }) =>
+          window.innerWidth !== was.w || window.innerHeight !== was.h,
+        { w: before.width, h: before.height },
+        { timeout: 3000, polling: 50 },
+      )
+      .catch(() => undefined);
     await settle(page);
-    await page.waitForTimeout(150);
   };
 
   /**
@@ -194,8 +207,9 @@ export async function launchApp(options: LaunchOptions = {}): Promise<App> {
    * platform, this measures the error once and takes it off the next request.
    */
   const resize = async (size: WindowSize): Promise<void> => {
+    if (JSON.stringify(await viewport()) === JSON.stringify(size)) return;
     let ask = size;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 4; attempt++) {
       await setContentSize(ask);
       const got = await viewport();
       if (got.width === size.width && got.height === size.height) return;
