@@ -252,8 +252,144 @@ is colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+- **The widget layer draws the fields, and the raster stops.** `PageLayers.widget` has been
+  reserved since M00; it now holds a real `<input>`, `<textarea>`, `<select>` or `<button>` per
+  widget, positioned over the page and styled from the field's own `/MK` and `/DA`. While it is
+  mounted the viewer renders with `forms: false` so PDFium does not draw the widgets as well.
+  Three reasons, in order of weight: a field the designer just drew **cannot be in the engine at
+  all** (PDFium creates ten annotation subtypes and `Widget` is not one of them), so drawing
+  loaded fields with PDFium and designed ones with the DOM would put two renderers on one page
+  and they would not match; typing has to appear as it is typed, and a round trip through the
+  worker per keystroke is not an editor; and a real labelled control with a focus ring is what a
+  screen reader and a keyboard need, which a bitmap is not. Print and export keep `forms: true`.
+  ADR 0019.
+- **A field's colours are content, not chrome.** Border, fill and ink come from the file and reach
+  the stylesheet as custom properties on each widget box; the chrome *around* a field — highlight,
+  required outline, selection, handles, tab numbers — is theme tokens. The same rule M30 set for
+  annotation colours. The highlight is `--info` and the required outline `--warning`: blue against
+  yellow, heavier and doubled as well as differently coloured, and "required" is in the field's
+  accessible name and as a word in the Fields panel, so nothing is told apart by colour alone.
+- **The designer's changes are written by us, not by PDFium.** There is no API for
+  `/AcroForm /Fields`, so `WritePlan.form` carries the whole form and `writers/forms.ts` rebuilds
+  it: every `Widget` annotation detached, `/Fields` emptied, the plan written in its place with a
+  real `/Kids` hierarchy from the dotted names. A rebuild is safe *here* because the plan is built
+  from `doc.state.fields`, which came from the engine's read of every field in the file.
+  Value-only saves keep the old `WritePlan.fields` path untouched.
+- **`/NeedAppearances` is off, always.** Every widget carries an appearance stream we generated,
+  which is what makes a form we designed look the same in Acrobat, in Chrome and here. It also
+  makes the barcode field work anywhere: the symbol is a real path in the stream, whatever a
+  reader makes of the private keys beside it.
+- **One generator, two drawers.** `engine/forms/appearance.ts` is the single answer to "what does
+  that field look like": the writer turns its output into `/AP`, and `FormLayer` lays its controls
+  out from the same geometry helpers (`contentBox`, `effectiveBorderWidth`, `layoutValue`). What
+  is saved is what was shown.
+- **Three roles AcroForm has no `/FT` for.** Image is a captionless icon-only push button, date is
+  a text field with the `AFDate_FormatEx` `/AA` pair Acrobat established, barcode is a text field
+  whose `/AP` *is* the barcode. Each records `/YNOTRole` (and a barcode its `/YNOTBarcode`
+  parameters) so a reopen finds it again; without our keys the shape of the dictionary is read
+  instead, so a form built by another editor still opens as an image or a date field. Provenance:
+  ISO 32000-1 §12.7 for what the dictionaries mean, Acrobat's public behaviour for
+  `AFDate_FormatEx` and the `/MK` conventions, our own choice for the private keys.
+- **The design is read from the bytes, not from PDFium.** `/MK`, `/BS`, `/Opt`'s export values,
+  `/AA`, `/TI` and `/Ff` in full are sub-dictionaries PDFium's form API cannot reach, so
+  `pdfium/rawform.ts` reads them with pdf-lib's parser and `formFields()` joins them on the name —
+  the same escape hatch `rawdoc.ts` already was for `/OCProperties`.
+- **Tab order is a property of the page, because the PDF says so.** `/Tabs` names a rule (`R`,
+  `C`, `S`) and a manual order *is* the order of `/Annots`. The mode and any manual order live in
+  `Document.custom('forms')`, so they are journalled, undone and recovered with everything else,
+  and every planned widget carries the `tabIndex` the writer appends `/Annots` by. Rows are banded
+  rather than sorted on `y`: two boxes three points apart are on one line to any reader.
+- **A designer edit replaces the whole field.** Name, role, flags, `/DA`, options, actions and
+  every widget's geometry change together, and a command per entry would let an undo put back a
+  field that never existed. `UpdateFieldCommand` holds the whole field before and after, and
+  merges on the field id *and the label*, so a drag is one undo step while a drag then a rename is
+  two — the label is what the Undo menu says.
+- **Undo of typing is word-wise.** The control shows what is typed, so nothing is written to the
+  model per keystroke; a space commits (and breaks the merge) and so does leaving the field. One
+  undo walks back a word rather than emptying the field. Two guards keep that honest: the model
+  once a commit has settled, and an in-flight map while one has not — a control raises `change`
+  and then `blur` with the same value, and without the second the blur would land an undo step
+  that undoes to the value it is already at.
+- **A duplicate is a new field, not another widget.** Two widgets of one field share a value,
+  which is right for "sign here on every page" and wrong for "initial each page", so Duplicate
+  Across Pages gives every copy its own name.
+- **The standard 14 only, and the panel says why.** A field's `/DA` names a font by a key in
+  `/DR /Font`; nothing is embedded before M51's subsetter, so a system family would render as
+  whatever the reader has. M30 made the same call for free text.
+- **No shortcut of its own.** Every key this module would have wanted is already spoken for —
+  Ctrl+A selects text (M13), Escape closes what is open (M02), Ctrl+Shift+F is Advanced Search
+  (M13). Escape and the arrow keys still work over a selected field, handled by the controller
+  while a form tool is active, which is scoped to the tool rather than to the app.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Built 2026-09-10 on `mod/M60-forms` (worktree `../ynotPDF-M60`).**
+
+### What shipped
+
+- **`src/engine/forms/`** — the AcroForm model as plain data (`model.ts`: the `/Ff` bit tables per
+  `/FT`, the ten roles, check styles, border styles, button layouts, barcode specs, field names
+  and the tab-order sort), the `/DA` round trip (`da.ts`), the appearance generator for every
+  field type (`appearance.ts`), and the barcode symbols (`barcode.ts`, bwip-js).
+- **`src/engine/pdfium/rawform.ts`** — the design read from the bytes: `/MK`, `/BS`, `/AS`, `/H`,
+  `/F`, `/Opt` with export values, `/AA`, `/TI`, `/MaxLen`, `/Q`, `/DA` and `/Ff`, plus `/Tabs`
+  per page and whether the file is XFA. `PdfiumEngine.formFields()` joins it on the field name.
+- **`src/engine/writers/forms.ts`** — the whole AcroForm, rebuilt: the `/T` hierarchy from dotted
+  names, radio kids under one parent, two-state `/AP /N` for check boxes and radios, `/MK`,
+  `/BS`, `/H`, `/F`, `/Opt`, `/AA`, the private role keys, `/Tabs`, `/Annots` in tab order, and
+  the fonts our streams used merged into `/DR /Font`.
+- **`src/renderer/view/FormLayer.ts`** — the widget layer: a real labelled control per widget,
+  built once and only moved afterwards, with the field highlight, the required outline, the
+  selection chrome, the resize handles and the tab-number overlay.
+- **`src/renderer/modules/M60-forms/`** — `FormService` (mode, selection, values, creation,
+  geometry, alignment, clipboard, duplication, tab order), `FormController` (pointer and
+  keyboard), the Fields panel, the five-tab properties panel, the Set Tab Order dialog, the
+  tools, the settings and the manifest's Form tab.
+- **Commands** — fill mode and the designer, a placement tool and command per field type, select /
+  deselect / select-all, delete, cut, copy, paste, duplicate across pages, move, six alignments,
+  two distributions, three size matches, grid snap, highlight, show and set tab order, reset form,
+  and three probes the acceptance tests read the module out of the app with.
+
+### The four things that were not as expected
+
+- **The tool layer swallowed every click meant for a field.** The layer stack puts the tool layer
+  on top, which is right for every tool that draws on the page and fatal for a form: no reader
+  could get a caret into one. In fill mode the widget layer is raised above it; the layer itself
+  never takes a pointer event, only the field boxes do, so a click anywhere else still reaches the
+  active tool and the hand still pans the page.
+- **The viewer ate the space bar.** M11's scroller treats Space as "page down" — correct until
+  this module put the first focusable elements inside it. It now leaves a typing target alone,
+  using the same test the shortcut manager uses. One line, and it would have bitten M51 too.
+- **`FORM_SetIndexSelected` adds to a list box's selection rather than replacing it.** Setting a
+  list that already had a choice left both selected and reported the older one back.
+  `PdfiumEngine.setFieldValue` now clears what is not wanted and takes a newline-separated value
+  for a multi-select list, which is how the model carries one.
+- **A QR finder pattern is a filled square with a hole in it.** bwip-js emits the white ring as a
+  sub-path wound the other way, and filling each sub-path separately draws three solid squares
+  that no decoder will look at twice. Every sub-path goes into one path and is filled once, under
+  the non-zero winding rule that PDF's `f` and SVG's default `fill-rule` both use — and the unit
+  test rasterises it the same way, so a mistake in the path parser or the y-flip cannot hide.
+
+### What was deferred, and why
+
+- **Choosing the picture for an image field** waits for M61's data path; the field, its box, its
+  layout and its `/MK /I` plumbing are here, and a picture placed later needs no file change.
+- **Field actions are round-tripped, not run.** The Actions tab reads, edits and writes `/AA`, so
+  a form keeps the actions it arrived with; validation, formatting and calculation are M61's, and
+  Acrobat JavaScript stays Parked (`PLAN.md` §1).
+- **`/Tabs /S` (document structure)** is written for readers that have a structure tree; ynotPDF
+  has none before M111, so it shows the fields in row order and the dialog says so in words.
+- **XFA** is Parked: such a file opens read-only, so the designer never runs on one.
+
+### Shared files touched (all additive)
+
+`src/engine/PdfEngine.ts` (`FormField.design`, `FormWidget`), `src/engine/Writer.ts`
+(`WritePlan.form`, the `form` phase), `src/engine/writers/FullRewriteWriter.ts` (the form phase,
+`/AP` states, `/DR` fonts), `src/engine/pdfium/PdfiumEngine.ts` (the design join, the list-box
+fix), `src/renderer/core/model.ts` (`ModelField.design`, `ModelWidget.appearance`, the `'form'`
+write intent), `src/renderer/core/Document.ts` (`addFieldRecord`, `insertFieldRecord`,
+`updateFieldRecord`), `src/renderer/modules/M21-save/plan.ts` (one call to `plannedFormFor`),
+`src/renderer/modules/M11-viewer/ViewerService.ts` (`setFormsVisible`),
+`src/renderer/modules/M11-viewer/Viewer.ts` (the typing-target guard), `src/renderer/main.ts`
+(registers the manifest), `test/unit/roundtrip.ts` (fields compare their design), `package.json`
+(bwip-js, and `@zxing/library` for the tests only).
