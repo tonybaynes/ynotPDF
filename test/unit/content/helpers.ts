@@ -39,6 +39,16 @@ export function openableFixtures(): Array<{ readonly name: string; readonly byte
       }
     }
   }
+  // The operator's own files (git-ignored, personal): named by number so nothing about them
+  // reaches a log. Absent on CI and other machines, which simply means fewer tests.
+  const local = join(FIXTURES, 'local');
+  if (existsSync(local)) {
+    readdirSync(local)
+      .filter((f) => f.toLowerCase().endsWith('.pdf'))
+      .forEach((f, i) => {
+        out.push({ name: `local/#${i + 1}`, bytes: new Uint8Array(readFileSync(join(local, f))) });
+      });
+  }
   return out;
 }
 
