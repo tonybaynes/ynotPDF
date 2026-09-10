@@ -15,9 +15,11 @@
  * await expectInsideWindow(app.page.locator('#ribbon'));
  * await expectNoOverlap(app.page.locator('#ribbon'), app.page.locator('#doc-area'));
  * await expectReadable(app.page.locator('#pane-left'));
+ * await expectWindowSound(app.page); // the first two over the whole window; every journey ends here
  * ```
  *
- * See `docs/adr/0019-ui-journey-harness.md`.
+ * `layout-helpers.spec.ts` gives each of them the fault it exists for and checks what it says —
+ * a check that never fires is worth nothing. See `docs/adr/0019-ui-journey-harness.md`.
  */
 
 import { expect, type Locator, type Page } from '@playwright/test';
