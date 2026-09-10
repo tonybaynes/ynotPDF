@@ -240,14 +240,20 @@ function collectPageTree(ctx: PDFContext, catalog: PDFDict, blocked: Set<string>
       const key = current.toString();
       if (blocked.has(key)) continue;
       blocked.add(key);
-      const resolved = ctx.lookupMaybe(current, PDFDict);
+      // A plain `lookup`, not the typed one: `/Kids` is legally allowed to be an indirect
+      // reference to the *array*, and a real file in the corpus does exactly that. pdf-lib's
+      // typed lookup throws on the mismatch rather than answering.
+      const resolved: PDFObject | undefined = ctx.lookup(current);
       if (resolved) stack.push(resolved);
+      continue;
+    }
+    if (current instanceof PDFArray) {
+      for (const kid of current.asArray()) stack.push(kid);
       continue;
     }
     if (current instanceof PDFDict) {
       const kids = current.get(PDFName.of('Kids'));
-      if (kids instanceof PDFArray) for (const kid of kids.asArray()) stack.push(kid);
-      else if (kids instanceof PDFRef) stack.push(kids);
+      if (kids !== undefined) stack.push(kids);
     }
   }
 }
