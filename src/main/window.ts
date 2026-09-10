@@ -56,10 +56,27 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
   // never steals the keyboard from whatever the operator is doing on whichever desktop they are
   // on (2026-09-10). Set YNOT_E2E_VISIBLE=1 to watch a run instead.
   const hidden = options.e2e && process.env['YNOT_E2E_VISIBLE'] !== '1';
+  /*
+   * …but only where hiding a window and keeping it *drawing* are compatible, and on X11 they are
+   * not.
+   *
+   * `requestAnimationFrame` is driven by the compositor, and the compositor produces frames for a
+   * surface that is actually on a screen. Park a window at −32000 on Windows or macOS and Chromium
+   * keeps drawing it anyway; do the same under X11 and the frames stop — about two a second, from
+   * a fallback timer — while the page still cheerfully reports itself visible, which is what makes
+   * it so hard to see. Seven Linux tests failed that way on 2026-09-10: a frame-rate acceptance
+   * measuring 1.19 fps against a floor of 30, a drag that never reached its target, a find that
+   * highlighted nothing, a `ResizeObserver` that never fired, a dialog that never closed.
+   *
+   * So on Linux the window stays where it is. It is still kept out of the taskbar and still shown
+   * *inactive*, so it never takes the keyboard from anyone; and on a CI runner it is drawn into
+   * Xvfb, a virtual screen with nobody in front of it, which is the isolation that matters there.
+   */
+  const parkOffScreen = hidden && process.platform !== 'linux';
   const win = new BrowserWindow({
     width: cascade?.width ?? bounds.width,
     height: cascade?.height ?? bounds.height,
-    ...(hidden
+    ...(parkOffScreen
       ? { x: -32_000, y: -32_000 }
       : cascade
         ? { x: cascade.x + 40, y: cascade.y + 40 }
@@ -93,11 +110,17 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
   if (options.settings && !options.parent) rememberWindowBounds(win, options.settings);
 
   win.once('ready-to-show', () => {
-    if (hidden) {
+    if (parkOffScreen) {
       // Transparent as well as off-screen: a display the operator plugs in later must not
-      // suddenly show a test window. `showInactive` keeps the DOM focusable without taking the
-      // OS focus, which the focus-order tests still need.
+      // suddenly show a test window. (`setOpacity` is a Windows and macOS API, which is the
+      // other reason this branch is not taken on Linux.)
       win.setOpacity(0);
+      win.showInactive();
+      return;
+    }
+    // `showInactive` keeps the DOM focusable without taking the OS focus, which the focus-order
+    // tests still need. On Linux this is the whole of the treatment — see `parkOffScreen`.
+    if (hidden) {
       win.showInactive();
       return;
     }

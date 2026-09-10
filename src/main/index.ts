@@ -23,25 +23,19 @@ const E2E = process.env['YNOT_E2E'] === '1';
 const E2E_HIDDEN = E2E && process.env['YNOT_E2E_VISIBLE'] !== '1';
 
 /*
- * A window nobody can see is a window Chromium stops drawing.
+ * A test window is off-screen (on Windows and macOS — see `window.ts`) and never focused, and
+ * Chromium's instinct with a window like that is to background its renderer: timers coalesced,
+ * animation frames throttled. Playwright drives a *running* application, so a test run keeps
+ * them.
  *
- * Off-screen, transparent and never focused is exactly what its occlusion tracker looks for, and
- * an occluded window has its renderer *backgrounded*: `requestAnimationFrame` drops to one frame
- * a second and timers are coalesced. On Windows and macOS the tracker gives our test windows the
- * benefit of the doubt; under X11 with no window manager — which is what a CI runner under Xvfb
- * is — it does not, and the renderer runs at 1 fps.
+ * These are the two switches Playwright and Puppeteer pass to every Chromium they launch, for
+ * this exact reason; Electron does not get them for free, because we launch an application rather
+ * than a browser. They are not what fixed the Linux frame rate — that was the window's position,
+ * and `window.ts` tells that story — but they are the right thing to say either way.
  *
- * Every test that measures a frame rate, drags something, or waits for the viewer to paint then
- * fails, and nothing says why: seven did on the Linux runner on 2026-09-10, reporting 1.19 fps
- * where they wanted 30. So occlusion backgrounding is turned off for a test run. The window stays
- * invisible; only Chromium's opinion about what that means changes.
- *
- * `test/e2e/app.spec.ts` has the guard that fails loudly if this ever comes undone.
+ * `test/e2e/app.spec.ts` has the guard that fails loudly if any of this ever comes undone.
  */
 if (E2E_HIDDEN) {
-  // Both of these are switches Playwright and Puppeteer pass to every Chromium they launch, for
-  // this exact reason. Electron does not get them for free, because we launch an application
-  // rather than a browser.
   app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
   app.commandLine.appendSwitch('disable-renderer-backgrounding');
 }
