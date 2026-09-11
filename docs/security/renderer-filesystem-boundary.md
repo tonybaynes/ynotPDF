@@ -6,6 +6,8 @@ and what has to be true before any of it lands again. The attempt itself is pres
 branch `fix/hardening-review` (its first commit is the original pass; the rest is the review of
 it). Nothing here has to be re-derived from scratch.
 
+Everything else left open that night is in [`docs/open-work.md`](../open-work.md).
+
 ## Why this is worth doing
 
 The renderer names paths and the main process acts on them. Nothing checks that the reader ever

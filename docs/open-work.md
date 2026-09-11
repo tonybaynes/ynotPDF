@@ -1,0 +1,124 @@
+# Open work, 2026-09-11
+
+Everything left unfinished on the night `main` was restored to `f1034ba`. Written down because
+five branches and six worktrees are more than anyone should have to reconstruct from memory.
+
+The security work has its own file — [`docs/security/renderer-filesystem-boundary.md`](security/renderer-filesystem-boundary.md).
+This one is everything else.
+
+## Nothing here is only on a disk
+
+Every branch named below is pushed to GitHub. The restore is `git reset --hard origin/main` in the
+primary checkout, which moves one local branch and touches nothing else: not another worktree, not
+another branch, and nothing on the remote. `origin/main` was never moved.
+
+## 1. The macOS flake — the oldest open item
+
+**Branch: `fix/macos-e2e-flakes`. Not merged. This is the one to land first.**
+
+It carries three fixes, all with tests that fail on the old code:
+
+- **`ThemeManager` saved out of order.** Its setters fired an unawaited `persist()`, so two changes
+  close together raced, and `load()` — which every settings write calls, because
+  `PreferencesService.apply()` reloads every service — could read a store that had not caught up
+  and put the old value back on screen. In Tony's hands: set the interface scale back to 100 % and
+  it stays at 150 %. Saves are chained now and `load()` waits for them.
+- **Two `panels.spec.ts` tests assumed a document opens at page 1.** M11 remembers where you left a
+  document _by path_, and every test in that file opened `C:/fixtures/<name>`, so the second test
+  to open `multipage.pdf` started where the first finished. Reproduced on Windows in one run. Each
+  open gets its own path now.
+- **`worker.test.ts` slept 5 ms** waiting for a render to start — fine idle, nothing under a
+  parallel suite. Polled now.
+
+**What it does _not_ fix, and this matters:** `preferences.spec.ts:232` — "the UI scale applies
+live" — still failed on macOS CI _with_ the `ThemeManager` fix in place. The ordering bug was real
+and is fixed, but it is **not** what that test is hitting. The cause is still unknown. That test is
+the thing that started the whole night and it is still open.
+
+There is overlap to check before landing: `fix/shared-fixture-paths` (worktree `../ynotPDF-paths`)
+appears to be another session on the same shared-path class of bug. Reconcile the two rather than
+merging both.
+
+## 2. The visual ratio is unmeasured
+
+**On `fix/post-restore`.** `maxDiffPixelRatio` is 0.04, down from 0.15 at Tony's instruction.
+`threshold` stays at 0.35, which is the knob that absorbs antialiasing.
+
+0.04 is reasoned, not measured. The 3 % figure it was argued against was taken at the old default
+threshold of 0.2, so nobody knows the real cross-machine number at 0.35.
+
+**Only the GitHub Windows runner can settle it.** The only baselines committed are `win32` ones and
+they were seeded on Tony's machine, so a local run compares his pixels against his own and is green
+at 0.04 and at 0.0004 alike. If CI fails there, Playwright prints the actual ratio and that is the
+measurement — move to just above it. This is written in the file next to the constant, because the
+obvious thing to reach for is a local run.
+
+## 3. The e2e window flash — fixed, unverified
+
+**On `fix/post-restore`.** Tony sees the outline of a window flash up during a run, every now and
+again. Two causes found, both fixed, neither confirmed:
+
+- Opacity was set at `ready-to-show`, but `maximize()` runs before that and shows the window as a
+  side effect. A window whose remembered state was maximised got shown, on a real monitor, at full
+  opacity.
+- `view.fullScreen.toggle` is exercised by `viewer.spec.ts`, and going full screen shows a parked
+  window and moves it to a real display — for the 300 ms the test then waits.
+
+Opacity now goes on the instant the window exists, a parked window does not restore a maximised
+state, and it re-asserts invisibility on `show`, `maximize`, `restore` and `enter-full-screen`.
+
+A flash that no longer happens is hard to prove absent. If Tony still sees one, that is real
+information and the hunt should continue — likely another path that shows or moves a parked window.
+
+## 4. Dropped files have no path — a real product bug
+
+Not caused by any of tonight's work, and owned by **M00** (`src/renderer/app/shell.ts`) and **M21**
+(`SaveService`). Neither session touched it.
+
+`shell.ts` builds a dropped file's path as `withPath.path ?? f.name`. `File.path` was removed in
+Electron 32; this repo is on 44 and `webUtils.getPathForFile` appears nowhere. So the path becomes
+the bare filename. `SaveService.save()` diverts to Save As only when there is no path, and
+`'report.pdf'` is truthy — so Save takes the overwrite route and writes to a **relative** path,
+which Node resolves against the main process's working directory.
+
+**So: drag a PDF in, edit it, press Save, and it is written somewhere other than where it came
+from, and reported as saved.** Thirty seconds to reproduce.
+
+The one-line honest fix is to stop substituting `f.name` and leave the path empty — Save then goes
+to Save As, which is correct today and needs no new trust. The proper fix needs the grant design in
+the security file, because a path asserted by the renderer is not a path main can trust.
+
+## 5. Branches and worktrees to clear up
+
+`CLAUDE.md`: a finished module leaves no folder behind. Tonight left a lot of both.
+
+**Delete when the work above has landed:**
+
+| Branch                                         | What it is                                                                                                                                    |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stress/mac-1`, `stress/mac-2`, `stress/mac-3` | throwaway copies pushed to get four parallel CI samples; the workflow cancels same-branch reruns, hence three extra branches. No unique work. |
+| `probe/audit-only`                             | the experiment that settled whether the audit or the review broke seventeen e2e tests. Answer: the audit. Confirmation only now.              |
+| `backup/pre-reword` (local only)               | the pre-rewording form of the audit commit, kept while its message was corrected.                                                             |
+
+**Keep until merged:** `fix/post-restore`, `fix/macos-e2e-flakes`, `fix/shared-fixture-paths`,
+`mod/M53-headers-bates-watermarks-links`.
+
+**Keep as the record:** `fix/hardening-review`. Its first commit is the original hardening pass and
+the rest is the review of it. The security file points at it so none of that has to be re-derived.
+Delete it only once that work has been re-landed.
+
+**Worktrees:** `../ynotPDF-review`, `../ynotPDF-macfix` and `../ynotPDF-post` are finished with once
+their branches land. `../ynotPDF-M53`, `../ynotPDF-paths` and `../ynotPDF-fs` belong to other
+sessions — leave them alone.
+
+## 6. Two habits worth keeping
+
+Both of these cost real time tonight.
+
+**Never pipe a test run through `tail`.** The exit status of a pipeline is the last command's, so a
+run with seventeen failures reports `exit 0`. The failure block sits above the cut, and the summary
+line that survives looks like a pass. It fooled two sessions independently within an hour.
+
+**Reconcile the totals.** `npx playwright test --list` gives the expected count. A run reporting
+fewer passes than that is hiding something — 546 listed against 525 passed and 4 skipped was
+seventeen failures in plain sight, and neither of us saw it until the arithmetic was done.
