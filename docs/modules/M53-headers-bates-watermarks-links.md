@@ -309,7 +309,7 @@ help, **ours** = our own choice.
 8. **No transparency anywhere, including on the page.** The brief marks watermark
    opacity ✗ and CLAUDE.md forbids translucent chrome. A watermark we create is a
    solid colour the reader picks; a watermark the file already carries keeps whatever
-   alpha it has, because that is the document rather than the interface. *(operator
+   alpha it has, because that is the document rather than the interface. *(Tony's
    rule.)*
 8a. **"Appears when printing" is an optional-content group, because that is the only
     thing that means it.** A decoration whose screen and print states differ is drawn
@@ -387,7 +387,7 @@ help, **ours** = our own choice.
   tool, the link layer (`src/renderer/view/LinkLayer.ts`, a new entry in the layer stack), the
   link properties dialog, the auto-detect review dialog and the Links panel.
 - Tests: 55 unit (pure functions, the model, the command, the plan, PDFium and the writer
-  end to end, plus an opt-in pass over the operator's own files) and 5 Playwright journeys that
+  end to end, plus an opt-in pass over Tony's own files) and 5 Playwright journeys that
   press the ribbon button, type in the dialog and click the page.
 
 **Found on the way.**

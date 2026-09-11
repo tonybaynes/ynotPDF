@@ -6,8 +6,8 @@
  * this build has no `type` for is **left on the page exactly as written**, so a macro added to
  * the data file without the code behind it is visible rather than silently blank.
  *
- * Dates are formatted here rather than through `Intl`, on purpose. A header written on the
- * operator's Windows machine and re-rendered on a Linux CI runner has to say the same words, and
+ * Dates are formatted here rather than through `Intl`, on purpose. A header written on
+ * Tony's Windows machine and re-rendered on a Linux CI runner has to say the same words, and
  * `Intl`'s output for a locale is a property of the platform's ICU build, not of the input.
  *
  * Pure: no clock, no engine, no DOM. The moment a decoration was applied arrives in

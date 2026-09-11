@@ -1,10 +1,10 @@
 /**
- * M53 against the operator's own files (`test/fixtures/local/`, git-ignored).
+ * M53 against Tony's own files (`test/fixtures/local/`, git-ignored).
  *
  * Synthetic fixtures are made by the same code that reads them, so they agree with us by
  * construction. These are real files made by other applications: a boarding pass is a small,
  * awkward page with its own fonts and its own idea of a crop box, and a Foxit-made portfolio is
- * the shape this application will meet most often on the operator's machine.
+ * the shape this application will meet most often on Tony's machine.
  *
  * The whole block skips when the folder is empty, so CI and other machines are unaffected.
  */
@@ -63,7 +63,7 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(s);
 }
 
-describe.skipIf(FILES.length === 0)('the operator’s own files', () => {
+describe.skipIf(FILES.length === 0)('Tony’s own files', () => {
   it('takes a header on every page, saves, and gives it back', async () => {
     for (const path of FILES) {
       const bytes = new Uint8Array(readFileSync(path));
