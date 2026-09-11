@@ -160,6 +160,15 @@ export async function buildCheatSheet(
   const t = options.template ?? CHEAT_SHEET_TEMPLATE;
   const isMac = options.isMac ?? false;
   const doc = await PDFDocument.create();
+  // The sheet is dated, so date it once and stamp that everywhere — including the document's own
+  // metadata. Left alone, pdf-lib fills CreationDate and ModificationDate from the wall clock at
+  // save time, and those live inside a deflate-compressed object stream: two builds a second apart
+  // compress to *different lengths*. Measured on this machine, one unchanged document saved at 575,
+  // 576 or 577 bytes across 120 consecutive seconds. A sheet built for a given day should be the
+  // same file every time (2026-09-11).
+  const stamp = options.date ?? new Date();
+  doc.setCreationDate(stamp);
+  doc.setModificationDate(stamp);
   const regular = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
 
@@ -173,7 +182,7 @@ export async function buildCheatSheet(
   const labelWidth = columnWidth - keyWidth - 6;
 
   const boundCount = rows.filter((r) => r.key !== undefined).length;
-  const dateText = (options.date ?? new Date()).toLocaleDateString(options.locale ?? 'en-GB', {
+  const dateText = stamp.toLocaleDateString(options.locale ?? 'en-GB', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
