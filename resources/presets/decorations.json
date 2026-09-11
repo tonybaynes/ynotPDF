@@ -1,0 +1,199 @@
+{
+  "$comment": "Built-in presets for the page-decoration dialogs (M53). Data, not code: PLAN.md §4.4. Each entry is `{ id, name, kind, spec }` and the spec is exactly what src/renderer/modules/M53-headers-bates-watermarks-links/model.ts validates, so a preset that gains a field an older build does not know simply loses that field rather than failing to load. Colours are `0xRRGGBB` numbers because they end up inside the PDF, not in the interface — theme tokens have no meaning on a printed page. Presets the reader saves live in settings, not here.",
+  "version": 1,
+  "presets": [
+    {
+      "id": "page-numbers",
+      "name": "Page numbers",
+      "kind": "header-footer",
+      "spec": {
+        "kind": "header-footer",
+        "zones": { "footer-centre": "<<1 of n>>" },
+        "font": "Helvetica",
+        "size": 9,
+        "colour": 0,
+        "margins": { "left": 36, "right": 36, "top": 28, "bottom": 28 },
+        "underline": false,
+        "shrink": 0,
+        "startNumber": 1,
+        "totalOverride": 0
+      }
+    },
+    {
+      "id": "filename-and-date",
+      "name": "File name and date",
+      "kind": "header-footer",
+      "spec": {
+        "kind": "header-footer",
+        "zones": {
+          "header-left": "<<FileName>>",
+          "header-right": "<<d:d MMMM yyyy>>",
+          "footer-right": "<<1 of n>>"
+        },
+        "font": "Helvetica",
+        "size": 9,
+        "colour": 0,
+        "margins": { "left": 36, "right": 36, "top": 28, "bottom": 28 },
+        "underline": true,
+        "shrink": 0,
+        "startNumber": 1,
+        "totalOverride": 0
+      }
+    },
+    {
+      "id": "title-block",
+      "name": "Title, author, page",
+      "kind": "header-footer",
+      "spec": {
+        "kind": "header-footer",
+        "zones": {
+          "header-centre": "<<Title>>",
+          "footer-left": "<<Author>>",
+          "footer-right": "Page <<1>> of <<n>>"
+        },
+        "font": "Times-Roman",
+        "size": 10,
+        "colour": 0,
+        "margins": { "left": 42, "right": 42, "top": 32, "bottom": 32 },
+        "underline": false,
+        "shrink": 0,
+        "startNumber": 1,
+        "totalOverride": 0
+      }
+    },
+    {
+      "id": "bates-plain",
+      "name": "Plain numbering",
+      "kind": "bates",
+      "spec": {
+        "kind": "bates",
+        "prefix": "",
+        "suffix": "",
+        "digits": 6,
+        "startAt": 1,
+        "zone": "footer-right",
+        "font": "Courier",
+        "size": 9,
+        "colour": 0,
+        "margins": { "left": 36, "right": 36, "top": 28, "bottom": 28 }
+      }
+    },
+    {
+      "id": "bates-exhibit",
+      "name": "Exhibit numbering",
+      "kind": "bates",
+      "spec": {
+        "kind": "bates",
+        "prefix": "EX-",
+        "suffix": "",
+        "digits": 5,
+        "startAt": 1,
+        "zone": "footer-right",
+        "font": "Helvetica-Bold",
+        "size": 9,
+        "colour": 0,
+        "margins": { "left": 36, "right": 36, "top": 28, "bottom": 28 }
+      }
+    },
+    {
+      "id": "draft",
+      "name": "DRAFT across the page",
+      "kind": "watermark",
+      "spec": {
+        "kind": "watermark",
+        "source": { "kind": "text", "text": "DRAFT" },
+        "font": "Helvetica-Bold",
+        "size": 64,
+        "colour": 12303291,
+        "rotation": 45,
+        "scale": 0.7,
+        "position": "centre",
+        "offsetX": 0,
+        "offsetY": 0,
+        "behind": true,
+        "print": true,
+        "screen": true
+      }
+    },
+    {
+      "id": "confidential",
+      "name": "CONFIDENTIAL",
+      "kind": "watermark",
+      "spec": {
+        "kind": "watermark",
+        "source": { "kind": "text", "text": "CONFIDENTIAL" },
+        "font": "Helvetica-Bold",
+        "size": 40,
+        "colour": 10066329,
+        "rotation": 0,
+        "scale": 0.85,
+        "position": "centre",
+        "offsetX": 0,
+        "offsetY": 0,
+        "behind": true,
+        "print": true,
+        "screen": true
+      }
+    },
+    {
+      "id": "copy-for-print",
+      "name": "COPY, printed only",
+      "kind": "watermark",
+      "spec": {
+        "kind": "watermark",
+        "source": { "kind": "text", "text": "COPY" },
+        "font": "Helvetica-Bold",
+        "size": 56,
+        "colour": 11184810,
+        "rotation": 30,
+        "scale": 0.6,
+        "position": "centre",
+        "offsetX": 0,
+        "offsetY": 0,
+        "behind": true,
+        "print": true,
+        "screen": false
+      }
+    },
+    {
+      "id": "paper-cream",
+      "name": "Cream paper",
+      "kind": "background",
+      "spec": {
+        "kind": "background",
+        "source": { "kind": "colour" },
+        "font": "Helvetica",
+        "size": 48,
+        "colour": 16775920,
+        "rotation": 0,
+        "scale": 0,
+        "position": "centre",
+        "offsetX": 0,
+        "offsetY": 0,
+        "behind": true,
+        "print": true,
+        "screen": true
+      }
+    },
+    {
+      "id": "paper-grey",
+      "name": "Light grey paper",
+      "kind": "background",
+      "spec": {
+        "kind": "background",
+        "source": { "kind": "colour" },
+        "font": "Helvetica",
+        "size": 48,
+        "colour": 15790320,
+        "rotation": 0,
+        "scale": 0,
+        "position": "centre",
+        "offsetX": 0,
+        "offsetY": 0,
+        "behind": true,
+        "print": true,
+        "screen": true
+      }
+    }
+  ]
+}

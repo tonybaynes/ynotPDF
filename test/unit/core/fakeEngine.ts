@@ -14,6 +14,7 @@
  * that has to prove the *engine* behaves is in `test/unit/engine/`, against real PDFium.
  */
 
+import type { DecorationDraw, FoundDecoration } from '@engine/decorations/types';
 import {
   DEFAULT_INITIAL_VIEW,
   EngineError,
@@ -112,6 +113,8 @@ interface FakePage {
   label: string;
   annotations: Annotation[];
   objects: PageObject[];
+  /** Decorations, in the order `setDecorations` last put them there (M53). */
+  decorations: DecorationDraw[];
 }
 
 /** The file a fake document starts from. Every field has a sensible default. */
@@ -190,6 +193,7 @@ export class FakeEngine implements PdfEngine {
         label: spec.labels?.[i] ?? String(i + 1),
         annotations: list.map((a, j) => ({ ...a, id: `a${i}.${j}`, page: i })),
         objects: (spec.objects?.[i] ?? []).map((o, j) => ({ ...o, index: j })),
+        decorations: [],
       });
     }
     const handle = this.next++ as DocHandle;
@@ -435,6 +439,7 @@ export class FakeEngine implements PdfEngine {
         label: String(at + i + 1),
         annotations: [],
         objects: [],
+        decorations: [],
       });
     }
     d.pages.splice(at, 0, ...made);
@@ -781,6 +786,35 @@ export class FakeEngine implements PdfEngine {
       fill: o.fillColor !== undefined,
       stroke: o.strokeColor !== undefined,
     });
+  }
+
+  /**
+   * Page decorations (M53, ADR 0020). The fake keeps them per page as a list, so a model test
+   * can assert that a command re-applied them without a PDF anywhere near it.
+   */
+  setDecorations(
+    doc: DocHandle,
+    page: PageIndex,
+    items: ReadonlyArray<DecorationDraw>,
+  ): Promise<number> {
+    this.note('setDecorations');
+    const p = this.page(doc, page);
+    const removed = p.decorations.length;
+    p.decorations = items.map((d) => ({ ...d }));
+    return Promise.resolve(removed);
+  }
+
+  decorations(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<FoundDecoration>> {
+    return Promise.resolve(
+      this.page(doc, page).decorations.map((d, index) => ({
+        page,
+        id: d.id,
+        kind: d.kind,
+        index,
+        spec: d.spec,
+        foreign: false,
+      })),
+    );
   }
 
   save(doc: DocHandle): Promise<Uint8Array> {

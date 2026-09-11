@@ -121,6 +121,12 @@
       "links": 3,
       "text": "Visit example.com"
     },
+    "urls.pdf": {
+      "pages": 2,
+      "annotations": 1,
+      "links": 1,
+      "text": "https://example.com"
+    },
     "forms-all.pdf": {
       "pages": 1,
       "annotations": 13,
