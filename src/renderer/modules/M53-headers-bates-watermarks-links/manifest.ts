@@ -839,18 +839,21 @@ export default defineModule({
 
   ribbon: [
     {
-      id: 'organize.pageMarks',
-      tab: 'organize',
+      id: 'edit.pageMarks',
+      tab: 'edit',
       label: 'Page marks',
-      order: 40,
+      order: 50,
       /*
-       * One large button, two small, and everything else in one menu.
+       * On the **Edit** tab, beside Links, rather than on Organize.
        *
-       * Four large buttons made the Organize tab wide enough that a group collapsed even on a
-       * full-screen window, which `shell.spec.ts` rightly calls a defect: a reader should not
-       * have to open a popup to reach a top-level command at a normal size. The three a person
-       * reaches for stay on the ribbon; the background and the five removals are one click
-       * further in, where Foxit also puts its less-used marks.
+       * Organize is about the order and presence of pages; a header, a watermark and a background
+       * change what is *on* one, which is editing — and it puts them next to the links, the other
+       * thing this module adds to a page. It is also the tab with room: with the group labels
+       * shown, Organize had none left at 1500 px, and `shell.spec.ts` rightly calls a group that
+       * collapses at that width a defect.
+       *
+       * One large button, two small, and everything else in one menu. The three a person reaches
+       * for stay on the ribbon; the background and the five removals are one click further in.
        */
       items: [
         { kind: 'button', command: 'decorate.headerFooter', size: 'large' },

@@ -82,7 +82,7 @@ test('M53: a header goes on every page and comes off again', async () => {
   const j = journey(app);
   await j.openDocument(join(FIXTURES, 'multipage.pdf'));
 
-  await j.clickRibbon('organize', 'Header and Footer…');
+  await j.clickRibbon('edit', 'Header and Footer…');
   const dialog = app.page.locator('#header-footer-dialog');
   await expect(dialog, 'the header and footer dialog did not open').toBeVisible();
   // The preview is the real page, rendered by the engine.
@@ -102,7 +102,7 @@ test('M53: a header goes on every page and comes off again', async () => {
   expect(after.capturedPages).toBe(5);
 
   // Off again, through the ribbon's Remove menu — two clicks, which is what the reader makes.
-  await j.clickRibbon('organize', 'More Marks');
+  await j.clickRibbon('edit', 'More Marks');
   await j.clickMenuItem('Remove Header and Footer');
   await expect
     .poll(async () => (await decorationsOf(app)).items.length, {
@@ -117,7 +117,7 @@ test('M53: Bates numbering runs from the number the reader chose', async () => {
   const j = journey(app);
   await j.openDocument(join(FIXTURES, 'multipage.pdf'));
 
-  await j.clickRibbon('organize', 'Bates Numbering…');
+  await j.clickRibbon('edit', 'Bates Numbering…');
   const dialog = app.page.locator('#bates-dialog');
   await expect(dialog).toBeVisible();
 
@@ -146,7 +146,7 @@ test('M53: a watermark goes behind the page contents', async () => {
   const j = journey(app);
   await j.openDocument(join(FIXTURES, 'text.pdf'));
 
-  await j.clickRibbon('organize', 'Watermark…');
+  await j.clickRibbon('edit', 'Watermark…');
   const dialog = app.page.locator('#watermark-dialog');
   await expect(dialog).toBeVisible();
   await dialog.locator('[data-testid="watermark-text"]').fill('DRAFT');

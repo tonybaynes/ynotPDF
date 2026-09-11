@@ -349,6 +349,12 @@ help, **ours** = our own choice.
     until the reader presses Create. *(Foxit offers the same as one action; the review
     step is ours — an unattended pass that turns a version number into a link is worse
     than no pass.)*
+13a. **The page marks live on the Edit tab, beside the links.** Organize is about the
+    order and presence of pages; a header, a watermark and a background change what is
+    *on* one, which is editing — and it puts them next to the other thing this module
+    adds to a page. Edit is also the tab with room: with the group labels shown,
+    Organize had none left at 1500 px, and `shell.spec.ts` rightly calls a group that
+    collapses at that width a defect. *(ours; measured, not guessed.)*
 14. **Everything is a command.** `decorate.*` and `link.*` ids, all in the palette;
     `Mod+Shift+H` header & footer, `Mod+Shift+W` watermark, `Mod+Shift+B` Bates,
     `Mod+Shift+K` the link tool — checked against
