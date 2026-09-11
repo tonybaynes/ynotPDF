@@ -42,6 +42,7 @@ import {
   askAboutRecovery,
   askAboutSignatures,
   askAboutUnsaved,
+  askAboutSaveWarnings,
   type CloseAnswer,
 } from './dialogs';
 import { buildWritePlan } from './plan';
@@ -66,6 +67,7 @@ import {
 } from './settings';
 import { LAST_FOLDER_KEY } from './settings';
 import { WriterClient } from './WriterClient';
+import { t } from '@modules/M130-preferences/i18n';
 
 export const SAVE_SERVICE = 'save';
 
@@ -74,6 +76,7 @@ const PROGRESS_DELAY_MS = 400;
 
 /** What a save attempt did. `path` is null when nothing was written. */
 export interface SaveOutcome {
+  /** Bytes were written. Warnings can leave the document dirty; callers must not assume clean. */
   readonly saved: boolean;
   readonly path: string | null;
   /** Why nothing was written, in the words the caller may show. */
@@ -455,6 +458,8 @@ export class SaveService {
     entry.saving = true;
     this.shell.invalidate();
     try {
+      // Plan warnings are known before any expensive work; do not build bytes the reader declined.
+      await this.reviewWarnings(document, path, planWarnings);
       // Plaintext for the writer when a stage owns the protection (M70): pdf-lib cannot rewrite
       // an encrypted document, and the stage will put the protection back — or deliberately not —
       // once the writer has finished. Without a stage this stays false and an encrypted document
@@ -473,22 +478,44 @@ export class SaveService {
         },
       });
 
+      const warnings = [
+        ...new Set([...planWarnings, ...written.warnings, ...(staged.warnings ?? [])]),
+      ];
+      // Writer/stage warnings must also be accepted before the first filesystem write. A plan
+      // warning already reviewed need not be shown twice, but newly discovered warnings must be.
+      await this.reviewWarnings(
+        document,
+        path,
+        warnings.filter((warning) => !planWarnings.includes(warning)),
+      );
+
       const result = await this.writeBytes(path, staged.bytes, options.backup);
       if (!result.ok) {
         return await this.handleWriteFailure(entry, result.message);
       }
 
-      // The document is saved: nothing to recover, and the file on disk is now ours.
-      await this.recoveryStorage.discard(entry.recoveryId);
       entry.source = fingerprintBytes(staged.bytes, result.modifiedAt);
-      document.undo.markSaved();
+      if (warnings.length === 0) {
+        await this.recoveryStorage.discard(entry.recoveryId);
+        document.undo.markSaved();
+      } else {
+        // Consent permits writing the available result, not pretending every model edit was
+        // persisted. String warnings have no reliable severity classification (ADR 0021).
+        document.undo.markUnsaved();
+        this.shell.toasts.show({
+          kind: 'warning',
+          text: t(
+            'save.warnings.saved',
+            'File written with warnings. The document is still marked unsaved; review it before closing.',
+          ),
+        });
+      }
       if (options.rename || entry.path !== path) {
         this.documents.update(entry.tabId, { path });
         await this.refreshPath(entry, path);
         if (hasBridge()) await invoke('recent:add', path).catch(() => []);
       }
       this.reportUnsaved();
-      const warnings = [...planWarnings, ...written.warnings, ...(staged.warnings ?? [])];
       return {
         saved: true,
         path,
@@ -512,6 +539,23 @@ export class SaveService {
     } finally {
       entry.saving = false;
       this.shell.invalidate();
+    }
+  }
+
+  private async reviewWarnings(
+    document: Document,
+    path: string,
+    warnings: ReadonlyArray<string>,
+  ): Promise<void> {
+    if (warnings.length === 0) return;
+    if (
+      !(await askAboutSaveWarnings(this.shell.dialogs, {
+        title: document.state.title,
+        path,
+        warnings: [...new Set(warnings)],
+      }))
+    ) {
+      throw new WriteCancelled(t('save.warnings.cancelled', 'The document was not saved.'));
     }
   }
 
@@ -804,7 +848,8 @@ export class SaveService {
       return 'discard';
     }
     const outcome = await this.save(document);
-    return outcome.saved || outcome.reason === 'clean' ? 'save' : 'cancel';
+    // A warning-accepted write may omit edits. It is not permission to discard the live model.
+    return (outcome.saved || outcome.reason === 'clean') && !document.isDirty ? 'save' : 'cancel';
   }
 
   /** Every open document is asked about, in order; the first Cancel stops the whole thing. */

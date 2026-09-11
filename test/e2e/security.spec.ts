@@ -431,13 +431,21 @@ test.describe('document security', () => {
 
     // Change something, so the save is a real one rather than the no-op a clean document gets.
     await app.run('dev.documentApply', { kind: 'rotate', page: 0, rotation: 90 });
-    // Saving then says, in words, that it cannot put the certificate protection back — a
-    // public-key file names its recipients but does not carry their certificates.
-    const saved = (await app.run('file.save')) as { saved: boolean; warnings?: string[] };
+    // The decision is visible BEFORE replacing the protected source (audit 2). A public-key
+    // file names its recipients but does not carry their certificates.
+    const protectedBytes = readFileSync(path);
+    const saving = app.run('file.save');
+    const warning = app.page.locator('#save-warnings-dialog');
+    await expect(warning).toBeVisible();
+    await expect(warning).toContainText('protected with certificates');
+    expect(readFileSync(path)).toEqual(protectedBytes);
+    await warning.getByRole('button', { name: 'Save with these warnings', exact: true }).click();
+    const saved = (await saving) as { saved: boolean; warnings?: string[] };
     expect(saved.saved).toBe(true);
     expect((saved.warnings ?? []).join(' ')).toMatch(
       /protected with certificates, and the saved copy is not/,
     );
+    expect(await app.run('dev.saveState')).toMatchObject({ dirty: true });
     await closeDiscarding(app);
   });
 });

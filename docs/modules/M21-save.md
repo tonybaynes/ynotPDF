@@ -41,6 +41,14 @@ Write the document back to disk: Save / Save As via a full pdf-lib
 rewrite that applies the journal, autosave with crash recovery, file-lock
 and changed-on-disk handling, and the close-with-unsaved flow.
 
+### Audit follow-up — save warnings (2026-09-12)
+
+Finding 2 adds pre-write review of plan, writer and pipeline warnings (ADR 0021). Cancel leaves
+the destination untouched. Explicit consent writes the available output while retaining dirty
+state and existing recovery records; close/quit cannot interpret that write as permission to
+discard the model. Warning-free saves are unchanged. The new warning regression suite and the
+Save ribbon/certificate UI scenarios exercise this decision through the real save service.
+
 ## Foxit 14 reference — what to emulate
 
 Foxit File → Save / Save As (with "reduce file size" option — that part is
