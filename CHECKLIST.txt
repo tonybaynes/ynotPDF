@@ -175,17 +175,17 @@ WAVE 5
       needs: M21 M11
       prompt: Read D:\Projects\ynotPDF\docs\modules\M50-object-model.md and carry out the "Your task" section in full.
 
-[ ] M60  Form fill & AcroForm field designer
+[✔] M60  Form fill & AcroForm field designer
       model:  Opus
       needs: M21 M30
       prompt: Read D:\Projects\ynotPDF\docs\modules\M60-forms.md and carry out the "Your task" section in full.
 
-[ ] M92  Export to images, text, HTML & RTF
+[✔] M92  Export to images, text, HTML & RTF
       model:  Opus
       needs: M11 M13
       prompt: Read D:\Projects\ynotPDF\docs\modules\M92-export.md and carry out the "Your task" section in full.
 
-[ ] M100  Optimise (reduce size), linearise, repair, remove duplicates
+[✔] M100  Optimise (reduce size), linearise, repair, remove duplicates
       model:  Opus
       needs: M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M100-optimise-repair.md and carry out the "Your task" section in full.
@@ -193,7 +193,7 @@ WAVE 5
 
 WAVE 6
 ------
-[ ] M53  Header/footer, Bates numbering, watermark, background & links
+[✔] M53  Header/footer, Bates numbering, watermark, background & links
       model:  Opus
       needs: M50 M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M53-headers-bates-watermarks-links.md and carry out the "Your task" section in full.
