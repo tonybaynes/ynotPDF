@@ -207,7 +207,111 @@ export const ANNOTATION_DICT_MAPPINGS: ReadonlyArray<DictMapping> = [
   { key: 'caption', pdfKey: 'Cap', kind: 'bool', engineWritable: false },
   { key: 'captionPosition', pdfKey: 'CP', kind: 'name', engineWritable: true },
   { key: 'captionOffset', pdfKey: 'CO', kind: 'numbers', engineWritable: false },
+  /*
+   * M53 (ADR 0020). A link's action, its `/H` highlight and the `/Border` a viewer draws.
+   *
+   * `linkAction` is the whole `/A` dictionary: a URI, a page of another file (`/GoToR`) or a
+   * file handed to the operating system (`/Launch`). A go-to *inside this document* is not here
+   * — its destination names a page object, and only M21's plan can turn a model page id into a
+   * reference, so that one arrives as `PlannedAnnotation.dest`.
+   */
+  {
+    key: 'linkAction',
+    pdfKey: 'A',
+    kind: 'dict',
+    engineWritable: false,
+    encode: (value) => encodeLinkAction(value),
+  },
+  /*
+   * The same action as JSON, under a private key.
+   *
+   * PDFium creates a Link annotation happily but has no setter for `/A`, so an action written
+   * only into the model is lost the moment the page is read again — which every viewer does. The
+   * JSON *is* engine-writable (`FPDFAnnot_SetStringValue` takes any key), so it survives the
+   * round trip and is what `readAction` reads. It is also what makes a link this application
+   * wrote editable in a file it opens later, exactly as the decoration marker is (M53, ADR 0020).
+   */
+  { key: 'linkActionJson', pdfKey: 'YNOTLinkAction', kind: 'string', engineWritable: true },
+  { key: 'linkHighlight', pdfKey: 'H', kind: 'name', engineWritable: true },
+  /*
+   * `/Border` is `[hRadius vRadius width]`, and a width of 0 is what "an invisible rectangle"
+   * means — the one thing every viewer agrees on. `/BS /W` says the same thing to the ones that
+   * read it, and M21's plan writes that from `borderWidth`.
+   */
+  { key: 'linkBorderArray', pdfKey: 'Border', kind: 'numbers', engineWritable: false },
 ];
+
+/** A link action in model terms → the `/A` dictionary (M53, ADR 0020 §5). */
+function encodeLinkAction(value: unknown): DictValue | null {
+  if (!value || typeof value !== 'object') return null;
+  const r = value as Record<string, unknown>;
+  const text = (key: string): string => (typeof r[key] === 'string' ? r[key] : '');
+  switch (r['kind']) {
+    case 'uri': {
+      const uri = text('uri');
+      if (uri === '') return null;
+      return {
+        kind: 'dict',
+        value: {
+          Type: { kind: 'name', value: 'Action' },
+          S: { kind: 'name', value: 'URI' },
+          URI: { kind: 'string', value: uri },
+        },
+      };
+    }
+    case 'file': {
+      const path = text('path');
+      if (path === '') return null;
+      const page = typeof r['page'] === 'number' && Number.isFinite(r['page']) ? r['page'] : 0;
+      return {
+        kind: 'dict',
+        value: {
+          Type: { kind: 'name', value: 'Action' },
+          S: { kind: 'name', value: 'GoToR' },
+          F: {
+            kind: 'dict',
+            value: {
+              Type: { kind: 'name', value: 'Filespec' },
+              F: { kind: 'string', value: path },
+              UF: { kind: 'string', value: path },
+            },
+          },
+          // A remote destination names its page by *number*, which is the one place a
+          // destination needs no reference at all.
+          D: {
+            kind: 'array',
+            value: [
+              { kind: 'number', value: Math.max(0, Math.round(page)) },
+              { kind: 'name', value: 'Fit' },
+            ],
+          },
+          NewWindow: { kind: 'bool', value: false },
+        },
+      };
+    }
+    case 'open': {
+      const path = text('path');
+      if (path === '') return null;
+      return {
+        kind: 'dict',
+        value: {
+          Type: { kind: 'name', value: 'Action' },
+          S: { kind: 'name', value: 'Launch' },
+          F: {
+            kind: 'dict',
+            value: {
+              Type: { kind: 'name', value: 'Filespec' },
+              F: { kind: 'string', value: path },
+              UF: { kind: 'string', value: path },
+            },
+          },
+        },
+      };
+    }
+    default:
+      return null;
+  }
+}
 
 const BY_KEY = new Map(ANNOTATION_DICT_MAPPINGS.map((m) => [m.key, m]));
 

@@ -1,0 +1,342 @@
+/*
+ * M53 — the decoration dialogs and the link overlay.
+ *
+ * Colours are theme tokens only, and nothing here is translucent: the dialogs are opaque and the
+ * link outlines are solid lines whose *pattern* carries the meaning, never a hue on its own.
+ */
+
+/* ---- the decoration dialogs ------------------------------------------------------------------ */
+
+.decoration-dialog .decoration-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .decoration-dialog .decoration-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.decoration-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.decoration-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem 0.75rem;
+}
+
+.decoration-subheading {
+  margin: 0.5rem 0 0;
+  font-size: 0.95em;
+  font-weight: var(--fw-heading);
+  color: var(--fg);
+}
+
+.decoration-preset-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: end;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.decoration-preset-actions {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.decoration-zones {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.decoration-macros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.decoration-macros-label {
+  color: var(--fg-muted);
+}
+
+.decoration-macro {
+  font-size: 0.9em;
+}
+
+.decoration-colour-row {
+  display: flex;
+  gap: 0.375rem;
+  align-items: center;
+}
+
+.decoration-colour {
+  inline-size: 2.5rem;
+  block-size: 1.9rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-input);
+}
+
+.decoration-colour-hex {
+  inline-size: 7ch;
+}
+
+.decoration-file-row {
+  display: flex;
+  gap: 0.375rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.decoration-file {
+  color: var(--fg-muted);
+}
+
+.decoration-source .field.is-hidden {
+  display: none;
+}
+
+.decoration-sample {
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+  color: var(--fg);
+}
+
+/* ---- the preview ------------------------------------------------------------------------------ */
+
+.decoration-preview-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.decoration-preview-title {
+  margin: 0;
+  font-size: 0.95em;
+  font-weight: var(--fw-heading);
+}
+
+/*
+ * The preview frame is a fixed shape on purpose: the page is scaled to fit inside it, so a
+ * portrait page and a landscape one do not make the dialog jump about while it is open.
+ */
+.decoration-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 260px;
+  padding: 0.5rem;
+  background: var(--bg-page-backdrop, var(--bg-app));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.decoration-preview-canvas {
+  display: block;
+  max-inline-size: 100%;
+  max-block-size: 360px;
+  block-size: auto;
+  box-shadow: 0 1px 3px var(--shadow);
+}
+
+.decoration-preview-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.decoration-preview-label {
+  display: flex;
+  gap: 0.375rem;
+  align-items: center;
+  color: var(--fg);
+}
+
+.decoration-preview-page {
+  inline-size: 6ch;
+}
+
+.decoration-preview-status {
+  margin: 0;
+  color: var(--fg-muted);
+}
+
+/* ---- links on the page ------------------------------------------------------------------------ */
+
+/*
+ * The layer is raised above the tool layer, as M60's widget layer is and for the same reason: the
+ * link boxes have to take a click, and everything else on the page still has to reach the active
+ * tool. The layer itself never takes an event.
+ */
+.viewer-content .page .layer-link {
+  pointer-events: none;
+  overflow: visible;
+  z-index: 1;
+}
+
+.viewer-content .page .layer-link .link-area {
+  fill: transparent;
+  stroke: none;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* In edit mode every link is outlined, so a reader can see what is there to change. */
+.viewer-content .page .layer-link[data-mode='edit'] .link-area {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 3;
+}
+
+.viewer-content .page .layer-link[data-mode='edit'] .link-area[data-quiet='true'] {
+  stroke: none;
+}
+
+.viewer-content .page .layer-link[data-mode='edit'] .link-area[data-selected='true'] {
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-dasharray: none;
+}
+
+.viewer-content .page .layer-link .link-draft {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
+.viewer[data-tool-cursor='crosshair'] .layer-link .link-area {
+  cursor: crosshair;
+}
+
+/* ---- the link dialogs and panel ---------------------------------------------------------------- */
+
+.link-confirm-address {
+  margin: 0.25rem 0 0.75rem;
+  padding: 0.5rem 0.625rem;
+  font-family: var(--font-mono, monospace);
+  overflow-wrap: anywhere;
+  color: var(--fg);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.link-candidates {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  max-block-size: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.link-candidate {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) auto minmax(0, 3fr);
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.link-candidate:last-child {
+  border-bottom: none;
+}
+
+.link-candidate-page {
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.link-candidate-uri {
+  overflow-wrap: anywhere;
+  color: var(--fg);
+}
+
+.links-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  min-block-size: 0;
+}
+
+.links-summary {
+  margin: 0;
+  color: var(--fg-muted);
+}
+
+.links-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+
+.links-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.5rem;
+  inline-size: 100%;
+  padding: 0.3rem 0.4rem;
+  text-align: start;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.links-item:hover {
+  background: var(--bg-hover);
+}
+
+.links-item[aria-current='true'] {
+  background: var(--selection);
+  border-color: var(--accent);
+}
+
+.links-page {
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+/*
+ * A link's description wraps rather than trailing off into an ellipsis.
+ *
+ * The pane is narrow and an address is long, so something has to give; cutting the address off is
+ * the one thing that makes the list useless — "Opens https://exam…" answers nothing. The row
+ * grows instead, and the address breaks wherever it must.
+ */
+.links-what {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.links-actions {
+  display: flex;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+}

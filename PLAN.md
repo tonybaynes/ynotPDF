@@ -41,7 +41,7 @@ commit. Sub-conversations working in parallel follow **§12**.
 | 5 | M60 Form fill & AcroForm field designer | [M60-forms.md](docs/modules/M60-forms.md) | ☑ |
 | 5 | M92 Export to images, text, HTML & RTF | [M92-export.md](docs/modules/M92-export.md) | ☑ |
 | 5 | M100 Optimise (reduce size), linearise, repair, remove duplicates | [M100-optimise-repair.md](docs/modules/M100-optimise-repair.md) | ☑ |
-| 6 | M53 Header/footer, Bates numbering, watermark, background & links | [M53-headers-bates-watermarks-links.md](docs/modules/M53-headers-bates-watermarks-links.md) | ☐ |
+| 6 | M53 Header/footer, Bates numbering, watermark, background & links | [M53-headers-bates-watermarks-links.md](docs/modules/M53-headers-bates-watermarks-links.md) | ☑ |
 | 6 | M61 Field logic — validation, formatting, calculation, actions; data import/export; flatten | [M61-form-logic-data.md](docs/modules/M61-form-logic-data.md) | ☐ |
 | 6 | M82 Handwritten signatures & initials | [M82-handwritten-signatures.md](docs/modules/M82-handwritten-signatures.md) | ☐ |
 | 6 | M90 OCR — searchable image, image+text, editable text | [M90-ocr.md](docs/modules/M90-ocr.md) | ☐ |

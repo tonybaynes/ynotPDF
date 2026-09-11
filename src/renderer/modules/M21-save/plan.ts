@@ -37,6 +37,7 @@ import type {
   PlannedAttachment,
   PlannedAnnotationProperties,
   PlannedBoxes,
+  PlannedDecorations,
   PlannedDestination,
   PlannedField,
   PlannedLayer,
@@ -53,6 +54,12 @@ import type {
 } from '@engine/Writer';
 import { plannedObjectsFor } from '@modules/M50-object-model/model';
 import { plannedFormFor } from '@modules/M60-forms/plan';
+import {
+  documentContext,
+  plannedDecorationsFor,
+  sourceSizes,
+} from '@modules/M53-headers-bates-watermarks-links/model';
+import { parseAction } from '@modules/M53-headers-bates-watermarks-links/links';
 
 /** What the plan could not express, for the caller to tell the user about. */
 export interface PlanResult {
@@ -65,6 +72,14 @@ export function buildWritePlan(doc: Document): PlanResult {
   const intents = new Set(state.writeIntents);
   const warnings: string[] = [];
   const touched = touchedEntities(doc);
+
+  /*
+   * The decorations are drawn from the same pure functions the live pages were drawn from, so
+   * the file and the screen cannot disagree. Nothing here reads a clock: each decoration carries
+   * the moment it was applied, so this stays a pure function of the document.
+   */
+  const decorationDocument = documentContext(doc);
+  const decorationSources = sourceSizes(doc.custom(XOBJECTS_NAMESPACE));
 
   const pages: PlannedPage[] = [];
   state.pages.forEach((page) => {
@@ -79,6 +94,7 @@ export function buildWritePlan(doc: Document): PlanResult {
       boxes?: PlannedBoxes;
       annotations?: PlannedAnnotation[];
       objects?: PlannedObjects;
+      decorations?: PlannedDecorations;
     } = { source };
     if (intents.has('page-labels')) planned.label = page.label;
     if (intents.has('page-boxes')) {
@@ -90,6 +106,13 @@ export function buildWritePlan(doc: Document): PlanResult {
     // Page-object edits replayed onto the original content stream (M50, ADR 0018).
     const objects = plannedObjectsFor(doc, page.id);
     if (objects) planned.objects = objects;
+    // Headers, footers, Bates numbers, watermarks and backgrounds (M53, ADR 0020). Only when the
+    // session actually changed them, so a document opened with decorations on it and saved
+    // untouched still round-trips.
+    if (intents.has('decorations')) {
+      const decorations = plannedDecorationsFor(doc, page, decorationDocument, decorationSources);
+      if (decorations) planned.decorations = decorations;
+    }
     pages.push(planned);
   });
 
@@ -183,6 +206,23 @@ export function asPlannedXObject(value: unknown): PlannedXObject | null {
         width: r['width'],
         height: r['height'],
       };
+    // One page of another PDF: a watermark or a background made from a file (M53, ADR 0020 §4).
+    case 'pdf':
+      if (
+        typeof r['data'] !== 'string' ||
+        typeof r['page'] !== 'number' ||
+        typeof r['width'] !== 'number' ||
+        typeof r['height'] !== 'number'
+      ) {
+        return null;
+      }
+      return {
+        kind: 'pdf',
+        data: r['data'],
+        page: r['page'],
+        width: r['width'],
+        height: r['height'],
+      };
     default:
       return null;
   }
@@ -248,15 +288,68 @@ function plannedAnnotations(
       insert?: boolean;
       properties?: PlannedAnnotationProperties;
       appearance?: { input: AppearanceInput; replace: boolean };
+      dest?: PlannedDestination | null;
     } = { index, subtype: annotation.subtype, rect: annotation.rect };
     if (insert) entry.insert = true;
     if (wasChanged) {
       entry.properties = changedProperties(annotation, (id) => doc.annotation(id)?.name ?? null);
+      /*
+       * A link's `/Dest` (M53, ADR 0020 §5). The model holds the target as a page id; only the
+       * plan can see both that and the page's place in the finished document, so it resolves it
+       * here. A link that names no page inside the document says `null`, which removes any `/Dest`
+       * the file had — the reader changed it to a URL.
+       */
+      if (annotation.subtype === 'Link') entry.dest = plannedLinkDest(doc, annotation);
     }
-    entry.appearance = { input, replace: wasChanged };
+    // A Link has no appearance of its own: viewers draw its border from `/Border` and `/H`, and
+    // an `/AP` we invented would replace that with a picture of a rectangle.
+    if (annotation.subtype !== 'Link') entry.appearance = { input, replace: wasChanged };
     out.push(entry);
   });
   return out;
+}
+
+/**
+ * Where a link goes inside this document, as the writer wants it (M53, ADR 0020 §5).
+ *
+ * `extra.linkDest` holds a **model page id**; the plan indexes `WritePlan.pages`, so a link still
+ * points at the right page after a reorder. A target page that is no longer in the document
+ * resolves to `null`, which removes the `/Dest` rather than pointing it at whatever is now in
+ * that position.
+ */
+function plannedLinkDest(doc: Document, annotation: ModelAnnotation): PlannedDestination | null {
+  const action = linkActionOf(annotation);
+  if (action.kind !== 'page') return null;
+  const index = doc.state.pages.findIndex((p) => p.id === action.page);
+  if (index < 0) return null;
+  return { page: index, fit: action.fit };
+}
+
+/** The action a Link annotation carries, from the JSON the engine keeps for it (M53). */
+function linkActionOf(annotation: ModelAnnotation): ReturnType<typeof parseAction> {
+  const json = annotation.extra['linkActionJson'];
+  if (typeof json !== 'string' || json === '') return { kind: 'none' };
+  try {
+    return parseAction(JSON.parse(json));
+  } catch {
+    return { kind: 'none' };
+  }
+}
+
+/**
+ * A Link's `extra`, with the `/A` dictionary put in beside the JSON that survives a page re-read.
+ *
+ * `dictEntries` is a table of model keys, so the action has to be a model key before it can
+ * become a dictionary. A destination inside this document is not an `/A` at all — it is
+ * `PlannedAnnotation.dest` — so it clears the entry instead.
+ */
+function withLinkAction(annotation: ModelAnnotation): Readonly<Record<string, unknown>> {
+  if (annotation.subtype !== 'Link') return annotation.extra;
+  const action = linkActionOf(annotation);
+  return {
+    ...annotation.extra,
+    linkAction: action.kind === 'page' || action.kind === 'none' ? null : action,
+  };
 }
 
 /**
@@ -295,7 +388,7 @@ function changedProperties(
   if ('vertices' in a) props['vertices'] = a.vertices.length > 0 ? a.vertices : null;
   // Dictionary entries the engine has no setter for — `/CL`, `/Q`, `/Rotate`, `/RD` — and the
   // ones it can only write as strings where the file wants a name.
-  const entries: Record<string, DictValue | null> = dictEntries(a.extra);
+  const entries: Record<string, DictValue | null> = dictEntries(withLinkAction(a));
   /*
    * `/IRT` is a reference to another annotation's object, which is the one thing the model holds
    * as an id and the file holds as a pointer (M32, ADR 0017). The plan is the last place that can

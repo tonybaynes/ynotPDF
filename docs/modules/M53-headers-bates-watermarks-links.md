@@ -256,8 +256,174 @@ colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+Provenance key: **spec** = ISO 32000-1, **Foxit** = observed as a user or from public
+help, **ours** = our own choice.
+
+1. **One marker, and it is a PDFium content mark (ADR 0020).** Every decoration is a
+   form XObject invoked inside `/YNOTDec <</Id … /Kind … /Spec …>> BDC … EMC`. That tag
+   is the only marker that survives all four paths a decoration takes: PDFium's live
+   object list, `FPDFPage_GenerateContent`, a save, and our own content parser. A key
+   on the XObject's dictionary does not — PDFium rebuilds the XObject — and a
+   `/PieceInfo` on the page cannot say *which* object. `Spec` carries the settings as
+   JSON, so "Update header" opens on what the last person chose even in a file this
+   application has never seen before. *(ours; Foxit marks its own decorations too, by
+   some means of its own we have not looked at and must not.)*
+2. **The writer restores the page and appends a stream; it never edits one.**
+   `/Contents` is an array, so a decoration is a new element beside the originals — the
+   page's own bytes are untouched. Before appending, the applier restores the original
+   stream captured before the first decoration (undoing PDFium's regeneration) and
+   strips every `/YNOTDec` span it finds, whoever wrote it. That strip is what makes
+   the order of M50's edits and M53's decorations on one page irrelevant. *(ours;
+   forced by the brief's "never bake into existing streams".)*
+3. **The live view goes through PDFium, so a watermark can be behind the text.**
+   `insertObject` at index 0 puts a decoration under the page's content and at the end
+   puts it over — which an overlay layer could never do, and the acceptance test asks
+   for exactly that. It also means the header's text is in `textRuns` the moment it is
+   added, not only after a save. *(ours; verified against our PDFium build before the
+   design was fixed.)*
+4. **A decoration is described once and drawn once.** `DecorationDraw` — content-stream
+   text, bbox, matrix, resources, behind/in front — is produced by pure functions in
+   `src/engine/decorations/draw.ts` and consumed by both the live engine and the
+   writer. There is one piece of drawing code, so the preview, the page and the saved
+   file cannot disagree. *(ours.)*
+5. **The model holds specs, not geometry.** `Document.custom('M53')` holds the
+   decoration *settings* plus the page range; the per-page drawing is derived. Undo is
+   therefore "put the previous settings back and re-apply", which is exact, cheap to
+   journal and replays in a batch run. *(ours; M20/ADR 0007 sanctions `custom` for
+   this.)*
+6. **Six zones, three positions each side, and the macro set is data.** Header and
+   footer each have left, centre and right; the macros are `<<1>>`, `<<1 of n>>`,
+   `<<Bates>>`, `<<FileName>>`, `<<FullPath>>`, `<<Title>>`, `<<Author>>`,
+   `<<Subject>>`, `<<Date>>`, `<<Time>>` and `<<d:…>>` for an explicit date pattern.
+   Where the numbering starts is a field of the spec, not a spelling of the macro, so
+   the dialog can show it. The catalogue lives in `resources/presets/macros.json` so it
+   can grow without a release; a token the data names and the code has no expander for
+   is left on the page as written rather than guessed at.
+   *(Foxit's own header/footer offers page-number and date macros and six zones; the
+   spelling and the escape rules are ours.)*
+7. **Bates numbering is a decoration like any other**, with prefix, suffix, digit count
+   and start, and it is the one whose number keeps counting across documents in a batch
+   run: the spec carries `startAt` and the runner passes the next value on. Its text is
+   real text in the page content, so a search finds `000123`. *(Foxit; spec for the
+   text.)*
+8. **No transparency anywhere, including on the page.** The brief marks watermark
+   opacity ✗ and CLAUDE.md forbids translucent chrome. A watermark we create is a
+   solid colour the reader picks; a watermark the file already carries keeps whatever
+   alpha it has, because that is the document rather than the interface. *(Tony's
+   rule.)*
+8a. **"Appears when printing" is an optional-content group, because that is the only
+    thing that means it.** A decoration whose screen and print states differ is drawn
+    inside an OCG whose `/Usage` says so, listed in `/OCProperties /D /AS` so a viewer
+    applies it automatically and in `/OFF` so one that ignores `/AS` still starts with
+    it hidden. Nothing else in the format expresses "print but do not show".
+    *(spec 8.11.)*
+8b. **A link's action is stored as JSON on the annotation, under a private key.**
+    PDFium creates a Link annotation but has no `/A` setter, so an action held only in
+    the model is gone the next time the page is read — which every viewer does. The
+    JSON goes in a string key PDFium *can* write (`/YNOTLinkAction`), so it survives
+    the round trip and makes a link editable in a file reopened later, exactly as the
+    decoration marker does. M21's plan turns it into the real `/A` and `/Dest`.
+    *(ours; found by the journey, not by the documentation.)*
+9. **Preview is the real thing, one page at a time.** The dialog renders the current
+   page through the engine on a scratch copy with the decoration applied, so what the
+   preview shows is what the page will be — not a CSS approximation of it. It is
+   debounced and cancelled on every keystroke. *(brief's own constraint.)*
+10. **Presets ship as data and the reader's own live in settings.** Built-in presets are
+    `resources/presets/*.json`; saved ones are JSON in one hidden setting per family, as
+    M100 does for optimise presets. *(PLAN.md §4.4.)*
+11. **A link is an annotation the writer inserts.** PDFium refuses to create a Link, so
+    links take M30's path (ADR 0013): the model holds it, the writer writes it.
+    `PlannedAnnotation.dest` is new because a destination is a reference to a page and
+    nothing in the plan could express one (ADR 0020 §5). *(spec 12.5.6.5; PDFium's
+    `IsValidAnnotSubtype`.)*
+12. **External links are confirmed before they open, and only `http(s)` opens at all.**
+    A click on a link inside a document is the document asking to run something; the
+    reader is shown the whole URL in an opaque dialog and says yes. `file:`,
+    `javascript:` and everything else is refused in words, as M12 already refuses them
+    for bookmarks. A "don't ask again for this session" tick is offered, not defaulted.
+    *(ours; security.)*
+13. **Auto-detect reads `textRuns`, and every candidate is reviewed before it is made.**
+    URLs, bare `www.`, and e-mail addresses are matched over the reconstructed text of
+    each run, mapped back to character boxes for the rectangle. The review dialog lists
+    every hit with its page and text and lets each be unticked. Nothing is written
+    until the reader presses Create. *(Foxit offers the same as one action; the review
+    step is ours — an unattended pass that turns a version number into a link is worse
+    than no pass.)*
+13a. **The page marks live on the Edit tab, beside the links.** Organize is about the
+    order and presence of pages; a header, a watermark and a background change what is
+    *on* one, which is editing — and it puts them next to the other thing this module
+    adds to a page. Edit is also the tab with room: with the group labels shown,
+    Organize had none left at 1500 px, and `shell.spec.ts` rightly calls a group that
+    collapses at that width a defect. *(ours; measured, not guessed.)*
+14. **Everything is a command.** `decorate.*` and `link.*` ids, all in the palette;
+    `Mod+Shift+H` header & footer, `Mod+Shift+W` watermark, `Mod+Shift+B` Bates,
+    `Mod+Shift+K` the link tool — checked against
+    `test/unit/shortcut-conflicts.test.ts`. *(ours + Foxit where free.)*
+15. **The link layer is its own overlay layer.** `annot`, `object` and `widget` each
+    call `replaceChildren()` on the layer they own, so links cannot share one. `link`
+    sits between `annot` and `widget`, takes pointer events only on the link boxes, and
+    is raised above the tool layer for the same reason M60's widget layer is. *(M00's
+    layer stack; ADR 0020 §6.)*
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Shipped (2026-09-11, branch `mod/M53-headers-bates-watermarks-links`, ADR 0020).**
+
+- `src/engine/decorations/` — the pure half: the spec and draw types, the macro expander (its
+  catalogue is `resources/presets/macros.json`) with its own date formatter so two machines say
+  the same words, display-space geometry (`/Rotate` applied, so a header is at the top of the
+  page a person sees), the drawing for all four families, WinAnsi encoding with a report of what
+  it could not write, and the address detector.
+- Engine (`src/engine/pdfium/decorations.ts`, additive to `PdfEngine`): `setDecorations` replaces
+  every marked decoration on a page in one call — add, update and remove are the same call with a
+  different list — and `decorations` reads them back. The marker is a PDFium **content mark**
+  (`/YNOTDec`), which survives the live object list, `FPDFPage_GenerateContent`, a save and a
+  reopen, and carries the settings as JSON so a file this application made is editable next year.
+  `behind` inserts at index 0, which is how a watermark gets under the text.
+- Writer (`src/engine/writers/decorations.ts`): restores the page's original content, strips
+  every `/YNOTDec` span whoever wrote it, and **appends** a new `/Contents` element — an existing
+  stream is never edited. A guard stream closes whatever `q` the producer left open. The
+  print/screen option is a real optional-content group with a `/Usage` and an `/AS` entry.
+  `src/engine/writers/resources.ts` is `FullRewriteWriter`'s form-XObject and `/Resources`
+  building, extracted so the writer and the live engine build the same object.
+- Renderer module: one `SetDecorationsCommand` for every change, so undo is the same path with
+  the previous list; the shared decoration dialog with a preview that is the real engine
+  rendering a real copy of the page; header/footer, Bates, watermark and background dialogs;
+  presets (ours in `resources/presets/decorations.json`, the reader's in one setting); the link
+  tool, the link layer (`src/renderer/view/LinkLayer.ts`, a new entry in the layer stack), the
+  link properties dialog, the auto-detect review dialog and the Links panel.
+- Tests: 55 unit (pure functions, the model, the command, the plan, PDFium and the writer
+  end to end, plus an opt-in pass over Tony's own files) and 5 Playwright journeys that
+  press the ribbon button, type in the dialog and click the page.
+
+**Found on the way.**
+
+- **PDFium creates a `Link` annotation but has no `/A` setter.** An action written only into the
+  model was gone the next time a page was read — which every viewer does. The action is now JSON
+  in `/YNOTLinkAction`, a key `FPDFAnnot_SetStringValue` *can* write; M21's plan turns it into the
+  real `/A` and `/Dest`. Found by the journey, not by the documentation.
+- **`Document.loadAnnotations` replaces the model's list with the engine's**, so calling it
+  behind the reader's back deletes any annotation PDFium cannot create — a measurement, a caret,
+  a polygon. The link service reads the model's own list for a page that has one and loads only a
+  page nobody has looked at yet. Five of M33's journeys found this.
+- Four large ribbon buttons made the Organize tab collapse a group on a 1500 px window, which
+  `shell.spec.ts` rightly calls a defect. One large button, three small.
+- The Links panel truncated what a link does with an ellipsis; `expectNothingClipped` found it.
+  It wraps now — "Opens https://exam…" answers nothing.
+
+**Deferred, and why.**
+
+- **Bates across several files in one run** is spec-ready but not wired: the settings carry
+  `startAt`, the command takes its range as an argument, and `SetDecorationsCommand` replays from
+  data — so M120's runner can hand each file the next number. There is no multi-file runner in
+  this module, because batch *is* M120.
+- **The link action editor is M53's own**, not shared with M61: field actions do not exist yet.
+  The shapes are the same (`/A` dictionaries through `engine/appearance/dict.ts`), so M61 can
+  take this dialog over rather than write a second one.
+- **A foreign decoration is found by its `/Watermark` annotation only.** There is no standard
+  marker for one, so that is the only thing that can be said honestly; it is reported, counted
+  and removable, never editable.
+- **Text is the standard 14 fonts, WinAnsi.** A character outside it is written as `?` and named
+  in the preview's status line. Embedding a chosen family needs M51's subsetter.
+- **The preview renders one page at a time.** A "show me every page" preview is a second viewer;
+  the page picker beside the preview is the honest version of it.
