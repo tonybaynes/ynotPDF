@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -51,7 +51,7 @@ Destinations, plus Fields/Signatures/Comments panels that later modules add.
 
 ## Scope — build all of this
 
-- **Pages (thumbnails) is the default panel — operator requirement.** On
+- **Pages (thumbnails) is the default panel — Tony's requirement.** On
   launch and on every document open the left pane is open showing Pages,
   unless the setting `ui.leftPaneOnOpen` says otherwise. Values: `pages`
   (default) · `bookmarks` · `last-used` (M02's current behaviour) ·
@@ -60,7 +60,7 @@ Destinations, plus Fields/Signatures/Comments panels that later modules add.
   panel by default") and register it for the Preferences dialog (M130,
   View page). Bookmarks-on-open never overrides it, even for documents
   whose `/PageMode` is `/UseOutlines` — the user's choice wins.
-- Thumbnails panel — layout rules (operator requirement, exact):
+- Thumbnails panel — layout rules (Tony's requirement, exact):
   - **Opens as a single column** of thumbnails at the default size; the
     panel's initial width is whatever one thumbnail plus margins needs.
   - **`+` and `−` buttons at the top of the panel** step the thumbnail
@@ -92,7 +92,7 @@ Destinations, plus Fields/Signatures/Comments panels that later modules add.
   file via IPC → OS default app), save as, add file(s), delete, edit
   description — all Commands. Also lists file-attachment *annotations*
   (read-only here; M31 creates them).
-- **PDF Portfolios open properly (operator requirement).** A file with a
+- **PDF Portfolios open properly (Tony's requirement).** A file with a
   `/Collection` dictionary is a portfolio: show its cover sheet as the
   page, open the Attachments panel automatically listing the embedded
   files, and let an embedded PDF open **in a new tab** (double-click /
@@ -127,7 +127,7 @@ edits, `test/e2e/panels.spec.ts`, `test/unit/outline-commands.test.ts`.
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -193,7 +193,7 @@ their behaviour only as a user would, from the running app and public
 documentation. Record in your Design decisions where a feature's
 behaviour came from (public docs, the PDF spec ISO 32000, our own choice)
 — this file is the provenance record. Help and
-documentation are written from scratch for ynotPDF. *(Operator rule,
+documentation are written from scratch for ynotPDF. *(Tony's rule,
 2026-09-09.)* Four colour themes
 and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;
 `/d/Projects/ynotPDF` in Git Bash). Master plan: `PLAN.md`. Session rules:
@@ -248,8 +248,8 @@ tiles, layers) · `src/renderer/theme/` · `src/renderer/modules/<Mid>-<slug>/`
 (**your module lives here**) · `resources/` · `test/{fixtures,unit,e2e}` ·
 `docs/{adr,modules}` · `scripts/`.
 
-**UI & accessibility rules (non-negotiable — the operator has low vision and
-is colourblind: black and red read as the same colour):**
+**UI & accessibility rules (non-negotiable — Tony has low vision and is
+colourblind: black and red read as the same colour):**
 - Colours **only** via theme tokens (`--bg-app`, `--bg-panel`, `--fg`,
   `--fg-muted`, `--icon`, `--accent`, `--border`, `--focus`, `--selection`,
   `--danger`, `--warning`, `--success`, `--info`, …). Never a literal.
@@ -285,7 +285,7 @@ is colourblind: black and red read as the same colour):**
   `Co-Authored-By: Claude <noreply@anthropic.com>`. Never commit real
   customer PDFs, binaries, or secrets — fixtures are public-domain/synthetic.
 - **Real sample PDFs for hands-on testing live in `test/fixtures/local/`**
-  (git-ignored; the operator drops files there, so they carry personal
+  (git-ignored; Tony drops files there, so they carry personal
   data). Currently: three airline boarding passes and **`Sample
   Portfolio.pdf`, a Foxit-made PDF Portfolio (`/Collection`) containing
   those three** — use it for attachments, embedded-file and portfolio
@@ -295,8 +295,12 @@ is colourblind: black and red read as the same colour):**
   with `it.skipIf(!existsSync(...))` — CI and other machines don't have
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
-- Replies to the operator: short and plain (eyesight). Never leave the
-  operator a to-do you could do yourself.
+- **Tony is who you are working for — call him Tony, not "the operator"**
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
+- Replies to Tony: short and plain (eyesight). Never leave him a to-do you
+  could do yourself.
 
 ---
 
@@ -414,7 +418,7 @@ tests with the coverage gates, 146 Playwright tests.
   View ribbon groups and five context menus.
 - **PDF Portfolios open properly.** New engine read `collection()` returns the `/Collection`
   schema; the Attachments panel opens by itself, shows the portfolio's own columns, and an
-  embedded PDF opens in a new tab. Verified against the operator's `Sample Portfolio.pdf`: all
+  embedded PDF opens in a new tab. Verified against Tony's `Sample Portfolio.pdf`: all
   three files open in tabs.
 - **Engine and writer work (ADR 0011).** `setLayerVisible` is implemented in the PDFium adapter
   by deactivating the page objects marked with the group — render-time only, so the bytes are
@@ -423,7 +427,7 @@ tests with the coverage gates, 146 Playwright tests.
   temp file. `WriteIntent` gains `destinations` and `attachments`, and the writer gains the
   section that puts an embedded file's description and type where a reader looks for them.
 
-### Bugs the tests and the operator found, all real
+### Bugs the tests and Tony found, all real
 
 - **An attached file's bytes were gone by the time the journal wanted them.** The engine
   *transfers* a `Uint8Array` into its worker, which detaches the buffer on this side, so
@@ -437,11 +441,11 @@ tests with the coverage gates, 146 Playwright tests.
   ribbon and the wheel could have drifted apart. They all run `view.thumbnails.larger` now.
 - **A bookmark nested under a collapsed parent vanished.** The panel opens whatever is hiding
   the selected bookmark.
-- **A portfolio's own PDFs said they were `text/plain`.** The operator's Foxit-made portfolio
+- **A portfolio's own PDFs said they were `text/plain`.** Tony's Foxit-made portfolio
   declares `/Subtype /text#2Fplain` on all three embedded PDFs, so "open in a new tab" decided by
   MIME type handed them to the OS instead. A PDF is now decided by its name and its `%PDF-`
   bytes, and the type is believed last.
-- **A debugging run opened three PDFs in Foxit on the operator's desk.** The two channels that
+- **A debugging run opened three PDFs in Foxit on Tony's desk.** The two channels that
   hand something to the operating system now do everything except the last step under
   `YNOT_E2E`, and the temporary copies are deleted when the app quits.
 - **M02's shell test asserted that the demo module owned the only two left panels.** It asserts

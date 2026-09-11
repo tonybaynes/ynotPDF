@@ -4,7 +4,7 @@
 |---|---|
 | **Module id** | `M42` — branch `mod/M42-portfolios`, module folder `src/renderer/modules/portfolio/` |
 | **Earliest wave** | 4 (see `PLAN.md` §0/§12) |
-| **Tier** | Core (operator un-parked it 2026-09-08 — portfolios are part of the daily workflow) |
+| **Tier** | Core (Tony un-parked it 2026-09-08 — portfolios are part of the daily workflow) |
 | **Depends on** | M12, M21 |
 | **Unlocks** | M120 registers "Build portfolio from files" as a batch op |
 
@@ -36,8 +36,8 @@ end to end without waiting to be asked for the next step:
 
 Foxit's Portfolio feature, in full: make a new portfolio, put files and
 folders in it, order and describe them, give it a cover sheet, take files
-out again, and save it so Foxit/Acrobat open it as a portfolio. The
-operator builds document packs this way every day (a signed instruction
+out again, and save it so Foxit/Acrobat open it as a portfolio.
+Tony builds document packs this way every day (a signed instruction
 PDF plus supporting files), so **round-trip fidelity is the headline
 requirement**: opening `Sample Portfolio.pdf`, changing one description
 and saving must leave every embedded file byte-identical — a digitally
@@ -66,7 +66,7 @@ signed embedded PDF must still verify afterwards.
   folder (names and folder structure preserved).
 - **Cover sheet**: generated one-page PDF (title, optional subtitle, date,
   table of contents listing the files with descriptions and sizes) built
-  from an operator-editable template in `resources/portfolio/`; or "use
+  from an editable template in `resources/portfolio/`; or "use
   this PDF as cover"; or none. Regenerate on demand; never silently.
 - **Portfolio view** (`src/renderer/modules/portfolio/`): when the open
   document is a portfolio, the document area shows the **file grid** —
@@ -96,7 +96,7 @@ writer incremental-friendly).
 
 - **Byte-identical embedded files** is the acceptance test that matters;
   build the writer test first. Signed PDFs embedded as attachments stay
-  valid because their bytes are never touched — the operator proved this
+  valid because their bytes are never touched — Tony proved this
   with pikepdf/qpdf; match it with pdf-lib.
 - Foxit and Acrobat read `/Folders`; pdf-lib has no API for it — write the
   dictionaries yourself in the writer layer, unit-tested against
@@ -119,7 +119,7 @@ writer incremental-friendly).
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -139,7 +139,7 @@ pdf-lib (already present). Nothing new unless the ADR justifies it.
 - Open `Sample Portfolio.pdf` (local, skip if absent): edit one
   description, save ⇒ the three embedded files are byte-identical to the
   originals (`pdfdetach`/own reader), Foxit still opens it as a portfolio
-  (operator confirms once — record in Build log).
+  (Tony confirms once — record in Build log).
 - Synthetic: new portfolio from 3 files + 1 folder with 2 files ⇒ save ⇒
   reopen ⇒ same tree, order, descriptions; extract all ⇒ same bytes and
   folder structure on disk.
@@ -182,7 +182,7 @@ their behaviour only as a user would, from the running app and public
 documentation. Record in your Design decisions where a feature's
 behaviour came from (public docs, the PDF spec ISO 32000, our own choice)
 — this file is the provenance record. Help and
-documentation are written from scratch for ynotPDF. *(Operator rule,
+documentation are written from scratch for ynotPDF. *(Tony's rule,
 2026-09-09.)* Four colour themes
 and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;
 `/d/Projects/ynotPDF` in Git Bash). Master plan: `PLAN.md`. Session rules:
@@ -237,8 +237,8 @@ tiles, layers) · `src/renderer/theme/` · `src/renderer/modules/<Mid>-<slug>/`
 (**your module lives here**) · `resources/` · `test/{fixtures,unit,e2e}` ·
 `docs/{adr,modules}` · `scripts/`.
 
-**UI & accessibility rules (non-negotiable — the operator has low vision and
-is colourblind: black and red read as the same colour):**
+**UI & accessibility rules (non-negotiable — Tony has low vision and is
+colourblind: black and red read as the same colour):**
 - Colours **only** via theme tokens (`--bg-app`, `--bg-panel`, `--fg`,
   `--fg-muted`, `--icon`, `--accent`, `--border`, `--focus`, `--selection`,
   `--danger`, `--warning`, `--success`, `--info`, …). Never a literal.
@@ -274,7 +274,7 @@ is colourblind: black and red read as the same colour):**
   `Co-Authored-By: Claude <noreply@anthropic.com>`. Never commit real
   customer PDFs, binaries, or secrets — fixtures are public-domain/synthetic.
 - **Real sample PDFs for hands-on testing live in `test/fixtures/local/`**
-  (git-ignored; the operator drops files there, so they carry personal
+  (git-ignored; Tony drops files there, so they carry personal
   data). Currently: three airline boarding passes and **`Sample
   Portfolio.pdf`, a Foxit-made PDF Portfolio (`/Collection`) containing
   those three** — use it for attachments, embedded-file and portfolio
@@ -284,8 +284,12 @@ is colourblind: black and red read as the same colour):**
   with `it.skipIf(!existsSync(...))` — CI and other machines don't have
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
-- Replies to the operator: short and plain (eyesight). Never leave the
-  operator a to-do you could do yourself.
+- **Tony is who you are working for — call him Tony, not "the operator"**
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
+- Replies to Tony: short and plain (eyesight). Never leave him a to-do you
+  could do yourself.
 
 ---
 
@@ -305,7 +309,7 @@ argument; this is the short form.
    written say the pipeline can carry that: PDFium's `FPDF_SaveAsCopy` and pdf-lib's save each
    leave an embedded stream byte-identical.
 3. **Folder membership is the name-tree key prefix**, `<ID>name` — what Acrobat 9 and Foxit
-   both write, and what the operator's own portfolio uses. A key with no prefix is a file at the
+   both write, and what Tony's own portfolio uses. A key with no prefix is a file at the
    top level, which is also what an ordinary attachment looks like. `/D`, the initial file, is
    one of these keys and not a bare name: a viewer looks it up in the tree (ISO 32000 12.3.5).
 4. **Order is a schema column.** The format has no order array: a viewer shows what its `/Sort`
@@ -315,8 +319,8 @@ argument; this is the short form.
    with none gets `ynot:Order`, hidden, with `/Sort` pointed at it. **Every `/CI` value is
    written in the type its column declares** — a number column gets numbers, a date column PDF
    dates — because Foxit sorts `foxit:Order` numerically and silently falls back to name order
-   when the values are strings. That is what the operator's Foxit check found (2026-09-09), and
-   the writer test on the operator's own file now guards it.
+   when the values are strings. That is what Tony's Foxit check found (2026-09-09), and
+   the writer test on Tony's own file now guards it.
 5. **The module folder is `src/renderer/modules/M42-portfolios/`**, not the `portfolio/` this
    brief's header says: PLAN §7 and §12 both name `<Mid>-<slug>`, and every other module follows
    it.
@@ -340,10 +344,10 @@ argument; this is the short form.
    updated rather than left to drift.
 10. **A portfolio opens as tiles with the file list down the left** (`/View /T`,
    `/Split /Direction /V /Position 30`): that is what Foxit writes for a new portfolio and how
-   the operator's own packs open, and a details table on top read as "not a portfolio" to the
-   operator (2026-09-09). Details stays as the M130 preference. A tile portfolio with no
+   Tony's own packs open, and a details table on top read as "not a portfolio" to 
+   Tony (2026-09-09). Details stays as the M130 preference. A tile portfolio with no
    `/Split` of its own is given that one on save; a split a producer wrote is kept. Provenance:
-   the operator's `Sample Portfolio.pdf` and ISO 32000-2 table 77.
+   Tony's `Sample Portfolio.pdf` and ISO 32000-2 table 77.
 
 ## Build log (fill in at merge)
 
@@ -359,25 +363,25 @@ creators on File ▸ New, a context menu, and settings for M130.
 **Round-trip fidelity, measured.** `test/unit/portfolio/writer.test.ts` opens the file in the
 real engine, edits one description, saves through the real writer and compares every embedded
 stream byte for byte — on the synthetic `portfolio.pdf` fixture and, when it is on the machine,
-on the operator's own `Sample Portfolio.pdf`. `/Params` (size, dates, checksum) and `/Subtype`
+on Tony's own `Sample Portfolio.pdf`. `/Params` (size, dates, checksum) and `/Subtype`
 come back unchanged too.
 
-**Foxit check, 2026-09-09.** The operator opened a copy of `Sample Portfolio.pdf` saved by
+**Foxit check, 2026-09-09.** Tony opened a copy of `Sample Portfolio.pdf` saved by
 ynotPDF in Foxit PDF Editor: it opened as a portfolio, in the tile layout the original uses,
 with all three files. The same check showed two faults the byte-level tests could not: the files
 came back sorted by name because the writer had turned Foxit's numeric `foxit:Order` values into
 strings, and `/D` was written as a bare file name rather than a name-tree key. Both were fixed on
-`fix/M42-portfolio-order` the same day, with writer tests — one of them on the operator's file.
+`fix/M42-portfolio-order` the same day, with writer tests — one of them on Tony's file.
 A synthetic portfolio saved by ynotPDF also opened in Foxit, but as a details table across the
 top of the window rather than Foxit's list of tiles down the left, because ynotPDF's default
-view was details. The operator judged that wrong for a portfolio, and it was: the default is
+view was details. Tony judged that wrong for a portfolio, and it was: the default is
 now tiles with the list on the left (decision 10), on `fix/M42-default-view`.
 
-**Confirmed, 2026-09-09.** With both fixes merged the operator reopened the synthetic portfolio
+**Confirmed, 2026-09-09.** With both fixes merged Tony reopened the synthetic portfolio
 in Foxit PDF Editor: tiles down the left, the folder first, the `/D` file selected with its page
 in the preview. That closes the brief's one acceptance line this session could not check itself
 — a portfolio ynotPDF writes opens as a portfolio in Foxit, in the order and the layout it was
-saved with. Both faults reached the operator because every automated test asked what our own
+saved with. Both faults reached Tony because every automated test asked what our own
 reader made of the bytes; only Foxit could say what Foxit made of them.
 
 **Cross-OS render hashes.** `portfolio.pdf` was added to the corpus. Its hash was generated on

@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -109,7 +109,7 @@ modules) — M02 ships a demo manifest used only by tests.
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -168,7 +168,7 @@ their behaviour only as a user would, from the running app and public
 documentation. Record in your Design decisions where a feature's
 behaviour came from (public docs, the PDF spec ISO 32000, our own choice)
 — this file is the provenance record. Help and
-documentation are written from scratch for ynotPDF. *(Operator rule,
+documentation are written from scratch for ynotPDF. *(Tony's rule,
 2026-09-09.)* Four colour themes
 and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;
 `/d/Projects/ynotPDF` in Git Bash). Master plan: `PLAN.md`. Session rules:
@@ -223,8 +223,8 @@ tiles, layers) · `src/renderer/theme/` · `src/renderer/modules/<Mid>-<slug>/`
 (**your module lives here**) · `resources/` · `test/{fixtures,unit,e2e}` ·
 `docs/{adr,modules}` · `scripts/`.
 
-**UI & accessibility rules (non-negotiable — the operator has low vision and
-is colourblind: black and red read as the same colour):**
+**UI & accessibility rules (non-negotiable — Tony has low vision and is
+colourblind: black and red read as the same colour):**
 - Colours **only** via theme tokens (`--bg-app`, `--bg-panel`, `--fg`,
   `--fg-muted`, `--icon`, `--accent`, `--border`, `--focus`, `--selection`,
   `--danger`, `--warning`, `--success`, `--info`, …). Never a literal.
@@ -260,7 +260,7 @@ is colourblind: black and red read as the same colour):**
   `Co-Authored-By: Claude <noreply@anthropic.com>`. Never commit real
   customer PDFs, binaries, or secrets — fixtures are public-domain/synthetic.
 - **Real sample PDFs for hands-on testing live in `test/fixtures/local/`**
-  (git-ignored; the operator drops files there, so they carry personal
+  (git-ignored; Tony drops files there, so they carry personal
   data). Currently: three airline boarding passes and **`Sample
   Portfolio.pdf`, a Foxit-made PDF Portfolio (`/Collection`) containing
   those three** — use it for attachments, embedded-file and portfolio
@@ -270,8 +270,12 @@ is colourblind: black and red read as the same colour):**
   with `it.skipIf(!existsSync(...))` — CI and other machines don't have
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
-- Replies to the operator: short and plain (eyesight). Never leave the
-  operator a to-do you could do yourself.
+- **Tony is who you are working for — call him Tony, not "the operator"**
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
+- Replies to Tony: short and plain (eyesight). Never leave him a to-do you
+  could do yourself.
 
 ---
 
@@ -379,7 +383,7 @@ is colourblind: black and red read as the same colour):**
   M00's `file.openBytes` / `file.close` now go through the `documents` service, `package.json`
   (`lucide`, `axe-core` devDependencies).
 
-**Changed after operator review (2026-09-07):** the operator uses Foxit daily — File is now a
+**Changed after Tony's review (2026-09-07):** Tony uses Foxit daily — File is now a
 normal tab with a horizontal ribbon (Open · Recent ▾ · New ▾ · Save · Save As · Print ·
 Properties · Preferences · Exit) built by the shell from the backstage slots
 (`app/ribbon/fileTab.ts`), and the ribbon body is Foxit's compact single row of icon buttons by

@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -89,7 +89,7 @@ Split/merge/crop/flatten (M41).
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -146,7 +146,7 @@ their behaviour only as a user would, from the running app and public
 documentation. Record in your Design decisions where a feature's
 behaviour came from (public docs, the PDF spec ISO 32000, our own choice)
 — this file is the provenance record. Help and
-documentation are written from scratch for ynotPDF. *(Operator rule,
+documentation are written from scratch for ynotPDF. *(Tony's rule,
 2026-09-09.)* Four colour themes
 and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;
 `/d/Projects/ynotPDF` in Git Bash). Master plan: `PLAN.md`. Session rules:
@@ -201,8 +201,8 @@ tiles, layers) · `src/renderer/theme/` · `src/renderer/modules/<Mid>-<slug>/`
 (**your module lives here**) · `resources/` · `test/{fixtures,unit,e2e}` ·
 `docs/{adr,modules}` · `scripts/`.
 
-**UI & accessibility rules (non-negotiable — the operator has low vision and
-is colourblind: black and red read as the same colour):**
+**UI & accessibility rules (non-negotiable — Tony has low vision and is
+colourblind: black and red read as the same colour):**
 - Colours **only** via theme tokens (`--bg-app`, `--bg-panel`, `--fg`,
   `--fg-muted`, `--icon`, `--accent`, `--border`, `--focus`, `--selection`,
   `--danger`, `--warning`, `--success`, `--info`, …). Never a literal.
@@ -238,7 +238,7 @@ is colourblind: black and red read as the same colour):**
   `Co-Authored-By: Claude <noreply@anthropic.com>`. Never commit real
   customer PDFs, binaries, or secrets — fixtures are public-domain/synthetic.
 - **Real sample PDFs for hands-on testing live in `test/fixtures/local/`**
-  (git-ignored; the operator drops files there, so they carry personal
+  (git-ignored; Tony drops files there, so they carry personal
   data). Currently: three airline boarding passes and **`Sample
   Portfolio.pdf`, a Foxit-made PDF Portfolio (`/Collection`) containing
   those three** — use it for attachments, embedded-file and portfolio
@@ -248,14 +248,18 @@ is colourblind: black and red read as the same colour):**
   with `it.skipIf(!existsSync(...))` — CI and other machines don't have
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
-- Replies to the operator: short and plain (eyesight). Never leave the
-  operator a to-do you could do yourself.
+- **Tony is who you are working for — call him Tony, not "the operator"**
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
+- Replies to Tony: short and plain (eyesight). Never leave him a to-do you
+  could do yourself.
 
 ---
 
 ## Design decisions (fill in before coding; keep current)
 
-Provenance (operator rule, 2026-09-09): the behaviour below comes from the PDF specification
+Provenance (Tony's rule, 2026-09-09): the behaviour below comes from the PDF specification
 (ISO 32000-1 §12.4.2 page labels, §7.7.3 the page tree), from this project's own `PLAN.md`
 conventions, and from Foxit 14 **as a user sees it** — which commands exist on its Organize tab
 and roughly what their dialogs ask for. No Foxit file has been opened, and no icon, string or
@@ -492,7 +496,7 @@ Nine more, all real, all fixed here and all with a test:
 - `src/renderer/modules/M20-document-model/manifest.ts` — the `organize.rotate` ribbon group
   removed, with a comment saying where it went. Its commands are untouched.
 - `src/renderer/main.ts`, `src/renderer/index.html` — registers the M40 manifest and its CSS.
-- `resources/credits.json` — **new**, per the operator's 2026-09-09 rule: the icon sets and fonts
+- `resources/credits.json` — **new**, per Tony's 2026-09-09 rule: the icon sets and fonts
   the app ships, with source, author and licence. M131 renders it as the acknowledgements page.
 - `vitest.config.ts` — coverage gates for M40's pure half; its DOM half excluded as every other
   module's is, and proved by Playwright.

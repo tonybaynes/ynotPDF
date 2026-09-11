@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -92,7 +92,7 @@ engine object mutations, tests.
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -148,7 +148,7 @@ their behaviour only as a user would, from the running app and public
 documentation. Record in your Design decisions where a feature's
 behaviour came from (public docs, the PDF spec ISO 32000, our own choice)
 — this file is the provenance record. Help and
-documentation are written from scratch for ynotPDF. *(Operator rule,
+documentation are written from scratch for ynotPDF. *(Tony's rule,
 2026-09-09.)* Four colour themes
 and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;
 `/d/Projects/ynotPDF` in Git Bash). Master plan: `PLAN.md`. Session rules:
@@ -203,8 +203,8 @@ tiles, layers) · `src/renderer/theme/` · `src/renderer/modules/<Mid>-<slug>/`
 (**your module lives here**) · `resources/` · `test/{fixtures,unit,e2e}` ·
 `docs/{adr,modules}` · `scripts/`.
 
-**UI & accessibility rules (non-negotiable — the operator has low vision and
-is colourblind: black and red read as the same colour):**
+**UI & accessibility rules (non-negotiable — Tony has low vision and is
+colourblind: black and red read as the same colour):**
 - Colours **only** via theme tokens (`--bg-app`, `--bg-panel`, `--fg`,
   `--fg-muted`, `--icon`, `--accent`, `--border`, `--focus`, `--selection`,
   `--danger`, `--warning`, `--success`, `--info`, …). Never a literal.
@@ -240,7 +240,7 @@ is colourblind: black and red read as the same colour):**
   `Co-Authored-By: Claude <noreply@anthropic.com>`. Never commit real
   customer PDFs, binaries, or secrets — fixtures are public-domain/synthetic.
 - **Real sample PDFs for hands-on testing live in `test/fixtures/local/`**
-  (git-ignored; the operator drops files there, so they carry personal
+  (git-ignored; Tony drops files there, so they carry personal
   data). Currently: three airline boarding passes and **`Sample
   Portfolio.pdf`, a Foxit-made PDF Portfolio (`/Collection`) containing
   those three** — use it for attachments, embedded-file and portfolio
@@ -250,8 +250,12 @@ is colourblind: black and red read as the same colour):**
   with `it.skipIf(!existsSync(...))` — CI and other machines don't have
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
-- Replies to the operator: short and plain (eyesight). Never leave the
-  operator a to-do you could do yourself.
+- **Tony is who you are working for — call him Tony, not "the operator"**
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
+- Replies to Tony: short and plain (eyesight). Never leave him a to-do you
+  could do yourself.
 
 ---
 
@@ -315,14 +319,14 @@ public help, **ours** = our own choice.
 9. **Snapping is opaque lines, never colour alone.** Smart guides draw as solid
    `--accent` lines with a 2 px core; the status bar names what was snapped to
    ("Left edges", "Page centre") in words. Grid, guides and object snapping are three
-   independent toggles, each a command. *(operator accessibility rules in CLAUDE.md.)*
+   independent toggles, each a command. *(Tony's accessibility rules in CLAUDE.md.)*
 10. **Align and distribute have two references: the selection, or the page.** With two
     or more objects selected, "align left" moves them to the selection's left edge;
     with the page reference chosen it uses the CropBox. Distribute needs three and
     spaces centres evenly. *(Foxit, Edit ▸ Arrange.)*
 11. **Opacity is not editable.** The brief marks it ✗ and CLAUDE.md forbids
     translucent chrome; the panel *reports* a fill/stroke alpha the file carries but
-    offers no control. *(operator rule.)*
+    offers no control. *(Tony's rule.)*
 12. **Everything is a command.** `object.*` ids, all in the palette, with the shortcuts
     Foxit uses where they do not collide: arrows nudge (Shift ×10), `Mod+Shift+O`
     picks up the tool, `Mod+Shift+G`/`Mod+Shift+U` group and ungroup, `Mod+[`/`Mod+]`
@@ -342,7 +346,7 @@ public help, **ours** = our own choice.
   Op spans tile the source, so an untouched stream round-trips byte-identical
   (asserted over every fixture page, synthetic and external); the scan agrees with
   PDFium's `pageObjects()` on every readable fixture. Edits: transform (a text object
-  gets an explicit `Tm` and the operators after it are repaired from PDFium's
+  gets an explicit `Tm` and Tonys after it are repaired from PDFium's
   recorded matrices), style, remove, insert.
 - Engine (`src/engine/pdfium/objects.ts`, additive to `PdfEngine`): `pageContent`,
   `transformObject`, `setObjectMatrix`, `removeObject`/`restoreObject` (stash, so undo

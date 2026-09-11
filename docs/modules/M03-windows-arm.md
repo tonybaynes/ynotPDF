@@ -29,7 +29,7 @@ this brief out end to end without waiting to be asked for the next step:
    artifacts present.
 6. Merge to `main`, tick M03 ☑ in `PLAN.md` §0 in the same merge, fill in
    the **Build log** below.
-7. Report back in a few plain lines, including exactly how the operator can
+7. Report back in a few plain lines, including exactly how Tony can
    test the arm64 installer.
 
 ---
@@ -38,7 +38,7 @@ this brief out end to end without waiting to be asked for the next step:
 
 Make the Windows build ship for **arm64** as well as x64, prove it in CI,
 and set the rule every later module follows when it adds a native binary.
-The operator wants Windows-on-ARM as a first-class target.
+Tony wants Windows-on-ARM as a first-class target.
 
 ## Why this is small
 
@@ -76,7 +76,7 @@ packaging + verification. The lasting value is the rule for M70 (qpdf), M90
   for private repos depends on the plan). If it is available: install the
   arm64 artifact silently, launch, run the Playwright smoke (`app.about`).
   If it is not available: document that clearly in the ADR and in
-  `README.md`, and provide a manual smoke checklist the operator runs on an
+  `README.md`, and provide a manual smoke checklist Tony runs on an
   ARM device; do not pretend it was tested.
 - `README.md`: supported platforms table (Windows x64, Windows arm64, macOS
   universal, Linux x64), how to build a specific arch locally, how to tell
@@ -111,7 +111,7 @@ ever adopted, `pdfium-binaries` publishes `win-arm64`).
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -134,8 +134,8 @@ None new.
   `win32-x64` but neither `win32-arm64` nor `arm64Fallback`.
 - Either: the `windows-11-arm` job installs and launches the arm64 build and
   the smoke passes — or: the ADR and README state that ARM CI is
-  unavailable and the operator's manual smoke on an ARM device is recorded
-  in the Build log (ask the operator whether an ARM machine exists).
+  unavailable and Tony's manual smoke on an ARM device is recorded
+  in the Build log (ask Tony whether an ARM machine exists).
 - About dialog shows `Windows arm64` / `Windows x64` correctly.
 
 ---
@@ -168,7 +168,7 @@ their behaviour only as a user would, from the running app and public
 documentation. Record in your Design decisions where a feature's
 behaviour came from (public docs, the PDF spec ISO 32000, our own choice)
 — this file is the provenance record. Help and
-documentation are written from scratch for ynotPDF. *(Operator rule,
+documentation are written from scratch for ynotPDF. *(Tony's rule,
 2026-09-09.)* Four colour themes
 and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;
 `/d/Projects/ynotPDF` in Git Bash). Master plan: `PLAN.md`. Session rules:
@@ -223,8 +223,8 @@ tiles, layers) · `src/renderer/theme/` · `src/renderer/modules/<Mid>-<slug>/`
 (**your module lives here**) · `resources/` · `test/{fixtures,unit,e2e}` ·
 `docs/{adr,modules}` · `scripts/`.
 
-**UI & accessibility rules (non-negotiable — the operator has low vision and
-is colourblind: black and red read as the same colour):**
+**UI & accessibility rules (non-negotiable — Tony has low vision and is
+colourblind: black and red read as the same colour):**
 - Colours **only** via theme tokens (`--bg-app`, `--bg-panel`, `--fg`,
   `--fg-muted`, `--icon`, `--accent`, `--border`, `--focus`, `--selection`,
   `--danger`, `--warning`, `--success`, `--info`, …). Never a literal.
@@ -260,7 +260,7 @@ is colourblind: black and red read as the same colour):**
   `Co-Authored-By: Claude <noreply@anthropic.com>`. Never commit real
   customer PDFs, binaries, or secrets — fixtures are public-domain/synthetic.
 - **Real sample PDFs for hands-on testing live in `test/fixtures/local/`**
-  (git-ignored; the operator drops files there, so they carry personal
+  (git-ignored; Tony drops files there, so they carry personal
   data). Currently: three airline boarding passes and **`Sample
   Portfolio.pdf`, a Foxit-made PDF Portfolio (`/Collection`) containing
   those three** — use it for attachments, embedded-file and portfolio
@@ -270,8 +270,12 @@ is colourblind: black and red read as the same colour):**
   with `it.skipIf(!existsSync(...))` — CI and other machines don't have
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
-- Replies to the operator: short and plain (eyesight). Never leave the
-  operator a to-do you could do yourself.
+- **Tony is who you are working for — call him Tony, not "the operator"**
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
+- Replies to Tony: short and plain (eyesight). Never leave him a to-do you
+  could do yourself.
 
 ---
 
@@ -321,7 +325,7 @@ electron-builder 26.15.3's own NSIS/MSI code, not from its documentation.
    `PROCESSOR_ARCHITEW6432=ARM64` inside an emulated x64 process, which is the
    only detection available without a native call. The About dialog shows
    `Windows arm64`, `Windows x64`, or `Windows x64 (emulated on arm64)` — the
-   last one is exactly what the operator needs to see when checking which
+   last one is exactly what Tony needs to see when checking which
    installer landed on an ARM PC.
 7. **Fetching is driven by the *target*, not the host.** `fetch-binaries`
    already took `--platform`/`--arch`; it now also reads `YNOT_TARGET`
@@ -339,7 +343,7 @@ electron-builder 26.15.3's own NSIS/MSI code, not from its documentation.
    a run proves it, so the workflow gains a real `windows-11-arm` job that
    installs the arm64 NSIS silently, launches it and runs the `app.about`
    smoke. If the run cannot get a runner, the job goes and the ADR/README say
-   so plainly. Either way the operator's own ARM PC gets a manual checklist.
+   so plainly. Either way Tony's own ARM PC gets a manual checklist.
 
    Outcome: the runner **is** available and the smoke passes on real ARM
    hardware. Two corrections were needed, both in the job rather than the
@@ -354,7 +358,7 @@ electron-builder 26.15.3's own NSIS/MSI code, not from its documentation.
    Tamper Protection makes `Set-MpPreference` a no-op that still reports
    success. CI installs the arm64 **MSI** instead (msiexec writes through
    Windows Installer, so it is unaffected). Signing in M131 is the real fix.
-   Consequence: the NSIS path on ARM is covered only by the operator's manual
+   Consequence: the NSIS path on ARM is covered only by Tony's manual
    smoke, and the checklist now starts by checking the executable is there.
 
 ## Build log (fill in at merge)
@@ -401,7 +405,7 @@ electron-builder 26.15.3's own NSIS/MSI code, not from its documentation.
   on a `windows-11-arm` runner, launched, and the About dialog read exactly
   `Windows arm64` — plus the engine-worker round trip, so PDFium's WASM ran on
   ARM.
-- Operator's manual smoke on his own ARM device: _pending_ — he is taking the
+- Tony's manual smoke on his own ARM device: _pending_ — he is taking the
   arm64 NSIS installer from the CI artifact. It matters because CI installs the
   MSI (below), so nothing else exercises the NSIS path on ARM.
 

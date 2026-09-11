@@ -4,7 +4,7 @@
 |---|---|
 | **Module id** | `M04` — branch `mod/M04-ui-journey-tests`; test code only, no `src/renderer/modules/` folder |
 | **Earliest wave** | 4 (see `PLAN.md` §0/§12) |
-| **Tier** | Core — the operator found five real defects by hand in three days that 4,000 automated tests had passed over |
+| **Tier** | Core — Tony found five real defects by hand in three days that 4,000 automated tests had passed over |
 | **Depends on** | M02, M11, M12, M13, M30 |
 | **Unlocks** | nothing blocks on it; every later module gains the helpers and must use them |
 
@@ -29,7 +29,7 @@ Carry this brief out end to end without waiting to be asked:
 
 ## Why this exists — five defects, one shape
 
-Between 2026-09-08 and 2026-09-10 the operator opened the installed app and
+Between 2026-09-08 and 2026-09-10 Tony opened the installed app and
 found, by clicking:
 
 1. The start page laid out in the bottom half of the window behind a dead
@@ -47,7 +47,7 @@ found, by clicking:
    `draw.stamp` **with coordinates**; nothing clicked a tile and then a page.
 
 One shape: *the suite drives the app through its command API and asserts that
-things exist; the operator drives it through the UI and sees where things are.*
+things exist; Tony drives it through the UI and sees where things are.*
 This module closes that gap. It adds no product code beyond a launch flag.
 
 ## Scope — build all of this
@@ -192,7 +192,7 @@ their behaviour only as a user would, from the running app and public
 documentation. Record in your Design decisions where a feature's
 behaviour came from (public docs, the PDF spec ISO 32000, our own choice)
 — this file is the provenance record. Help and
-documentation are written from scratch for ynotPDF. *(Operator rule,
+documentation are written from scratch for ynotPDF. *(Tony's rule,
 2026-09-09.)* Four colour themes
 and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;
 `/d/Projects/ynotPDF` in Git Bash). Master plan: `PLAN.md`. Session rules:
@@ -247,8 +247,8 @@ tiles, layers) · `src/renderer/theme/` · `src/renderer/modules/<Mid>-<slug>/`
 (**your module lives here**) · `resources/` · `test/{fixtures,unit,e2e}` ·
 `docs/{adr,modules}` · `scripts/`.
 
-**UI & accessibility rules (non-negotiable — the operator has low vision and
-is colourblind: black and red read as the same colour):**
+**UI & accessibility rules (non-negotiable — Tony has low vision and is
+colourblind: black and red read as the same colour):**
 - Colours **only** via theme tokens (`--bg-app`, `--bg-panel`, `--fg`,
   `--fg-muted`, `--icon`, `--accent`, `--border`, `--focus`, `--selection`,
   `--danger`, `--warning`, `--success`, `--info`, …). Never a literal.
@@ -284,7 +284,7 @@ is colourblind: black and red read as the same colour):**
   `Co-Authored-By: Claude <noreply@anthropic.com>`. Never commit real
   customer PDFs, binaries, or secrets — fixtures are public-domain/synthetic.
 - **Real sample PDFs for hands-on testing live in `test/fixtures/local/`**
-  (git-ignored; the operator drops files there, so they carry personal
+  (git-ignored; Tony drops files there, so they carry personal
   data). Currently: three airline boarding passes and **`Sample
   Portfolio.pdf`, a Foxit-made PDF Portfolio (`/Collection`) containing
   those three** — use it for attachments, embedded-file and portfolio
@@ -294,8 +294,12 @@ is colourblind: black and red read as the same colour):**
   with `it.skipIf(!existsSync(...))` — CI and other machines don't have
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
-- Replies to the operator: short and plain (eyesight). Never leave the
-  operator a to-do you could do yourself.
+- **Tony is who you are working for — call him Tony, not "the operator"**
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
+- Replies to Tony: short and plain (eyesight). Never leave him a to-do you
+  could do yourself.
 
 ---
 
@@ -355,7 +359,7 @@ contract for the helpers. The decisions, in short:
     looks at the *older* specs only warns — a rule that fails the build over a judgement call
     gets deleted, and then it catches nothing.
 
-**Provenance.** Nothing here comes from another product. The five defects are the operator's own
+**Provenance.** Nothing here comes from another product. The five defects are Tony's own
 (2026-09-10); the contrast maths is WCAG 2.1's relative-luminance formula; the reachability rule
 is CSS box-model arithmetic. Visual comparison is Playwright's own `toHaveScreenshot`.
 
@@ -393,7 +397,7 @@ The point of the module, and the reason the diff touches product code at all.
    `src/renderer/app/ribbon/Ribbon.ts`.
 3. **The comments list clipped every row at 150 % and 200 %.** M32 computes row heights from
    constants documented as "CSS pixels at 100 % UI scale", while the stylesheet sizes the rows in
-   rem — so at the scale the operator actually runs, every row was a 100 %-height box holding
+   rem — so at the scale Tony actually runs, every row was a 100 %-height box holding
    200 %-sized text. Fixed in `M32-comments-panel/metrics.ts` (a `scale` option) and
    `CommentsPanel.ts` (passing `uiScaleFactor()`).
 4. **The navigation strip could not be reached at 200 % in a short window.** Eleven panel buttons

@@ -65,7 +65,7 @@ commit. Sub-conversations working in parallel follow **§12**.
 Legend: ☐ not started · ◐ in progress (branch open) · ☑ merged to `main`,
 acceptance test green on all three OSes.
 
-**Ordering principle (operator, 2026-09-07): easiest-first, hardest-last.**
+**Ordering principle (Tony, 2026-09-07): easiest-first, hardest-last.**
 Waves 0–4 give an installable, usable viewer/annotator; waves 5–7 make it an
 everyday editor; the genuinely hard modules — text editing with reflow, true
 redaction, incremental writer + digital signatures, PDF/A, the Office bridge
@@ -89,8 +89,8 @@ tiers:
 |---|---|---|
 | **Core** | Build fully; parity with Foxit is realistic | View, annotate, organise pages, forms, protect, redact, sign, OCR, optimise, compare, batch, watermarks/Bates, create-from-image/web |
 | **Pro** | Build, but expect ~80 % of Foxit's polish | Text editing with reflow (see §8), auto form-field recognition, PDF/A conversion, OCR "editable text" mode |
-| **Un-parked 2026-09-08** | PDF Portfolios — create/edit/cover/extract, operator's daily workflow | **M42** (wave 4); opening/extracting already in M12 |
-| **Parked** | Not planned unless asked — cost far exceeds value for one operator | XFA forms, Acrobat-JavaScript compatibility, PDF→Word/Excel with layout fidelity, 3D/video/rich media, tag-tree accessibility editor, full preflight, cloud/ECM connectors, virtual printer driver, scanner drivers |
+| **Un-parked 2026-09-08** | PDF Portfolios — create/edit/cover/extract, Tony's daily workflow | **M42** (wave 4); opening/extracting already in M12 |
+| **Parked** | Not planned unless asked — cost far exceeds value for one user | XFA forms, Acrobat-JavaScript compatibility, PDF→Word/Excel with layout fidelity, 3D/video/rich media, tag-tree accessibility editor, full preflight, cloud/ECM connectors, virtual printer driver, scanner drivers |
 
 Anything Parked can be promoted later; the engine layer does not block it.
 
@@ -105,12 +105,12 @@ Anything Parked can be promoted later; the engine layer does not block it.
 | **C/C++** (consumed, not written) | PDFium, qpdf, Tesseract — used as prebuilt WASM or prebuilt binaries | The heavy lifting. Prebuilt releases are fetched by script; a local compiler is only needed if we build a custom PDFium WASM (see §8.2). |
 | **Rust** (optional) | Only if profiling shows a hot path WASM can't handle — via `napi-rs` | Kept out until proven necessary. |
 
-**Toolchain authorisation (operator, 2026-09-07):** installing Rust, a C++
+**Toolchain authorisation (Tony, 2026-09-07):** installing Rust, a C++
 toolchain, emsdk or anything else the *build* needs is pre-approved. Install
 when a module needs it, record what was installed and why in `docs/adr/`,
 and add the install step to `README.md`.
 
-**No Docker — anywhere (operator, 2026-09-07).** Not at build time, not at
+**No Docker — anywhere (Tony, 2026-09-07).** Not at build time, not at
 runtime. The installed app is fully self-contained: every native dependency
 (PDFium, qpdf, Tesseract + language data) ships inside the installer, and an
 end user needs nothing but the installer. Custom engine builds, if ever
@@ -165,7 +165,7 @@ All colours are **semantic tokens** (`--bg-app`, `--bg-panel`, `--bg-ribbon`,
 defined once per theme in `src/renderer/theme/<name>.css`. **No colour
 literal anywhere else in the codebase** — a lint rule enforces it.
 
-**Built and approved by the operator on 2026-09-07 (M01).** The character of
+**Built and approved by Tony on 2026-09-07 (M01).** The character of
 each theme is below; `src/renderer/theme/*.css` and the token catalogue in
 `tokens.css` are the source of truth for exact values, and
 `test/unit/theme-contrast.test.ts` fails the build if any of them breaks a rule.
@@ -180,11 +180,11 @@ so the white focus ring keeps 3:1 on them, and the borders lightened to reach
 | 3 | **Daylight** | Mid grey, **no white anywhere in the chrome**: panels `#d9d9e3`, app and ribbon `#d2d2dc`, inputs `#d5d5df`, page backdrop `#9e9eb0`, black text set heavier (`--fw-body: 600`), accent `#082a68`. Only the PDF page is white. |
 | 4 | **High Contrast** | Pure black / white / yellow, 2 px borders, no greys. |
 
-Accessibility rules baked into every theme (non-negotiable — the operator's
+Accessibility rules baked into every theme (non-negotiable — Tony's
 own requirements):
 - WCAG AA minimum: text ≥ 4.5:1, icons and UI borders ≥ 3:1. A unit test
   computes every token pair per theme and fails the build if violated.
-- **Never differentiate by red/green or gold/green alone** — the operator is
+- **Never differentiate by red/green or gold/green alone** — Tony is
   colourblind and black and red read as one colour. Status uses a word + icon;
   the palette separates on blue↔yellow and lightness. No red text on black.
   A test simulates protanopia and deuteranopia and asserts every status pair
@@ -192,7 +192,7 @@ own requirements):
   by red↔green alone. The two channels are needed because a flat ΔL\* rule is
   impossible next to the 4.5:1 floor — see `docs/adr/0002-status-colour-separation.md`.
 - Muted/secondary text is still ≥ 4.5:1 — no dim grey on dark. **There is no
-  low-contrast text anywhere** (operator, 2026-09-07): the 3:1 this plan first
+  low-contrast text anywhere** (Tony, 2026-09-07): the 3:1 this plan first
   allowed for placeholder hints proved unreadable, and so did 4.5:1. A hint is
   now never fainter than the theme's own muted text, which the tests enforce as
   a relative rule so it cannot drift when a surface moves. The italics carry
@@ -220,7 +220,7 @@ theme, persisted, and available whichever theme is active — as in Foxit's View
 the tokens, the command and the `data-night-mode` attribute; M11 applies the matching inversion
 to the rendered page raster.
 
-The Daylight chrome contains **no white at all** (operator requirement): a full-screen
+The Daylight chrome contains **no white at all** (Tony's requirement): a full-screen
 `#ffffff` reads as glare, and so do white input fields. It is grey throughout, with black
 text — panels lightest, then the app, inputs and ribbon, and the page backdrop darkest so a
 page stands out against it. The only white in the window is the PDF page, because that is the
@@ -233,7 +233,7 @@ is left. Searching the colour space under semantic hue constraints puts the floo
 text-bearing surface of about `#ccccd8`; below that nothing works. At the current `#d2d2dc`
 the band is already narrow enough to force a choice, and the one taken is: **all four statuses
 stay clearly lighter than body text, at the cost of `--danger` being a burnt orange rather than
-a vivid red-orange.** Discrimination is what the operator actually needs; how red the red looks
+a vivid red-orange.** Discrimination is what Tony actually needs; how red the red looks
 is not something he can use. Going darker again means giving up one of those two.
 
 ### 3.3 UI layout (Foxit-style)
@@ -458,7 +458,7 @@ D:\Projects\ynotPDF\
 5. **Native binaries per OS** (Tesseract, optional PDFium, qpdf). Fetched by
    `scripts/fetch-binaries.ts` from official releases with pinned checksums;
    never committed.
-6. **macOS notarisation and Windows signing** need the operator's developer
+6. **macOS notarisation and Windows signing** need Tony's developer
    accounts — §10.
 
 ---
@@ -478,7 +478,7 @@ third-party component credited with its licence (Help → Open-source software, 
 (3) each brief's Design decisions names the source of a behaviour (public docs, ISO 32000 —
 which carries Adobe's public patent licence for implementing PDF — or our own choice);
 (4) git history shows independent authorship from a plan written before any code. Before
-launch (operator): trademark search and registration for the name/logo, our own EULA and
+launch (Tony): trademark search and registration for the name/logo, our own EULA and
 privacy policy drafted by a lawyer (M131's first-run screen shows them), marketing that never
 uses competitors' logos and makes only verifiable comparisons.
 
@@ -508,7 +508,7 @@ component is credited on the generated Help → Open-source software page.
 
 ---
 
-## 10. Decisions & inputs needed from the operator
+## 10. Decisions & inputs needed from Tony
 
 | # | Item | Needed by |
 |---|---|---|
@@ -538,7 +538,7 @@ component is credited on the generated Help → Open-source software page.
 
 ## 12. Parallel sub-conversation protocol
 
-The operator runs 3–4 Claude Code conversations at once, one module each.
+Tony runs 3–4 Claude Code conversations at once, one module each.
 To make that safe:
 
 1. **Waves.** Start a module only when every module it depends on is ☑ on
@@ -553,7 +553,7 @@ To make that safe:
    fast-forward merge if no PR flow) only when the acceptance test passes in
    CI; then tick §0 in the same commit. **Then remove the worktree and the local
    branch** (`git worktree remove ../ynotPDF-M11`, `git branch -d mod/M11-viewer`):
-   a finished module leaves no folder behind (operator, 2026-09-10).
+   a finished module leaves no folder behind (Tony, 2026-09-10).
 3. **Own your folder.** A module writes only inside
    `src/renderer/modules/<Mid>-<name>/`, its engine adapter file(s) under
    `src/engine/`, its tests, its `docs/modules/` spec and `resources/` data.

@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -88,7 +88,7 @@ n/a — infrastructure.
   fails on GPL/AGPL/LGPL-only/commercial.
 - `README.md` (setup, scripts, architecture pointer), `docs/adr/0001-stack.md`
   (records the Electron + TypeScript + PDFium decision and the no-Docker rule).
-- Push to `github.com/tonybaynes/ynotPDF` (the operator creates the private
+- Push to `github.com/tonybaynes/ynotPDF` (Tony creates the private
   repo — ask for it if it does not exist yet).
 
 ## Out of scope
@@ -112,7 +112,7 @@ Everything under `PLAN.md` §7 that is not a module folder.
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -170,7 +170,7 @@ their behaviour only as a user would, from the running app and public
 documentation. Record in your Design decisions where a feature's
 behaviour came from (public docs, the PDF spec ISO 32000, our own choice)
 — this file is the provenance record. Help and
-documentation are written from scratch for ynotPDF. *(Operator rule,
+documentation are written from scratch for ynotPDF. *(Tony's rule,
 2026-09-09.)* Four colour themes
 and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;
 `/d/Projects/ynotPDF` in Git Bash). Master plan: `PLAN.md`. Session rules:
@@ -225,8 +225,8 @@ tiles, layers) · `src/renderer/theme/` · `src/renderer/modules/<Mid>-<slug>/`
 (**your module lives here**) · `resources/` · `test/{fixtures,unit,e2e}` ·
 `docs/{adr,modules}` · `scripts/`.
 
-**UI & accessibility rules (non-negotiable — the operator has low vision and
-is colourblind: black and red read as the same colour):**
+**UI & accessibility rules (non-negotiable — Tony has low vision and is
+colourblind: black and red read as the same colour):**
 - Colours **only** via theme tokens (`--bg-app`, `--bg-panel`, `--fg`,
   `--fg-muted`, `--icon`, `--accent`, `--border`, `--focus`, `--selection`,
   `--danger`, `--warning`, `--success`, `--info`, …). Never a literal.
@@ -262,7 +262,7 @@ is colourblind: black and red read as the same colour):**
   `Co-Authored-By: Claude <noreply@anthropic.com>`. Never commit real
   customer PDFs, binaries, or secrets — fixtures are public-domain/synthetic.
 - **Real sample PDFs for hands-on testing live in `test/fixtures/local/`**
-  (git-ignored; the operator drops files there, so they carry personal
+  (git-ignored; Tony drops files there, so they carry personal
   data). Currently: three airline boarding passes and **`Sample
   Portfolio.pdf`, a Foxit-made PDF Portfolio (`/Collection`) containing
   those three** — use it for attachments, embedded-file and portfolio
@@ -272,8 +272,12 @@ is colourblind: black and red read as the same colour):**
   with `it.skipIf(!existsSync(...))` — CI and other machines don't have
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
-- Replies to the operator: short and plain (eyesight). Never leave the
-  operator a to-do you could do yourself.
+- **Tony is who you are working for — call him Tony, not "the operator"**
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
+- Replies to Tony: short and plain (eyesight). Never leave him a to-do you
+  could do yourself.
 
 ---
 
@@ -356,7 +360,7 @@ is colourblind: black and red read as the same colour):**
 - Docs: `README.md`, `docs/adr/0001-stack.md`.
 
 **Deferred / notes:**
-- App icon: **real logo in place since 2026-09-08** (`resources/build/icon.png` from `resources/brand/`; `npm run icon` now verifies instead of generating). Earlier note: none yet (electron-builder default). Needs the operator's logo (PLAN.md §10.1);
+- App icon: **real logo in place since 2026-09-08** (`resources/build/icon.png` from `resources/brand/`; `npm run icon` now verifies instead of generating). Earlier note: none yet (electron-builder default). Needs Tony's logo (PLAN.md §10.1);
   M131 adds it under `resources/build/`.
 - `file.open` only reflects the file name in the shell; rendering arrives with M10/M11.
 - `Document` and `Selection` are typed shells with minimal behaviour (no unit tests yet);

@@ -30,8 +30,8 @@ end without waiting to be asked for the next step:
 6. Merge to `main` (PR if the remote supports it, else fast-forward), tick
    this module ☑ in `PLAN.md` §0 in the same merge, and fill in the
    **Build log** below with what shipped, what was deferred and why.
-7. Report back in a few plain lines: what works, what to try, anything the
-   operator must do by hand.
+7. Report back in a few plain lines: what works, what to try, anything 
+   Tony must do by hand.
 
 ---
 
@@ -78,7 +78,7 @@ its View → Night Mode. Ours are proper themes, applied to every surface.
   remain pairwise distinguishable by lightness (ΔL* ≥ 20).
 - Storybook-free **theme gallery page** (`theme/gallery.html`, dev only):
   every token rendered as a swatch with its contrast number, all four themes
-  side by side — the operator will use this to approve palettes.
+  side by side — Tony will use this to approve palettes.
 
 ## Out of scope
 
@@ -102,7 +102,7 @@ in `src/renderer/main.ts` to boot `ThemeManager`.
 
 ## Libraries
 
-_Credit rule (operator): every open-source component this module adds
+_Credit rule (Tony): every open-source component this module adds
 must be creditable by M131's generated acknowledgements page — npm
 packages need only a licence in their metadata; binaries/WASM go in
 `resources/binaries.json` with `license`, `homepage`, `copyright`; anything
@@ -157,7 +157,7 @@ their behaviour only as a user would, from the running app and public
 documentation. Record in your Design decisions where a feature's
 behaviour came from (public docs, the PDF spec ISO 32000, our own choice)
 — this file is the provenance record. Help and
-documentation are written from scratch for ynotPDF. *(Operator rule,
+documentation are written from scratch for ynotPDF. *(Tony's rule,
 2026-09-09.)* Four colour themes
 and a dark default. Project root: `D:\Projects\ynotPDF` (Windows path;
 `/d/Projects/ynotPDF` in Git Bash). Master plan: `PLAN.md`. Session rules:
@@ -212,8 +212,8 @@ tiles, layers) · `src/renderer/theme/` · `src/renderer/modules/<Mid>-<slug>/`
 (**your module lives here**) · `resources/` · `test/{fixtures,unit,e2e}` ·
 `docs/{adr,modules}` · `scripts/`.
 
-**UI & accessibility rules (non-negotiable — the operator has low vision and
-is colourblind: black and red read as the same colour):**
+**UI & accessibility rules (non-negotiable — Tony has low vision and is
+colourblind: black and red read as the same colour):**
 - Colours **only** via theme tokens (`--bg-app`, `--bg-panel`, `--fg`,
   `--fg-muted`, `--icon`, `--accent`, `--border`, `--focus`, `--selection`,
   `--danger`, `--warning`, `--success`, `--info`, …). Never a literal.
@@ -249,7 +249,7 @@ is colourblind: black and red read as the same colour):**
   `Co-Authored-By: Claude <noreply@anthropic.com>`. Never commit real
   customer PDFs, binaries, or secrets — fixtures are public-domain/synthetic.
 - **Real sample PDFs for hands-on testing live in `test/fixtures/local/`**
-  (git-ignored; the operator drops files there, so they carry personal
+  (git-ignored; Tony drops files there, so they carry personal
   data). Currently: three airline boarding passes and **`Sample
   Portfolio.pdf`, a Foxit-made PDF Portfolio (`/Collection`) containing
   those three** — use it for attachments, embedded-file and portfolio
@@ -259,8 +259,12 @@ is colourblind: black and red read as the same colour):**
   with `it.skipIf(!existsSync(...))` — CI and other machines don't have
   them. Never copy, commit or quote their contents; `local/README.md`
   lists what is there.
-- Replies to the operator: short and plain (eyesight). Never leave the
-  operator a to-do you could do yourself.
+- **Tony is who you are working for — call him Tony, not "the operator"**
+  (2026-09-11). `CLAUDE.md`, `PLAN.md` and every module brief use his name.
+  Source comments and ADRs still say "the operator" in places; that is
+  history, not a style to copy. New writing uses his name.
+- Replies to Tony: short and plain (eyesight). Never leave him a to-do you
+  could do yourself.
 
 ---
 
@@ -301,12 +305,12 @@ is colourblind: black and red read as the same colour):**
   palette entry, so the palette, shortcuts and the e2e harness all drive the same code.
 - **Every theme declares `color-scheme: <scheme> only`, never a bare `light`/`dark`.** The
   `only` keyword forbids the browser substituting a scheme of its own. Without it, Chrome's
-  "Auto Dark Mode for Web Contents" (`chrome://flags`, which the operator runs) repaints any
+  "Auto Dark Mode for Web Contents" (`chrome://flags`, which Tony runs) repaints any
   subtree declaring `color-scheme: light` — so the Daylight column of the gallery rendered
-  dark and the palette under review was not the palette that ships. Probed in the operator's
+  dark and the palette under review was not the palette that ships. Probed in Tony's
   own Chrome: a bare `light` is repainted, `light only` is not. The contrast and e2e tests
   both assert the keyword so it cannot regress.
-- **Night Mode is a separate toggle, not a property of the dark themes** (operator decision,
+- **Night Mode is a separate toggle, not a property of the dark themes** (Tony's decision,
   2026-09-07). A theme colours the *interface*; a PDF page is the *document* and renders as its
   author made it, which is nearly always white paper. Foxit puts Night Mode under View and so do
   we: `view.nightMode.toggle` (`Mod+Alt+N`), off by default in every theme, persisted like the
@@ -316,7 +320,7 @@ is colourblind: black and red read as the same colour):**
   daylight highlight is a pale yellow that near-white ink cannot sit on (1.06:1 measured), and a
   dark blue ink stroke drops to 2.88:1 against dark paper. Each annotation colour therefore has
   a `-night` partner, and the pair table asserts them against the darkened page.
-- **No white at all in the Daylight chrome, and black text** (operator, 2026-09-07). A
+- **No white at all in the Daylight chrome, and black text** (Tony, 2026-09-07). A
   full-screen `#ffffff` reads as glare, and so does a white input field. Grey throughout:
   panels `#e0e0e8`, app `#d8d8e2`, inputs `#dcdce6`, ribbon `#d5d5de`, page backdrop `#a9a9b8`.
   `--fg` and `--icon` are `#000000`. The only white left is `--page-paper`, which is the
@@ -328,11 +332,11 @@ is colourblind: black and red read as the same colour):**
   `#ccccd8`. At the current `#d2d2dc` the band already forces a choice, verified by exhaustive
   search: you can have a vivid red-orange `--danger` (chroma ≥ 55) **or** all four statuses
   clearly lighter than body text, but not both. This theme takes the second — `--danger` is a
-  burnt orange `#884810`, and nothing is near-black. Discrimination is what the operator needs;
+  burnt orange `#884810`, and nothing is near-black. Discrimination is what Tony needs;
   how red the red looks is not a channel available to him. An earlier note here claimed no set
   existed below `#d0d0db`; that was an artefact of a search constrained to fixed lightness
   bands, and is wrong.
-- **A placeholder hint is never the faintest text on its surface** (operator, 2026-09-07,
+- **A placeholder hint is never the faintest text on its surface** (Tony, 2026-09-07,
   twice). The brief and PLAN.md §3.2 allowed 3:1 for hints as the single low-contrast
   exception; raising them to the 4.5:1 floor was still not enough to read comfortably. The rule
   the tests now enforce is relative, not absolute: `--fg-placeholder` must reach at least the
@@ -342,7 +346,7 @@ is colourblind: black and red read as the same colour):**
 - **Font weight is a theme token** (`--fw-body`, `--fw-heading`), applied on `[data-theme]`
   rather than `body` so it follows the theme wherever the attribute is set — `<html>` in the
   app, each preview column in the gallery. Daylight sets 600/700 against the dark themes'
-  400/600: black-on-grey reads thinner than white-on-black at the same weight, and the operator
+  400/600: black-on-grey reads thinner than white-on-black at the same weight, and Tony
   was losing the text (2026-09-07).
 - **Annotation colours are theme-independent.** They are document content, not UI: the same
   values in all four themes, checked against the page paper rather than the app surfaces.
@@ -381,10 +385,10 @@ is colourblind: black and red read as the same colour):**
   M00's status bar.
 
 **Fixed after first merge (2026-09-07):**
-- The operator reported the gallery's Daylight column rendering dark in Chrome. Cause: Chrome's
+- Tony reported the gallery's Daylight column rendering dark in Chrome. Cause: Chrome's
   Auto Dark Mode repaints subtrees that declare `color-scheme: light`. All four themes now use
-  `color-scheme: <scheme> only`, which is the standards-defined opt-out; verified in the
-  operator's own browser with the flag enabled. `gallery.html` and `index.html` also carry
+  `color-scheme: <scheme> only`, which is the standards-defined opt-out; verified in 
+  Tony's own browser with the flag enabled. `gallery.html` and `index.html` also carry
   `<meta name="color-scheme" content="dark light">` so the very first paint is covered too.
 
 **Added after review (2026-09-07):**
@@ -394,10 +398,10 @@ is colourblind: black and red read as the same colour):**
   theme's page sample twice, Night Mode off and on, so the two can be compared directly.
   **M11 must apply the same inversion to the rendered page raster** — the tokens and the
   `data-night-mode` attribute are the contract it codes against.
-- **Daylight softened** at the operator's request: no pure white in the chrome.
+- **Daylight softened** at Tony's request: no pure white in the chrome.
 
 **Deferred / notes:**
-- **Palettes approved by the operator on 2026-09-07**, all four, from the gallery page
+- **Palettes approved by Tony on 2026-09-07**, all four, from the gallery page
   (`CHECKLIST.txt` and PLAN.md §10 item 4 ticked). To revisit one later: `npm run gallery`,
   edit the single value in its theme file, and `npm test` says at once whether it still passes.
 - Tritanopia is simulated by `contrast.ts` and unit-tested, but the status rule only asserts
