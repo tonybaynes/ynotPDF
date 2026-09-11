@@ -144,3 +144,55 @@ test('the engine worker answers over RPC', async () => {
   // M10: the worker now serves PDFium (WASM); M00 shipped the NotImplemented stub here.
   expect(info).toMatchObject({ name: 'pdfium' });
 });
+
+/**
+ * A parked e2e window is transparent, and stays transparent when the window is driven.
+ *
+ * **Read what this does and does not cover.** Tony sees the outline of a window flash up during
+ * runs, every now and again. This test does *not* reproduce that and does not prove it fixed:
+ * removing both halves of the fix in `window.ts` leaves this passing, because by the time
+ * Playwright is attached the window is long past `ready-to-show`, and the suspected cause —
+ * `maximize()` showing the window before opacity is applied — happens during construction, where
+ * no test can observe it.
+ *
+ * What it does pin is the invariant itself: a parked window reads as fully transparent, and
+ * maximise and full screen do not change that. If the parking treatment were ever removed
+ * wholesale this would fail. That is worth having; it is not the regression test for the flash,
+ * and the flash's cause is still open — see `docs/open-work.md`.
+ *
+ * Linux is exempt because `window.ts` does not park windows there — `setOpacity` is a Windows and
+ * macOS API.
+ */
+test('a parked window reads as transparent, through maximise and full screen', async () => {
+  test.skip(process.platform === 'linux', 'windows are not parked off-screen on Linux');
+  test.skip(
+    process.env['YNOT_E2E_VISIBLE'] === '1',
+    'the run was asked for visible windows on purpose',
+  );
+
+  const opacity = async (): Promise<number> =>
+    app.electron.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      return win ? win.getOpacity() : 1;
+    });
+
+  expect(await opacity(), 'a parked window starts transparent').toBe(0);
+
+  await app.electron.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.maximize();
+  });
+  expect(await opacity(), 'maximising showed the window at full opacity').toBe(0);
+
+  await app.electron.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.unmaximize();
+  });
+  expect(await opacity(), 'unmaximising showed the window at full opacity').toBe(0);
+
+  await app.run('view.fullScreen.toggle', { on: true });
+  await app.page.waitForTimeout(400);
+  expect(await opacity(), 'going full screen showed the window at full opacity').toBe(0);
+
+  await app.run('view.fullScreen.toggle', { on: false });
+  await app.page.waitForTimeout(400);
+  expect(await opacity(), 'leaving full screen showed the window at full opacity').toBe(0);
+});

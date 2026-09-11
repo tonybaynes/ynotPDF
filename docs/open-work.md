@@ -53,22 +53,60 @@ at 0.04 and at 0.0004 alike. If CI fails there, Playwright prints the actual rat
 measurement — move to just above it. This is written in the file next to the constant, because the
 obvious thing to reach for is a local run.
 
-## 3. The e2e window flash — fixed, unverified
+## 2b. Visual baselines exist for one platform only — M04's, to fill in
 
-**On `fix/post-restore`.** Tony sees the outline of a window flash up during a run, every now and
-again. Two causes found, both fixed, neither confirmed:
+Nine of the ten screens `visual.spec.ts` compares are only ever compared on a single Windows
+runner. There are no macOS or Linux baselines at all, so on those platforms the spec skips.
 
-- Opacity was set at `ready-to-show`, but `maximize()` runs before that and shows the window as a
-  side effect. A window whose remembered state was maximised got shown, on a real monitor, at full
-  opacity.
-- `view.fullScreen.toggle` is exercised by `viewer.spec.ts`, and going full screen shows a parked
-  window and moves it to a real display — for the 300 ms the test then waits.
+The skip is the honest part and should stay until this is done: a platform with no baselines says
+so, rather than reporting green for a comparison it never made.
 
-Opacity now goes on the instant the window exists, a parked window does not restore a maximised
-state, and it re-asserts invisibility on `show`, `maximize`, `restore` and `enter-full-screen`.
+Seeding the missing ones is awkward on purpose. A baseline has to come from the machine that will
+later compare against it, and the only macOS and Linux machines here are CI runners — so
+generating them inside the same run that checks them would be a run grading its own homework,
+which is the dead-assertion failure mode this repository has already been bitten by once. The
+shape M04 proposes is a `workflow_dispatch` job that runs with `--update-snapshots=all`, uploads
+the PNGs as an artifact, and leaves a person to commit them.
 
-A flash that no longer happens is hard to prove absent. If Tony still sees one, that is real
-information and the hunt should continue — likely another path that shows or moves a parked window.
+There is a decision inside it — how a baseline is regenerated when the interface legitimately
+changes, and who may bless a new one — so it wants Tony's eye and a line in a brief rather than a
+quiet commit. **M04 owns this and will fill in the detail here.**
+
+## 3. The e2e window flash — cause NOT established
+
+Tony sees the outline of a window flash up during a run, every now and again. **This is still
+open.** Two candidate causes were found by inspection and both are now doubtful; the changes made
+for them are on `fix/post-restore` and are worth keeping as hardening, but they should not be
+described as the fix.
+
+What was changed in `src/main/window.ts`: opacity goes on the instant a parked window exists
+rather than at `ready-to-show`; a parked window does not restore a maximised state; and it
+re-asserts opacity on `show`, `maximize`, `restore` and `enter-full-screen`.
+
+**Why neither candidate convinces:**
+
+- **`maximize()` showing the window before opacity was applied.** Real by inspection — Electron's
+  `maximize()` shows a window as a side effect. But it only runs when a _remembered_ maximised
+  state exists, and e2e uses a fresh profile per launch, so it may never fire during a run at all.
+- **Full screen showing a parked window.** `view.fullScreen.toggle` is exercised by
+  `viewer.spec.ts` and does move the window to a real display. But measured on Windows, opacity
+  **survives** the transition without the listener, so nothing becomes visible.
+
+**The guard in `app.spec.ts` does not test this**, and says so in its own comment: removing both
+halves of the fix leaves it passing, because by the time Playwright is attached the window is past
+`ready-to-show` and the construction-time path cannot be observed. It pins a real invariant — a
+parked window reads as transparent — and nothing more.
+
+**The better candidates, unexamined.** `src/main/print/index.ts` and
+`src/main/webpdf/WebPdfPrinter.ts` both create a `BrowserWindow` with `show: false` and **no
+parking and no transparency at all** — default size, default position, middle of the screen, and
+blank. "An outline of a window, nothing else" describes one of those far better than it describes
+the main window. If anything shows them for a frame, that is what Tony is seeing.
+
+**Next step, already begun:** a temporary probe in `src/main/index.ts`, behind
+`YNOT_WINDOW_PROBE=<file>`, records every window created, shown, maximised, focused or taken full
+screen during a hidden run. Run the full suite with it set and read the log — that names the
+culprit instead of guessing at it a third time. Remove the probe afterwards.
 
 ## 4. Dropped files have no path — a real product bug
 
