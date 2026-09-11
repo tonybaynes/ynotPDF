@@ -28,7 +28,6 @@ import {
   type PageContext,
   type DecorationFont,
   type WatermarkSpec,
-  type ZoneName,
 } from './types';
 
 /**
@@ -275,8 +274,3 @@ export function batesFor(spec: BatesSpec, ordinal: number): string {
     value: spec.startAt + ordinal - 1,
   });
 }
-
-/** A zone's default text, for the dialog's first paint. */
-export const DEFAULT_ZONE_TEXT: Readonly<Partial<Record<ZoneName, string>>> = {
-  'footer-centre': '<<1 of n>>',
-};

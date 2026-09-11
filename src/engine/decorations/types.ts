@@ -243,6 +243,3 @@ export interface DocumentContext {
   /** Bates value for this page, when a Bates decoration is on the document. */
   readonly bates?: string;
 }
-
-/** The empty resource set, so a stream that names nothing still has the shape. */
-export const NO_RESOURCES: AppearanceResources = { extGState: {}, fonts: {} };

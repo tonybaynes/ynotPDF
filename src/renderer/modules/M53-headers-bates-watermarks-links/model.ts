@@ -70,8 +70,6 @@ export interface DecorationsState {
   readonly seq: number;
 }
 
-export const EMPTY_DECORATIONS: DecorationsState = { items: [], pages: {}, seq: 1 };
-
 /** What a decoration with no recorded moment falls back to, so a date macro is never `Invalid`. */
 const EPOCH = '1970-01-01T00:00:00.000Z';
 
@@ -274,13 +272,6 @@ export function readDecorationsState(bag: Readonly<Record<string, unknown>>): De
 /** The Bates decoration on a document, if there is one. Only one is ever kept. */
 export function batesOf(state: DecorationsState): ModelDecoration | null {
   return state.items.find((d) => d.kind === 'bates') ?? null;
-}
-
-/** Every page id any decoration touches. */
-export function decoratedPages(state: DecorationsState): Set<ModelId> {
-  const out = new Set<ModelId>();
-  for (const item of state.items) for (const id of item.pages) out.add(id);
-  return out;
 }
 
 /**

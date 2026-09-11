@@ -37,6 +37,7 @@ import type { PdfMatrix } from '@shared/pdf';
 import { num } from '../appearance/content';
 import { parse, scanObjects, serialise } from '../content';
 import type { ContentOp } from '../content/parser';
+import { shrinkMatrix } from '../decorations/layout';
 import { DECORATION_MARK, MARK_ID, MARK_KIND, MARK_SPEC } from '../decorations/types';
 import type { PlannedDecoration, PlannedDecorations } from '../Writer';
 import { formXObject, fromBase64, type EmbeddedXObjects } from './resources';
@@ -347,11 +348,12 @@ export function writePageDecorations(
   const shrinks = typeof scale === 'number' && scale > 0 && scale < 1;
   const elements: PDFObject[] = [];
   if (shrinks) {
-    const box = leaf.CropBox() ?? leaf.MediaBox();
-    const rect = boxNumbers(ctx, box);
-    const m = shrinkFor(rect, scale ?? 1);
-    elements.push(markedStream(ctx, `q\n${matrixOps(m)}`));
-    changed = true;
+    const rect = boxNumbers(ctx, leaf.CropBox() ?? leaf.MediaBox());
+    const m = shrinkMatrix({ x0: rect[0], y0: rect[1], x1: rect[2], y1: rect[3] }, scale ?? 1);
+    if (m) {
+      elements.push(markedStream(ctx, `q\n${matrixOps(m)}`));
+      changed = true;
+    }
   } else if (items.length > 0) {
     elements.push(markedStream(ctx, 'q'));
   }
@@ -403,13 +405,6 @@ function boxNumbers(
   if (values.length < 4) return [0, 0, 612, 792];
   const [a = 0, b = 0, c = 0, d = 0] = values;
   return [Math.min(a, c), Math.min(b, d), Math.max(a, c), Math.max(b, d)];
-}
-
-/** The centred shrink matrix for a page box. */
-function shrinkFor(box: readonly [number, number, number, number], fraction: number): PdfMatrix {
-  const cx = (box[0] + box[2]) / 2;
-  const cy = (box[1] + box[3]) / 2;
-  return [fraction, 0, 0, fraction, cx - fraction * cx, cy - fraction * cy];
 }
 
 /**
