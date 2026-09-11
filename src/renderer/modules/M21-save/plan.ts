@@ -59,6 +59,7 @@ import {
   plannedDecorationsFor,
   sourceSizes,
 } from '@modules/M53-headers-bates-watermarks-links/model';
+import { parseAction } from '@modules/M53-headers-bates-watermarks-links/links';
 
 /** What the plan could not express, for the caller to tell the user about. */
 export interface PlanResult {
@@ -317,29 +318,37 @@ function plannedAnnotations(
  * that position.
  */
 function plannedLinkDest(doc: Document, annotation: ModelAnnotation): PlannedDestination | null {
-  const raw = annotation.extra['linkDest'];
-  if (!raw || typeof raw !== 'object') return null;
-  const record = raw as Record<string, unknown>;
-  const pageId = record['page'];
-  if (typeof pageId !== 'string') return null;
-  const index = doc.state.pages.findIndex((p) => p.id === pageId);
+  const action = linkActionOf(annotation);
+  if (action.kind !== 'page') return null;
+  const index = doc.state.pages.findIndex((p) => p.id === action.page);
   if (index < 0) return null;
-  const fit = typeof record['fit'] === 'string' ? record['fit'] : 'fit';
-  const allowed: ReadonlyArray<PlannedDestination['fit']> = [
-    'xyz',
-    'fit',
-    'fitH',
-    'fitV',
-    'fitR',
-    'fitB',
-    'fitBH',
-    'fitBV',
-  ];
+  return { page: index, fit: action.fit };
+}
+
+/** The action a Link annotation carries, from the JSON the engine keeps for it (M53). */
+function linkActionOf(annotation: ModelAnnotation): ReturnType<typeof parseAction> {
+  const json = annotation.extra['linkActionJson'];
+  if (typeof json !== 'string' || json === '') return { kind: 'none' };
+  try {
+    return parseAction(JSON.parse(json));
+  } catch {
+    return { kind: 'none' };
+  }
+}
+
+/**
+ * A Link's `extra`, with the `/A` dictionary put in beside the JSON that survives a page re-read.
+ *
+ * `dictEntries` is a table of model keys, so the action has to be a model key before it can
+ * become a dictionary. A destination inside this document is not an `/A` at all — it is
+ * `PlannedAnnotation.dest` — so it clears the entry instead.
+ */
+function withLinkAction(annotation: ModelAnnotation): Readonly<Record<string, unknown>> {
+  if (annotation.subtype !== 'Link') return annotation.extra;
+  const action = linkActionOf(annotation);
   return {
-    page: index,
-    fit: (allowed as ReadonlyArray<string>).includes(fit)
-      ? (fit as PlannedDestination['fit'])
-      : 'fit',
+    ...annotation.extra,
+    linkAction: action.kind === 'page' || action.kind === 'none' ? null : action,
   };
 }
 
@@ -379,7 +388,7 @@ function changedProperties(
   if ('vertices' in a) props['vertices'] = a.vertices.length > 0 ? a.vertices : null;
   // Dictionary entries the engine has no setter for — `/CL`, `/Q`, `/Rotate`, `/RD` — and the
   // ones it can only write as strings where the file wants a name.
-  const entries: Record<string, DictValue | null> = dictEntries(a.extra);
+  const entries: Record<string, DictValue | null> = dictEntries(withLinkAction(a));
   /*
    * `/IRT` is a reference to another annotation's object, which is the one thing the model holds
    * as an id and the file holds as a pointer (M32, ADR 0017). The plan is the last place that can

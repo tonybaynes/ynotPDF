@@ -102,6 +102,22 @@ describe('headers and footers', () => {
     }
   });
 
+  it('reads "k of 100" on every page of a hundred, and nothing is left when it goes', async () => {
+    // The brief's own acceptance line, at its own size.
+    const doc = await pdfium.createDocument();
+    try {
+      await pdfium.insertBlankPages(doc, 0, 100, { width: 595, height: 842 });
+      await apply(doc, HEADER);
+      for (let i = 0; i < 100; i++) {
+        expect(await textOf(doc, i), `page ${String(i + 1)}`).toBe(`${String(i + 1)} of 100`);
+      }
+      for (let i = 0; i < 100; i++) await pdfium.setDecorations(doc, i, []);
+      for (let i = 0; i < 100; i++) expect(await textOf(doc, i)).toBe('');
+    } finally {
+      await pdfium.close(doc);
+    }
+  });
+
   it('survives a save and comes back as a marker that names its own settings', async () => {
     const doc = pdfium.openSync(fixture('multipage.pdf'));
     let saved: Uint8Array;
@@ -218,6 +234,76 @@ describe('watermarks', () => {
       expect(inkCoverage(await pdfium.renderRaw(doc, 0, 1), whole, 220)).toBeGreaterThan(0);
       await pdfium.setDecorations(doc, 0, []);
       expect(inkCoverage(await pdfium.renderRaw(doc, 0, 1), whole, 220)).toBe(0);
+    } finally {
+      await pdfium.close(doc);
+    }
+  });
+});
+
+describe('a watermark that only prints', () => {
+  it('is written as an optional-content group the viewer turns off on screen', async () => {
+    const spec: WatermarkSpec = {
+      kind: 'watermark',
+      source: { kind: 'text', text: 'COPY' },
+      font: 'Helvetica-Bold',
+      size: 48,
+      colour: 0x808080,
+      rotation: 30,
+      scale: 0.6,
+      position: 'centre',
+      offsetX: 0,
+      offsetY: 0,
+      behind: true,
+      print: true,
+      screen: false,
+    };
+    const doc = pdfium.openSync(fixture('blank.pdf'));
+    let planned: PlannedDecoration[] = [];
+    let base: Uint8Array;
+    try {
+      const [page] = await pageContexts(doc, 1);
+      if (!page) throw new Error('no page');
+      const { draw } = drawDecoration('d1', spec, { page });
+      if (draw) planned = [draw];
+      base = await pdfium.save(doc);
+    } finally {
+      await pdfium.close(doc);
+    }
+    const plan: WritePlan = {
+      ...emptyWritePlan(1),
+      pages: [{ source: 0, decorations: { items: planned } }],
+    };
+    const written = await new FullRewriteWriter().write({ bytes: base, plan });
+    const re = pdfium.openSync(written.bytes);
+    try {
+      // The group is real optional content, so PDFium — and every other viewer — sees a layer,
+      // named for what it is and starting hidden.
+      const layers = await pdfium.layers(re);
+      const group = layers.find((l) => l.name === 'Print only');
+      expect(
+        group,
+        `no print-only layer among ${layers.map((l) => l.name).join(', ')}`,
+      ).toBeDefined();
+      expect(group?.visible).toBe(false);
+      // And the decoration itself is still the marked object it always was.
+      expect(await pdfium.decorations(re, 0)).toHaveLength(1);
+    } finally {
+      await pdfium.close(re);
+    }
+  });
+});
+
+describe('a decoration another application left behind', () => {
+  it('is reported so it can be counted and removed, but not edited', async () => {
+    const doc = pdfium.openSync(fixture('annotations-all.pdf'));
+    try {
+      const found = await pdfium.decorations(doc, 0);
+      const foreign = found.filter((f) => f.foreign);
+      expect(foreign.length).toBeGreaterThan(0);
+      expect(foreign[0]?.kind).toBe('watermark');
+      // Nothing in the file says what it was meant to be, so there is no spec to open a dialog on.
+      expect(foreign[0]?.spec).toBeNull();
+      expect(foreign[0]?.label).toBeTruthy();
     } finally {
       await pdfium.close(doc);
     }

@@ -2197,6 +2197,10 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
             ['lineEnding', 'LE'],
             // `/RT` says what an `/IRT` means: `/R` a reply, `/Group` a grouped annotation (M32).
             ['replyType', 'RT'],
+            // A link's action as JSON, and its `/H` highlight (M53, ADR 0020 §5). PDFium has no
+            // `/A` setter, so the action survives a page re-read as this private string.
+            ['linkActionJson', 'YNOTLinkAction'],
+            ['linkHighlight', 'H'],
           ] as const) {
             const value = str(pdfKey);
             if (value) extra[modelKey] = value;

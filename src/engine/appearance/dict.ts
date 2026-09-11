@@ -222,7 +222,17 @@ export const ANNOTATION_DICT_MAPPINGS: ReadonlyArray<DictMapping> = [
     engineWritable: false,
     encode: (value) => encodeLinkAction(value),
   },
-  { key: 'linkHighlight', pdfKey: 'H', kind: 'name', engineWritable: false },
+  /*
+   * The same action as JSON, under a private key.
+   *
+   * PDFium creates a Link annotation happily but has no setter for `/A`, so an action written
+   * only into the model is lost the moment the page is read again — which every viewer does. The
+   * JSON *is* engine-writable (`FPDFAnnot_SetStringValue` takes any key), so it survives the
+   * round trip and is what `readAction` reads. It is also what makes a link this application
+   * wrote editable in a file it opens later, exactly as the decoration marker is (M53, ADR 0020).
+   */
+  { key: 'linkActionJson', pdfKey: 'YNOTLinkAction', kind: 'string', engineWritable: true },
+  { key: 'linkHighlight', pdfKey: 'H', kind: 'name', engineWritable: true },
   /*
    * `/Border` is `[hRadius vRadius width]`, and a width of 0 is what "an invisible rectangle"
    * means — the one thing every viewer agrees on. `/BS /W` says the same thing to the ones that

@@ -30,6 +30,7 @@ import {
   type FoundDecoration,
 } from '../decorations/types';
 import { embedXObjectSource, formXObject } from '../writers/resources';
+import { ANNOT_SUBTYPES } from './constants';
 import type { Ffi } from './ffi';
 
 /** The kinds a marker may name; anything else read back is reported as `unknown`. */
@@ -117,7 +118,39 @@ function decorationMark(ffi: Ffi, obj: number): number {
   return 0;
 }
 
-/** Every decoration this application put on a page, newest last, with its object index. */
+/**
+ * Decorations another application left on the page.
+ *
+ * There is no standard marker for a watermark, so the one thing that can be said honestly is
+ * what the specification does define: a `/Watermark` annotation (PDF 12.5.6.22). It is reported
+ * so a reader can be told it is there and take it off; it cannot be edited, because nothing in
+ * the file says what it was meant to be.
+ */
+function readForeign(ffi: Ffi, page: number, pageIndex: number): FoundDecoration[] {
+  const out: FoundDecoration[] = [];
+  const count = ffi.call('FPDFPage_GetAnnotCount', page);
+  for (let i = 0; i < count; i++) {
+    const annot = ffi.call('FPDFPage_GetAnnot', page, i);
+    if (annot === 0) continue;
+    try {
+      if (ANNOT_SUBTYPES[ffi.call('FPDFAnnot_GetSubtype', annot)] !== 'Watermark') continue;
+      out.push({
+        page: pageIndex,
+        id: `foreign.${String(pageIndex)}.${String(i)}`,
+        kind: 'watermark',
+        index: i,
+        spec: null,
+        foreign: true,
+        label: 'A watermark added by another application',
+      });
+    } finally {
+      ffi.call('FPDFPage_CloseAnnot', annot);
+    }
+  }
+  return out;
+}
+
+/** Every decoration on a page: ours by its mark, and another application's by its shape. */
 export function readDecorations(ffi: Ffi, page: number, pageIndex: number): FoundDecoration[] {
   const out: FoundDecoration[] = [];
   const count = ffi.call('FPDFPage_CountObjects', page);
@@ -136,12 +169,15 @@ export function readDecorations(ffi: Ffi, page: number, pageIndex: number): Foun
       foreign: false,
     });
   }
+  out.push(...readForeign(ffi, page, pageIndex));
   return out;
 }
 
 /** Removes every marked decoration from a page. Returns how many went. */
 function clearDecorations(ffi: Ffi, page: number): number {
-  const indexes = readDecorations(ffi, page, 0).map((d) => d.index);
+  const indexes = readDecorations(ffi, page, 0)
+    .filter((d) => !d.foreign)
+    .map((d) => d.index);
   // Back to front: removing an object shifts every later index down by one.
   for (const index of [...indexes].reverse()) {
     const obj = ffi.call('FPDFPage_GetObject', page, index);
@@ -229,7 +265,11 @@ export function scalePageContent(
   const cy = (box[1] + box[3]) / 2;
   const e = cx - factor * cx;
   const f = cy - factor * cy;
-  const decorations = new Set(readDecorations(ffi, page, 0).map((d) => d.index));
+  const decorations = new Set(
+    readDecorations(ffi, page, 0)
+      .filter((d) => !d.foreign)
+      .map((d) => d.index),
+  );
   const count = ffi.call('FPDFPage_CountObjects', page);
   for (let i = 0; i < count; i++) {
     if (decorations.has(i)) continue;

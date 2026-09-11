@@ -53,7 +53,7 @@ interface TabState {
   readonly layer: LinkLayer;
   readonly disposers: Array<() => void>;
   readonly pages: Map<number, ReadonlyArray<LinkInfo>>;
-  selection: ReadonlyArray<ModelId>;
+  selection: ReadonlyArray<string>;
   page: number | null;
 }
 
@@ -125,6 +125,7 @@ export class LinkService {
 
   /** Turns the editing outlines on and off — the link tool becoming active, and going away. */
   setEditing(editing: boolean): void {
+    this.ensureBound();
     if (this.editing === editing) return;
     this.editing = editing;
     for (const tab of this.tabs.values()) tab.layer.setMode(editing ? 'edit' : 'read');
@@ -135,6 +136,17 @@ export class LinkService {
 
   get isEditing(): boolean {
     return this.editing;
+  }
+
+  /**
+   * Binds any tab that has a viewer and no layer yet.
+   *
+   * A tab appears in the shell before M11 has built its viewer, so binding on the tab list alone
+   * misses the first document of the session — the one the reader opened. Every entry point calls
+   * this first, which costs a map lookup and means the layer is there whenever anything asks.
+   */
+  ensureBound(): void {
+    for (const tab of this.shell.documents.state.tabs) this.bind(tab.id);
   }
 
   /** Attaches a layer to a tab's panes. Called when a document is shown. */
@@ -156,13 +168,14 @@ export class LinkService {
     for (const pane of viewer.allPanes) state.disposers.push(layer.attach(pane));
     layer.setHandlers({
       onFollow: (id) => {
-        void this.follow(id as ModelId);
+        void this.follow(id);
       },
       onSelect: (id, additive) => {
-        this.select(id as ModelId, additive);
+        this.select(id, additive);
       },
       onOpen: (id) => {
-        void this.editLink(id as ModelId);
+        const modelId = this.link(id)?.modelId ?? null;
+        if (modelId !== null) void this.editLink(modelId);
       },
     });
     this.tabs.set(tabId, state);
@@ -187,6 +200,7 @@ export class LinkService {
 
   /** Re-reads the links on every page a pane is showing, and repaints. */
   async refresh(tabId?: string): Promise<void> {
+    this.ensureBound();
     const documents = this.documents();
     const viewer = this.viewer();
     if (!documents || !viewer) return;
@@ -199,6 +213,25 @@ export class LinkService {
       const pages = new Set<number>();
       for (const pane of view.allPanes) for (const r of pane.layoutTable.rects) pages.add(r.page);
       for (const page of pages) await this.loadPage(state, doc, page);
+    }
+    this.notify();
+  }
+
+  /**
+   * Reads every page of the active document, not only the ones a pane is showing.
+   *
+   * What the panel and the tests want is the whole document's links; what a repaint wants is the
+   * pages on screen. Keeping them apart is what stops opening a thousand-page file reading a
+   * thousand pages before it can draw one.
+   */
+  async readEveryPage(): Promise<void> {
+    this.ensureBound();
+    const tabId = this.activeTabId();
+    const state = tabId === null ? undefined : this.tabs.get(tabId);
+    const doc = this.activeDocument();
+    if (!state || !doc) return;
+    for (let page = 0; page < doc.state.pages.length; page++) {
+      await this.loadPage(state, doc, page);
     }
     this.notify();
   }
@@ -222,23 +255,23 @@ export class LinkService {
   }
 
   /**
-   * A page's links: the model's `Link` annotations, with the action the engine could read filled
-   * in for the ones that came from the file.
+   * A page's links.
    *
-   * The model is the list — a link this session added is in it before the engine has ever heard
-   * of it — and the engine supplies what the model could not read, which is the action of a link
-   * the file already had.
+   * **Reading a page never changes the document.** The file's own links come from
+   * `PdfEngine.links`, which is a read; the model's `Link` annotations are added for a page whose
+   * annotations something else has already loaded, and for the links this session made. Loading
+   * them ourselves would be worse than useless: `Document.loadAnnotations` replaces the model's
+   * list with PDFium's, and PDFium cannot create a Line dimension or a Caret — so it would
+   * quietly delete the measurement the reader had just drawn. The link tool loads them when it is
+   * chosen, which is when the reader has asked to work on links.
    */
   private async readPage(
     doc: Document,
     pageId: ModelId,
     page: number,
   ): Promise<ReadonlyArray<LinkInfo>> {
-    const annotations = await doc.loadAnnotations(pageId);
-    const links = annotations.filter((a) => a.subtype === 'Link');
-    if (links.length === 0) return [];
-    let fromEngine: ReadonlyArray<Link> = [];
     const index = doc.enginePage(pageId);
+    let fromEngine: ReadonlyArray<Link> = [];
     if (index !== undefined) {
       try {
         fromEngine = await doc.engine.links(doc.handle, index);
@@ -246,7 +279,25 @@ export class LinkService {
         fromEngine = [];
       }
     }
-    return links.map((annotation) => this.toInfo(doc, annotation, pageId, page, fromEngine));
+    const loaded = this.editing && index !== undefined ? await annotationsOf(doc, pageId) : null;
+    const annotations = (loaded ?? doc.annotations(pageId)).filter((a) => a.subtype === 'Link');
+    const out: LinkInfo[] = annotations.map((a) => this.toInfo(doc, a, pageId, page, fromEngine));
+    // A link the file carries that no model annotation stands for: visible and followable, and
+    // editable as soon as the page's annotations are read.
+    const claimed = new Set(out.map((info) => rectKey(info.rect)));
+    fromEngine.forEach((link, at) => {
+      if (claimed.has(rectKey(link.rect))) return;
+      out.push({
+        id: `e${String(page)}.${String(at)}`,
+        modelId: null,
+        pageId,
+        page,
+        rect: link.rect,
+        action: engineAction(doc, link),
+        border: DEFAULT_BORDER,
+      });
+    });
+    return out;
   }
 
   private toInfo(
@@ -262,14 +313,11 @@ export class LinkService {
       const match =
         fromEngine.find((l) => engineId !== undefined && l.annotationId === engineId) ??
         fromEngine.find((l) => sameRect(l.rect, annotation.rect));
-      if (match?.uri) action = { kind: 'uri', uri: match.uri };
-      else if (match?.dest) {
-        const target = doc.state.pages[match.dest.page];
-        if (target) action = { kind: 'page', page: target.id, fit: match.dest.fit };
-      }
+      if (match) action = engineAction(doc, match);
     }
     return {
-      id: annotation.id,
+      id: String(annotation.id),
+      modelId: annotation.id,
       pageId,
       page,
       rect: annotation.rect,
@@ -280,7 +328,7 @@ export class LinkService {
 
   private toLayerLink(doc: Document, link: LinkInfo): LayerLink {
     return {
-      id: String(link.id),
+      id: link.id,
       rect: link.rect,
       label: describeAction(link.action, (id) => {
         const index = doc.state.pages.findIndex((p) => p.id === id);
@@ -292,6 +340,7 @@ export class LinkService {
 
   /** The rectangle a drag is making, so the tool can show it before it is a link. */
   setDraft(draft: { readonly page: number; readonly rect: PdfRect } | null): void {
+    this.ensureBound();
     const tabId = this.activeTabId();
     const state = tabId === null ? undefined : this.tabs.get(tabId);
     state?.layer.setDraft(draft);
@@ -305,19 +354,19 @@ export class LinkService {
     return [...state.pages.entries()].sort((a, b) => a[0] - b[0]).flatMap(([, links]) => links);
   }
 
-  link(id: ModelId): LinkInfo | null {
+  link(id: string): LinkInfo | null {
     for (const link of this.all()) if (link.id === id) return link;
     return null;
   }
 
   // ---- selection -------------------------------------------------------------------------------
 
-  get selection(): ReadonlyArray<ModelId> {
+  get selection(): ReadonlyArray<string> {
     const id = this.activeTabId();
     return (id === null ? undefined : this.tabs.get(id)?.selection) ?? [];
   }
 
-  select(id: ModelId, additive = false): void {
+  select(id: string, additive = false): void {
     const tabId = this.activeTabId();
     const state = tabId === null ? undefined : this.tabs.get(tabId);
     if (!state) return;
@@ -349,7 +398,7 @@ export class LinkService {
    * opened only on a yes. Anything that is not `http(s)` is refused in words rather than handed
    * to the operating system.
    */
-  async follow(id: ModelId): Promise<boolean> {
+  async follow(id: string): Promise<boolean> {
     const link = this.link(id);
     const doc = this.activeDocument();
     if (!link || !doc) return false;
@@ -498,8 +547,10 @@ export class LinkService {
   }
 
   /** Deletes links. One command, so a multiple delete is one undo. */
-  async remove(doc: Document, ids: ReadonlyArray<ModelId>): Promise<number> {
-    const alive = ids.filter((id) => doc.annotation(id) !== null);
+  async remove(doc: Document, ids: ReadonlyArray<string>): Promise<number> {
+    const alive = ids
+      .map((id) => this.link(id)?.modelId ?? null)
+      .filter((id): id is ModelId => id !== null && doc.annotation(id) !== null);
     if (alive.length === 0) return 0;
     await doc.batch(
       alive.length === 1 ? 'Delete link' : `Delete ${String(alive.length)} links`,
@@ -536,7 +587,7 @@ export class LinkService {
       if (!modelPage || index === undefined) continue;
       let existing: PdfRect[];
       try {
-        const annotations = await doc.loadAnnotations(modelPage.id);
+        const annotations = await annotationsOf(doc, modelPage.id);
         existing = annotations.filter((a) => a.subtype === 'Link').map((a) => a.rect);
       } catch {
         existing = [];
@@ -577,6 +628,39 @@ export class LinkService {
     await this.refresh();
     return candidates.length;
   }
+}
+
+/** A link the file itself carries, as an action. */
+function engineAction(doc: Document, link: Link): LinkAction {
+  if (link.uri) return { kind: 'uri', uri: link.uri };
+  if (link.dest) {
+    const target = doc.state.pages[link.dest.page];
+    if (target) return { kind: 'page', page: target.id, fit: link.dest.fit };
+  }
+  return { kind: 'none' };
+}
+
+/** A rectangle as a key, so a model link and the engine's view of it are recognised as one. */
+function rectKey(rect: PdfRect): string {
+  const n = (v: number): string => v.toFixed(1);
+  return `${n(rect.x0)},${n(rect.y0)},${n(rect.x1)},${n(rect.y1)}`;
+}
+
+/**
+ * A page's annotations, **without re-reading them from the engine** when the model already has
+ * them.
+ *
+ * `Document.loadAnnotations` replaces the model's list with what PDFium says, and PDFium cannot
+ * create five of the subtypes this application offers — a Line dimension, a Caret, a Polygon.
+ * Calling it behind the reader's back therefore deletes the measurement they have just drawn.
+ * A page nobody has looked at yet is still loaded once, because there is nothing to lose.
+ */
+async function annotationsOf(
+  doc: Document,
+  pageId: ModelId,
+): Promise<ReadonlyArray<ModelAnnotation>> {
+  if (pageId in doc.state.annotations) return doc.annotations(pageId);
+  return await doc.loadAnnotations(pageId);
 }
 
 /** `/Border` and `/H` as the annotation's `extra` holds them. */

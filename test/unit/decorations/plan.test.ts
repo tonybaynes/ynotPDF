@@ -50,9 +50,14 @@ async function addLink(doc: Document, extra: Record<string, unknown>): Promise<M
   return command.annotationId;
 }
 
+/** What the plan puts in `extra` for an action — the JSON, plus the dictionary it becomes. */
+function actionEntries(action: Parameters<typeof actionExtra>[0]): Record<string, unknown> {
+  return { ...actionExtra(action), linkAction: action.kind === 'none' ? null : action };
+}
+
 describe('a link action as a dictionary', () => {
   it('writes a URI action', () => {
-    const entries = dictEntries(actionExtra({ kind: 'uri', uri: 'https://example.com' }));
+    const entries = dictEntries(actionEntries({ kind: 'uri', uri: 'https://example.com' }));
     expect(entries['A']).toEqual({
       kind: 'dict',
       value: {
@@ -64,7 +69,7 @@ describe('a link action as a dictionary', () => {
   });
 
   it('writes a remote go-to whose destination names its page by number', () => {
-    const entries = dictEntries(actionExtra({ kind: 'file', path: 'other.pdf', page: 4 }));
+    const entries = dictEntries(actionEntries({ kind: 'file', path: 'other.pdf', page: 4 }));
     const action = entries['A'];
     expect(action?.kind).toBe('dict');
     if (action?.kind !== 'dict') return;
@@ -79,7 +84,7 @@ describe('a link action as a dictionary', () => {
   });
 
   it('writes a launch action for a file to open', () => {
-    const entries = dictEntries(actionExtra({ kind: 'open', path: 'report.docx' }));
+    const entries = dictEntries(actionEntries({ kind: 'open', path: 'report.docx' }));
     const action = entries['A'];
     expect(action?.kind).toBe('dict');
     if (action?.kind !== 'dict') return;
@@ -87,7 +92,7 @@ describe('a link action as a dictionary', () => {
   });
 
   it('removes the action when there is nothing behind the link, and refuses a malformed one', () => {
-    expect(dictEntries(actionExtra({ kind: 'none' }))['A']).toBeNull();
+    expect(dictEntries(actionEntries({ kind: 'none' }))['A']).toBeNull();
     const mapping = dictMapping('linkAction');
     expect(mapping).toBeDefined();
     if (!mapping) return;
@@ -143,7 +148,9 @@ describe('a link in the write plan', () => {
 
   it('falls back to Fit when the stored destination names a mode that is not one', async () => {
     const { doc } = await openFake({ pageCount: 2 });
-    await addLink(doc, { linkDest: { page: doc.page(1).id, fit: 'sideways' } });
+    await addLink(doc, {
+      linkActionJson: JSON.stringify({ kind: 'page', page: doc.page(1).id, fit: 'sideways' }),
+    });
     expect(buildWritePlan(doc).plan.pages[0]?.annotations?.[0]?.dest).toEqual({
       page: 1,
       fit: 'fit',

@@ -307,6 +307,19 @@ help, **ours** = our own choice.
    solid colour the reader picks; a watermark the file already carries keeps whatever
    alpha it has, because that is the document rather than the interface. *(operator
    rule.)*
+8a. **"Appears when printing" is an optional-content group, because that is the only
+    thing that means it.** A decoration whose screen and print states differ is drawn
+    inside an OCG whose `/Usage` says so, listed in `/OCProperties /D /AS` so a viewer
+    applies it automatically and in `/OFF` so one that ignores `/AS` still starts with
+    it hidden. Nothing else in the format expresses "print but do not show".
+    *(spec 8.11.)*
+8b. **A link's action is stored as JSON on the annotation, under a private key.**
+    PDFium creates a Link annotation but has no `/A` setter, so an action held only in
+    the model is gone the next time the page is read — which every viewer does. The
+    JSON goes in a string key PDFium *can* write (`/YNOTLinkAction`), so it survives
+    the round trip and makes a link editable in a file reopened later, exactly as the
+    decoration marker does. M21's plan turns it into the real `/A` and `/Dest`.
+    *(ours; found by the journey, not by the documentation.)*
 9. **Preview is the real thing, one page at a time.** The dialog renders the current
    page through the engine on a scratch copy with the decoration applied, so what the
    preview shows is what the page will be — not a CSS approximation of it. It is
@@ -344,4 +357,63 @@ help, **ours** = our own choice.
 
 ## Build log (fill in at merge)
 
-_Not started._
+**Shipped (2026-09-11, branch `mod/M53-headers-bates-watermarks-links`, ADR 0020).**
+
+- `src/engine/decorations/` — the pure half: the spec and draw types, the macro expander (its
+  catalogue is `resources/presets/macros.json`) with its own date formatter so two machines say
+  the same words, display-space geometry (`/Rotate` applied, so a header is at the top of the
+  page a person sees), the drawing for all four families, WinAnsi encoding with a report of what
+  it could not write, and the address detector.
+- Engine (`src/engine/pdfium/decorations.ts`, additive to `PdfEngine`): `setDecorations` replaces
+  every marked decoration on a page in one call — add, update and remove are the same call with a
+  different list — and `decorations` reads them back. The marker is a PDFium **content mark**
+  (`/YNOTDec`), which survives the live object list, `FPDFPage_GenerateContent`, a save and a
+  reopen, and carries the settings as JSON so a file this application made is editable next year.
+  `behind` inserts at index 0, which is how a watermark gets under the text.
+- Writer (`src/engine/writers/decorations.ts`): restores the page's original content, strips
+  every `/YNOTDec` span whoever wrote it, and **appends** a new `/Contents` element — an existing
+  stream is never edited. A guard stream closes whatever `q` the producer left open. The
+  print/screen option is a real optional-content group with a `/Usage` and an `/AS` entry.
+  `src/engine/writers/resources.ts` is `FullRewriteWriter`'s form-XObject and `/Resources`
+  building, extracted so the writer and the live engine build the same object.
+- Renderer module: one `SetDecorationsCommand` for every change, so undo is the same path with
+  the previous list; the shared decoration dialog with a preview that is the real engine
+  rendering a real copy of the page; header/footer, Bates, watermark and background dialogs;
+  presets (ours in `resources/presets/decorations.json`, the reader's in one setting); the link
+  tool, the link layer (`src/renderer/view/LinkLayer.ts`, a new entry in the layer stack), the
+  link properties dialog, the auto-detect review dialog and the Links panel.
+- Tests: 55 unit (pure functions, the model, the command, the plan, PDFium and the writer
+  end to end, plus an opt-in pass over the operator's own files) and 5 Playwright journeys that
+  press the ribbon button, type in the dialog and click the page.
+
+**Found on the way.**
+
+- **PDFium creates a `Link` annotation but has no `/A` setter.** An action written only into the
+  model was gone the next time a page was read — which every viewer does. The action is now JSON
+  in `/YNOTLinkAction`, a key `FPDFAnnot_SetStringValue` *can* write; M21's plan turns it into the
+  real `/A` and `/Dest`. Found by the journey, not by the documentation.
+- **`Document.loadAnnotations` replaces the model's list with the engine's**, so calling it
+  behind the reader's back deletes any annotation PDFium cannot create — a measurement, a caret,
+  a polygon. The link service reads the model's own list for a page that has one and loads only a
+  page nobody has looked at yet. Five of M33's journeys found this.
+- Four large ribbon buttons made the Organize tab collapse a group on a 1500 px window, which
+  `shell.spec.ts` rightly calls a defect. One large button, three small.
+- The Links panel truncated what a link does with an ellipsis; `expectNothingClipped` found it.
+  It wraps now — "Opens https://exam…" answers nothing.
+
+**Deferred, and why.**
+
+- **Bates across several files in one run** is spec-ready but not wired: the settings carry
+  `startAt`, the command takes its range as an argument, and `SetDecorationsCommand` replays from
+  data — so M120's runner can hand each file the next number. There is no multi-file runner in
+  this module, because batch *is* M120.
+- **The link action editor is M53's own**, not shared with M61: field actions do not exist yet.
+  The shapes are the same (`/A` dictionaries through `engine/appearance/dict.ts`), so M61 can
+  take this dialog over rather than write a second one.
+- **A foreign decoration is found by its `/Watermark` annotation only.** There is no standard
+  marker for one, so that is the only thing that can be said honestly; it is reported, counted
+  and removable, never editable.
+- **Text is the standard 14 fonts, WinAnsi.** A character outside it is written as `?` and named
+  in the preview's status line. Embedding a chosen family needs M51's subsetter.
+- **The preview renders one page at a time.** A "show me every page" preview is a second viewer;
+  the page picker beside the preview is the honest version of it.

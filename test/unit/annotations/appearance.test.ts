@@ -513,6 +513,7 @@ describe('the dictionary mapping', () => {
       'lineEnding',
       'lineEndings',
       'linkAction',
+      'linkActionJson',
       'linkBorderArray',
       'linkHighlight',
       'measure',

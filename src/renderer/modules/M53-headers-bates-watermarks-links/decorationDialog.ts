@@ -118,6 +118,10 @@ export async function openDecorationDialog<S extends DecorationSpec>(
   };
   repaintPresets();
 
+  /** The settings the form holds right now. Declared before the dialog: its body reads it as
+   * soon as it is built, to draw the first preview. */
+  const currentSpec = (): S => options.read();
+
   const dialog = options.shell.dialogs.open({
     id: options.id,
     title: options.title,
@@ -215,8 +219,6 @@ export async function openDecorationDialog<S extends DecorationSpec>(
     ],
   });
 
-  const currentSpec = (): S => options.read();
-
   const result = await dialog.result;
   preview.dispose();
   if (result === 'remove') return { action: 'remove' };
@@ -264,6 +266,8 @@ class DecorationPreview {
   private queued: { spec: DecorationSpec; pages: ReadonlyArray<number> | null } | null = null;
   private disposed = false;
   private readonly listeners: Array<() => void> = [];
+  /** Characters the last draw could not write, for the status line. */
+  private dropped: ReadonlyArray<string> = [];
 
   constructor(doc: Document, kind: DecorationKind) {
     this.doc = doc;
@@ -339,8 +343,9 @@ class DecorationPreview {
         documentContext(doc, new Date().toISOString()),
       );
       const sizes = sourceSizes(doc.custom(XOBJECTS_NAMESPACE));
-      const { draw } = drawDecoration('preview', spec, { page: context, sources: sizes });
+      const { draw, dropped } = drawDecoration('preview', spec, { page: context, sources: sizes });
       if (draw) draws.push(draw);
+      this.dropped = dropped;
     }
     const sources: Record<string, PlannedXObject> = {};
     for (const [key, value] of Object.entries(doc.custom(XOBJECTS_NAMESPACE))) {
@@ -369,9 +374,15 @@ class DecorationPreview {
     const context = this.canvas.getContext('2d');
     context?.drawImage(result.bitmap, 0, 0);
     result.bitmap.close();
-    this.status.textContent = inRange
+    const where = inRange
       ? `Page ${String(index + 1)} of ${String(this.doc.state.pages.length)}`
       : `Page ${String(index + 1)} is not in the range, so it shows without the ${label(this.kind)}`;
+    // The standard fonts are WinAnsi, so a character outside it comes out as a question mark.
+    // Saying which is the difference between a reader fixing it and finding it on the paper.
+    this.status.textContent =
+      this.dropped.length === 0
+        ? where
+        : `${where}. These characters cannot be written in this font: ${this.dropped.join(' ')}`;
   }
 
   /** A one-page document holding a copy of `engineIndex`, reused while the page does not change. */

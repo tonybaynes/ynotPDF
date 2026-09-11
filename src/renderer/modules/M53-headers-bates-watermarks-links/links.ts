@@ -5,11 +5,14 @@
  * do all the work and nothing new is undoable here. What is new is the shape of its action, which
  * lives in `Annotation.extra` under two keys:
  *
- * - `linkAction` — the whole `/A` dictionary in model terms: a URL, a page of another file, a
- *   file to open. `engine/appearance/dict.ts` encodes it; the writer writes it.
- * - `linkDest` — a destination *inside this document*, which cannot be an `/A` because a
- *   destination names a page **object** and the plan carries values, not references. M21's plan
- *   turns the model page id here into `PlannedAnnotation.dest`.
+ * `linkActionJson` — the whole action as JSON. It is one string on purpose: PDFium creates a
+ * Link annotation but has no `/A` setter, so anything held only in the model is lost the moment
+ * the page is read again. A string PDFium *can* write survives, and it is also what makes a link
+ * this application wrote editable in a file opened a year later.
+ *
+ * M21's plan turns that JSON into the `/A` dictionary the file wants, and — for a destination
+ * inside this document, which names a page **object** rather than a value — into
+ * `PlannedAnnotation.dest`.
  *
  * Everything in this file is pure.
  */
@@ -48,9 +51,19 @@ export const DEFAULT_BORDER: LinkBorder = {
   highlight: 'invert',
 };
 
-/** A link as the module works with it: a model annotation plus what it means. */
+/** A link as the module works with it: where it is, what it does, and how it is drawn. */
 export interface LinkInfo {
-  readonly id: ModelId;
+  /** Identity for the overlay and the panel: the model id when there is one, else `e<page>.<n>`. */
+  readonly id: string;
+  /**
+   * The model annotation behind it, when the page's annotations have been read.
+   *
+   * A file's own links are visible and followable from `PdfEngine.links` alone, which costs
+   * nothing and changes nothing. Editing one needs a model annotation, and that needs the page
+   * loaded — which the link tool does when it is chosen, because by then the reader has asked to
+   * work on links (M53).
+   */
+  readonly modelId: ModelId | null;
   readonly pageId: ModelId;
   /** 0-based page index at the time it was read. */
   readonly page: number;
@@ -67,14 +80,28 @@ const FITS = new Set<string>(['xyz', 'fit', 'fitH', 'fitV', 'fitR', 'fitB', 'fit
 
 /** The action stored on an annotation, validated. */
 export function readAction(extra: Readonly<Record<string, unknown>>): LinkAction {
-  const dest = extra['linkDest'];
-  if (isRecord(dest) && typeof dest['page'] === 'string') {
-    const fit = typeof dest['fit'] === 'string' && FITS.has(dest['fit']) ? dest['fit'] : 'fit';
-    return { kind: 'page', page: dest['page'] as ModelId, fit: fit as Destination['fit'] };
+  const json = extra['linkActionJson'];
+  if (typeof json !== 'string' || json === '') return { kind: 'none' };
+  let action: unknown;
+  try {
+    action = JSON.parse(json);
+  } catch {
+    return { kind: 'none' };
   }
-  const action = extra['linkAction'];
+  return parseAction(action);
+}
+
+/** One action value, validated. Exported so M21's plan reads it exactly as the module does. */
+export function parseAction(action: unknown): LinkAction {
   if (!isRecord(action)) return { kind: 'none' };
   switch (action['kind']) {
+    case 'page': {
+      const page = action['page'];
+      if (typeof page !== 'string' || page === '') return { kind: 'none' };
+      const fit =
+        typeof action['fit'] === 'string' && FITS.has(action['fit']) ? action['fit'] : 'fit';
+      return { kind: 'page', page: page as ModelId, fit: fit as Destination['fit'] };
+    }
     case 'uri':
       return typeof action['uri'] === 'string' && action['uri'] !== ''
         ? { kind: 'uri', uri: action['uri'] }
@@ -96,23 +123,12 @@ export function readAction(extra: Readonly<Record<string, unknown>>): LinkAction
   }
 }
 
-/** The `extra` entries an action comes to. Both keys are always written, so a change clears. */
+/**
+ * The `extra` entry an action comes to. An empty string is a removal, which is what "this link
+ * does nothing" has to say: a key left behind would outlive the action the reader cleared.
+ */
 export function actionExtra(action: LinkAction): Record<string, unknown> {
-  switch (action.kind) {
-    case 'page':
-      return { linkAction: null, linkDest: { page: action.page, fit: action.fit } };
-    case 'uri':
-      return { linkAction: { kind: 'uri', uri: action.uri }, linkDest: null };
-    case 'file':
-      return {
-        linkAction: { kind: 'file', path: action.path, page: action.page },
-        linkDest: null,
-      };
-    case 'open':
-      return { linkAction: { kind: 'open', path: action.path }, linkDest: null };
-    default:
-      return { linkAction: null, linkDest: null };
-  }
+  return { linkActionJson: action.kind === 'none' ? '' : JSON.stringify(action) };
 }
 
 /** The border stored on an annotation, validated. */

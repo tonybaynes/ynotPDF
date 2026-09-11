@@ -52,7 +52,7 @@ export function mountLinksPanel(host: HTMLElement, ctx: ServiceContext): () => v
       const row = el('li.links-row');
       const button = el('button.links-item', {
         type: 'button',
-        'data-link-id': String(link.id),
+        'data-link-id': link.id,
         ...(selected.has(link.id) ? { 'aria-current': 'true' } : {}),
       });
       button.append(
@@ -71,19 +71,22 @@ export function mountLinksPanel(host: HTMLElement, ctx: ServiceContext): () => v
         links.select(link.id);
       });
       button.addEventListener('dblclick', () => {
-        void links.editLink(link.id);
+        if (link.modelId !== null) void links.editLink(link.modelId);
       });
       row.append(button);
       list.append(row);
     }
-    const one = links.selection.length === 1 ? links.selection[0] : null;
-    editButton.disabled = one === null;
+    const one = links.selection.length === 1 ? links.selection[0] : undefined;
+    // A link the file carries can only be edited once its page's annotations are read, which the
+    // link tool does when it is chosen; until then the button says so by being off.
+    editButton.disabled = one === undefined || links.link(one)?.modelId == null;
     deleteButton.disabled = links.selection.length === 0;
   };
 
   editButton.addEventListener('click', () => {
     const one = links.selection[0];
-    if (one !== undefined) void links.editLink(one);
+    const modelId = one === undefined ? null : (links.link(one)?.modelId ?? null);
+    if (modelId !== null) void links.editLink(modelId);
   });
   deleteButton.addEventListener('click', () => {
     void (async () => {

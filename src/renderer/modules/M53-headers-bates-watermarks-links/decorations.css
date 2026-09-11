@@ -297,6 +297,7 @@
 .links-item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
   gap: 0.5rem;
   inline-size: 100%;
   padding: 0.3rem 0.4rem;
@@ -322,10 +323,16 @@
   white-space: nowrap;
 }
 
+/*
+ * A link's description wraps rather than trailing off into an ellipsis.
+ *
+ * The pane is narrow and an address is long, so something has to give; cutting the address off is
+ * the one thing that makes the list useless — "Opens https://exam…" answers nothing. The row
+ * grows instead, and the address breaks wherever it must.
+ */
 .links-what {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .links-actions {

@@ -27,6 +27,7 @@ import {
   PDFRawStream,
   PDFRef,
   PDFStream,
+  PDFString,
   decodePDFRawStream,
   type PDFContext,
   type PDFDocument,
@@ -46,6 +47,83 @@ export interface DecorationWriteContext {
 
 /** Our own marker on a `/Contents` element, so a re-save finds the stream it wrote last time. */
 const CONTENTS_MARKER = 'YNOTDecoration';
+
+/**
+ * An optional-content group for a decoration that appears on screen but not in print, or the
+ * other way about (M53 — the brief's "also appears when printing" option).
+ *
+ * This is the only mechanism the PDF specification has for it (8.11): the form XObject carries
+ * `/OC`, the group's `/Usage` says what it does in each context, and the default configuration's
+ * `/AS` tells a viewer to honour that usage automatically. A group that is off on screen is also
+ * listed in `/D /OFF`, so a viewer that ignores `/AS` still starts with it hidden.
+ */
+function usageOcg(doc: PDFDocument, item: PlannedDecoration): PDFRef | null {
+  if (item.print && item.screen) return null;
+  const ctx = doc.context;
+  const ocg = ctx.obj({});
+  ocg.set(PDFName.of('Type'), PDFName.of('OCG'));
+  ocg.set(PDFName.of('Name'), PDFString.of(item.screen ? 'Screen only' : 'Print only'));
+  const usage = ctx.obj({});
+  const view = ctx.obj({});
+  view.set(PDFName.of('ViewState'), PDFName.of(item.screen ? 'ON' : 'OFF'));
+  const print = ctx.obj({});
+  print.set(PDFName.of('PrintState'), PDFName.of(item.print ? 'ON' : 'OFF'));
+  usage.set(PDFName.of('View'), view);
+  usage.set(PDFName.of('Print'), print);
+  ocg.set(PDFName.of('Usage'), usage);
+  const ref = ctx.register(ocg);
+  registerOcg(doc, ref, !item.screen);
+  return ref;
+}
+
+/** Adds a group to `/OCProperties`, wiring the automatic-state entries a viewer reads. */
+function registerOcg(doc: PDFDocument, ref: PDFRef, offOnScreen: boolean): void {
+  const ctx = doc.context;
+  const catalog = doc.catalog;
+  let props = catalog.lookupMaybe(PDFName.of('OCProperties'), PDFDict);
+  if (!props) {
+    props = ctx.obj({});
+    catalog.set(PDFName.of('OCProperties'), props);
+  }
+  const list = (owner: PDFDict, key: string): PDFArray => {
+    const existing = owner.lookupMaybe(PDFName.of(key), PDFArray);
+    if (existing) return existing;
+    const made = ctx.obj([]);
+    owner.set(PDFName.of(key), made);
+    return made;
+  };
+  list(props, 'OCGs').push(ref);
+  let config = props.lookupMaybe(PDFName.of('D'), PDFDict);
+  if (!config) {
+    config = ctx.obj({});
+    props.set(PDFName.of('D'), config);
+  }
+  if (offOnScreen) list(config, 'OFF').push(ref);
+  // `/AS` is what makes a viewer apply the usage automatically rather than only on a menu.
+  const as = list(config, 'AS');
+  for (const event of ['View', 'Print'] as const) {
+    let entry: PDFDict | null = null;
+    for (const value of as.asArray()) {
+      const dict = value instanceof PDFRef ? ctx.lookup(value) : value;
+      if (
+        dict instanceof PDFDict &&
+        dict.lookupMaybe(PDFName.of('Event'), PDFName)?.decodeText() === event
+      ) {
+        entry = dict;
+        break;
+      }
+    }
+    if (!entry) {
+      entry = ctx.obj({});
+      entry.set(PDFName.of('Event'), PDFName.of(event));
+      entry.set(PDFName.of('Category'), ctx.obj([PDFName.of(event)]));
+      entry.set(PDFName.of('OCGs'), ctx.obj([]));
+      as.push(entry);
+    }
+    const groups = entry.lookupMaybe(PDFName.of('OCGs'), PDFArray);
+    if (groups) groups.push(ref);
+  }
+}
 
 /** The page's own `/Resources`, cloned from an inherited one so nothing else is touched. */
 function ownResources(doc: PDFDocument, leaf: PDFPageLeaf): PDFDict {
@@ -284,11 +362,13 @@ export function writePageDecorations(
     for (const item of items) {
       let ref: PDFRef;
       try {
+        const oc = usageOcg(doc, item);
         ref = formXObject(ctx, {
           content: item.content,
           bbox: item.bbox,
           resources: item.resources,
           xobjects: options.xobjects,
+          ...(oc ? { refs: { OC: oc } } : {}),
         });
       } catch (error) {
         options.context.warn(

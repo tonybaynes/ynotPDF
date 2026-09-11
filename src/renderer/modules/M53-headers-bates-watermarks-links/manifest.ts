@@ -350,6 +350,7 @@ function decorationCommands(): CommandSpec[] {
       shortcut: 'Mod+Shift+H',
       description: 'Put text in the six zones at the top and bottom of the pages',
       keyTip: 'HF',
+      permission: 'modify',
       when: open,
       run: async (ctx) => {
         const service = decorations(ctx);
@@ -406,6 +407,7 @@ function decorationCommands(): CommandSpec[] {
       shortcut: 'Mod+Shift+B',
       description: 'Number every page with a running number, with a prefix and a suffix',
       keyTip: 'BN',
+      permission: 'modify',
       when: open,
       run: async (ctx) => {
         const service = decorations(ctx);
@@ -468,6 +470,7 @@ function decorationCommands(): CommandSpec[] {
       category: 'Organize',
       icon: 'layers',
       description: 'Take off every header, footer, number, watermark and background',
+      permission: 'modify',
       when: open,
       run: async (ctx) => {
         const service = decorations(ctx);
@@ -486,7 +489,7 @@ function decorationCommands(): CommandSpec[] {
       },
     },
     {
-      id: 'decorate.probe',
+      id: 'dev.decorations',
       label: 'Report Page Marks',
       category: 'Developer',
       hidden: true,
@@ -523,6 +526,7 @@ function removeCommand(
     category: 'Organize',
     icon: 'link-2-off',
     hidden: false,
+    permission: 'modify',
     when: open,
     run: async (ctx) => {
       const service = decorations(ctx);
@@ -551,6 +555,7 @@ function watermarkCommand(background: boolean): CommandSpec {
       ? 'Put a colour, a picture or a PDF page behind every page'
       : 'Put text, a picture or a PDF page over or under every page',
     keyTip: background ? 'BG' : 'WM',
+    permission: 'modify',
     when: open,
     run: async (ctx) => {
       const service = decorations(ctx);
@@ -597,8 +602,30 @@ function watermarkCommand(background: boolean): CommandSpec {
   };
 }
 
+/** The one selected link that has a model annotation behind it, or null. */
+function editableSelection(ctx: ServiceContext): ModelId | null {
+  const service = links(ctx);
+  if (service.selection.length !== 1) return null;
+  const id = service.selection[0];
+  return id === undefined ? null : (service.link(id)?.modelId ?? null);
+}
+
 function linkCommands(): CommandSpec[] {
   return [
+    {
+      id: 'link.tool',
+      label: 'Link',
+      category: 'Edit',
+      icon: 'link-2',
+      shortcut: 'Mod+Shift+K',
+      description: 'Draw a rectangle on the page and say where it goes',
+      keyTip: 'LK',
+      permission: 'modify',
+      when: linksOpen,
+      run: (ctx) => {
+        ctx.service<{ activate(id: string): void }>(SERVICE.tools).activate(LINK_TOOL_ID);
+      },
+    },
     {
       id: 'link.create',
       label: 'Create Link',
@@ -626,12 +653,12 @@ function linkCommands(): CommandSpec[] {
       category: 'Edit',
       icon: 'link-2',
       description: 'Change where the selected link goes',
-      when: (ctx) => linksOpen(ctx) && links(ctx).selection.length === 1,
+      permission: 'modify',
+      when: (ctx) => linksOpen(ctx) && editableSelection(ctx) !== null,
       run: async (ctx) => {
-        const service = links(ctx);
-        const id = service.selection[0];
-        if (id === undefined) return false;
-        await service.editLink(id);
+        const id = editableSelection(ctx);
+        if (id === null) return false;
+        await links(ctx).editLink(id);
         return true;
       },
     },
@@ -641,6 +668,7 @@ function linkCommands(): CommandSpec[] {
       category: 'Edit',
       icon: 'link-2-off',
       description: 'Remove the selected links',
+      permission: 'modify',
       when: (ctx) => linksOpen(ctx) && links(ctx).selection.length > 0,
       run: async (ctx) => {
         const service = links(ctx);
@@ -660,6 +688,7 @@ function linkCommands(): CommandSpec[] {
       icon: 'text-search',
       description: 'Find the web and e-mail addresses written in the text and offer to link them',
       keyTip: 'LD',
+      permission: 'modify',
       when: linksOpen,
       run: async (ctx) => {
         const service = links(ctx);
@@ -702,11 +731,11 @@ function linkCommands(): CommandSpec[] {
       run: async (ctx) => {
         const id = ctx.args['id'];
         if (typeof id !== 'string') return false;
-        return await links(ctx).follow(id as unknown as ModelId);
+        return await links(ctx).follow(id);
       },
     },
     {
-      id: 'link.probe',
+      id: 'dev.links',
       label: 'Report Links',
       category: 'Developer',
       hidden: true,
@@ -714,12 +743,12 @@ function linkCommands(): CommandSpec[] {
       when: linksOpen,
       run: async (ctx) => {
         const service = links(ctx);
-        await service.refresh();
         const doc = service.activeDocument();
+        await service.readEveryPage();
         return service.all().map((link) => {
           const action = link.action;
           return {
-            id: String(link.id),
+            id: link.id,
             page: link.page,
             action: action.kind,
             uri: action.kind === 'uri' ? action.uri : '',
@@ -794,8 +823,6 @@ export default defineModule({
     }),
   ],
 
-  shortcuts: [{ key: 'Mod+Shift+K', command: `${LINK_TOOL_ID}.activate` }],
-
   panels: [
     {
       id: LINKS_PANEL_ID,
@@ -815,18 +842,27 @@ export default defineModule({
       tab: 'organize',
       label: 'Page marks',
       order: 40,
+      /*
+       * One large button, two small, and everything else in one menu.
+       *
+       * Four large buttons made the Organize tab wide enough that a group collapsed even on a
+       * full-screen window, which `shell.spec.ts` rightly calls a defect: a reader should not
+       * have to open a popup to reach a top-level command at a normal size. The three a person
+       * reaches for stay on the ribbon; the background and the five removals are one click
+       * further in, where Foxit also puts its less-used marks.
+       */
       items: [
         { kind: 'button', command: 'decorate.headerFooter', size: 'large' },
-        { kind: 'button', command: 'decorate.bates', size: 'large' },
-        { kind: 'button', command: 'decorate.watermark', size: 'large' },
-        { kind: 'button', command: 'decorate.background', size: 'large' },
-        '-',
+        'decorate.watermark',
+        'decorate.bates',
         {
           kind: 'dropdown',
-          id: 'decorate.remove',
-          label: 'Remove',
-          icon: 'link-2-off',
+          id: 'decorate.more',
+          label: 'More Marks',
+          icon: 'layers',
           menu: [
+            'decorate.background',
+            '-',
             'decorate.headerFooter.remove',
             'decorate.bates.remove',
             'decorate.watermark.remove',
@@ -843,7 +879,7 @@ export default defineModule({
       label: 'Links',
       order: 60,
       items: [
-        { kind: 'button', command: `${LINK_TOOL_ID}.activate`, size: 'large' },
+        { kind: 'button', command: 'link.tool', size: 'large' },
         { kind: 'button', command: 'link.detect', size: 'large' },
         'link.edit',
         'link.delete',

@@ -123,8 +123,10 @@ export function formXObject(
     readonly matrix?: readonly [number, number, number, number, number, number];
     readonly resources: AppearanceResources;
     readonly xobjects: EmbeddedXObjects;
-    /** Extra dictionary entries — the decoration marker, for one. */
+    /** Extra name-valued dictionary entries. */
     readonly entries?: Readonly<Record<string, PDFName>>;
+    /** Extra reference-valued entries — `/OC` for a decoration that prints but does not show. */
+    readonly refs?: Readonly<Record<string, PDFRef>>;
   },
 ): PDFRef {
   const form = ctx.flateStream(options.content, {
@@ -137,6 +139,9 @@ export function formXObject(
   form.dict.set(PDFName.of('Matrix'), ctx.obj([...(options.matrix ?? [1, 0, 0, 1, 0, 0])]));
   form.dict.set(PDFName.of('Resources'), resourcesDict(ctx, options.resources, options.xobjects));
   for (const [key, value] of Object.entries(options.entries ?? {})) {
+    form.dict.set(PDFName.of(key), value);
+  }
+  for (const [key, value] of Object.entries(options.refs ?? {})) {
     form.dict.set(PDFName.of(key), value);
   }
   return ctx.register(form);
