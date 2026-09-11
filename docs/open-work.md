@@ -70,43 +70,71 @@ the PNGs as an artifact, and leaves a person to commit them.
 
 There is a decision inside it — how a baseline is regenerated when the interface legitimately
 changes, and who may bless a new one — so it wants Tony's eye and a line in a brief rather than a
-quiet commit. **M04 owns this and will fill in the detail here.**
+quiet commit. **M04 owns this.** Its detail follows.
 
-## 3. The e2e window flash — cause NOT established
+**What "regenerating a baseline" has to answer.** Three things, and the middle one is the
+decision:
 
-Tony sees the outline of a window flash up during a run, every now and again. **This is still
-open.** Two candidate causes were found by inspection and both are now doubtful; the changes made
-for them are on `fix/post-restore` and are worth keeping as hardening, but they should not be
-described as the fix.
+1. _Where the image comes from._ A `workflow_dispatch` job running `--update-snapshots=all` on
+   each of the three runners, uploading `test/e2e/visual.spec.ts-snapshots/` as an artifact. It
+   must never run as part of the ordinary CI job: a run that writes the baseline it then compares
+   against is grading its own homework, which is the same failure the removed assertion had.
+2. _Who may bless one._ A baseline changes for two completely different reasons — the interface
+   legitimately changed, or it broke. The image cannot tell you which. So a regenerated baseline
+   needs a human to look at the before-and-after and say which it was, and the commit that lands
+   it should say so in words. This is Tony's decision to make, not a rule to infer.
+3. _What happens on the day it is wrong._ Committing a bad baseline is silent: every later run
+   agrees with it. The protection is that regeneration is deliberate and reviewed, never
+   automatic — which is why the dispatch job must not be wired to anything that runs on its own.
 
-What was changed in `src/main/window.ts`: opacity goes on the instant a parked window exists
-rather than at `ready-to-show`; a parked window does not restore a maximised state; and it
-re-asserts opacity on `show`, `maximize`, `restore` and `enter-full-screen`.
+Until that exists, the skip stays and is the honest thing: a platform with no baselines says so
+rather than reporting a comparison it never made.
 
-**Why neither candidate convinces:**
+## 3. The window flash — ruled out of the e2e suite, cause still unknown
 
-- **`maximize()` showing the window before opacity was applied.** Real by inspection — Electron's
-  `maximize()` shows a window as a side effect. But it only runs when a _remembered_ maximised
-  state exists, and e2e uses a fresh profile per launch, so it may never fire during a run at all.
-- **Full screen showing a parked window.** `view.fullScreen.toggle` is exercised by
-  `viewer.spec.ts` and does move the window to a real display. But measured on Windows, opacity
-  **survives** the transition without the listener, so nothing becomes visible.
+Tony sees the outline of a window flash up, every now and again, while an e2e run is going.
+**It does not come from the suite's own window lifecycle, and there is no fix here.**
 
-**The guard in `app.spec.ts` does not test this**, and says so in its own comment: removing both
-halves of the fix leaves it passing, because by the time Playwright is attached the window is past
-`ready-to-show` and the construction-time path cannot be observed. It pins a real invariant — a
-parked window reads as transparent — and nothing more.
+**The evidence.** `src/main/windowProbe.ts` records every window created, shown, hidden,
+maximised, restored, focused or taken full screen, with its position and whether it was visible.
+Two full runs were recorded. In a complete run of 546 tests on unmodified `main`, **no window was
+ever both visible and on a real display** — 129 events, every one of them either not visible or
+parked at -16384,-16384. The full-screen transition, the obvious suspect, stays off-screen at
+opacity 0.
 
-**The better candidates, unexamined.** `src/main/print/index.ts` and
-`src/main/webpdf/WebPdfPrinter.ts` both create a `BrowserWindow` with `show: false` and **no
-parking and no transparency at all** — default size, default position, middle of the screen, and
-blank. "An outline of a window, nothing else" describes one of those far better than it describes
-the main window. If anything shows them for a frame, that is what Tony is seeing.
+**What was tried and withdrawn.** Two causes were argued from reading the code — `maximize()`
+showing a window before opacity was applied, and full screen dragging a parked window onto a
+display — and changes were written for both. Both are wrong, and all of it has been reverted:
 
-**Next step, already begun:** a temporary probe in `src/main/index.ts`, behind
-`YNOT_WINDOW_PROBE=<file>`, records every window created, shown, maximised, focused or taken full
-screen during a hidden run. Run the full suite with it set and read the log — that names the
-culprit instead of guessing at it a third time. Remove the probe afterwards.
+- The "conclusive" probe evidence for the second one (a window maximised to 1934x1046 at -7,-7 and
+  focused) was **the guard test doing it**, not the product. A test that maximises a window shows
+  up in a probe as a window being maximised.
+- The fix for the first was never in the build: an edit silently failed to apply, so the set
+  recording which windows were parked stayed empty and the guards never ran once. The "fix" was
+  never under test at all.
+
+**What is left, and why.** The probe, as an opt-in diagnostic, because a visual event this rare
+cannot be caught by watching for it:
+
+```bash
+YNOT_WINDOW_PROBE=/tmp/windows.log npm run e2e
+grep -v 'bounds=-' /tmp/windows.log | grep 'visible=true'
+```
+
+A run where that prints nothing is a run where no window reached the screen. And one guard in
+`app.spec.ts` pinning what `CLAUDE.md` actually promises — a run's window is off-screen and
+transparent — which is true today and would fail if the parking treatment were removed.
+
+**Where to look next.** Several sessions run e2e suites on this machine at once, and the probe only
+sees its own. A run started with `YNOT_E2E_VISIBLE=1`, or any launch outside the e2e path, shows
+its windows by design and nothing in `window.ts` would stop it. That fits the symptom — occasional,
+brief, invisible to instrumentation — better than anything in this section. Worth ruling out before
+anyone changes window management again.
+
+Two details noticed on the way, neither a defect: Windows clamps the requested `x: -32000` to
+-16384, so the number in the source is not the number in effect; and a window exists briefly at its
+on-screen default position with opacity 1 before it is parked, though it is `show: false`
+throughout and nothing shows it there.
 
 ## 4. Dropped files have no path — a real product bug
 

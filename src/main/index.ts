@@ -17,6 +17,7 @@ import { Settings, THEME_KEY } from './settings';
 import { WebPdfPrinter } from './webpdf/WebPdfPrinter';
 import { broadcast, createMainWindow, getMainWindow, sendTo } from './window';
 import { cleanTempFiles, readFileForRenderer } from './files';
+import { installWindowProbe } from './windowProbe';
 
 const E2E = process.env['YNOT_E2E'] === '1';
 /** An e2e window is parked off-screen and transparent unless the operator asked to watch it. */
@@ -39,6 +40,10 @@ if (E2E_HIDDEN) {
   app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
   app.commandLine.appendSwitch('disable-renderer-backgrounding');
 }
+
+// Records every window's comings and goings when `YNOT_WINDOW_PROBE` names a file, so a flash
+// nobody can reproduce on demand leaves evidence behind. Off and free otherwise.
+installWindowProbe(app);
 
 // Files handed to us before the window is ready (argv on Windows/Linux, open-file on macOS).
 const pendingOpens: string[] = [];

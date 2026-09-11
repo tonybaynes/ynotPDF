@@ -146,53 +146,41 @@ test('the engine worker answers over RPC', async () => {
 });
 
 /**
- * A parked e2e window is transparent, and stays transparent when the window is driven.
+ * A window in an e2e run is parked off a real display, and transparent.
  *
- * **Read what this does and does not cover.** Tony sees the outline of a window flash up during
- * runs, every now and again. This test does *not* reproduce that and does not prove it fixed:
- * removing both halves of the fix in `window.ts` leaves this passing, because by the time
- * Playwright is attached the window is long past `ready-to-show`, and the suspected cause —
- * `maximize()` showing the window before opacity is applied — happens during construction, where
- * no test can observe it.
+ * `CLAUDE.md`: "E2E windows are invisible (off-screen, transparent, inactive) so a run never
+ * interrupts the operator's machine." That is the promise; this is the only thing holding it, and
+ * `window.ts` now parks conditionally per platform after the Xvfb work — the shape of code
+ * someone simplifies later without knowing what the branch was for.
  *
- * What it does pin is the invariant itself: a parked window reads as fully transparent, and
- * maximise and full screen do not change that. If the parking treatment were ever removed
- * wholesale this would fail. That is worth having; it is not the regression test for the flash,
- * and the flash's cause is still open — see `docs/open-work.md`.
+ * **What this does not cover.** Tony sees a window outline flash up during runs, every now and
+ * again, and this is not a test for that. A probe of two full runs (`src/main/windowProbe.ts`)
+ * recorded every window created, shown, focused, maximised and taken full screen, and **no window
+ * was ever both visible and on a real display** — so whatever he is seeing does not come from
+ * this suite's window lifecycle, and there is nothing here to regress against. See
+ * `docs/open-work.md` §3 (2026-09-11).
  *
- * Linux is exempt because `window.ts` does not park windows there — `setOpacity` is a Windows and
- * macOS API.
+ * Linux is exempt: `window.ts` does not park windows there.
  */
-test('a parked window reads as transparent, through maximise and full screen', async () => {
+test('a window in a run is parked off-screen and transparent', async () => {
   test.skip(process.platform === 'linux', 'windows are not parked off-screen on Linux');
   test.skip(
     process.env['YNOT_E2E_VISIBLE'] === '1',
     'the run was asked for visible windows on purpose',
   );
 
-  const opacity = async (): Promise<number> =>
-    app.electron.evaluate(({ BrowserWindow }) => {
-      const win = BrowserWindow.getAllWindows()[0];
-      return win ? win.getOpacity() : 1;
-    });
-
-  expect(await opacity(), 'a parked window starts transparent').toBe(0);
-
-  await app.electron.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0]?.maximize();
+  const where = await app.electron.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win) return { x: 0, y: 0, opacity: 1 };
+    const bounds = win.getBounds();
+    return { x: bounds.x, y: bounds.y, opacity: win.getOpacity() };
   });
-  expect(await opacity(), 'maximising showed the window at full opacity').toBe(0);
 
-  await app.electron.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0]?.unmaximize();
-  });
-  expect(await opacity(), 'unmaximising showed the window at full opacity').toBe(0);
-
-  await app.run('view.fullScreen.toggle', { on: true });
-  await app.page.waitForTimeout(400);
-  expect(await opacity(), 'going full screen showed the window at full opacity').toBe(0);
-
-  await app.run('view.fullScreen.toggle', { on: false });
-  await app.page.waitForTimeout(400);
-  expect(await opacity(), 'leaving full screen showed the window at full opacity').toBe(0);
+  // Windows clamps the requested -32000 to -16384, so this asks "far off any display", not for
+  // the exact number `window.ts` passes.
+  expect(
+    where.x < -1000 || where.y < -1000,
+    `the window is at ${String(where.x)},${String(where.y)} — on a real display`,
+  ).toBe(true);
+  expect(where.opacity, 'a parked window is transparent').toBe(0);
 });
