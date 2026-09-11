@@ -15,7 +15,7 @@ import { expect, test } from '@playwright/test';
 import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { launchApp, type App } from './harness';
+import { fixturePath, launchApp, type App } from './harness';
 
 const FIXTURES = join(process.cwd(), 'test', 'fixtures');
 
@@ -73,7 +73,7 @@ function must<T>(value: T | null | undefined, what = 'value'): T {
 
 /** The bytes of a fixture, as a plain array for the structured-clone bridge. */
 const fileArg = (name: string): { path: string; name: string; bytes: number[] } => ({
-  path: `C:/fixtures/${name}`,
+  path: fixturePath(name),
   name,
   bytes: Array.from(readFileSync(join(FIXTURES, name))),
 });

@@ -13,7 +13,7 @@ import { expect, test } from '@playwright/test';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { launchApp, type App } from './harness';
+import { fixturePath, launchApp, type App } from './harness';
 
 const FIXTURES = join(process.cwd(), 'test', 'fixtures');
 const LOCAL = join(FIXTURES, 'local');
@@ -90,20 +90,17 @@ const navState = (): Promise<NavState> => app.run('dev.navState') as Promise<Nav
 const viewState = (): Promise<ViewerState> => app.run('dev.viewerState') as Promise<ViewerState>;
 
 /**
- * A fresh path for every open, so no test inherits where another one left the reader.
+ * Opens a fixture and waits for its first page, under a path nothing has used before.
  *
- * M11 remembers the page, zoom and scroll of every document *by path* and puts the reader back
- * there when it is reopened — a feature, and one `viewer.spec.ts` tests on purpose. These tests
- * all opened `C:/fixtures/<name>`, so the second test to open `multipage.pdf` started wherever
- * the first one had finished: "two pages on from the start" landed on page 4, not page 2, and
- * only when the earlier test had got far enough to be remembered. A different path each time
- * means each test opens a document nothing has seen before, which is what they all assume
- * (2026-09-11).
+ * `fixturePath` is the harness's, and the reason it exists is worth keeping: M11 remembers the
+ * page, zoom and scroll of every document *by path* and puts the reader back there when it is
+ * reopened — a feature, and one `viewer.spec.ts` tests on purpose. Every test in this file used
+ * to open `C:/fixtures/<name>`, so the second one to open `multipage.pdf` started wherever the
+ * first had finished: "two pages on from the start" landed on page 4, not page 2, and only when
+ * the earlier test had got far enough to be remembered. `harness-rules.spec.ts` now fails if any
+ * spec goes back to a shared path (2026-09-11).
  */
-let opens = 0;
-
-/** Opens a fixture and waits for its first page. */
-async function open(name: string, path = `C:/fixtures/${String(++opens)}/${name}`): Promise<void> {
+async function open(name: string, path = fixturePath(name)): Promise<void> {
   const bytes = Array.from(readFileSync(join(FIXTURES, name)));
   await app.run('file.openBytes', { file: { path, name, bytes } });
   await app.page.waitForSelector('.viewer-content .page');

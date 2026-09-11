@@ -13,7 +13,7 @@ import { expect, test } from '@playwright/test';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { launchApp, type App } from './harness';
+import { fixturePath, launchApp, type App } from './harness';
 
 const FIXTURES = join(process.cwd(), 'test', 'fixtures');
 const LOCAL = join(FIXTURES, 'local');
@@ -73,7 +73,7 @@ async function openPortfolio(
   view: 'details' | 'tile' | null = 'details',
 ): Promise<void> {
   const bytes = Array.from(readFileSync(path));
-  await app.run('file.openBytes', { file: { path: `C:/fixtures/${name}`, name, bytes } });
+  await app.run('file.openBytes', { file: { path: fixturePath(name), name, bytes } });
   await app.page.waitForSelector('.pf-host:not([hidden])');
   if (view !== null) await app.run('portfolio.setView', { value: view });
   await app.page.waitForTimeout(200);
@@ -434,7 +434,7 @@ test.describe('new portfolios', () => {
   });
 });
 
-test.describe('the operator’s own portfolio', () => {
+test.describe('Tony’s own portfolio', () => {
   test.skip(!existsSync(SAMPLE), 'Sample Portfolio.pdf is not on this machine');
   test.afterEach(closeAll);
 
