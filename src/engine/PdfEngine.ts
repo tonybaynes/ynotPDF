@@ -18,6 +18,8 @@ import type {
   FormFieldType as FormFieldTypeOf,
   WidgetAppearance as WidgetAppearanceOf,
 } from './forms/model';
+import type { DecorationDraw, FoundDecoration } from './decorations/types';
+import type { PlannedXObject } from './Writer';
 import type {
   ObjectStyle,
   PageBoxes,
@@ -877,6 +879,35 @@ export interface PdfEngine {
   /** The geometry of a path object in page space, for precise hit-testing. */
   objectPath(doc: DocHandle, page: PageIndex, index: number): Promise<ObjectPath>;
 
+  // ---- page decorations (M53, ADR 0020) --------------------------------------------------------
+
+  /**
+   * Replaces every decoration on a page with `items` (M53, ADR 0020 §2).
+   *
+   * One call is add, update and remove at once, and calling it twice with the same items leaves
+   * the same page — which is what lets the renderer keep decorations in the model and simply
+   * re-apply after each change and each undo. Each item is marked `/YNOTDec` so `decorations`
+   * can find it again, in this session and in the saved file. `behind` puts a decoration under
+   * the page's own content. Resolves to the number of decorations that were taken off.
+   */
+  setDecorations(
+    doc: DocHandle,
+    page: PageIndex,
+    items: ReadonlyArray<DecorationDraw>,
+    options?: {
+      /** Pictures and PDF pages the items name, by `resources.xobjects` key. */
+      readonly sources?: Readonly<Record<string, PlannedXObject>>;
+      /** The content shrink already applied to this page, and the one wanted. */
+      readonly shrink?: { readonly from: number; readonly to: number };
+    },
+  ): Promise<number>;
+
+  /**
+   * The decorations on a page: ours by their marker, and another application's watermark by its
+   * shape, reported with `foreign: true` so it can be counted and removed but not edited.
+   */
+  decorations(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<FoundDecoration>>;
+
   /** Serialises the current state. Returns a fresh buffer owned by the caller. */
   save(doc: DocHandle, options?: SaveOptions, progress?: ProgressCallback): Promise<Uint8Array>;
 }
@@ -998,6 +1029,12 @@ export class NotImplementedEngine implements PdfEngine {
   }
   objectPath(..._args: unknown[]): Promise<ObjectPath> {
     return Promise.reject(new NotImplementedError('objectPath'));
+  }
+  setDecorations(..._args: unknown[]): Promise<number> {
+    return Promise.reject(new NotImplementedError('setDecorations'));
+  }
+  decorations(..._args: unknown[]): Promise<ReadonlyArray<FoundDecoration>> {
+    return Promise.reject(new NotImplementedError('decorations'));
   }
   pageObjectPaths(..._args: unknown[]): Promise<ReadonlyArray<PageObjectPath>> {
     return Promise.reject(new NotImplementedError('pageObjectPaths'));
@@ -1134,6 +1171,8 @@ export const ENGINE_METHODS = [
   'objectAsPdf',
   'setObjectStyle',
   'objectPath',
+  'setDecorations',
+  'decorations',
   'save',
 ] as const satisfies ReadonlyArray<keyof PdfEngine>;
 

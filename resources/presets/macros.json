@@ -1,0 +1,97 @@
+{
+  "$comment": "The macro catalogue for headers, footers and Bates numbering (M53). Data, not code: PLAN.md §4.4. `token` is what the reader types or inserts from the menu; `type` is what the expander in src/engine/decorations/macros.ts recognises. A token whose type this build does not know is left on the page as written rather than guessed at, so adding one here without the code is visible rather than silent. Date and time use the explicit pattern in `<<d:...>>`; the patterns are the usual d/dd/M/MM/MMM/MMMM/yy/yyyy/HH/mm/ss and are formatted in English so a file made on one machine reads the same on another.",
+  "version": 1,
+  "macros": [
+    {
+      "token": "<<1>>",
+      "type": "page-number",
+      "label": "Page number",
+      "description": "1, 2, 3 — the position in the range this decoration covers.",
+      "example": "7"
+    },
+    {
+      "token": "<<1 of n>>",
+      "type": "page-of-total",
+      "label": "Page number of total",
+      "description": "\"7 of 100\" — the position and how many pages there are.",
+      "example": "7 of 100"
+    },
+    {
+      "token": "<<n>>",
+      "type": "page-total",
+      "label": "Number of pages",
+      "description": "How many pages the range covers.",
+      "example": "100"
+    },
+    {
+      "token": "<<PageLabel>>",
+      "type": "page-label",
+      "label": "Page label",
+      "description": "The page's own label, when the document numbers its pages itself (i, ii, A-5).",
+      "example": "A-5"
+    },
+    {
+      "token": "<<Bates>>",
+      "type": "bates",
+      "label": "Bates number",
+      "description": "The Bates number of this page, when the document is Bates-numbered.",
+      "example": "ACME000123"
+    },
+    {
+      "token": "<<FileName>>",
+      "type": "file-name",
+      "label": "File name",
+      "description": "The document's file name, without its folder.",
+      "example": "contract.pdf"
+    },
+    {
+      "token": "<<FullPath>>",
+      "type": "full-path",
+      "label": "Full path",
+      "description": "The document's whole path on this computer.",
+      "example": "C:\\Work\\contract.pdf"
+    },
+    {
+      "token": "<<Title>>",
+      "type": "title",
+      "label": "Title",
+      "description": "The document's title from its properties.",
+      "example": "Supply agreement"
+    },
+    {
+      "token": "<<Author>>",
+      "type": "author",
+      "label": "Author",
+      "description": "The document's author from its properties.",
+      "example": "A. Baynes"
+    },
+    {
+      "token": "<<Subject>>",
+      "type": "subject",
+      "label": "Subject",
+      "description": "The document's subject from its properties.",
+      "example": "Draft 3"
+    },
+    {
+      "token": "<<Date>>",
+      "type": "date",
+      "label": "Date",
+      "description": "Today's date as dd/MM/yyyy.",
+      "example": "11/09/2026"
+    },
+    {
+      "token": "<<Time>>",
+      "type": "time",
+      "label": "Time",
+      "description": "The time the decoration was added, as HH:mm.",
+      "example": "09:24"
+    },
+    {
+      "token": "<<d:d MMMM yyyy>>",
+      "type": "date-pattern",
+      "label": "Date, your pattern",
+      "description": "A date written the way you spell it. Put the pattern after d: — d, dd, M, MM, MMM, MMMM, yy, yyyy, HH, mm, ss.",
+      "example": "11 September 2026"
+    }
+  ]
+}

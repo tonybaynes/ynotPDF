@@ -1117,6 +1117,51 @@ async function links(): Promise<void> {
   await save(doc, 'links.pdf');
 }
 
+// ---- M53: addresses written in the text, for the link detector -----------------------------
+/**
+ * Twelve addresses in prose plus three traps: a version number, a footnote marker, and one
+ * address that is *already* a link. What the detector must find is the twelve, and it must find
+ * them once each — which is why the count is asserted rather than a sample.
+ */
+async function urls(): Promise<void> {
+  const doc = await newDoc('Addresses');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const page1 = doc.addPage(A4);
+  const page2 = doc.addPage(A4);
+  const lines1 = [
+    'Our site is https://example.com and the docs are at https://docs.example.com/a_b.',
+    'A trailing full stop belongs to the sentence: https://example.org/page.',
+    'In brackets (https://example.net/x) and in quotes "https://example.io/y".',
+    'Bare host: www.example.co.uk, and another one www.example.travel.',
+    'Write to sales@example.com or to first.last+tag@mail.example.org.',
+    'Version 1.2.3 is not an address, and neither is the footnote marker 4.',
+    'Already linked: https://linked.example.com/here',
+  ];
+  const lines2 = [
+    'Page two has https://second.example.com/one and https://second.example.com/two.',
+    'And a long path https://second.example.com/a/b/c?d=e&f=g#h that must survive intact.',
+    'Reach the team at team@second.example.com.',
+  ];
+  lines1.forEach((line, i) => {
+    page1.drawText(line, { x: 54, y: 760 - i * 26, size: 10, font });
+  });
+  lines2.forEach((line, i) => {
+    page2.drawText(line, { x: 54, y: 760 - i * 26, size: 10, font });
+  });
+  // The one that is already a link, so the detector has to leave it alone.
+  const linked = 'https://linked.example.com/here';
+  const prefix = font.widthOfTextAtSize('Already linked: ', 10);
+  const width = font.widthOfTextAtSize(linked, 10);
+  const y = 760 - 6 * 26;
+  addAnnot(doc, page1, {
+    Subtype: 'Link',
+    Rect: [54 + prefix, y - 2, 54 + prefix + width, y + 12],
+    Border: [0, 0, 0],
+    A: { S: 'URI', URI: PDFString.of(linked) },
+  });
+  await save(doc, 'urls.pdf');
+}
+
 // ---- M10: forms, every field type ----------------------------------------------------------
 async function formsAll(): Promise<void> {
   const doc = await newDoc('All form field types');
@@ -3053,6 +3098,7 @@ await rotated();
 await mixedBoxes();
 await pageLabels();
 await links();
+await urls();
 await formsAll();
 await annotationsAll();
 await comments();
