@@ -21,6 +21,7 @@ import type { ShellServices } from '@app/services';
 import type { Documents } from '@app/tabs/Documents';
 import type { Document } from '@core/Document';
 import type { Registry } from '@core/Registry';
+import { WriteCancelled } from '@engine/Writer';
 import type { SaveStageInput, SaveStageResult, SavePipelineStage } from '@engine/Writer';
 import { fromEnginePermissions, permits, reasonFor } from '@engine/security/permissions';
 import {
@@ -565,12 +566,16 @@ export class SecurityService {
       return { bytes: input.bytes, warnings: this.certificateWarning(doc, entry) };
     }
 
+    // `secretsForSave` throws `WriteCancelled` when the reader cancels a password prompt, which
+    // stops the save before any bytes reach the disk. `null` is the other thing entirely: an
+    // intent that names no password at all, so there is nothing to protect the file with and
+    // nobody was asked anything.
     const secrets = await this.secretsForSave(doc, intent, entry);
     if (secrets === null) {
       return {
         bytes: input.bytes,
         warnings: [
-          'The document was saved without its password protection, because the password was not given.',
+          'The document was saved without protection: its security settings name no password.',
         ],
       };
     }
@@ -633,6 +638,16 @@ export class SecurityService {
    * They will not be in memory after a crash recovery, because a recovery record never held one.
    * Asking here — before the bytes are written, with the reason on screen — is the honest place;
    * the alternative is a file that quietly lost its protection.
+   *
+   * Cancelling one of those prompts throws `WriteCancelled`, which stops the save. It used to
+   * return null and let the save write the document in the clear, on the reasoning that losing
+   * the reader's edits would be worse. That reasoning was wrong: nothing is lost by stopping,
+   * because the edits stay in the model and the recovery record stays on disk — while the file
+   * written in the clear was a real loss, and a silent one (Codex audit finding 1, 2026-09-11).
+   * Cancelling a question is not an instruction to remove the protection.
+   *
+   * Null is kept for the one case that is not a cancellation: an intent naming no password at
+   * all, where there is nothing to ask for and nothing to protect the file with.
    */
   private async secretsForSave(
     doc: Document,
@@ -648,13 +663,16 @@ export class SecurityService {
     // from the one the reader set up, which is worse than asking twice.
     const preamble =
       'This document is protected, and its passwords are not held in this session — they are never saved to disk.';
+    const cancelled = new WriteCancelled(
+      'The document was not saved, and its password protection is unchanged.',
+    );
     const secrets: { user?: string; owner?: string } = {};
     if (intent.hasUserPassword) {
       const user = await this.askPassword({
         title: doc.state.title,
         reason: `${preamble} Enter the password needed to open it.`,
       });
-      if (user === null) return null;
+      if (user === null) throw cancelled;
       secrets.user = user;
     }
     if (intent.hasOwnerPassword) {
@@ -662,7 +680,13 @@ export class SecurityService {
         title: doc.state.title,
         reason: `${preamble} Enter the password that controls permissions.`,
       });
-      if (owner === null) return null;
+      // The answer already given is deliberately *not* kept. It is tempting to save the reader
+      // retyping it, but `secrets` is only written back once both prompts are answered, and the
+      // check at the top of this method treats any held password as the complete set — so half an
+      // answer left behind would make the next save protect the file with the open password and
+      // silently without the permissions one. Asking twice is a small cost; a file protected
+      // differently from the way the reader set it up is not.
+      if (owner === null) throw cancelled;
       secrets.owner = owner;
     }
     if (secrets.user === undefined && secrets.owner === undefined) return null;

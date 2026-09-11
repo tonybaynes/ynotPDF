@@ -497,6 +497,15 @@ export class SaveService {
         warnings,
       };
     } catch (error) {
+      // A stage that stopped the save is not a failure: it asked the reader something and was
+      // told no. Nothing above has run — no bytes were written, the document is still dirty and
+      // its recovery record is still there — so there is nothing to repair and nothing to
+      // apologise for. Saying it in a toast rather than an error dialog matters, because the one
+      // thing the reader must not conclude is that the file was saved (Codex audit finding 1).
+      if (error instanceof WriteCancelled) {
+        this.shell.toasts.show({ kind: 'warning', text: error.message });
+        return { saved: false, path: null, reason: 'cancelled' };
+      }
       const message = error instanceof Error ? error.message : String(error);
       await this.shell.dialogs.error('Could not save', `The document was not saved. ${message}`);
       return { saved: false, path: null, reason: 'failed', message };
@@ -538,6 +547,15 @@ export class SaveService {
     plan: ReturnType<typeof buildWritePlan>['plan'],
     path: string,
   ): Promise<WriteResult | null> {
+    // The dialog appears only if the save is still going after a moment: a one-page document
+    // saves faster than a dialog can be read, and a flash of one is worse than none.
+    //
+    // Declared before the writer starts rather than after it: `onProgress` closes over this
+    // binding, and a writer that reports progress synchronously — the in-process one, which runs
+    // wherever there is no `Worker` — reached it while it was still in its temporal dead zone and
+    // threw "Cannot access 'progress' before initialization" instead of saving.
+    let progress: ReturnType<ShellServices['dialogs']['progress']> | null = null;
+
     const handle = this.writer.write({
       // The worker transfers the buffer, so it gets its own copy; the engine's bytes stay ours.
       bytes: base.slice(),
@@ -548,9 +566,6 @@ export class SaveService {
       },
     });
 
-    // The dialog appears only if the save is still going after a moment: a one-page document
-    // saves faster than a dialog can be read, and a flash of one is worse than none.
-    let progress: ReturnType<ShellServices['dialogs']['progress']> | null = null;
     const timer = setTimeout(() => {
       progress = this.shell.dialogs.progress({
         id: 'save-progress-dialog',

@@ -19,6 +19,7 @@ import { fileNameFor, folderOf, joinPath } from '@modules/M21-save/SaveService';
 import { memoryRecoveryStorage } from '@modules/M21-save/recovery';
 import { memorySettingsStorage } from '@modules/M21-save/settings';
 import { WriterClient } from '@modules/M21-save/WriterClient';
+import { WriteCancelled, type SavePipelineStage } from '@engine/Writer';
 import { openFake, must } from '../core/helpers';
 
 /** What the tests want the dialogs to answer, and what they were asked. */
@@ -69,14 +70,20 @@ function makeShell(
 }
 
 /** A service over a fake document, with in-memory storage and no worker. */
-async function makeService(options: { answers?: Record<string, string> } = {}) {
+async function makeService(
+  options: { answers?: Record<string, string>; path?: string; writer?: WriterClient } = {},
+) {
   const documents = new Documents();
   const registry = new Registry();
   const dialogs: FakeDialogs = { answers: options.answers ?? {}, asked: [] };
   const { shell, toasts } = makeShell(dialogs, documents);
 
-  const { doc } = await openFake();
-  const tab = documents.open({ title: doc.state.title, path: null });
+  const { doc } = await openFake(
+    undefined,
+    {},
+    options.path === undefined ? {} : { path: options.path },
+  );
+  const tab = documents.open({ title: doc.state.title, path: options.path ?? null });
   documents.attach(tab.id, doc);
   const docService = {
     active: doc,
@@ -93,7 +100,7 @@ async function makeService(options: { answers?: Record<string, string> } = {}) {
     settingsStorage: memorySettingsStorage(),
     recoveryStorage: recovery,
     // No `Worker` in Node, so this runs the same writer in-process.
-    writer: new WriterClient(null),
+    writer: options.writer ?? new WriterClient(null),
     now: () => 1_000,
   });
   await service.load();
@@ -336,5 +343,171 @@ describe('paths', () => {
     expect(joinPath('C:\\Users\\tony', 'a.pdf')).toBe('C:\\Users\\tony\\a.pdf');
     expect(joinPath('/home/tony', 'a.pdf')).toBe('/home/tony/a.pdf');
     expect(joinPath('/home/tony/', 'a.pdf')).toBe('/home/tony/a.pdf');
+  });
+});
+
+describe('a stage that cancels the save', () => {
+  /**
+   * The one case M21 cannot decide for itself: a save stage asks the reader a question, and the
+   * reader says no. M70's encryption stage does exactly this when a recovered document's password
+   * is not in memory, and cancelling that prompt used to write the file in the clear (Codex audit
+   * finding 1, 2026-09-11). The rule this suite fixes: a cancelled stage writes nothing, and
+   * leaves the document exactly as dirty as it was.
+   */
+  const PATH = 'C:/docs/protected.pdf';
+
+  // RICH_SPEC is signed, and a full rewrite breaks signatures — so every save over the same file
+  // asks about that first. Answering "save anyway" is what gets these tests to the stage, which is
+  // what they are actually about.
+  const ANSWERS = { 'save-signatures-dialog': 'save' };
+
+  /** Installs the smallest bridge `writeTo` needs, recording every write it is asked for. */
+  function fakeBridge(): { writes: string[]; restore: () => void } {
+    const writes: string[] = [];
+    const bridge = {
+      platform: 'win32',
+      e2e: false,
+      e2eDemoModule: false,
+      on: () => () => undefined,
+      invoke: (channel: string, ...args: unknown[]): Promise<unknown> => {
+        if (channel === 'file:writeAtomic') {
+          writes.push(String(args[0]));
+          return Promise.resolve({
+            path: args[0],
+            backupPath: null,
+            bytesWritten: 1,
+            modifiedAt: 2,
+          });
+        }
+        if (channel === 'file:probe') {
+          return Promise.resolve({
+            path: args[0],
+            exists: true,
+            size: 10,
+            modifiedAt: 1,
+            writable: true,
+            directoryWritable: true,
+            readOnly: false,
+          });
+        }
+        return Promise.resolve(undefined);
+      },
+    };
+    const host = globalThis as { ynot?: unknown };
+    const had = 'ynot' in host;
+    const previous = host.ynot;
+    host.ynot = bridge;
+    return {
+      writes,
+      restore: () => {
+        if (had) host.ynot = previous;
+        else delete host.ynot;
+      },
+    };
+  }
+
+  /**
+   * A writer that hands back whatever it was given.
+   *
+   * The fake engine's bytes are not a real PDF, so the shipping writer cannot rewrite them — and
+   * what these tests are about is what `SaveService` *decides*, not what pdf-lib produces. The
+   * writer's own behaviour has its own suite.
+   */
+  const passThroughWriter = () =>
+    ({
+      write: (job: { bytes: Uint8Array }) => ({
+        promise: Promise.resolve({ bytes: job.bytes, applied: [], appearances: 0, warnings: [] }),
+        cancel: () => undefined,
+      }),
+      dispose: () => undefined,
+    }) as unknown as WriterClient;
+
+  /** A stage that asks its question and is told no, the way M70's does. */
+  const cancelling = (): SavePipelineStage => ({
+    id: 'test.cancels',
+    order: 100,
+    run: () => Promise.reject(new WriteCancelled('The document was not saved.')),
+    handlesSecurity: () => true,
+  });
+
+  it('writes nothing, and the document stays dirty', async () => {
+    const bridge = fakeBridge();
+    try {
+      const { service, doc, recovery } = await makeService({
+        path: PATH,
+        answers: ANSWERS,
+        writer: passThroughWriter(),
+      });
+      service.addStage(cancelling());
+      await doc.apply(new RotatePagesCommand(doc, [doc.page(0).id], 90, true));
+      await service.autosaveNow();
+      expect(recovery.size).toBe(1);
+
+      const outcome = await service.save(doc);
+
+      expect(outcome).toEqual({ saved: false, path: null, reason: 'cancelled' });
+      // The three things that must not have happened: no bytes on disk, no clean document, and
+      // no discarded recovery record. Any one of them alone loses the reader's work.
+      expect(bridge.writes).toEqual([]);
+      expect(doc.undo.isDirty).toBe(true);
+      expect(recovery.size).toBe(1);
+      service.dispose();
+      await doc.close();
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it('says so, rather than leaving the reader thinking it saved', async () => {
+    const bridge = fakeBridge();
+    try {
+      const { service, doc, toasts } = await makeService({
+        path: PATH,
+        answers: ANSWERS,
+        writer: passThroughWriter(),
+      });
+      service.addStage(cancelling());
+      await doc.apply(new RotatePagesCommand(doc, [doc.page(0).id], 90, true));
+      await service.save(doc);
+      // A word, not just an icon: Tony cannot read a colour change.
+      expect(toasts.at(-1)?.text).toMatch(/not saved/i);
+      // And not as an error dialog — cancelling is a choice, not a failure.
+      expect(toasts.some((t) => t.kind === 'error')).toBe(false);
+      service.dispose();
+      await doc.close();
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it('leaves a stage that merely warns alone: that save still happens', async () => {
+    // The boundary of the rule above. A stage returning a warning is saying "I did the job, with
+    // something worth mentioning" — it must not be confused with one that stopped.
+    const bridge = fakeBridge();
+    try {
+      const { service, doc } = await makeService({
+        path: PATH,
+        answers: ANSWERS,
+        writer: passThroughWriter(),
+      });
+      service.addStage({
+        id: 'test.warns',
+        order: 100,
+        run: (input) => Promise.resolve({ bytes: input.bytes, warnings: ['something to mention'] }),
+        handlesSecurity: () => true,
+      });
+      await doc.apply(new RotatePagesCommand(doc, [doc.page(0).id], 90, true));
+
+      const outcome = await service.save(doc);
+
+      expect(outcome.saved).toBe(true);
+      expect(outcome.warnings).toContain('something to mention');
+      expect(bridge.writes).toEqual([PATH]);
+      expect(doc.undo.isDirty).toBe(false);
+      service.dispose();
+      await doc.close();
+    } finally {
+      bridge.restore();
+    }
   });
 });

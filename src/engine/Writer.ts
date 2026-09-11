@@ -727,12 +727,19 @@ export interface WriteResult {
   readonly warnings: ReadonlyArray<string>;
 }
 
-/** Thrown when a write is aborted through its `AbortSignal`. */
+/**
+ * Thrown when a write is stopped before anything reaches the disk — the caller aborted its
+ * `AbortSignal`, or a save stage asked the reader a question and was told no.
+ *
+ * It is not a failure, and it is not a reason to show an error: nothing has been written, and the
+ * document is exactly as it was. `message` is what to tell the reader, so a stage that stops a
+ * save can say why in its own words.
+ */
 export class WriteCancelled extends Error {
   override readonly name = 'WriteCancelled';
 
-  constructor() {
-    super('The save was cancelled');
+  constructor(message = 'The save was cancelled.') {
+    super(message);
   }
 }
 

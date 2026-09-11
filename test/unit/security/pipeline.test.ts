@@ -13,7 +13,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Document } from '@core/Document';
 import { PERMISSION_GATE, Registry, type PermissionGate } from '@core/Registry';
-import { runSaveStages, type SavePipelineStage } from '@engine/Writer';
+import { runSaveStages, WriteCancelled, type SavePipelineStage } from '@engine/Writer';
 import {
   ALL_ALLOWED,
   NONE_ALLOWED,
@@ -298,7 +298,13 @@ describe('the encryption stage', () => {
     expect(await s.isOwnerPassword(result.bytes, 'open-again')).toBe(false);
   }, 40_000);
 
-  it('saves without protection, and says so, when the reader cancels that question', async () => {
+  it('cancels the save when the reader cancels the open-password question', async () => {
+    // This test used to assert the opposite — that the file was written unprotected, because
+    // "losing the reader's edits would be the worse failure". That reasoning was wrong, and it
+    // was how cancelling a password prompt could commit plaintext to disk (Codex audit finding 1,
+    // 2026-09-11). Nothing is lost by stopping: the edits stay in the model, the document stays
+    // dirty, and its recovery record stays on disk. Cancelling a question is not an instruction
+    // to remove the protection.
     const { doc, service } = await recoveredDocument(
       {
         kind: 'password',
@@ -310,12 +316,90 @@ describe('the encryption stage', () => {
       },
       () => Promise.resolve(null),
     );
+    await expect(runStage(service, doc, fixture('multipage.pdf'))).rejects.toBeInstanceOf(
+      WriteCancelled,
+    );
+  }, 40_000);
+
+  it('cancels the save when the reader answers the first question and cancels the second', async () => {
+    // The owner prompt is the second of two, so by the time it is cancelled the user password is
+    // already in hand. Keeping it and writing the file would protect the document differently
+    // from the way the reader set it up, which is its own kind of quiet damage.
+    const asked: string[] = [];
+    const { doc, service } = await recoveredDocument(
+      {
+        kind: 'password',
+        algorithm: 'aes-256',
+        scope: 'all',
+        permissions: NONE_ALLOWED,
+        hasUserPassword: true,
+        hasOwnerPassword: true,
+      },
+      (ask) => {
+        asked.push(ask.reason);
+        return Promise.resolve(asked.length === 1 ? 'open-again' : null);
+      },
+    );
+    await expect(runStage(service, doc, fixture('multipage.pdf'))).rejects.toBeInstanceOf(
+      WriteCancelled,
+    );
+    expect(asked).toHaveLength(2);
+  }, 40_000);
+
+  it('forgets a half-given answer, so the next save asks for both again', async () => {
+    // Tempting to keep the open password the reader already typed and ask only for the missing
+    // one. It would be wrong: secrets are stored only once both prompts are answered, and the
+    // check that skips the prompts treats any held password as the complete set — so half an
+    // answer left behind would protect the next save with the open password and silently without
+    // the permissions one. Asking twice is the cheaper mistake.
+    const asked: string[] = [];
+    const answers: (string | null)[] = ['open-again', null, 'open-again', 'change-again'];
+    const { doc, service } = await recoveredDocument(
+      {
+        kind: 'password',
+        algorithm: 'aes-256',
+        scope: 'all',
+        permissions: NONE_ALLOWED,
+        hasUserPassword: true,
+        hasOwnerPassword: true,
+      },
+      (ask) => {
+        asked.push(ask.reason);
+        return Promise.resolve(answers[asked.length - 1] ?? null);
+      },
+    );
+    await expect(runStage(service, doc, fixture('multipage.pdf'))).rejects.toBeInstanceOf(
+      WriteCancelled,
+    );
+    const result = await runStage(service, doc, fixture('multipage.pdf'));
+    // Four questions: two for the cancelled save, two for the one that went through.
+    expect(asked).toHaveLength(4);
+    expect(asked[2]).toMatch(/needed to open it/);
+    expect(asked[3]).toMatch(/controls permissions/);
+    const info = await s.inspect(result.bytes);
+    expect(info.encrypted).toBe(true);
+    expect(await s.isOwnerPassword(result.bytes, 'change-again')).toBe(true);
+  }, 60_000);
+
+  it('saves unprotected, and says so, when the intent names no password at all', async () => {
+    // Not a cancellation: an intent with neither password is a contradiction the reader never
+    // gets asked about, and there is nothing to protect the file with. It is written in the clear
+    // and the warning says so.
+    const { doc, service } = await recoveredDocument(
+      {
+        kind: 'password',
+        algorithm: 'aes-256',
+        scope: 'all',
+        permissions: NONE_ALLOWED,
+        hasUserPassword: false,
+        hasOwnerPassword: false,
+      },
+      () => Promise.reject(new Error('must not ask: there is no password to ask for')),
+    );
     const input = fixture('multipage.pdf');
     const result = await runStage(service, doc, input);
-    // The document is still saved — losing the reader's edits would be the worse failure — and
-    // the warning says exactly what was lost.
     expect(result.bytes).toBe(input);
-    expect(result.warnings.join(' ')).toMatch(/without its password protection/);
+    expect(result.warnings.join(' ')).toMatch(/no password/i);
   }, 40_000);
 
   it('really removes protection when asked, rather than putting it back', async () => {
