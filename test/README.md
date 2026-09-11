@@ -35,16 +35,50 @@ YNOT_E2E_VISIBLE=1 npx playwright test test/e2e/<spec>.spec.ts
 On Windows PowerShell: `$env:YNOT_E2E_VISIBLE=1; npx playwright test …` — and clear it after with
 `Remove-Item Env:YNOT_E2E_VISIBLE`.
 
+## Reading a test run
+
+Three ways a run can tell you it passed when it did not. All three were paid for on the night of
+2026-09-11, twice each, by people who thought they were being careful.
+
+**The result you read must be the result of the run.** A run piped anywhere —
+
+```bash
+npx playwright test --reporter=line | tail -4   # wrong
+```
+
+— reports the _pipe's_ exit status, not Playwright's. Seventeen failures came back as `exit 0`
+under a summary line that read like a pass, and it fooled two sessions inside an hour. Run it
+bare, send the output to a file, and read the exit code on its own:
+
+```bash
+npx playwright test --reporter=line > run.log 2>&1; echo "EXIT=$?"
+```
+
+Then reconcile the count against `npx playwright test --list`. Passed plus skipped must equal
+the total listed — a spec that fails to load runs zero tests and says so quietly.
+
+**The run must be of the commit you push, not the folder you have.** "The suite passed" is a
+claim about a _commit_. An uncommitted change makes a green local run a statement about a tree
+that never leaves your machine: a full, correctly-read, correctly-reconciled 543-of-547 was run
+here against a working tree whose fix was never committed, and CI went red on the one file the
+folder had already fixed. `git status` before you push, and if it matters, run from the pushed
+SHA.
+
+**A step that can quietly do nothing is a step that will.** A find-and-replace that matches
+nothing replaces nothing and reports success; the edit never reaches the build, and everything
+downstream still looks right. Assert the match. The same shape as the two above: the checking was
+honest, it was just pointed at the wrong object.
+
 ## The rule
 
 **A feature is not covered until a test reaches it the way a person does.**
 Asserting that something is _visible_ is not asserting that it is _usable_.
 
-The operator opened the installed app on 2026-09-10 and found five defects by clicking that
+Tony opened the installed app on 2026-09-10 and found five defects by clicking that
 four thousand automated tests had passed over. Every one of them satisfied
 `expect(locator).toBeVisible()`:
 
-| What they saw                                                        | What the suite believed                      |
+| What Tony saw                                                        | What the suite believed                      |
 | -------------------------------------------------------------------- | -------------------------------------------- |
 | The start page in the bottom half of the window, its top unreachable | `#empty-state` is visible                    |
 | The Pages panel reading "the navigation panels are not available"    | the panel mounted                            |
