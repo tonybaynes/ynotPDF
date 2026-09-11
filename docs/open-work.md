@@ -181,35 +181,16 @@ the security file, because a path asserted by the renderer is not a path main ca
 **Keep until merged:** `fix/post-restore`, `fix/macos-e2e-flakes`, `fix/shared-fixture-paths`,
 `mod/M53-headers-bates-watermarks-links`.
 
-**Keep as the record:** `fix/hardening-review`. Its first commit is the original hardening pass and
-the rest is the review of it. The security file points at it so none of that has to be re-derived.
-Delete it only once that work has been re-landed.
+**Gone:** `fix/hardening-review` and `backup/pre-reword` were deleted at Tony's instruction on
+2026-09-11. The first held the reverted hardening pass and the review of it; the second held that
+commit's original message. Nothing of either survives, so
+[`docs/security/renderer-filesystem-boundary.md`](security/renderer-filesystem-boundary.md) is the
+entire record of that work rather than a pointer to it. Written while the code was still in front
+of someone, which is why it is as specific as it is.
 
 **Worktrees:** `../ynotPDF-review`, `../ynotPDF-macfix` and `../ynotPDF-post` are finished with once
 their branches land. `../ynotPDF-M53`, `../ynotPDF-paths` and `../ynotPDF-fs` belong to other
 sessions — leave them alone.
-
-## 7. Every PDF we generate is non-deterministic, and six places still are
-
-`PDFDocument.create()` leaves pdf-lib to fill `CreationDate` and `ModificationDate` from the wall
-clock at save time. Those live inside a **deflate-compressed object stream**, so two otherwise
-identical documents saved a second apart do not merely differ — they come out **different
-lengths**. Measured here: one unchanged document saved at 575, 576 or 577 bytes across 120
-consecutive one-second timestamps.
-
-That is what CI kept reporting as `expected 1667 to be 1666` on `shortcuts.test.ts`. It was read as
-a macOS problem for most of a day. It is not: macOS is simply the slowest runner in the matrix, so
-it is the one whose two builds are most likely to straddle a second. Fixed for the cheat sheet by
-stamping the sheet's own date into the document metadata — a sheet built for a given day is now the
-same file every time.
-
-**Still open, six call sites:** `stampPdf.ts`, `pdfium/decorations.ts`, `printToPdf.ts`,
-`M42-portfolios/cover.ts` (twice) and `M42-portfolios/merge.ts`. None is failing today, because no
-test asserts byte-identity on their output — the exposure is latent, not live. It becomes live the
-moment anyone writes a reproducibility test, caches output by hash, or asks why saving the same
-document twice gives two different files. Owned by M10 (engine), M13 (print) and M42 (portfolios);
-each wants a deliberate choice about what date a generated document should carry, not a blanket
-edit from here.
 
 ## 6. Two habits worth keeping
 
@@ -236,3 +217,25 @@ background watcher, so a "monitor" armed against CI can sit there reporting noth
 everything it was meant to catch goes past. It cost M53 a whole run's worth of watching. Use
 `gh`'s built-in `--jq` flag instead — `gh run view <id> --json jobs --jq '...'` — which needs no
 external binary.
+
+## 7. Every PDF we generate is non-deterministic, and six places still are
+
+`PDFDocument.create()` leaves pdf-lib to fill `CreationDate` and `ModificationDate` from the wall
+clock at save time. Those live inside a **deflate-compressed object stream**, so two otherwise
+identical documents saved a second apart do not merely differ — they come out **different
+lengths**. Measured here: one unchanged document saved at 575, 576 or 577 bytes across 120
+consecutive one-second timestamps.
+
+That is what CI kept reporting as `expected 1667 to be 1666` on `shortcuts.test.ts`. It was read as
+a macOS problem for most of a day. It is not: macOS is simply the slowest runner in the matrix, so
+it is the one whose two builds are most likely to straddle a second. Fixed for the cheat sheet by
+stamping the sheet's own date into the document metadata — a sheet built for a given day is now the
+same file every time.
+
+**Still open, six call sites:** `stampPdf.ts`, `pdfium/decorations.ts`, `printToPdf.ts`,
+`M42-portfolios/cover.ts` (twice) and `M42-portfolios/merge.ts`. None is failing today, because no
+test asserts byte-identity on their output — the exposure is latent, not live. It becomes live the
+moment anyone writes a reproducibility test, caches output by hash, or asks why saving the same
+document twice gives two different files. Owned by M10 (engine), M13 (print) and M42 (portfolios);
+each wants a deliberate choice about what date a generated document should carry, not a blanket
+edit from here.
