@@ -110,7 +110,14 @@ export function ipcSettingsStorage(): SettingsStorage {
   };
 }
 
-/** Reads every setting, falling back rather than throwing. */
+/**
+ * Reads every setting, falling back rather than throwing.
+ *
+ * The five reads go together rather than one after another. M130 calls `load()` on every service
+ * after *any* preference changes and waits for each in turn, so a service that takes five round
+ * trips to answer holds up the one the reader is actually watching — the UI scale, which is
+ * supposed to apply as they type.
+ */
 export async function readSettings(storage: SettingsStorage): Promise<DecorationSettings> {
   const read = async <K extends keyof DecorationSettings>(
     name: K,
@@ -127,13 +134,15 @@ export async function readSettings(storage: SettingsStorage): Promise<Decoration
   const isString = (v: unknown): v is string => typeof v === 'string';
   const isUnit = (v: unknown): v is DecorationSettings['units'] =>
     v === 'pt' || v === 'mm' || v === 'cm' || v === 'in';
-  return {
-    units: await read('units', isUnit),
-    confirmExternalLinks: await read('confirmExternalLinks', isBool),
-    showLinkOutlines: await read('showLinkOutlines', isBool),
-    detectBareLinks: await read('detectBareLinks', isBool),
-    presets: await read('presets', isString),
-  };
+  const [units, confirmExternalLinks, showLinkOutlines, detectBareLinks, presets] =
+    await Promise.all([
+      read('units', isUnit),
+      read('confirmExternalLinks', isBool),
+      read('showLinkOutlines', isBool),
+      read('detectBareLinks', isBool),
+      read('presets', isString),
+    ]);
+  return { units, confirmExternalLinks, showLinkOutlines, detectBareLinks, presets };
 }
 
 export async function writeSetting<K extends keyof DecorationSettings>(
