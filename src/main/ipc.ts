@@ -38,6 +38,12 @@ import { decodeWithNativeImage } from './webpdf/decodeImage';
 import type { WebPdfPrinter } from './webpdf/WebPdfPrinter';
 import { allWindows, broadcast, getMainWindow } from './window';
 
+/**
+ * Upper bound on waiting for an OS full-screen transition to settle. macOS takes ~600 ms;
+ * Windows and Linux are immediate. See 'window:setFullScreen'.
+ */
+const FULL_SCREEN_SETTLE_MS = 3000;
+
 export interface IpcDeps {
   onOpenPath(path: string): Promise<void>;
   /** The renderer has finished booting and is listening (M04). */
@@ -334,12 +340,32 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
         focused: win?.isFocused() ?? false,
       };
     },
-    'window:setFullScreen': (e, fullScreen) => {
+    'window:setFullScreen': async (e, fullScreen) => {
       const win = windowOf(e);
       if (!win) return false;
       const next = fullScreen ?? !win.isFullScreen();
-      win.setFullScreen(next);
-      return win.isFullScreen();
+      if (win.isFullScreen() === next) return next; // nothing to wait for
+      // macOS animates the transition (~600 ms measured on a Mac mini, 2026-09-12) and
+      // `isFullScreen()` keeps reporting the OLD state until 'enter-full-screen' /
+      // 'leave-full-screen' fires. Windows and Linux settle synchronously and fire the event at
+      // once. So the answer is read after the event, never straight after the call. The timer is
+      // a guard against a platform that never fires it: after FULL_SCREEN_SETTLE_MS the handler
+      // answers with whatever `isFullScreen()` says at that moment — possibly stale, but a
+      // stale answer beats a renderer waiting forever.
+      await new Promise<void>((resolve) => {
+        const done = (): void => {
+          clearTimeout(timer);
+          // Electron's overloads want a literal event name, hence the branch.
+          if (next) win.removeListener('enter-full-screen', done);
+          else win.removeListener('leave-full-screen', done);
+          resolve();
+        };
+        const timer = setTimeout(done, FULL_SCREEN_SETTLE_MS);
+        if (next) win.once('enter-full-screen', done);
+        else win.once('leave-full-screen', done);
+        win.setFullScreen(next);
+      });
+      return win.isDestroyed() ? false : win.isFullScreen();
     },
     'window:count': () => allWindows().length,
     'window:setUnsaved': (e, unsaved) => {

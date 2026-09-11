@@ -681,13 +681,13 @@ test.describe('acceptance: split view, full screen, reading mode, guides', () =>
 
   test('full screen goes through main and reports back', async () => {
     await open('multipage.pdf');
+    // Both answers are asserted, unconditionally. The earlier `if (entered === true)` guard let
+    // a stale `false` from main (macOS answers before its animated transition settles) skip the
+    // only assertion, so the test was green without checking anything.
     const entered = await app.run('view.fullScreen.toggle', { on: true });
-    expect(typeof entered).toBe('boolean');
-    await app.page.waitForTimeout(300);
-    if (entered === true) {
-      const left = await app.run('view.fullScreen.toggle', { on: false });
-      expect(left).toBe(false);
-    }
+    expect(entered).toBe(true);
+    const left = await app.run('view.fullScreen.toggle', { on: false });
+    expect(left).toBe(false);
   });
 
   test('guides survive closing and reopening the document', async () => {
