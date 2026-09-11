@@ -13,7 +13,7 @@ import { expect, test } from '@playwright/test';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { launchApp, type App } from './harness';
+import { fixturePath, launchApp, type App } from './harness';
 
 const FIXTURES = join(process.cwd(), 'test', 'fixtures');
 const LOCAL = join(FIXTURES, 'local');
@@ -90,7 +90,7 @@ const navState = (): Promise<NavState> => app.run('dev.navState') as Promise<Nav
 const viewState = (): Promise<ViewerState> => app.run('dev.viewerState') as Promise<ViewerState>;
 
 /** Opens a fixture and waits for its first page. */
-async function open(name: string, path = `C:/fixtures/${name}`): Promise<void> {
+async function open(name: string, path = fixturePath(name)): Promise<void> {
   const bytes = Array.from(readFileSync(join(FIXTURES, name)));
   await app.run('file.openBytes', { file: { path, name, bytes } });
   await app.page.waitForSelector('.viewer-content .page');
