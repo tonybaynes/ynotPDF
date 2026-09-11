@@ -146,41 +146,46 @@ test('the engine worker answers over RPC', async () => {
 });
 
 /**
- * A window in an e2e run is parked off a real display, and transparent.
+ * A run never interrupts Tony's machine.
  *
- * `CLAUDE.md`: "E2E windows are invisible (off-screen, transparent, inactive) so a run never
- * interrupts the operator's machine." That is the promise; this is the only thing holding it, and
- * `window.ts` now parks conditionally per platform after the Xvfb work — the shape of code
- * someone simplifies later without knowing what the branch was for.
+ * He works on his Windows PC while a suite runs, so a window there is parked off-screen and
+ * transparent (`CLAUDE.md`). Nowhere else needs it: the macOS, Linux and ARM runners have nobody
+ * in front of them, and macOS would not have obliged anyway — it clamps a window back onto the
+ * display, which CI proved the first time this test ran, reporting **0,31** for a window that
+ * asked for -32000,-32000 (2026-09-11).
  *
- * **What this does not cover.** Tony sees a window outline flash up during runs, every now and
- * again, and this is not a test for that. A probe of two full runs (`src/main/windowProbe.ts`)
- * recorded every window created, shown, focused, maximised and taken full screen, and **no window
- * was ever both visible and on a real display** — so whatever he is seeing does not come from
- * this suite's window lifecycle, and there is nothing here to regress against. See
- * `docs/open-work.md` §3 (2026-09-11).
- *
- * Linux is exempt: `window.ts` does not park windows there.
+ * So this is a Windows test, deliberately, and it is the only thing holding that promise —
+ * `window.ts` decides parking on one condition that someone will eventually simplify.
  */
-test('a window in a run is parked off-screen and transparent', async () => {
-  test.skip(process.platform === 'linux', 'windows are not parked off-screen on Linux');
+test('a window in a run on Tony’s machine is off every display, and transparent', async () => {
+  test.skip(process.platform !== 'win32', 'windows are only parked on Tony’s Windows machine');
   test.skip(
     process.env['YNOT_E2E_VISIBLE'] === '1',
     'the run was asked for visible windows on purpose',
   );
 
-  const where = await app.electron.evaluate(({ BrowserWindow }) => {
+  // Asked as "does it overlap a display the reader has", not as a coordinate threshold: the
+  // number `window.ts` passes is not the number that takes effect — Windows clamps -32000 to
+  // -16384 — and a threshold would be a guess about a platform rather than a statement about a
+  // screen.
+  const where = await app.electron.evaluate(({ BrowserWindow, screen }) => {
     const win = BrowserWindow.getAllWindows()[0];
-    if (!win) return { x: 0, y: 0, opacity: 1 };
-    const bounds = win.getBounds();
-    return { x: bounds.x, y: bounds.y, opacity: win.getOpacity() };
+    if (!win) return { bounds: { x: 0, y: 0, width: 0, height: 0 }, opacity: 1, overlaps: 0 };
+    const b = win.getBounds();
+    const overlaps = screen
+      .getAllDisplays()
+      .map((display) => display.bounds)
+      .filter(
+        (d) =>
+          b.x < d.x + d.width &&
+          b.x + b.width > d.x &&
+          b.y < d.y + d.height &&
+          b.y + b.height > d.y,
+      ).length;
+    return { bounds: b, opacity: win.getOpacity(), overlaps };
   });
 
-  // Windows clamps the requested -32000 to -16384, so this asks "far off any display", not for
-  // the exact number `window.ts` passes.
-  expect(
-    where.x < -1000 || where.y < -1000,
-    `the window is at ${String(where.x)},${String(where.y)} — on a real display`,
-  ).toBe(true);
-  expect(where.opacity, 'a parked window is transparent').toBe(0);
+  const at = `${String(where.bounds.x)},${String(where.bounds.y)} ${String(where.bounds.width)}x${String(where.bounds.height)}`;
+  expect(where.overlaps, `the window at ${at} overlaps a display Tony can see`).toBe(0);
+  expect(where.opacity, `the window at ${at} is not transparent`).toBe(0);
 });

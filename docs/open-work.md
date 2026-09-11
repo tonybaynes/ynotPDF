@@ -136,6 +136,18 @@ Two details noticed on the way, neither a defect: Windows clamps the requested `
 on-screen default position with opacity 1 before it is parked, though it is `show: false`
 throughout and nothing shows it there.
 
+**Settled on the way: parking is Windows-only now.** The guard added here caught, on its first CI
+run, that macOS does not honour an off-screen position at all — it clamps the window back into the
+visible frame, and a window asking for -32000,-32000 reported `0,31`: full size over the desktop,
+hidden only by its opacity, and still taking mouse clicks.
+
+The fix was not to fight the OS. Parking exists for one machine — Tony's Windows PC, which he
+works on while a suite runs. The macOS, Linux and ARM runners have nobody in front of them, so a
+window on screen there interrupts no one (Tony, 2026-09-11). `parkOffScreen` is now
+`hidden && process.platform === 'win32'`, which is what it always meant, and the macOS problem
+stops existing rather than needing a workaround. The click-through call written for it has been
+removed with it.
+
 ## 4. Dropped files have no path — a real product bug
 
 Not caused by any of tonight's work, and owned by **M00** (`src/renderer/app/shell.ts`) and **M21**
