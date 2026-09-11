@@ -71,8 +71,18 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
    * So on Linux the window stays where it is. It is still kept out of the taskbar and still shown
    * *inactive*, so it never takes the keyboard from anyone; and on a CI runner it is drawn into
    * Xvfb, a virtual screen with nobody in front of it, which is the isolation that matters there.
+   *
+   * **And the same reasoning retires it on macOS.** Parking exists for one machine: Tony's
+   * Windows PC, which he works on while a suite runs. Every other place the suite runs — the
+   * macOS, Linux and ARM runners — has nobody sitting in front of it, so a window on screen
+   * interrupts no one (Tony, 2026-09-11).
+   *
+   * macOS would not have obliged in any case. It clamps a window back into the visible frame:
+   * one asking for -32000,-32000 reported **0,31** in CI, full size over the desktop and hidden
+   * only by its opacity — and a transparent window still takes mouse clicks. Fighting the OS to
+   * hide a window nobody is looking at was cost without benefit, so this is Windows only.
    */
-  const parkOffScreen = hidden && process.platform !== 'linux';
+  const parkOffScreen = hidden && process.platform === 'win32';
   const win = new BrowserWindow({
     width: cascade?.width ?? bounds.width,
     height: cascade?.height ?? bounds.height,

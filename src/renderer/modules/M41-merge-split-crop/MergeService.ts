@@ -26,7 +26,7 @@ import type { Registry } from '@core/Registry';
 import type { Selection } from '@core/Selection';
 import { DeletePagesCommand, SetPageBoxCommand } from '@core/commands';
 import type { DocHandle, PdfEngine } from '@engine/PdfEngine';
-import { inkBounds, inkRect, type Margins } from '@engine/ops/crop';
+import { clampRect, inkBounds, inkRect, rectFromMargins, type Margins } from '@engine/ops/crop';
 import { detectSkew, MIN_ANGLE, type SkewEstimate } from '@engine/ops/deskew';
 import type { CombineOptions, CombineResult } from '@engine/ops/combine';
 import type { SplitOptions, SplitPart } from '@engine/ops/split';
@@ -330,7 +330,6 @@ export class MergeService {
     const doc = this.require();
     const { target } = options;
     if (target.ids.length === 0) return 0;
-    const { clampRect, rectFromMargins } = await import('@engine/ops/crop');
     const label =
       options.label ??
       (target.ids.length === 1 ? 'Crop page' : `Crop ${countPages(target.ids.length)}`);
