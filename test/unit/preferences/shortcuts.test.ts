@@ -7,7 +7,8 @@
  * application can answer that.
  */
 
-import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { describe, expect, it, vi } from 'vitest';
 import { normalizeKey } from '@core/Registry';
 import { flatten, unflatten } from '@shared/settings';
 import {
@@ -35,6 +36,9 @@ import {
   sections,
   winAnsiSafe,
 } from '@modules/M130-preferences/shortcuts/cheatsheet';
+
+/** A whole PDF in a failure message helps nobody; a digest says "same" or "not same" and stops. */
+const digest = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
 const COMMANDS: ReadonlyArray<BindableCommand> = [
   { id: 'edit.find', label: 'Find', category: 'Edit', defaultKey: 'Mod+F' },
@@ -315,12 +319,26 @@ describe('the printable sheet', () => {
     expect(new TextDecoder().decode(sheet.bytes.slice(0, 5))).toBe('%PDF-');
   });
 
-  it('is deterministic for the same rows and date', async () => {
+  it('is deterministic for the same rows and date, however much later you rebuild it', async () => {
+    // The clock moves between the two builds on purpose. pdf-lib, left alone, stamps CreationDate
+    // and ModificationDate from `new Date()` at save time, and those sit inside a
+    // deflate-compressed object stream — so two otherwise identical documents saved a second apart
+    // come out *different lengths*. That is what CI caught as `expected 1667 to be 1666`: not a
+    // macOS quirk, just the slowest runner in the matrix being the one most likely to straddle a
+    // second. Without the clock moved this test passes on the old code roughly always, which is
+    // exactly the kind of assertion this repository has been bitten by (2026-09-11).
     const date = new Date('2026-09-10T00:00:00Z');
-    const a = await buildCheatSheet(rows, { date });
-    const b = await buildCheatSheet(rows, { date });
-    expect(a.pageCount).toBe(b.pageCount);
-    expect(a.bytes.length).toBe(b.bytes.length);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-09-11T12:00:00Z'));
+      const a = await buildCheatSheet(rows, { date });
+      vi.setSystemTime(new Date('2026-09-11T12:00:37Z'));
+      const b = await buildCheatSheet(rows, { date });
+      expect(a.pageCount).toBe(b.pageCount);
+      expect(digest(a.bytes)).toBe(digest(b.bytes));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('paginates rather than running off the bottom of the page', async () => {
