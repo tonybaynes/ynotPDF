@@ -33,6 +33,14 @@ import {
   type DecorationApplier,
 } from './commands';
 import {
+  DEFAULT_DECORATION_SETTINGS,
+  ipcSettingsStorage,
+  readSettings,
+  writeSetting,
+  type DecorationSettings,
+  type SettingsStorage,
+} from './settings';
+import {
   DECORATIONS_NAMESPACE,
   documentContext,
   drawsForPage,
@@ -66,6 +74,7 @@ export interface DecorationServiceOptions {
   readonly shell: ShellServices;
   /** The clock, injected so tests get a fixed date in a header. */
   readonly now?: () => string;
+  readonly storage?: SettingsStorage;
 }
 
 export class DecorationService implements DecorationApplier {
@@ -76,18 +85,58 @@ export class DecorationService implements DecorationApplier {
   private readonly appliedShrink = new Map<string, number>();
   /** Decorations found in a file, per document id — session knowledge, not a document change. */
   private readonly discovered = new Map<string, ReadonlyArray<ExistingDecoration>>();
+  private readonly storage: SettingsStorage;
+  private settingsValue: DecorationSettings = DEFAULT_DECORATION_SETTINGS;
   private disposed = false;
 
   constructor(options: DecorationServiceOptions) {
     this.registry = options.registry;
     this.shell = options.shell;
     this.now = options.now ?? ((): string => new Date().toISOString());
+    this.storage = options.storage ?? ipcSettingsStorage();
   }
+
+  /** The units, the presets and the link preferences, as the reader has them now. */
+  get settings(): DecorationSettings {
+    return this.settingsValue;
+  }
+
+  /**
+   * Re-reads the settings.
+   *
+   * M130 calls `load()` on every service after a preference changes, which is how a schema that
+   * says `live: true` keeps its word (ADR 0018 §Live apply). It is also how the module gets its
+   * settings the first time, from `activate`.
+   */
+  async load(): Promise<void> {
+    this.settingsValue = await readSettings(this.storage);
+    for (const listener of this.settingsListeners) listener(this.settingsValue);
+  }
+
+  /** Writes one setting and applies it. Used by the dialogs when a preset is saved. */
+  async setSetting<K extends keyof DecorationSettings>(
+    name: K,
+    value: DecorationSettings[K],
+  ): Promise<void> {
+    this.settingsValue = { ...this.settingsValue, [name]: value };
+    await writeSetting(this.storage, name, value);
+    for (const listener of this.settingsListeners) listener(this.settingsValue);
+  }
+
+  /** Told whenever the settings change, so the link service can follow them. */
+  onSettings(listener: (settings: DecorationSettings) => void): () => void {
+    this.settingsListeners.add(listener);
+    listener(this.settingsValue);
+    return () => this.settingsListeners.delete(listener);
+  }
+
+  private readonly settingsListeners = new Set<(settings: DecorationSettings) => void>();
 
   dispose(): void {
     this.disposed = true;
     this.appliedShrink.clear();
     this.discovered.clear();
+    this.settingsListeners.clear();
   }
 
   // ---- documents -------------------------------------------------------------------------------

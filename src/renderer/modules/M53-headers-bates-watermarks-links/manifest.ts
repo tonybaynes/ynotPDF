@@ -46,9 +46,6 @@ import { DEFAULT_BORDER, readBorder, readAction } from './links';
 import {
   DECORATION_SETTINGS_SCHEMA,
   DEFAULT_DECORATION_SETTINGS,
-  ipcSettingsStorage,
-  readSettings,
-  writeSetting,
   type DecorationSettings,
 } from './settings';
 import { linkTool } from './tools';
@@ -68,8 +65,11 @@ registerIcon('text-search', TextSearch);
 /** The live services, so the tool and the panel can reach them without a context. */
 let decorationService: DecorationService | null = null;
 let linkService: LinkService | null = null;
-let settings: DecorationSettings = DEFAULT_DECORATION_SETTINGS;
 let shellServices: ShellServices | null = null;
+
+/** What the reader has chosen, as the service holds it now. */
+const settings = (): DecorationSettings =>
+  decorationService?.settings ?? DEFAULT_DECORATION_SETTINGS;
 
 const has = (ctx: ServiceContext, name: string): boolean =>
   ctx.service<Registry>('registry').hasService(name);
@@ -197,11 +197,10 @@ const dialogDeps = (
 } => ({
   shell: ctx.service<ShellServices>('shellServices'),
   document: doc,
-  units: settings.units,
-  presets: settings.presets,
+  units: settings().units,
+  presets: settings().presets,
   savePresets: async (json: string) => {
-    settings = { ...settings, presets: json };
-    await writeSetting(ipcSettingsStorage(), 'presets', json);
+    await decorations(ctx).setSetting('presets', json);
   },
 });
 
@@ -783,10 +782,11 @@ export default defineModule({
     registry.provide(LINK_SERVICE, linksCreated);
     linksCreated.editLink = (id) => editLink(shell, linksCreated, id);
 
-    void (async () => {
-      settings = await readSettings(ipcSettingsStorage());
-      linksCreated.setSettings(settings);
-    })();
+    // M130 calls `load()` after a preference changes; this is the first read.
+    const settingsWatch = created.onSettings((next) => {
+      linksCreated.setSettings(next);
+    });
+    void created.load();
 
     // A tab that appears gets a link layer; one that goes takes its layer with it.
     const bindAll = (): void => {
@@ -802,6 +802,7 @@ export default defineModule({
     bindAll();
 
     return () => {
+      settingsWatch();
       unsubscribe();
       closed();
       linksCreated.dispose();

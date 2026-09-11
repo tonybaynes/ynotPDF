@@ -112,6 +112,10 @@ export class LinkService {
     this.shell.invalidate();
   }
 
+  /**
+   * Follows the reader's preferences. The decoration service owns the reading of them — M130
+   * calls its `load()` after a change — and hands them here.
+   */
   setSettings(settings: {
     readonly confirmExternalLinks: boolean;
     readonly showLinkOutlines: boolean;
