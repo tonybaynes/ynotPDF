@@ -89,7 +89,17 @@ async function openPath(path: string): Promise<void> {
 const navState = (): Promise<NavState> => app.run('dev.navState') as Promise<NavState>;
 const viewState = (): Promise<ViewerState> => app.run('dev.viewerState') as Promise<ViewerState>;
 
-/** Opens a fixture and waits for its first page. */
+/**
+ * Opens a fixture and waits for its first page, under a path nothing has used before.
+ *
+ * `fixturePath` is the harness's, and the reason it exists is worth keeping: M11 remembers the
+ * page, zoom and scroll of every document *by path* and puts the reader back there when it is
+ * reopened — a feature, and one `viewer.spec.ts` tests on purpose. Every test in this file used
+ * to open `C:/fixtures/<name>`, so the second one to open `multipage.pdf` started wherever the
+ * first had finished: "two pages on from the start" landed on page 4, not page 2, and only when
+ * the earlier test had got far enough to be remembered. `harness-rules.spec.ts` now fails if any
+ * spec goes back to a shared path (2026-09-11).
+ */
 async function open(name: string, path = fixturePath(name)): Promise<void> {
   const bytes = Array.from(readFileSync(join(FIXTURES, name)));
   await app.run('file.openBytes', { file: { path, name, bytes } });
@@ -97,13 +107,22 @@ async function open(name: string, path = fixturePath(name)): Promise<void> {
   await settle();
 }
 
-/** Waits until the thumbnails the panel wants have been drawn, or the time is up. */
+/**
+ * Waits until the thumbnails the panel wants have been drawn, or the time is up.
+ *
+ * Two empty queues in a row, not one: a document that has only just opened has not queued its
+ * thumbnails yet, so the first reading is zero because the work has not started rather than
+ * because it has finished — and the caller walks on to click a cell that is not there yet.
+ */
 async function settle(timeout = 6000): Promise<void> {
   const deadline = Date.now() + timeout;
+  let quiet = 0;
   for (;;) {
     await app.page.waitForTimeout(120);
     const state = await navState().catch(() => null);
-    if (!state || state.thumbnailStats.queued === 0) return;
+    if (!state) return;
+    quiet = state.thumbnailStats.queued === 0 ? quiet + 1 : 0;
+    if (quiet >= 2) return;
     if (Date.now() > deadline) return;
   }
 }
@@ -257,7 +276,9 @@ test.describe('the thumbnail grid — the operator’s layout rules', () => {
 
   test('clicking a thumbnail navigates, and the current page is marked with a word', async () => {
     await open('multipage.pdf');
-    await app.page.locator('.thumb-cell').nth(2).click();
+    // The cell for page 2, not the third cell drawn: the grid is virtualised, so which pages are
+    // mounted — and in what order — is its business, and `nth(2)` was only page 2 by luck.
+    await app.page.locator('.thumb-cell[data-page="2"]').click();
     // Polled rather than waited out: the viewport scrolls, tells the store, and the panel
     // repaints on the next frame, and how long that takes is the runner's business.
     await expect.poll(async () => (await viewState()).page).toBe(2);

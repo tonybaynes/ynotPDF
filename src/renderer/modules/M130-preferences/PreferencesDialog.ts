@@ -386,7 +386,18 @@ export function openPreferences(options: PreferencesDialogOptions): PreferencesD
         structural = structural || rowsByKey.has(key);
         continue;
       }
-      control.set(coerce(row.spec, settings.peek(key)));
+      // Never over the reader's fingers. This fires for *our own* writes as well as another
+      // window's, and a write settles asynchronously — so the notification for "150" could land
+      // 23 ms after the reader had already typed "100" over it, put the 150 back, and leave the
+      // field reading what it read at focus. The browser only raises `change` when the value at
+      // blur differs from the value at focus, so the second edit then vanished without a trace:
+      // no event, no write, no complaint. Tony would set the interface scale and watch it snap
+      // back. It surfaced as an intermittent macOS CI failure because the race needs the settle
+      // to be slower than the reader (2026-09-11).
+      const editing =
+        document.activeElement === control.focusTarget ||
+        control.element.contains(document.activeElement);
+      if (!editing) control.set(coerce(row.spec, settings.peek(key)));
       markChanged(row, control.element);
     }
     if (structural) render();

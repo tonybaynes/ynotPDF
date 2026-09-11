@@ -72,6 +72,8 @@ export class ThemeManager {
   private theme: ThemeName = DEFAULT_THEME;
   private scale: number = UI_SCALE_DEFAULT;
   private night = false;
+  /** Every save so far, chained so they land in the order they were made. See `persist`. */
+  private saving: Promise<void> = Promise.resolve();
 
   constructor(options: ThemeManagerOptions = {}) {
     this.root = options.root ?? document.documentElement;
@@ -86,8 +88,15 @@ export class ThemeManager {
     return manager;
   }
 
-  /** Reads the persisted state and applies it (falling back to the defaults). */
+  /**
+   * Reads the persisted state and applies it (falling back to the defaults).
+   *
+   * Waits for any save still in flight first. Every settings change reloads every service, this
+   * one among them, and a read that overtakes its own unfinished write puts the value the reader
+   * has just replaced back on screen — see `persist`.
+   */
   async load(): Promise<void> {
+    await this.whenSaved();
     let saved: Partial<ThemeState> = {};
     try {
       saved = await this.storage.read();
@@ -130,7 +139,7 @@ export class ThemeManager {
     if (name === this.theme) return;
     this.theme = name;
     this.apply();
-    void this.persist();
+    this.persist();
   }
 
   /** Cycles to the next theme in `list` order (wraps). */
@@ -157,7 +166,7 @@ export class ThemeManager {
     if (next === this.scale) return next;
     this.scale = next;
     this.apply();
-    void this.persist();
+    this.persist();
     return next;
   }
 
@@ -166,7 +175,7 @@ export class ThemeManager {
     if (on === this.night) return this.night;
     this.night = on;
     this.apply();
-    void this.persist();
+    this.persist();
     return this.night;
   }
 
@@ -199,11 +208,37 @@ export class ThemeManager {
     for (const listener of Array.from(this.listeners)) listener(state);
   }
 
-  private async persist(): Promise<void> {
-    try {
-      await this.storage.write(this.state);
-    } catch (error) {
-      console.warn('theme: could not save the theme', error);
-    }
+  /**
+   * Queues a save behind the one before it.
+   *
+   * Every setter fires this and does not wait for it, so two changes close together used to put
+   * two writes in flight at once with nothing deciding which landed last. A slow first write
+   * then overwrote a fast second one and the store held a value the screen had moved on from —
+   * which matters because {@link load} reads the store straight back: `PreferencesService`
+   * applies a settings change by handing it here and *then* reloading every service, this one
+   * included. A stale store at that moment puts the old value back on screen and leaves it
+   * there. On the macOS runner, setting the interface scale back to 100 % left it at 150 %.
+   *
+   * Chaining costs nothing — the writes were already asynchronous — and gives {@link whenSaved}
+   * something to wait for.
+   */
+  private persist(): void {
+    this.saving = this.saving.then(async () => {
+      try {
+        await this.storage.write(this.state);
+      } catch (error) {
+        console.warn('theme: could not save the theme', error);
+      }
+    });
+  }
+
+  /**
+   * Resolves once every save made so far has landed.
+   *
+   * Anything that reads the theme back out of storage — {@link load}, and so every settings
+   * reload — must await this first, or it can read a value this manager has already replaced.
+   */
+  async whenSaved(): Promise<void> {
+    await this.saving;
   }
 }

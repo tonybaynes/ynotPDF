@@ -152,13 +152,14 @@ test.describe('opening and rendering', () => {
     expect(inked).toBeGreaterThan(50);
   });
 
-  test('the six overlay layers exist on every page, raster first and tool last', async () => {
+  test('the overlay layers exist on every page, raster first and tool last', async () => {
     await open('multipage.pdf');
     const layers = await app.page
       .locator('.viewer-content .page')
       .first()
       .evaluate((page) => [...page.children].map((c) => c.getAttribute('data-layer')));
-    expect(layers).toEqual(['raster', 'text', 'annot', 'widget', 'object', 'tool']);
+    // `link` joined the stack with M53 (ADR 0020 §6), between the annotations and the widgets.
+    expect(layers).toEqual(['raster', 'text', 'annot', 'link', 'widget', 'object', 'tool']);
   });
 
   test('only the pages near the viewport have DOM', async () => {

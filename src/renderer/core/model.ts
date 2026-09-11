@@ -671,6 +671,12 @@ export type WriteIntent =
    * so operators PDFium does not model survive the save.
    */
   | 'page-objects'
+  /**
+   * Headers, footers, Bates numbers, watermarks or backgrounds were added, changed or removed
+   * (M53, ADR 0020). The engine drew them on the live page; the writer puts the page's original
+   * content back and appends its own stream, so nothing was baked into a stream that existed.
+   */
+  | 'decorations'
   | 'custom';
 
 /** Everything a module may hang off the document, one namespace per module id. */

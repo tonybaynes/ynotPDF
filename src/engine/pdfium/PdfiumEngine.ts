@@ -113,6 +113,12 @@ import {
   readObjectPath,
   type ObjectStash,
 } from './objects';
+import {
+  readDecorations,
+  setDecorations as setPageDecorations,
+  type SetDecorationsOptions,
+} from './decorations';
+import type { DecorationDraw, FoundDecoration } from '../decorations/types';
 import { FontRegistry, type SubstitutionTable } from './fonts';
 import { readRawInfo, type RawInfo } from './rawdoc';
 import { readRawForm, type RawForm } from './rawform';
@@ -2191,6 +2197,10 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
             ['lineEnding', 'LE'],
             // `/RT` says what an `/IRT` means: `/R` a reply, `/Group` a grouped annotation (M32).
             ['replyType', 'RT'],
+            // A link's action as JSON, and its `/H` highlight (M53, ADR 0020 §5). PDFium has no
+            // `/A` setter, so the action survives a page re-read as this private string.
+            ['linkActionJson', 'YNOTLinkAction'],
+            ['linkHighlight', 'H'],
           ] as const) {
             const value = str(pdfKey);
             if (value) extra[modelKey] = value;
@@ -3157,6 +3167,46 @@ export class PdfiumEngine implements PdfEngine, CancellableEngine {
       const d = this.doc(doc);
       const p = this.loadPage(d, page);
       return readObjectPath(this.ffi, p.page, index);
+    });
+  }
+
+  // ---- page decorations (M53, ADR 0020) --------------------------------------------------------
+
+  /**
+   * Replaces the page's decorations. Every item is drawn into a one-page PDF, brought in as a
+   * form XObject and marked `/YNOTDec`, so it is findable again in this session and in the file.
+   *
+   * `run()` is not used here because the work is genuinely asynchronous — pdf-lib's embedders
+   * are — so the PDFium calls are made after the drawing is finished rather than inside a
+   * synchronous slice.
+   */
+  async setDecorations(
+    doc: DocHandle,
+    page: PageIndex,
+    items: ReadonlyArray<DecorationDraw>,
+    options: {
+      readonly sources?: SetDecorationsOptions['sources'];
+      readonly shrink?: { readonly from: number; readonly to: number };
+    } = {},
+  ): Promise<number> {
+    const d = this.doc(doc);
+    const p = this.beforeObjectEdit(d, page);
+    const box = this.geometry(p).box;
+    const removed = await setPageDecorations(this.ffi, d.doc, p.page, items, {
+      ...(options.sources ? { sources: options.sources } : {}),
+      ...(options.shrink ? { shrink: options.shrink } : {}),
+      box: [box.x0, box.y0, box.x1, box.y1] as const,
+    });
+    p.geometry = null;
+    this.afterObjectEdit(d);
+    return removed;
+  }
+
+  decorations(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<FoundDecoration>> {
+    return run(() => {
+      const d = this.doc(doc);
+      const p = this.loadPage(d, page);
+      return readDecorations(this.ffi, p.page, page);
     });
   }
 

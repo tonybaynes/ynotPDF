@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { ThemeManager, type ThemeState, type ThemeStorage } from '@theme/ThemeManager';
 import {
   buildExport,
   drop,
@@ -425,5 +426,79 @@ describe('SettingsService', () => {
     await service.importText(text);
     expect(service.peek('theme.name')).toBe('high-contrast');
     expect(service.peek('ui.scale')).toBe(150);
+  });
+});
+
+/**
+ * The interface scale, all the way through: the dialog writes a setting, M130's theme applier
+ * hands it to `ThemeManager`, and then `apply()` reloads every service — `ThemeManager` among
+ * them, because it is registered under `THEME_SERVICE` and is not in `skipServices`. That last
+ * step reads the theme store straight back, so the whole path is only correct if the manager's
+ * own save has landed by then.
+ *
+ * It had not. The setters fired an unawaited save, so two changes close together raced, and the
+ * reload read a store that had not caught up and put the old scale back on `<html>` — where it
+ * stayed. Tony would set the interface scale back to 100 % and watch it stay at 150 %; CI saw it
+ * as `preferences.spec.ts` timing out for ten seconds on macOS (2026-09-11).
+ *
+ * The store here is deliberately slower on its first write than its second, which is the whole
+ * race in one line.
+ */
+describe('the interface scale, from the dialog to the screen', () => {
+  function pacedThemeStorage(delays: number[]): ThemeStorage {
+    let saved: Partial<ThemeState> = {};
+    let call = 0;
+    return {
+      read: () => Promise.resolve({ ...saved }),
+      write: async (state: ThemeState) => {
+        await new Promise((resolve) => setTimeout(resolve, delays[call++] ?? 0));
+        saved = { ...state };
+      },
+    };
+  }
+
+  /** `<html>`, as far as `ThemeManager` is concerned. */
+  function fakeRoot(): { root: HTMLElement; properties: Record<string, string> } {
+    const properties: Record<string, string> = {};
+    const root = {
+      dataset: {} as Record<string, string>,
+      style: {
+        setProperty(name: string, value: string | null) {
+          properties[name] = value ?? '';
+        },
+      },
+    };
+    return { root: root as unknown as HTMLElement, properties };
+  }
+
+  it('ends where the reader put it, even when the first save is the slower one', async () => {
+    const { root, properties } = fakeRoot();
+    const themes = await ThemeManager.create({ root, storage: pacedThemeStorage([40, 0]) });
+    const service = new SettingsService({
+      storage: memorySettingsStorage(),
+      // M130's own theme applier, in miniature: the part that touches the scale.
+      appliers: [
+        {
+          prefixes: ['theme', 'ui.scale'],
+          apply: (values, changed) => {
+            if (!changed.has('ui.scale') && !changed.has('theme.scale')) return;
+            const scale = values['ui.scale'] ?? values['theme.scale'];
+            themes.setScale(typeof scale === 'number' ? scale : 100);
+          },
+        },
+      ],
+      // The reload loop, with the manager in it exactly as the real registry has it.
+      registry: lookup({ theme: themes, viewer: fakeModule() }),
+    });
+    await service.load();
+
+    await service.write('ui.scale', 150);
+    expect(properties['--ui-scale']).toBe('1.5');
+
+    await service.write('ui.scale', 100);
+    expect(properties['--ui-scale'], 'the scale the reader chose last is the one on screen').toBe(
+      '1',
+    );
+    expect(themes.uiScale).toBe(100);
   });
 });

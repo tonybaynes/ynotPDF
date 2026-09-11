@@ -144,3 +144,48 @@ test('the engine worker answers over RPC', async () => {
   // M10: the worker now serves PDFium (WASM); M00 shipped the NotImplemented stub here.
   expect(info).toMatchObject({ name: 'pdfium' });
 });
+
+/**
+ * A run never interrupts Tony's machine.
+ *
+ * He works on his Windows PC while a suite runs, so a window there is parked off-screen and
+ * transparent (`CLAUDE.md`). Nowhere else needs it: the macOS, Linux and ARM runners have nobody
+ * in front of them, and macOS would not have obliged anyway — it clamps a window back onto the
+ * display, which CI proved the first time this test ran, reporting **0,31** for a window that
+ * asked for -32000,-32000 (2026-09-11).
+ *
+ * So this is a Windows test, deliberately, and it is the only thing holding that promise —
+ * `window.ts` decides parking on one condition that someone will eventually simplify.
+ */
+test('a window in a run on Tony’s machine is off every display, and transparent', async () => {
+  test.skip(process.platform !== 'win32', 'windows are only parked on Tony’s Windows machine');
+  test.skip(
+    process.env['YNOT_E2E_VISIBLE'] === '1',
+    'the run was asked for visible windows on purpose',
+  );
+
+  // Asked as "does it overlap a display the reader has", not as a coordinate threshold: the
+  // number `window.ts` passes is not the number that takes effect — Windows clamps -32000 to
+  // -16384 — and a threshold would be a guess about a platform rather than a statement about a
+  // screen.
+  const where = await app.electron.evaluate(({ BrowserWindow, screen }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win) return { bounds: { x: 0, y: 0, width: 0, height: 0 }, opacity: 1, overlaps: 0 };
+    const b = win.getBounds();
+    const overlaps = screen
+      .getAllDisplays()
+      .map((display) => display.bounds)
+      .filter(
+        (d) =>
+          b.x < d.x + d.width &&
+          b.x + b.width > d.x &&
+          b.y < d.y + d.height &&
+          b.y + b.height > d.y,
+      ).length;
+    return { bounds: b, opacity: win.getOpacity(), overlaps };
+  });
+
+  const at = `${String(where.bounds.x)},${String(where.bounds.y)} ${String(where.bounds.width)}x${String(where.bounds.height)}`;
+  expect(where.overlaps, `the window at ${at} overlaps a display Tony can see`).toBe(0);
+  expect(where.opacity, `the window at ${at} is not transparent`).toBe(0);
+});
