@@ -36,10 +36,22 @@ const SIZE = { width: 1280, height: 800 } as const;
  * ratio then has room for the rest.
  *
  * A layout collapse — a pane that vanished, a ribbon that fell into one column, a theme that
- * painted its text the colour of its panel — moves a third of the picture or more. That is what
- * this suite is for, and 15 % is nowhere near it.
+ * painted its text the colour of its panel — moves a third of the picture or more.
+ *
+ * 15 % was too much slack, though (Tony, 2026-09-11). The two knobs do different jobs and only
+ * one of them is about antialiasing: `threshold` decides whether a single pixel counts as
+ * different at all, and at 0.35 the text-rendering differences between two machines mostly stop
+ * counting *before* the ratio is measured. Raising both was belt and braces. The threshold keeps
+ * its job; the ratio is back to something that would notice a panel going missing.
+ *
+ * **A local run cannot tell you whether this number is right.** The only baselines committed are
+ * `win32` ones, seeded on Tony's machine, so running this spec there compares his pixels against
+ * his own and reports a difference near zero — green at 0.04, and just as green at 0.0004. The
+ * number this has to survive is the *cross-machine* one, and the only cross-machine comparison
+ * that happens is the GitHub Windows runner. Read CI, not your own screen; if it fails there,
+ * Playwright prints the actual ratio and that is the measurement.
  */
-const COMPARE = { maxDiffPixelRatio: 0.15, threshold: 0.35, animations: 'disabled' } as const;
+const COMPARE = { maxDiffPixelRatio: 0.04, threshold: 0.35, animations: 'disabled' } as const;
 
 let app: App;
 

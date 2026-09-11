@@ -78,7 +78,7 @@ If a journey finds a real defect, **fix the product**, not the test.
 
 ## Visual baselines
 
-`visual.spec.ts` compares ten screens with `maxDiffPixelRatio: 0.02`. Baselines live in
+`visual.spec.ts` compares ten screens with `maxDiffPixelRatio: 0.04` and `threshold: 0.35`. Baselines live in
 `e2e/visual.spec.ts-snapshots/` and are per platform. A platform with none skips with a message
 rather than failing; to seed one, run on that machine:
 

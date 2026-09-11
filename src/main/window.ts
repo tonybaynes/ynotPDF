@@ -112,14 +112,37 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
     },
   });
   windows.add(win);
-  if (saved?.maximized) win.maximize();
+  // Transparent from the moment it exists, not from `ready-to-show`. Anything that shows the
+  // window before then shows it at full opacity, and the outline flashed up on Tony's screen
+  // mid-run — which is exactly what an invisible test window must never do (2026-09-11).
+  if (parkOffScreen) win.setOpacity(0);
+  // A remembered maximised state is not restored for a parked window: `maximize()` puts it back
+  // on a real monitor, and it *shows* the window as a side effect ("this will also show the
+  // window if it isn't being displayed already"), which is the other half of the same flash.
+  if (saved?.maximized && !parkOffScreen) win.maximize();
   if (options.settings && !options.parent) rememberWindowBounds(win, options.settings);
+
+  // Anything that puts a parked window back on a monitor has to leave it invisible. Full screen
+  // is the one that does: `view.fullScreen.toggle` runs in the e2e suite, and going full screen
+  // shows the window and moves it to a real display — for the 300 ms the test then waits, which
+  // is exactly the "split second" Tony was seeing. `maximize` and `restore` can do the same.
+  // Re-asserting opacity on the event covers the case where the transition rebuilds the native
+  // window and loses it (2026-09-11).
+  if (parkOffScreen) {
+    const stayInvisible = (): void => {
+      if (!win.isDestroyed()) win.setOpacity(0);
+    };
+    win.on('show', stayInvisible);
+    win.on('maximize', stayInvisible);
+    win.on('restore', stayInvisible);
+    win.on('enter-full-screen', stayInvisible);
+  }
 
   win.once('ready-to-show', () => {
     if (parkOffScreen) {
-      // Transparent as well as off-screen: a display the operator plugs in later must not
-      // suddenly show a test window. (`setOpacity` is a Windows and macOS API, which is the
-      // other reason this branch is not taken on Linux.)
+      // Off-screen as well as transparent: a display Tony plugs in later must not suddenly show
+      // a test window. (`setOpacity` is a Windows and macOS API, which is the other reason this
+      // branch is not taken on Linux.)
       win.setOpacity(0);
       win.showInactive();
       return;
