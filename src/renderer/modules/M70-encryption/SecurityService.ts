@@ -236,7 +236,9 @@ export class SecurityService {
       if (!entry.sourceCaptured) {
         if (entry.engineInfo.encrypted || !entry.sourcePolicy.encrypted) {
           entry.sourcePolicy = entry.engineInfo;
-          entry.authority = entry.sourcePolicy.encrypted ? 'user' : 'none';
+          // Inspection learns policy, not credentials. An owner may have authenticated
+          // while the worker was busy; that authority must survive this late result.
+          if (entry.authority === 'none' && entry.sourcePolicy.encrypted) entry.authority = 'user';
         }
         entry.sourceCaptured = true;
       }

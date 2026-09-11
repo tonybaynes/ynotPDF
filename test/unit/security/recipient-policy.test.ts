@@ -175,4 +175,31 @@ describe('certificate recipient policy (audit finding 3)', () => {
       await f.close();
     }
   });
+
+  it('does not revoke verified owner authority when a fallback source inspection finishes', async () => {
+    const f = await setup();
+    try {
+      const current = f.doc.state;
+      vi.spyOn(f.doc, 'state', 'get').mockReturnValue({
+        ...current,
+        security: { ...current.security, encrypted: true },
+      });
+      f.service.forget(f.doc.id);
+      let finish!: (info: typeof UNENCRYPTED) => void;
+      const inspection = new Promise<typeof UNENCRYPTED>((resolve) => {
+        finish = resolve;
+      });
+      f.inspect.mockReturnValue(inspection);
+      f.service.load();
+      const refreshing = f.service.refresh(f.doc);
+      vi.spyOn(f.client, 'isOwnerPassword').mockResolvedValue(true);
+      expect(await f.service.unlockWithPassword(f.doc, 'owner')).toBe(true);
+      finish({ ...UNENCRYPTED, encrypted: true, handler: 'standard', permissions: NONE_ALLOWED });
+      await refreshing;
+      expect(f.service.securityOf(f.doc).authority).toBe('owner');
+      expect(f.service.allows('copy', f.doc)).toBe(true);
+    } finally {
+      await f.close();
+    }
+  });
 });
