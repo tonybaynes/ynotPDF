@@ -200,3 +200,17 @@ line that survives looks like a pass. It fooled two sessions independently withi
 **Reconcile the totals.** `npx playwright test --list` gives the expected count. A run reporting
 fewer passes than that is hiding something — 546 listed against 525 passed and 4 skipped was
 seventeen failures in plain sight, and neither of us saw it until the arithmetic was done.
+
+**"The suite passed" is a claim about a commit, not about a folder.** M04 ran a full suite bare,
+read the exit code directly, reconciled it against `--list` — every control sound — and pushed a
+tree missing an uncommitted change, so the run it trusted tested something it never shipped. The
+same shape caught me an hour earlier: an edit silently failed to apply, so I spent an hour testing
+a build my fix had never reached. `git status` before a push, and if it matters, run from the
+pushed SHA. Neither the pipe rule nor the count check touches this one: both of us verified
+honestly, and verified the wrong artefact.
+
+**`jq` is not on this machine's PATH.** A shell pipeline that calls it fails silently in a
+background watcher, so a "monitor" armed against CI can sit there reporting nothing while
+everything it was meant to catch goes past. It cost M53 a whole run's worth of watching. Use
+`gh`'s built-in `--jq` flag instead — `gh run view <id> --json jobs --jq '...'` — which needs no
+external binary.
