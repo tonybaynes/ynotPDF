@@ -248,11 +248,133 @@ test.describe('a setting changes, persists and applies', () => {
     // The alias in resources/preferences.json means the key M01 actually reads was written.
     expect(await read('ui.scale')).toBe(150);
 
+    // A spy on the pipeline, armed before the second edit only — the first one already worked, so
+    // what matters is whether the *second* `change` ever reaches the handler. Three outcomes tell
+    // three different stories: no `change` at all means the input/event path broke; a `change`
+    // with no style mutation means the settings chain broke; neither, with frames stopped, means
+    // the renderer was paused (2026-09-11).
+    await app.page.evaluate(() => {
+      const log: { tag: string; value: string; at: number }[] = [];
+      (window as unknown as { __scaleTrace?: typeof log }).__scaleTrace = log;
+      const push = (tag: string, value: string): void => {
+        log.push({ tag, value, at: Math.round(performance.now()) });
+      };
+      const input = document.querySelector<HTMLInputElement>(
+        '[data-setting="pref-ui-scale"] input[type="number"]',
+      );
+      input?.addEventListener('input', () => {
+        push('input', input.value);
+      });
+      input?.addEventListener('change', () => {
+        push('change', input.value);
+      });
+      input?.addEventListener('blur', () => {
+        push('blur', input.value);
+      });
+      new MutationObserver(() => {
+        push('style', document.documentElement.style.getPropertyValue('--ui-scale'));
+      }).observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+    });
+
     // Setting it back through Preferences, the same way the reader would.
     await setting('ui.scale').locator('input[type="number"]').fill('100');
     await setting('ui.scale').locator('input[type="number"]').blur();
-    await expect.poll(uiScale).toBe('1');
+    // Both halves, so a failure says *which* half broke. This has failed intermittently on the
+    // macOS runner with the scale stuck at 1.5, and the one thing the old assertion could not
+    // tell us was whether the write had landed: a store holding 100 with the screen at 1.5 means
+    // the applier never ran, and a store still holding 150 means the edit never reached it. The
+    // extra expectation is stricter than what it replaces, not looser (2026-09-11).
+    try {
+      await expect
+        .poll(async () => ({ applied: await uiScale(), stored: await read('ui.scale') }))
+        .toEqual({ applied: '1', stored: 100 });
+    } catch (failure) {
+      // Only on the way out, so the happy path pays nothing. The leading theory for this flake is
+      // that macOS marks the window occluded and Chromium pauses the renderer despite
+      // `backgroundThrottling: false` — in which case the renderer is not running when the
+      // `change` event should be handled. That predicts `visibilityState: 'hidden'`, or frames
+      // that have stopped. Both are measurable, and neither has ever been measured at the moment
+      // this fails (2026-09-11).
+      const renderer = await app.page.evaluate(async () => {
+        const started = performance.now();
+        let frames = 0;
+        await new Promise<void>((resolve) => {
+          const tick = (): void => {
+            frames++;
+            if (performance.now() - started >= 500) resolve();
+            else requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        });
+        const input = document.querySelector<HTMLInputElement>(
+          '[data-setting="pref-ui-scale"] input[type="number"]',
+        );
+        return {
+          hidden: document.hidden,
+          visibility: document.visibilityState,
+          fps: Math.round((frames * 1000) / (performance.now() - started)),
+          inputValue: input?.value ?? '(no input found)',
+          inputIsFocused: input !== null && document.activeElement === input,
+          uiScaleNow: getComputedStyle(document.documentElement)
+            .getPropertyValue('--ui-scale')
+            .trim(),
+        };
+      });
+      const trace = await app.page.evaluate(
+        () => (window as unknown as { __scaleTrace?: unknown[] }).__scaleTrace ?? [],
+      );
+      throw new Error(
+        `${failure instanceof Error ? failure.message : String(failure)}
+
+` +
+          `Renderer at the moment of failure: ${JSON.stringify(renderer)}
+` +
+          `Event trace for the second edit: ${JSON.stringify(trace)}
+
+` +
+          'Reading it: no `change` in the trace means the event never reached the handler; a ' +
+          '`change` with no `style` after it means the settings chain broke on the way to the ' +
+          'theme; and an fps near zero or a hidden visibility means the renderer was paused, ' +
+          'which is macOS occlusion throttling.',
+        { cause: failure },
+      );
+    }
     expect(await fontSize()).toBe('14px');
+    await write('ui.scale', undefined);
+  });
+
+  /**
+   * The dialog must not type over the reader.
+   *
+   * It subscribes to settings changes so that another window, an import or a reset redraws what
+   * is on screen — but that fires for its *own* writes too, and a write settles asynchronously.
+   * So the notification for a value the reader has already replaced could land on top of what
+   * they were in the middle of typing. The browser only raises `change` when the value at blur
+   * differs from the value at focus, so the second edit then vanished in silence: no event, no
+   * write, nothing to see.
+   *
+   * That is what `preferences.spec.ts:232` had been failing on intermittently on the macOS
+   * runner, and the trace that caught it showed exactly this — `input` carrying "100", then
+   * `blur` carrying "150", 23 ms apart, with no `change` between them (2026-09-11).
+   *
+   * Forced here rather than waited for: type into the field, leave it focused, and write the key
+   * from outside while the caret is still in it.
+   */
+  test('a setting changing elsewhere does not type over the field in front of you', async () => {
+    await openPreferences({ page: 'M01' });
+    const input = setting('ui.scale').locator('input[type="number"]');
+    await input.fill('130');
+    await expect(input).toBeFocused();
+
+    // The same key, changed from outside, while the reader is still in the field.
+    await write('ui.scale', 170);
+    await app.page.waitForTimeout(400);
+
+    expect(await input.inputValue(), 'the dialog overwrote what the reader was typing').toBe('130');
+
+    // And committing still works: the reader's value wins, because it is the one they chose.
+    await input.blur();
+    await expect.poll(() => read('ui.scale')).toBe(130);
     await write('ui.scale', undefined);
   });
 

@@ -120,6 +120,9 @@ export class PreferencesService {
           const next = typeof night === 'boolean' ? night : false;
           if (next !== themes.nightMode) themes.setNightMode(next);
         }
+        // Nothing to wait for here: the manager's own `load()` holds the barrier, so the
+        // reload that follows cannot overtake the save this just started. Waiting here as well
+        // only put another round trip in the way of every settings write.
       },
     };
   }
