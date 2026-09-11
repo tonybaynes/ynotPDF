@@ -136,6 +136,7 @@ export async function openLinkDialog(
         onChange: (value) => {
           border = { ...border, width: value === 'visible' ? 1 : 0 };
           styleSelect.element.hidden = value !== 'visible';
+          colourRow.hidden = value !== 'visible';
         },
       });
       const styleSelect = select({
@@ -151,6 +152,20 @@ export async function openLinkDialog(
         },
       });
       styleSelect.element.hidden = border.width === 0;
+      const colourSwatch = el('input.decoration-colour', {
+        type: 'color',
+        value: `#${border.colour.toString(16).padStart(6, '0')}`,
+      });
+      colourSwatch.addEventListener('input', () => {
+        const match = /^#([0-9a-f]{6})$/i.exec(colourSwatch.value);
+        if (match?.[1]) border = { ...border, colour: parseInt(match[1], 16) };
+      });
+      const colourRow = field({
+        label: 'Border colour',
+        input: el('div.decoration-colour-row', null, colourSwatch),
+        hint: 'The colour a viewer draws the border in — this is the document, not the interface.',
+      });
+      colourRow.hidden = border.width === 0;
       const highlight = select({
         label: 'While it is pressed',
         value: border.highlight,
@@ -164,7 +179,7 @@ export async function openLinkDialog(
           border = { ...border, highlight: value };
         },
       });
-      body.append(widthSelect.element, styleSelect.element, highlight.element);
+      body.append(widthSelect.element, styleSelect.element, colourRow, highlight.element);
 
       readAction = (): LinkAction => {
         switch (kindSelect.input.value) {
