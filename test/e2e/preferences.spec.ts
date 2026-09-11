@@ -343,6 +343,41 @@ test.describe('a setting changes, persists and applies', () => {
     await write('ui.scale', undefined);
   });
 
+  /**
+   * The dialog must not type over the reader.
+   *
+   * It subscribes to settings changes so that another window, an import or a reset redraws what
+   * is on screen — but that fires for its *own* writes too, and a write settles asynchronously.
+   * So the notification for a value the reader has already replaced could land on top of what
+   * they were in the middle of typing. The browser only raises `change` when the value at blur
+   * differs from the value at focus, so the second edit then vanished in silence: no event, no
+   * write, nothing to see.
+   *
+   * That is what `preferences.spec.ts:232` had been failing on intermittently on the macOS
+   * runner, and the trace that caught it showed exactly this — `input` carrying "100", then
+   * `blur` carrying "150", 23 ms apart, with no `change` between them (2026-09-11).
+   *
+   * Forced here rather than waited for: type into the field, leave it focused, and write the key
+   * from outside while the caret is still in it.
+   */
+  test('a setting changing elsewhere does not type over the field in front of you', async () => {
+    await openPreferences({ page: 'M01' });
+    const input = setting('ui.scale').locator('input[type="number"]');
+    await input.fill('130');
+    await expect(input).toBeFocused();
+
+    // The same key, changed from outside, while the reader is still in the field.
+    await write('ui.scale', 170);
+    await app.page.waitForTimeout(400);
+
+    expect(await input.inputValue(), 'the dialog overwrote what the reader was typing').toBe('130');
+
+    // And committing still works: the reader's value wins, because it is the one they chose.
+    await input.blur();
+    await expect.poll(() => read('ui.scale')).toBe(130);
+    await write('ui.scale', undefined);
+  });
+
   test('the interface font applies live', async () => {
     await openPreferences({ page: 'M130' });
     await setting('app.uiFont').locator('select').selectOption('dejavu-sans');
