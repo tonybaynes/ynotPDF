@@ -1,10 +1,10 @@
 # The renderer/main filesystem boundary — work to do
 
 **Status: not started.** A first attempt was made on 2026-09-11, found real holes, and was
-reverted from `main` before it was pushed. This file records what it found, what is worth keeping,
-and what has to be true before any of it lands again. The attempt itself is preserved on the
-branch `fix/hardening-review` (its first commit is the original pass; the rest is the review of
-it). Nothing here has to be re-derived from scratch.
+reverted from `main` before it was pushed. **The code is gone** — its branch was deleted at Tony's
+instruction on the same day, so nothing of it survives anywhere. This file is therefore the whole
+of the record, not an index to it: everything below was written while the code was in front of
+someone, and it is what the next attempt has instead of the original.
 
 Everything else left open that night is in [`docs/open-work.md`](../open-work.md).
 

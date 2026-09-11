@@ -181,9 +181,12 @@ the security file, because a path asserted by the renderer is not a path main ca
 **Keep until merged:** `fix/post-restore`, `fix/macos-e2e-flakes`, `fix/shared-fixture-paths`,
 `mod/M53-headers-bates-watermarks-links`.
 
-**Keep as the record:** `fix/hardening-review`. Its first commit is the original hardening pass and
-the rest is the review of it. The security file points at it so none of that has to be re-derived.
-Delete it only once that work has been re-landed.
+**Gone:** `fix/hardening-review` and `backup/pre-reword` were deleted at Tony's instruction on
+2026-09-11. The first held the reverted hardening pass and the review of it; the second held that
+commit's original message. Nothing of either survives, so
+[`docs/security/renderer-filesystem-boundary.md`](security/renderer-filesystem-boundary.md) is the
+entire record of that work rather than a pointer to it. Written while the code was still in front
+of someone, which is why it is as specific as it is.
 
 **Worktrees:** `../ynotPDF-review`, `../ynotPDF-macfix` and `../ynotPDF-post` are finished with once
 their branches land. `../ynotPDF-M53`, `../ynotPDF-paths` and `../ynotPDF-fs` belong to other
