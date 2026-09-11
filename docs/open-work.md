@@ -192,6 +192,28 @@ of someone, which is why it is as specific as it is.
 their branches land. `../ynotPDF-M53`, `../ynotPDF-paths` and `../ynotPDF-fs` belong to other
 sessions — leave them alone.
 
+## 7. Every PDF we generate is non-deterministic, and six places still are
+
+`PDFDocument.create()` leaves pdf-lib to fill `CreationDate` and `ModificationDate` from the wall
+clock at save time. Those live inside a **deflate-compressed object stream**, so two otherwise
+identical documents saved a second apart do not merely differ — they come out **different
+lengths**. Measured here: one unchanged document saved at 575, 576 or 577 bytes across 120
+consecutive one-second timestamps.
+
+That is what CI kept reporting as `expected 1667 to be 1666` on `shortcuts.test.ts`. It was read as
+a macOS problem for most of a day. It is not: macOS is simply the slowest runner in the matrix, so
+it is the one whose two builds are most likely to straddle a second. Fixed for the cheat sheet by
+stamping the sheet's own date into the document metadata — a sheet built for a given day is now the
+same file every time.
+
+**Still open, six call sites:** `stampPdf.ts`, `pdfium/decorations.ts`, `printToPdf.ts`,
+`M42-portfolios/cover.ts` (twice) and `M42-portfolios/merge.ts`. None is failing today, because no
+test asserts byte-identity on their output — the exposure is latent, not live. It becomes live the
+moment anyone writes a reproducibility test, caches output by hash, or asks why saving the same
+document twice gives two different files. Owned by M10 (engine), M13 (print) and M42 (portfolios);
+each wants a deliberate choice about what date a generated document should carry, not a blanket
+edit from here.
+
 ## 6. Two habits worth keeping
 
 Both of these cost real time tonight.
