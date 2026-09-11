@@ -67,7 +67,10 @@ function toInputs(value: unknown): ConvertInput[] {
     out.push({
       name: record.name,
       bytes,
-      ...(typeof record.path === 'string' && record.path !== record.name
+      // A dropped file has no path, and an empty one is not a path. The `!== record.name` half
+      // is older: it was working around the shell handing over the *filename* as the path, which
+      // is fixed at source now but may still arrive from a caller that has not been updated.
+      ...(typeof record.path === 'string' && record.path !== '' && record.path !== record.name
         ? { path: record.path }
         : {}),
       ...(typeof record.mime === 'string' ? { mime: record.mime } : {}),

@@ -281,14 +281,28 @@ export async function mountShell(root: HTMLElement, options: ShellOptions): Prom
     const convertible = others.length > 0 && registry.has('create.fromDropped');
     if (pdfs.length === 0 && !convertible) return;
     e.preventDefault();
-    const read = async (f: File): Promise<OpenedFile> => {
-      const withPath = f as File & { path?: string };
-      return {
-        path: withPath.path ?? f.name,
-        name: f.name,
-        bytes: new Uint8Array(await f.arrayBuffer()),
-      };
-    };
+    /**
+     * A dropped file has no path, and must not be given a fake one.
+     *
+     * This used to read `(f as File & { path?: string }).path ?? f.name`. `File.path` was an
+     * Electron extension and it was removed in Electron 32 — we are on 44 — so that was always
+     * `undefined`, and every dropped document arrived carrying its own *filename* as its path.
+     * `SaveService.save()` sends a document to Save As only when it has no path, and
+     * `'report.pdf'` is not nothing: so Save took the overwrite route and wrote to a relative
+     * path, which resolves against the main process's working directory. Dropping a PDF in,
+     * editing it and pressing Save wrote the document somewhere else entirely and reported
+     * success (Tony, 2026-09-11).
+     *
+     * Empty is the truth, and every reader of this field already treats it as "no path": Save
+     * goes to Save As, and the file is not added to Recent. Giving a dropped file a *real* path
+     * needs `webUtils.getPathForFile` and a way for main to trust it — see
+     * `docs/security/renderer-filesystem-boundary.md`, which is where that design lives.
+     */
+    const read = async (f: File): Promise<OpenedFile> => ({
+      path: '',
+      name: f.name,
+      bytes: new Uint8Array(await f.arrayBuffer()),
+    });
     for (const f of pdfs) {
       void read(f).then((file) => services.run('file.openBytes', { file }));
     }

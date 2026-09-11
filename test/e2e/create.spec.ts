@@ -392,3 +392,64 @@ test.describe('files that are not PDFs, dropped on the window', () => {
     expect(outcomes[0]?.pageCount).toBe(1);
   });
 });
+
+test.describe('a PDF dropped on the window', () => {
+  /**
+   * A dropped file has no path, and must not be given a fake one.
+   *
+   * `shell.ts` used to fall back to `f.name`, because `File.path` was an Electron extension that
+   * was removed in Electron 32 and this app is on 44. Every dropped document therefore arrived
+   * carrying its own *filename* as its path — and `SaveService.save()` sends a document to Save As
+   * only when it has no path. `'multipage.pdf'` is not nothing, so Save took the overwrite route
+   * and wrote to a **relative** path, which resolves against the main process's working
+   * directory: the document was written somewhere other than where it came from, and reported as
+   * saved (Tony, 2026-09-11).
+   *
+   * This is a DOM drop rather than a native one — Playwright cannot drag from the desktop — but it
+   * is the same handler, reached the same way, with a real `File` carrying real bytes.
+   */
+  test('arrives with no path, so Save cannot overwrite the wrong file', async () => {
+    // No `closeAll` here: this spec shares one app, and closing the last tab takes the window
+    // with it, which ends the run. The drop opens a new tab and makes it active, which is enough.
+    const bytes = [...readFileSync(join(process.cwd(), 'test', 'fixtures', 'multipage.pdf'))];
+    const dropped = await app.page.evaluate((data) => {
+      const file = new File([new Uint8Array(data)], 'multipage.pdf', { type: 'application/pdf' });
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      // The handler is on `#app`, which the shell is mounted into — dispatching on `body` would
+      // never reach it, because events bubble up rather than down.
+      const root = document.getElementById('app');
+      if (!root) throw new Error('#app is not mounted');
+      const event = new DragEvent('drop', {
+        dataTransfer: transfer,
+        bubbles: true,
+        cancelable: true,
+      });
+      root.dispatchEvent(event);
+      // `defaultPrevented` is how we know the shell's handler actually ran: it calls
+      // `preventDefault()` as soon as it sees a PDF among the dropped files.
+      return { files: transfer.files.length, handled: event.defaultPrevented };
+    }, bytes);
+    expect(dropped.files, 'the test never built a File to drop').toBe(1);
+    expect(dropped.handled, 'the shell never handled the drop').toBe(true);
+
+    await expect
+      .poll(
+        async () =>
+          ((await app.run('dev.saveState').catch(() => null)) as { title: string } | null)?.title ??
+          '',
+        {
+          timeout: 20_000,
+          message: 'the dropped PDF never opened',
+        },
+      )
+      // The title is the PDF's own, "Multi-page" — not the file name.
+      .toMatch(/multi-?page/i);
+
+    const state = (await app.run('dev.saveState')) as { path: string | null };
+    expect(state.path, 'a dropped file must not be given its own name as a path').not.toBe(
+      'multipage.pdf',
+    );
+    expect(state.path ?? '', 'a dropped file has no path at all').toBe('');
+  });
+});
