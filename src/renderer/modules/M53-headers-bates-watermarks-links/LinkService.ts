@@ -342,6 +342,21 @@ export class LinkService {
     };
   }
 
+  /**
+   * The cursor every pane shows while the link tool is active.
+   *
+   * The shell does not apply `ToolSpec.cursor` — every module sets it on its own panes, as M30,
+   * M31 and M33 all do — so without this the reader gets no sign that the tool is live.
+   */
+  setCursor(cursor: string | null): void {
+    const viewer = this.viewer()?.active;
+    if (!viewer) return;
+    for (const pane of viewer.allPanes) {
+      if (cursor === null) delete pane.element.dataset['toolCursor'];
+      else pane.element.dataset['toolCursor'] = cursor;
+    }
+  }
+
   /** The rectangle a drag is making, so the tool can show it before it is a link. */
   setDraft(draft: { readonly page: number; readonly rect: PdfRect } | null): void {
     this.ensureBound();

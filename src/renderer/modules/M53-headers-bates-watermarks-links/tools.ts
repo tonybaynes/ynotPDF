@@ -44,19 +44,38 @@ export function linkTool(options: LinkToolOptions): ToolSpec {
     icon: 'link',
     cursor: 'crosshair',
     activate: () => {
-      options.service()?.setEditing(true);
+      const service = options.service();
+      service?.setEditing(true);
+      service?.setCursor('crosshair');
     },
     deactivate: () => {
       anchor = null;
       current = null;
       const service = options.service();
       service?.setDraft(null);
+      service?.setCursor(null);
       service?.setEditing(false);
     },
     onPointerDown: (event) => {
       if (event.buttons !== 1) return undefined;
       anchor = { page: event.page, x: event.x, y: event.y };
       current = null;
+      /*
+       * Capture the pointer on the layer the event arrived at.
+       *
+       * Without it the tool only hears a move while the pointer is still over that page's tool
+       * layer, and a drag that crosses a page edge — or that the platform delivers slightly
+       * differently — loses its `pointerup` and makes no link at all. macOS CI found this; the
+       * capture is what makes the gesture the same on all three.
+       */
+      const target = event.original.currentTarget ?? event.original.target;
+      if (target instanceof Element) {
+        try {
+          target.setPointerCapture(event.original.pointerId);
+        } catch {
+          // A synthetic event with no real pointer id: the drag still works without capture.
+        }
+      }
       return true;
     },
     onPointerMove: (event) => {
@@ -66,6 +85,10 @@ export function linkTool(options: LinkToolOptions): ToolSpec {
       return true;
     },
     onPointerUp: (event) => {
+      const target = event.original.currentTarget ?? event.original.target;
+      if (target instanceof Element && target.hasPointerCapture(event.original.pointerId)) {
+        target.releasePointerCapture(event.original.pointerId);
+      }
       const start = anchor;
       anchor = null;
       const rect = current ?? (start ? rectOf(event) : null);

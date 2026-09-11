@@ -213,6 +213,9 @@ test('M53: a link drawn on the page goes where the reader said', async () => {
   await j.openDocument(join(FIXTURES, 'multipage.pdf'));
 
   await j.clickRibbon('edit', 'Link');
+  // The tool says it is active by the cursor it asks for; without this the drag below would fail
+  // with "no dialog" rather than with "the tool never came on".
+  await expect(app.page.locator('.viewer[data-tool-cursor="crosshair"]')).toHaveCount(1);
   await j.dragOnPageAt([0.2, 0.2], [0.6, 0.3]);
 
   const dialog = app.page.locator('#link-dialog');
