@@ -26,6 +26,7 @@ import type { SaveStageInput, SaveStageResult, SavePipelineStage } from '@engine
 import { fromEnginePermissions, permits, reasonFor } from '@engine/security/permissions';
 import {
   ALL_ALLOWED,
+  NONE_ALLOWED,
   NO_SECURITY,
   SecurityError,
   UNENCRYPTED,
@@ -73,10 +74,11 @@ export interface DocumentSecurity {
   /** What it should become on the next save. */
   readonly intent: SecurityIntent;
   /**
-   * True when the document was opened with the *owner* password, or with a digital ID, or is not
-   * protected at all — in which case `/P` does not restrict this reader.
+   * True for owner-password authority or an unprotected source. A recipient's individual
+   * rights never grant owner authority, even when that recipient may modify the document.
    */
   readonly unlocked: boolean;
+  readonly authority: 'none' | 'user' | 'owner' | 'recipient';
   /** The certificate the document was opened with, when it was. */
   readonly openedAs: string | null;
   /** True when the intent differs from what is on disk, so a save has work to do. */
@@ -84,19 +86,20 @@ export interface DocumentSecurity {
 }
 
 interface Entry {
-  info: SecurityInfo;
-  unlocked: boolean;
+  sourcePolicy: SecurityInfo;
+  engineInfo: SecurityInfo;
+  sourceCaptured: boolean;
+  authority: DocumentSecurity['authority'];
   openedAs: string | null;
   secrets: Secrets;
-  /**
-   * True when the file this document came from was certificate-protected.
-   *
-   * `info` cannot record it: a certificate-protected file is decrypted before PDFium ever sees
-   * it, so from the engine's side the document is plaintext — which is the truth about the *tab*
-   * and a dangerous thing to believe about the *file*. Without this flag a save would quietly
-   * write the document out unprotected.
-   */
-  wasCertificateProtected: boolean;
+}
+
+/** M11 carries this result intact until the document is registered, before exposing its tab. */
+export interface PreparedSecurityOpen {
+  readonly bytes: Uint8Array;
+  readonly openedAs: string | null;
+  readonly sourceInfo?: SecurityInfo;
+  readonly permissions?: PermissionFlags;
 }
 
 export interface SecurityServiceOptions {
@@ -186,7 +189,7 @@ export class SecurityService {
         // The model already knows whether the file was encrypted, from PDFium; the full picture
         // arrives when `refresh` has asked the worker. Starting from the model rather than from
         // "unencrypted" means a protected document never briefly looks open.
-        info: doc.state.security.encrypted
+        sourcePolicy: doc.state.security.encrypted
           ? {
               ...UNENCRYPTED,
               encrypted: true,
@@ -194,10 +197,11 @@ export class SecurityService {
               permissions: fromEnginePermissions(doc.state.security.permissions),
             }
           : UNENCRYPTED,
-        unlocked: !doc.state.security.encrypted,
+        engineInfo: UNENCRYPTED,
+        sourceCaptured: false,
+        authority: doc.state.security.encrypted ? 'user' : 'none',
         openedAs: null,
         secrets: {},
-        wasCertificateProtected: false,
       });
       void this.refresh(doc);
     }
@@ -219,19 +223,28 @@ export class SecurityService {
     this.entries.delete(documentId);
   }
 
-  /** Reads the file's real security from the engine's bytes. */
+  /** Refreshes working-byte information without replacing a captured source policy. */
   async refresh(document: Document): Promise<void> {
     const entry = this.entries.get(document.id);
     if (!entry) return;
     try {
       const bytes = await document.engine.save(document.handle);
-      entry.info = await this.client.inspect(bytes);
+      entry.engineInfo = await this.client.inspect(bytes);
+      // Direct model opens (without M11) have only PDFium's initial policy. Enrich it once,
+      // but never downgrade a protected source because a working copy is now plaintext.
+      // Check after await: M11 may have installed a recipient policy while this was pending.
+      if (!entry.sourceCaptured) {
+        if (entry.engineInfo.encrypted || !entry.sourcePolicy.encrypted) {
+          entry.sourcePolicy = entry.engineInfo;
+          entry.authority = entry.sourcePolicy.encrypted ? 'user' : 'none';
+        }
+        entry.sourceCaptured = true;
+      }
     } catch {
       // A document the engine cannot serialise is one we can say nothing about. The model's own
       // `encrypted` flag stands, which is the conservative answer.
       return;
     }
-    if (!entry.info.encrypted) entry.unlocked = true;
     this.shell.invalidate();
   }
 
@@ -241,11 +254,12 @@ export class SecurityService {
   securityOf(document: Document): DocumentSecurity {
     const entry = this.entries.get(document.id);
     const intent = intentOf(document);
-    const info = entry?.info ?? UNENCRYPTED;
+    const info = entry?.sourcePolicy ?? UNENCRYPTED;
     return {
       info,
       intent,
-      unlocked: entry?.unlocked ?? !info.encrypted,
+      unlocked: !info.encrypted || entry?.authority === 'owner',
+      authority: entry?.authority ?? 'none',
       openedAs: entry?.openedAs ?? null,
       pending: intent.kind !== 'none' || (info.encrypted && intent.kind === 'none'),
     };
@@ -254,28 +268,30 @@ export class SecurityService {
   /**
    * Whether the reader may do something to the active document.
    *
-   * `true` for an unprotected document, `true` for one opened with the owner password or a
-   * digital ID, and otherwise whatever `/P` says. This is the single question every
+   * `true` for an unprotected document or verified owner-password authority, and otherwise the
+   * source or recipient permissions. This is the question every
    * permission-aware command asks, so a command cannot accidentally consult a different rule.
    */
   allows(action: ProtectedAction, document?: Document | null): boolean {
     const doc = document ?? this.docs.active;
     if (!doc) return true;
     const entry = this.entries.get(doc.id);
-    if (!entry || !entry.info.encrypted || entry.unlocked) return true;
-    return permits(entry.info.permissions, action);
+    if (!entry || !entry.sourcePolicy.encrypted || entry.authority === 'owner') return true;
+    return permits(entry.sourcePolicy.permissions, action);
   }
 
   /** Why an action is not allowed, for a tooltip. Empty when it is allowed. */
   reasonAgainst(action: ProtectedAction, document?: Document | null): string {
-    return this.allows(action, document) ? '' : reasonFor(action);
+    const doc = document ?? this.docs.active;
+    const recipient = doc && this.entries.get(doc.id)?.sourcePolicy.handler === 'public-key';
+    return this.allows(action, doc) ? '' : reasonFor(action, recipient ? 'recipient' : 'password');
   }
 
   /** The permissions in force for the reader — everything, when the document is unlocked. */
   permissionsFor(document: Document): PermissionFlags {
     const entry = this.entries.get(document.id);
-    if (!entry || !entry.info.encrypted || entry.unlocked) return ALL_ALLOWED;
-    return entry.info.permissions;
+    if (!entry || !entry.sourcePolicy.encrypted || entry.authority === 'owner') return ALL_ALLOWED;
+    return entry.sourcePolicy.permissions;
   }
 
   // ---- the commands ------------------------------------------------------------------------------
@@ -312,7 +328,7 @@ export class SecurityService {
   async removeSecurity(document: Document): Promise<boolean> {
     const entry = this.ensure(document);
     const intent = intentOf(document);
-    if (!entry.info.encrypted && intent.kind === 'none') {
+    if (!entry.sourcePolicy.encrypted && intent.kind === 'none') {
       await this.shell.dialogs.info(
         'Not protected',
         `"${document.state.title}" has no security to remove.`,
@@ -321,14 +337,18 @@ export class SecurityService {
     }
     const confirmed = await confirmRemoveSecurity(this.shell.dialogs, {
       title: document.state.title,
-      info: entry.info,
+      info: entry.sourcePolicy,
     });
     if (!confirmed) return false;
 
     // Removing protection from a file that is protected *on disk* needs the owner password, and
     // asking for it now rather than mid-save is the difference between a question and a
     // surprise. A file whose protection was only ever an unsaved intent needs nothing.
-    if (entry.info.encrypted && entry.info.handler === 'standard' && !entry.unlocked) {
+    if (
+      entry.sourcePolicy.encrypted &&
+      entry.sourcePolicy.handler === 'standard' &&
+      entry.authority !== 'owner'
+    ) {
       const password = await this.askAndVerify(document, {
         reason: 'Removing protection needs the password that controls permissions.',
       });
@@ -349,8 +369,9 @@ export class SecurityService {
    */
   async unlock(document: Document): Promise<boolean> {
     const entry = this.ensure(document);
-    if (!entry.info.encrypted) return true;
-    if (entry.unlocked) {
+    if (entry.sourcePolicy.handler === 'public-key') return false;
+    if (!entry.sourcePolicy.encrypted) return true;
+    if (entry.authority === 'owner') {
       await this.shell.dialogs.info(
         'Already unlocked',
         `"${document.state.title}" is already open with full permissions.`,
@@ -380,6 +401,7 @@ export class SecurityService {
     options: { readonly reason: string },
   ): Promise<string | null> {
     const entry = this.ensure(document);
+    if (entry.sourcePolicy.handler !== 'standard') return null;
     const bytes = await document.engine.save(document.handle);
     for (let attempt = 0; ; attempt++) {
       const password = await this.askPassword({
@@ -390,7 +412,7 @@ export class SecurityService {
       if (password === null) return null;
       if (await this.client.isOwnerPassword(bytes, password)) {
         entry.secrets = { ...entry.secrets, owner: password };
-        entry.unlocked = true;
+        entry.authority = 'owner';
         return password;
       }
     }
@@ -478,24 +500,42 @@ export class SecurityService {
    * handler — so this is where such a document is decrypted, with the reader's `.p12`, before the
    * engine ever sees it. Everything else passes straight through untouched.
    */
-  async prepareForOpen(
-    bytes: Uint8Array,
-    name: string,
-  ): Promise<{ bytes: Uint8Array; openedAs: string | null } | null> {
-    let certificateProtected: boolean;
+  async prepareForOpen(bytes: Uint8Array, name: string): Promise<PreparedSecurityOpen | null> {
+    let sourceInfo: SecurityInfo;
     try {
-      certificateProtected = (await this.client.inspect(bytes)).handler === 'public-key';
+      sourceInfo = await this.client.inspect(bytes);
     } catch {
       return { bytes, openedAs: null };
     }
-    if (!certificateProtected) return { bytes, openedAs: null };
+    if (sourceInfo.handler !== 'public-key') return { bytes, openedAs: null, sourceInfo };
     await this.shell.dialogs.info(
       'Digital ID needed',
       `"${name}" is protected with certificates. Choose the digital ID (.p12 or .pfx) belonging to one of its recipients.`,
     );
     const opened = await this.unlockBytesWithDigitalId(bytes, name);
     // Cancelling is not a failure: no tab is left behind and no error is shown.
-    return opened ? { bytes: opened.bytes, openedAs: opened.openedAs } : null;
+    return opened ? { ...opened, sourceInfo } : null;
+  }
+
+  /** Installed before tab attachment, so listeners and commands never see unrestricted plaintext. */
+  noteSource(document: Document, prepared: PreparedSecurityOpen): void {
+    const entry = this.ensure(document);
+    if (prepared.sourceInfo) {
+      entry.sourcePolicy =
+        !prepared.sourceInfo.encrypted && document.state.security.encrypted
+          ? {
+              ...prepared.sourceInfo,
+              encrypted: true,
+              handler: 'standard',
+              permissions: fromEnginePermissions(document.state.security.permissions),
+            }
+          : prepared.sourceInfo;
+      entry.sourceCaptured = true;
+      entry.authority = entry.sourcePolicy.encrypted ? 'user' : 'none';
+    }
+    if (prepared.openedAs !== null) {
+      this.noteOpenedAs(document.id, prepared.openedAs, prepared.permissions);
+    }
   }
 
   /** Records how a document was opened, once M11 has made a tab for it. */
@@ -505,11 +545,18 @@ export class SecurityService {
     if (openedAs !== null) {
       // Opened with a digital ID, so the file it came from was certificate-protected — which the
       // engine's bytes no longer show, because they are the decrypted ones.
-      entry.wasCertificateProtected = true;
       // A recipient's own envelope says what they may do, and it is not `/P` — so it is kept
-      // rather than derived, and the document is *not* treated as unlocked unless it says so.
-      entry.unlocked = permissions === undefined || permits(permissions, 'modify');
-      if (permissions) entry.info = { ...entry.info, permissions };
+      // rather than derived. Even unrestricted recipient permissions are not owner authority.
+      entry.authority = 'recipient';
+      entry.sourceCaptured = true;
+      entry.sourcePolicy = {
+        ...entry.sourcePolicy,
+        encrypted: true,
+        handler: 'public-key',
+        opensWithoutPassword: false,
+        rawPermissions: null,
+        permissions: { ...(permissions ?? NONE_ALLOWED) },
+      };
     }
     this.entries.set(documentId, entry);
     this.shell.invalidate();
@@ -549,11 +596,11 @@ export class SecurityService {
     // Nothing was asked for, but the file on disk is protected: the save keeps it that way, using
     // the passwords held for the session.
     const entry = this.entries.get(documentId);
-    return entry?.info.encrypted === true && this.canReprotect(entry);
+    return entry?.sourcePolicy.encrypted === true && this.canReprotect(entry);
   }
 
   private canReprotect(entry: Entry): boolean {
-    if (entry.info.handler === 'public-key') return entry.info.recipients.length > 0;
+    if (entry.sourcePolicy.handler === 'public-key') return false;
     return entry.secrets.user !== undefined || entry.secrets.owner !== undefined;
   }
 
@@ -592,7 +639,7 @@ export class SecurityService {
    * clear — and the reader has to be told that, before they send the file to someone.
    */
   private certificateWarning(doc: Document, entry: Entry | undefined): string[] {
-    if (!entry?.wasCertificateProtected || hasIntent(doc)) return [];
+    if (entry?.sourcePolicy.handler !== 'public-key' || hasIntent(doc)) return [];
     return [
       'This document was protected with certificates, and the saved copy is not: a protected file ' +
         'names its recipients but does not contain their certificates, so the protection cannot be ' +
@@ -611,23 +658,18 @@ export class SecurityService {
     // *unprotect* carries `{ kind: 'none' }`, and treating that as "nothing was asked for" would
     // put the protection straight back on — which is the one thing Remove Security must not do.
     if (hasIntent(doc)) return intentOf(doc);
-    if (!entry?.info.encrypted) return NO_SECURITY;
-    if (entry.info.handler === 'public-key') {
-      return entry.info.recipients.length === 0
-        ? NO_SECURITY
-        : {
-            kind: 'certificate',
-            algorithm: 'aes-256',
-            scope: entry.info.metadataEncrypted ? 'all' : 'except-metadata',
-            recipients: entry.info.recipients,
-          };
+    if (!entry?.sourcePolicy.encrypted) return NO_SECURITY;
+    if (entry.sourcePolicy.handler === 'public-key') {
+      // Source envelopes identify recipients but contain no certificates to encrypt to.
+      // An explicit certificate intent above supplies those; otherwise the warning gates Save.
+      return NO_SECURITY;
     }
     return {
       kind: 'password',
-      algorithm: entry.info.algorithm ?? 'aes-256',
-      scope: entry.info.metadataEncrypted ? 'all' : 'except-metadata',
-      permissions: entry.info.permissions,
-      hasUserPassword: !entry.info.opensWithoutPassword,
+      algorithm: entry.sourcePolicy.algorithm ?? 'aes-256',
+      scope: entry.sourcePolicy.metadataEncrypted ? 'all' : 'except-metadata',
+      permissions: entry.sourcePolicy.permissions,
+      hasUserPassword: !entry.sourcePolicy.opensWithoutPassword,
       hasOwnerPassword: true,
     };
   }
@@ -716,10 +758,11 @@ export class SecurityService {
    */
   async unlockWithPassword(document: Document, password: string): Promise<boolean> {
     const entry = this.ensure(document);
+    if (entry.sourcePolicy.handler !== 'standard') return false;
     const bytes = await document.engine.save(document.handle);
     if (!(await this.client.isOwnerPassword(bytes, password))) return false;
     entry.secrets = { ...entry.secrets, owner: password };
-    entry.unlocked = true;
+    entry.authority = 'owner';
     this.shell.invalidate();
     return true;
   }
@@ -741,13 +784,19 @@ export class SecurityService {
     const file = await invoke('file:read', path);
     const id = await invoke('file:read', p12Path);
     const opened = await this.client.unlock(file.bytes, id.bytes, password);
+    const sourceInfo = await this.client.inspect(file.bytes);
     const viewer = this.registry.service<{
-      open(f: { path: string; name: string; bytes: Uint8Array }): Promise<{ id: string } | null>;
+      open(
+        f: { path: string; name: string; bytes: Uint8Array },
+        prepared: PreparedSecurityOpen,
+      ): Promise<{ id: string } | null>;
     }>('viewer');
-    const tab = await viewer.open({ path, name: file.name, bytes: opened.bytes });
+    const tab = await viewer.open(
+      { path, name: file.name, bytes: file.bytes },
+      { ...opened, sourceInfo },
+    );
     if (!tab) throw new SecurityError('failed', 'The document was unlocked but did not open.');
-    const active = this.docs.active;
-    if (active) this.noteOpenedAs(active.id, opened.openedAs, opened.permissions);
+    const active = this.docs.get(tab.id);
     return {
       openedAs: opened.openedAs,
       permissions: opened.permissions,
@@ -831,11 +880,12 @@ export class SecurityService {
 
   private blank(): Entry {
     return {
-      info: UNENCRYPTED,
-      unlocked: true,
+      sourcePolicy: UNENCRYPTED,
+      engineInfo: UNENCRYPTED,
+      sourceCaptured: false,
+      authority: 'none',
       openedAs: null,
       secrets: {},
-      wasCertificateProtected: false,
     };
   }
 }

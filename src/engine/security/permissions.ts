@@ -181,7 +181,10 @@ export function permits(flags: PermissionFlags, action: ProtectedAction): boolea
  * Always names the permission and always says what would lift it, because a control that is
  * disabled without saying why is the thing this app is trying not to be.
  */
-export function reasonFor(action: ProtectedAction): string {
+export function reasonFor(
+  action: ProtectedAction,
+  authority: 'password' | 'recipient' = 'password',
+): string {
   const what: Record<ProtectedAction, string> = {
     print: 'printing',
     'print-high': 'printing at full resolution',
@@ -192,7 +195,11 @@ export function reasonFor(action: ProtectedAction): string {
     'fill-forms': 'filling in form fields',
     assemble: 'inserting, deleting or moving pages',
   };
-  return `The document's security settings do not allow ${what[action]}. Enter the owner password to unlock it.`;
+  const next =
+    authority === 'recipient'
+      ? 'This digital ID does not grant that permission.'
+      : 'Enter the owner password to unlock it.';
+  return `The document's security settings do not allow ${what[action]}. ${next}`;
 }
 
 /** Every action a permission set forbids. Used by the status item and the Properties tab. */

@@ -27,6 +27,10 @@ import type { ThemeManager } from '@theme/ThemeManager';
 import { THEME_SERVICE } from '@modules/M01-theme-system/manifest';
 import { DOCUMENT_SERVICE, type DocumentService } from '@modules/M20-document-model/manifest';
 import type { OpenedDocument } from '@modules/M20-document-model/DocumentService';
+import type {
+  PreparedSecurityOpen,
+  SecurityService,
+} from '@modules/M70-encryption/SecurityService';
 // A type, so this import disappears at compile time and M11 gains no dependency on M100 in the
 // bundle. The service is optional and looked up by name (ADR 0019 §2).
 import type { RepairService } from '@modules/M100-optimise-repair/OptimiseService';
@@ -210,7 +214,10 @@ export class ViewerService {
    * Opens a file into a new tab. Returns the tab, or `null` when the reader cancelled the
    * password prompt — cancelling leaves nothing behind.
    */
-  async open(file: OpenedFile): Promise<DocumentTab | null> {
+  async open(
+    file: OpenedFile,
+    preparedSecurity?: PreparedSecurityOpen,
+  ): Promise<DocumentTab | null> {
     const service = this.registry.service<DocumentService>(DOCUMENT_SERVICE);
     const existing = file.path ? this.documents.tabs.find((t) => t.path === file.path) : undefined;
     if (existing) {
@@ -221,7 +228,7 @@ export class ViewerService {
     // knows only the standard security handler, so such a file is not "wrong password" to it, it
     // is unreadable. M70 registers the `security` service and does the decryption with the
     // reader's digital ID; without M70 the bytes pass through untouched (ADR 0012).
-    const prepared = await this.prepareBytes(file);
+    const prepared = preparedSecurity ?? (await this.prepareBytes(file));
     if (!prepared) return null;
 
     const attempt = (bytes: Uint8Array): Promise<OpenedDocument | null> =>
@@ -233,6 +240,11 @@ export class ViewerService {
             path: file.path,
             name: file.name,
             ...(password === undefined ? {} : { password }),
+            beforeAttach: (document) => {
+              if (prepared.sourceInfo || prepared.openedAs !== null) {
+                this.registry.service<SecurityService>('security').noteSource(document, prepared);
+              }
+            },
           }),
         { dialogs: this.shell.dialogs, name: file.name },
       );
@@ -249,11 +261,6 @@ export class ViewerService {
       opened = await attempt(repaired);
     }
     if (!opened) return null;
-    if (prepared.openedAs !== null) {
-      this.registry
-        .service<{ noteOpenedAs(id: string, openedAs: string | null): void }>('security')
-        .noteOpenedAs(opened.document.id, prepared.openedAs);
-    }
     await this.attach(opened.tab, opened.document);
     if (hasBridge() && file.path) await invoke('recent:add', file.path).catch(() => []);
     return opened.tab;
@@ -264,15 +271,10 @@ export class ViewerService {
    * them. Returns `null` when the reader cancelled, which leaves no tab behind and shows no
    * error, because cancelling is not a failure.
    */
-  private async prepareBytes(
-    file: OpenedFile,
-  ): Promise<{ bytes: Uint8Array; openedAs: string | null } | null> {
+  private async prepareBytes(file: OpenedFile): Promise<PreparedSecurityOpen | null> {
     if (!this.registry.hasService('security')) return { bytes: file.bytes, openedAs: null };
     const security = this.registry.service<{
-      prepareForOpen(
-        bytes: Uint8Array,
-        name: string,
-      ): Promise<{ bytes: Uint8Array; openedAs: string | null } | null>;
+      prepareForOpen(bytes: Uint8Array, name: string): Promise<PreparedSecurityOpen | null>;
     }>('security');
     return security.prepareForOpen(file.bytes, file.name);
   }

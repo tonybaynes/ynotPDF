@@ -10,7 +10,7 @@
 
 import type { ShellServices } from '@app/services';
 import { SERVICE } from '@app/services';
-import type { Registry } from '@core/Registry';
+import { PERMISSION_GATE, type PermissionGate, type Registry } from '@core/Registry';
 import type { Document } from '@core/Document';
 import { pageSizeOf } from '@core/model';
 import type { SelectionState as CoreSelection, TextRange } from '@core/Selection';
@@ -459,8 +459,26 @@ export class SelectFindService {
     return selectionText(state.selection.selection, this.text.lookup(source.key));
   }
 
+  /** The contextual Copy command must still work in ordinary text inputs. */
+  canCopy(): boolean {
+    return (
+      !this.registry.hasService(PERMISSION_GATE) ||
+      this.registry.service<PermissionGate>(PERMISSION_GATE).allows('copy')
+    );
+  }
+
+  /** Tool callbacks and direct service calls enforce the same policy as registered commands. */
+  private allowOutput(action: 'copy' | 'print'): boolean {
+    if (!this.registry.hasService(PERMISSION_GATE)) return true;
+    const gate = this.registry.service<PermissionGate>(PERMISSION_GATE);
+    if (gate.allows(action)) return true;
+    this.shell.toasts.show({ kind: 'warning', text: gate.reasonAgainst(action) });
+    return false;
+  }
+
   /** Copy, optionally with formatting (RTF as well as plain text). */
   async copySelection(options: { readonly rtf?: boolean } = {}): Promise<boolean> {
+    if (!this.allowOutput('copy')) return false;
     const state = this.activeTab();
     const source = this.activeSource();
     if (!state || !source || state.selection.isEmpty) return false;
@@ -494,6 +512,7 @@ export class SelectFindService {
     readonly x: number;
     readonly y: number;
   }): Promise<boolean> {
+    if (!this.allowOutput('copy')) return false;
     const source = this.activeSource();
     const point = at ?? this.lastPointer;
     if (!source || !point) return false;
@@ -540,6 +559,7 @@ export class SelectFindService {
     page: number,
     rect: PdfRect,
   ): Promise<{ width: number; height: number } | null> {
+    if (!this.allowOutput('copy')) return null;
     const source = this.activeSource();
     const document = this.activeDocument();
     if (!source || !document) return null;
@@ -1013,6 +1033,7 @@ export class SelectFindService {
 
   /** Opens the print dialog and carries out whatever it says. */
   async openPrint(overrides: Partial<PrintSettings> = {}): Promise<'printed' | 'saved' | null> {
+    if (!this.allowOutput('print')) return null;
     const document = this.activeDocument();
     const source = this.activeSource();
     if (!document || !source) return null;
@@ -1045,6 +1066,7 @@ export class SelectFindService {
 
   /** Prints without asking — the dialog has already been answered, or a test drove it. */
   async runPrint(settings: PrintSettings, dryRun = false): Promise<'printed' | null> {
+    if (!this.allowOutput('print')) return null;
     const document = this.activeDocument();
     const source = this.activeSource();
     if (!document || !source) return null;
@@ -1099,6 +1121,7 @@ export class SelectFindService {
     documentPath: string | null;
     error: string | null;
   } | null> {
+    if (!this.allowOutput('print')) return null;
     const document = this.activeDocument();
     const source = this.activeSource();
     if (!document || !source) return null;
@@ -1119,6 +1142,7 @@ export class SelectFindService {
 
   /** "Print to PDF": the same imposition, written to a file. */
   async runPrintToPdf(settings: PrintSettings, path?: string): Promise<'saved' | null> {
+    if (!this.allowOutput('print')) return null;
     const document = this.activeDocument();
     const source = this.activeSource();
     if (!document || !source) return null;
