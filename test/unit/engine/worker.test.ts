@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EngineClient, type WorkerLike } from '@engine/EngineClient';
 import { EngineError, NotImplementedEngine, type DocHandle } from '@engine/PdfEngine';
 import type { RpcFromWorker, RpcToWorker } from '@engine/rpc';
@@ -69,8 +69,11 @@ describe('engine worker queue and cancellation', () => {
     const second = client.request('render', [doc, 1, 1]);
     const third = client.request('render', [doc, 2, 1]);
     const info = client.request('info', []);
-    await new Promise((r) => setTimeout(r, 5));
-    expect(slow.started).toEqual([0]); // one at a time
+    // Polled, not slept on: five milliseconds is plenty on an idle machine and nothing at all
+    // when the whole unit suite is running in parallel, which is where this used to fail.
+    await vi.waitFor(() => {
+      expect(slow.started).toEqual([0]); // one at a time
+    });
     expect(client.pendingCount).toBe(4);
     // Cancel a queued request: rejected locally, never started.
     second.cancel();
@@ -78,9 +81,10 @@ describe('engine worker queue and cancellation', () => {
     // Cancel the in-flight one: the engine is told to abort.
     first.cancel();
     await expect(first.promise).rejects.toMatchObject({ code: 'cancelled' });
-    await new Promise((r) => setTimeout(r, 5));
-    expect(slow.cancelCalls).toBe(1);
-    expect(slow.started).toEqual([0, 2]);
+    await vi.waitFor(() => {
+      expect(slow.cancelCalls).toBe(1);
+      expect(slow.started).toEqual([0, 2]);
+    });
     // cancelRenders drops what is left; non-render requests survive.
     expect(client.cancelRenders()).toBe(1);
     await expect(third.promise).rejects.toMatchObject({ code: 'cancelled' });

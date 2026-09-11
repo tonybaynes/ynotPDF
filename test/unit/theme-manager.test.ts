@@ -5,7 +5,12 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { memoryStorage, ThemeManager, type ThemeStorage } from '@theme/ThemeManager';
+import {
+  memoryStorage,
+  ThemeManager,
+  type ThemeState,
+  type ThemeStorage,
+} from '@theme/ThemeManager';
 import {
   clampUiScale,
   DEFAULT_THEME,
@@ -307,5 +312,74 @@ describe('ipcThemeStorage', () => {
       [UI_SCALE_KEY]: 150,
       [NIGHT_MODE_KEY]: true,
     });
+  });
+});
+
+/**
+ * Saving the theme is fire-and-forget, and two changes in quick succession are two writes in
+ * flight at once. Nothing made them land in the order they were made, and nothing let a caller
+ * wait for them — so a slow first write could overwrite a fast second one, and the store would
+ * then hold a value the screen had already moved on from.
+ *
+ * That is not theoretical. `PreferencesService` applies a settings change by handing it to the
+ * `ThemeManager` and then reloading every service — `ThemeManager.load()` included, which reads
+ * the store straight back. A stale store there puts the old scale back on screen and leaves it
+ * there: on the macOS runner, setting the interface scale back to 100 % left it at 150 %
+ * (2026-09-11).
+ */
+describe('saving the theme, when two changes come close together', () => {
+  /** A store whose writes take as long as the test says, in the order the test says. */
+  function pacedStorage(delays: number[]): ThemeStorage & { saved: Partial<ThemeState> } {
+    let saved: Partial<ThemeState> = {};
+    let call = 0;
+    const store = {
+      get saved() {
+        return saved;
+      },
+      read: () => Promise.resolve({ ...saved }),
+      write: async (state: ThemeState) => {
+        const wait = delays[call++] ?? 0;
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        saved = { ...state };
+      },
+    };
+    return store;
+  }
+
+  it('leaves the store holding the last change, not the slowest one', async () => {
+    const { root } = fakeRoot();
+    // The first write takes 30 ms, the second none: unordered, the first would land last.
+    const storage = pacedStorage([30, 0]);
+    const themes = await ThemeManager.create({ root, storage });
+
+    themes.setScale(150);
+    themes.setScale(100);
+    await themes.whenSaved();
+
+    expect(storage.saved.scale, 'the store kept the scale the reader chose last').toBe(100);
+  });
+
+  it('a reload after a change reads back what the change wrote', async () => {
+    const { root, properties } = fakeRoot();
+    const storage = pacedStorage([30, 0]);
+    const themes = await ThemeManager.create({ root, storage });
+
+    themes.setScale(150);
+    themes.setScale(100);
+    // What `PreferencesService.apply()` does next: reload every service, this one among them.
+    await themes.whenSaved();
+    await themes.load();
+
+    expect(themes.uiScale).toBe(100);
+    expect(properties['--ui-scale']).toBe('1');
+  });
+
+  it('waits for a save that has not finished before answering', async () => {
+    const { root } = fakeRoot();
+    const storage = pacedStorage([25]);
+    const themes = await ThemeManager.create({ root, storage });
+    themes.set('midnight');
+    await themes.whenSaved();
+    expect(storage.saved.theme).toBe('midnight');
   });
 });
