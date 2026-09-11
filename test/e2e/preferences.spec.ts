@@ -251,7 +251,14 @@ test.describe('a setting changes, persists and applies', () => {
     // Setting it back through Preferences, the same way the reader would.
     await setting('ui.scale').locator('input[type="number"]').fill('100');
     await setting('ui.scale').locator('input[type="number"]').blur();
-    await expect.poll(uiScale).toBe('1');
+    // Both halves, so a failure says *which* half broke. This has failed intermittently on the
+    // macOS runner with the scale stuck at 1.5, and the one thing the old assertion could not
+    // tell us was whether the write had landed: a store holding 100 with the screen at 1.5 means
+    // the applier never ran, and a store still holding 150 means the edit never reached it. The
+    // extra expectation is stricter than what it replaces, not looser (2026-09-11).
+    await expect
+      .poll(async () => ({ applied: await uiScale(), stored: await read('ui.scale') }))
+      .toEqual({ applied: '1', stored: 100 });
     expect(await fontSize()).toBe('14px');
     await write('ui.scale', undefined);
   });
