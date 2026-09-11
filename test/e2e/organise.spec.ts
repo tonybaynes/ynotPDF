@@ -13,7 +13,7 @@ import { expect, test } from '@playwright/test';
 import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { launchApp, type App } from './harness';
+import { fixturePath, launchApp, type App } from './harness';
 
 const FIXTURES = join(process.cwd(), 'test', 'fixtures');
 
@@ -72,7 +72,7 @@ function stage(fixture: string, as = fixture): string {
 }
 
 /** Opens a fixture by bytes and waits for its first page. */
-async function open(name: string, path = `C:/fixtures/${name}`): Promise<void> {
+async function open(name: string, path = fixturePath(name)): Promise<void> {
   const bytes = Array.from(readFileSync(join(FIXTURES, name)));
   await app.run('file.openBytes', { file: { path, name, bytes } });
   await app.page.waitForSelector('.viewer-content .page');
@@ -88,7 +88,7 @@ async function openPath(path: string): Promise<void> {
 
 /** The bytes of a fixture, as a plain array for the structured-clone bridge. */
 const fileArg = (name: string): { path: string; name: string; bytes: number[] } => ({
-  path: `C:/fixtures/${name}`,
+  path: fixturePath(name),
   name,
   bytes: Array.from(readFileSync(join(FIXTURES, name))),
 });

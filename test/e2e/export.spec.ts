@@ -17,7 +17,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { launchApp, type App } from './harness';
+import { fixturePath, launchApp, type App } from './harness';
 
 const FIXTURES = join(process.cwd(), 'test', 'fixtures');
 
@@ -77,7 +77,7 @@ const state = (): Promise<ExportState> => app.run('dev.exportState') as Promise<
 
 /** The bytes of a fixture, as a plain array for the structured-clone bridge. */
 const fileArg = (name: string): { path: string; name: string; bytes: number[] } => ({
-  path: `C:/fixtures/${name}`,
+  path: fixturePath(name),
   name,
   bytes: Array.from(readFileSync(join(FIXTURES, name))),
 });
