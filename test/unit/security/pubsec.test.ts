@@ -54,9 +54,28 @@ describe('the block ciphers', () => {
     expect(new TextDecoder().decode(await aesDecryptContent(key, b))).toBe('the quick brown fox');
   });
 
+  /**
+   * The property is "a wrong key does not get the data back" — not "a wrong key throws".
+   *
+   * This used to assert `rejects.toThrow()`, and that is a coin flip. `crypto.subtle.decrypt`
+   * rejects AES-CBC when the PKCS#7 padding is invalid, and a wrong key leaves random bytes in
+   * the final block: they pass for valid padding about **1 time in 256** (the last byte reads as
+   * 1, or the last n bytes all read as n). When that happens the decrypt resolves, returns
+   * rubbish, and the test failed — having found nothing wrong. It fired on 2026-09-11.
+   *
+   * Both outcomes are correct behaviour. Recovering the plaintext would not be, so that is what
+   * is asserted. Deterministic, and a stronger claim than the one it replaces.
+   */
   it('refuses to decrypt with the wrong key', async () => {
-    const data = await aesEncryptContent(randomBytes(32), new Uint8Array(64));
-    await expect(aesDecryptContent(randomBytes(32), data)).rejects.toThrow();
+    const plain = randomBytes(64);
+    const data = await aesEncryptContent(randomBytes(32), plain);
+    let recovered: Uint8Array | null = null;
+    try {
+      recovered = await aesDecryptContent(randomBytes(32), data);
+    } catch {
+      // Rejected outright — the common case, and the one the old assertion relied on.
+    }
+    if (recovered !== null) expect(toHex(recovered)).not.toBe(toHex(plain));
   });
 
   it('does AES-CBC without padding, which is what the spec asks for in /UE', () => {
