@@ -84,7 +84,7 @@ remaining or competitor parity. Existing audit findings remain tracked in
 
 | Reopened module | Required completion work | Task |
 |---|---|---|
-| M11 | PR59 raster repair passed full local UI; corrected page/border test oracle retains 1 CSS pixel tolerance, final CI pending. Same-task follow-up must reproduce/repair potentially missing full-screen/reading Escape exit, exercise real ruler drags and record actual performance measurements | M11 - Complete Fit Visible |
+| M11 | PR59 Fit Visible/raster repair merged as 2696119 with all eight CI checks green. Same-task follow-up must reproduce/repair potentially missing full-screen/reading Escape exit, exercise real ruler drags and record actual performance measurements | M11 - Complete Fit Visible |
 | M13 | PR58 merged; PR62 has eight green CI checks, but merge is held for repeated Linux tile-journey right-edge overflow diagnosis. Region snapshot fidelity, selection-input journeys and independent RTF application verification remain; installed Word is a valid substitute for absent WordPad, accurately recorded | M13 - Preserve annotations in PDF printing |
 | M41 | Crop ratios/geometry merged in PR55. PR64 import deskew and Combine folder/desktop-drop routes passed 567 local UI tests without skips/retries/failures; exact-head CI pending | M41 - Complete import and Combine workflows |
 | M92 | Group 4 TIFF merged in PR57. PR63 intrinsic image fidelity and separate HTML appearance passed full local UI; test-only Blink width correction passed focused checks, fresh CI pending. Audit PR65 addresses export/status readability; broader copy-permission gate remains unmerged | M92 - Complete image export fidelity |

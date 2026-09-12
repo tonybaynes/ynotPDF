@@ -15,9 +15,9 @@ LIVE STATUS — 2026-09-12
 ACTIVE REPAIRS (finish existing scope before new modules)
   M11 - Complete Fit Visible
         Content-aware fit, rotation/crop geometry, cache invalidation.
-        PR59 remains open: full viewer UI passed 561 tests (4 existing skips).
-        Corrected actual page/border test geometry keeps the 1 CSS pixel raster
-        tolerance; 12 final integration checks pass, final platform CI pending.
+        PR59 Fit Visible/raster repair MERGED as 2696119, all 8 CI checks green.
+        Full local viewer UI passed 561 tests (4 existing skips). Corrected
+        actual page/border test geometry keeps the 1 CSS pixel raster tolerance.
         Same-task follow-up: reproduce/repair potentially missing Escape exit
         from full-screen/reading modes; exercise F11 and real ruler-drag guides.
         Record measured frame rates: adaptive test passes do not prove 55 fps.
@@ -77,8 +77,9 @@ MERGED REVIEW / REPAIR HISTORY
   PR57 — M92 Group 4 TIFF and single-page compression; merge c492bfd.
   PR55 — M41 fixed/custom crop ratios and rotated geometry; merge 214f7f4.
   PR61 — tracker for merged repairs and remaining acceptance; merge 5ec4c3e.
+  PR59 — M11 Fit Visible bounds and browser tile scaling; merge 2696119.
   All passed Windows, macOS, Ubuntu and Windows ARM installer checks.
-  Required follow-ups remain active in the same M13, M41 and M92 tasks.
+  Required follow-ups remain active in all four existing module tasks.
 
 LOCAL UI TEST COORDINATION
   All local Electron runs, including focused tests, use one coordinator-owned
