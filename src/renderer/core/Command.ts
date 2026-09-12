@@ -7,6 +7,8 @@
  *   call the engine). The `UndoStack` serialises them, so a command never runs concurrently
  *   with another.
  * - `do()` must be safe to call again after `undo()` (redo).
+ * - A rejected do/undo must restore its own pre-call state. Composites roll back completed
+ *   children; a child that changes multiple objects owns its own partial-failure rollback.
  * - `merge(next)` lets consecutive commands coalesce (typing characters, dragging a handle):
  *   return a new command representing both, or `null` to keep them separate. The stack calls
  *   it on the *top* command with the *incoming* one, only when both are `mergeable`.
@@ -21,6 +23,17 @@
 export interface CommandJson {
   readonly id: string;
   readonly data: unknown;
+}
+
+/** Rollback could not restore the pre-operation state; ordinary saving must not conceal it. */
+export class CommandRollbackError extends AggregateError {
+  constructor(errors: unknown[]) {
+    super(
+      errors,
+      'The operation failed and some changes could not be rolled back. Reopen the document or recover the last checkpoint before continuing.',
+    );
+    this.name = 'CommandRollbackError';
+  }
 }
 
 export interface Command {
@@ -74,13 +87,35 @@ export class CompositeCommand implements Command {
   }
 
   async do(): Promise<void> {
-    for (const c of this.commands) await c.do();
+    await this.perform(this.commands, 'do', 'undo');
   }
 
   async undo(): Promise<void> {
-    for (let i = this.commands.length - 1; i >= 0; i--) {
-      const c = this.commands[i];
-      if (c) await c.undo();
+    await this.perform([...this.commands].reverse(), 'undo', 'do');
+  }
+
+  private async perform(
+    commands: ReadonlyArray<Command>,
+    action: 'do' | 'undo',
+    inverse: 'do' | 'undo',
+  ): Promise<void> {
+    const completed: Command[] = [];
+    try {
+      for (const command of commands) {
+        await command[action]();
+        completed.push(command);
+      }
+    } catch (error) {
+      const failures: unknown[] = [];
+      for (const command of completed.reverse()) {
+        try {
+          await command[inverse]();
+        } catch (rollbackError) {
+          failures.push(rollbackError);
+        }
+      }
+      if (failures.length) throw new CommandRollbackError([error, ...failures]);
+      throw error;
     }
   }
 

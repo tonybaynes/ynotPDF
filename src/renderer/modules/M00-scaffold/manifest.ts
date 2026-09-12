@@ -48,7 +48,7 @@ export default defineModule({
           const recent = hasBridge() ? await invoke('recent:list') : [];
           return recent;
         }
-        const file = await invoke('file:read', path);
+        const file = await invoke('recent:open', path);
         return ctx.run('file.openBytes', { [FILE_ARG]: file });
       },
     },

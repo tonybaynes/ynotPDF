@@ -18,7 +18,15 @@
  */
 
 import { chromium, expect, test, type Frame } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import {
+  realpathSync,
+  copyFileSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -52,7 +60,7 @@ interface SecurityState {
 let workspace: string;
 
 test.beforeAll(() => {
-  workspace = mkdtempSync(join(tmpdir(), 'ynot-security-'));
+  workspace = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-security-')));
 });
 
 test.afterAll(() => {
@@ -174,6 +182,7 @@ test.describe('document security', () => {
 
   test.beforeAll(async () => {
     app = await launchApp();
+    await app.grantPath(workspace, true);
   });
   test.afterAll(async () => {
     await app.close();
@@ -315,6 +324,16 @@ test.describe('document security', () => {
     expect(restricted.unlocked).toBe(false);
     expect(restricted.allows['print']).toBe(false);
     expect(restricted.allows['copy']).toBe(false);
+    for (const id of [
+      'convert.exportImages',
+      'convert.exportAllImages',
+      'convert.exportText',
+      'convert.exportHtml',
+      'convert.exportRtf',
+    ]) {
+      expect(await app.isEnabled(id), id).toBe(false);
+      await expect(app.run(id, { ask: false })).rejects.toThrow(/do not allow copying/);
+    }
     expect(restricted.allows['modify']).toBe(false);
 
     // The tooltip is a sentence naming the permission and what would lift it — never a bare
@@ -346,6 +365,21 @@ test.describe('document security', () => {
     expect(unlocked.unlocked).toBe(true);
     expect(unlocked.allows['print']).toBe(true);
     expect(unlocked.reasonAgainstPrint).toBe('');
+    for (const id of [
+      'convert.exportImages',
+      'convert.exportAllImages',
+      'convert.exportText',
+      'convert.exportHtml',
+      'convert.exportRtf',
+    ])
+      expect(await app.isEnabled(id), id).toBe(true);
+    const exported = await app.run('convert.exportImages', {
+      pages: [0],
+      dpi: 72,
+      ask: false,
+      directory: workspace,
+    });
+    expect(exported).toMatchObject({ kind: 'images' });
     expect(await app.isEnabled('protect.security')).toBe(true);
     await closeDiscarding(app);
   });
@@ -504,6 +538,16 @@ test.describe('document security', () => {
       await expect(app.run('file.print')).rejects.toThrow(/do not allow printing/);
       await app.run('edit.selectAll');
       expect(await app.isEnabled('edit.copy')).toBe(false);
+      for (const id of [
+        'convert.exportImages',
+        'convert.exportAllImages',
+        'convert.exportText',
+        'convert.exportHtml',
+        'convert.exportRtf',
+      ]) {
+        expect(await app.isEnabled(id), id).toBe(false);
+        await expect(app.run(id, { ask: false })).rejects.toThrow(/do not allow copying/);
+      }
       await expect(app.run('edit.copyFormatted')).rejects.toThrow(/do not allow copying/);
       expect(await app.run('dev.snapshot', { page: 0, x0: 0, y0: 0, x1: 100, y1: 100 })).toBeNull();
       expect(await app.run('dev.printDryRun')).toBeNull();
@@ -538,4 +582,135 @@ test.describe('document security', () => {
       await closeDiscarding(app);
     }
   });
+});
+
+/** Crash only this test's Electron process tree; leave its recovery store on disk. */
+function crashSecurityApp(app: App): void {
+  const pid = app.electron.process().pid;
+  if (process.platform === 'win32' && pid !== undefined) {
+    execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
+  } else {
+    app.electron.process().kill('SIGKILL');
+  }
+}
+
+test('protected recovery keeps its record after a wrong password and cancellation', async () => {
+  const first = await launchApp({ noDemo: true });
+  await first.grantPath(workspace, true);
+  let source: Buffer;
+  let path: string;
+  try {
+    path = await protectedFile(first, 'password-recovery.pdf', {
+      kind: 'password',
+      algorithm: 'aes-256',
+      user: 'recover-reader',
+      owner: 'recover-owner',
+      print: 'none',
+      copy: false,
+      modify: 'all',
+    });
+    source = readFileSync(path);
+    await openProtected(first, path, 'recover-reader');
+    await first.run('dev.documentApply', { kind: 'metadata', value: 'Recovered protected edits' });
+    expect(await first.run('file.autosaveNow')).toMatchObject({ written: 1 });
+    crashSecurityApp(first);
+  } catch (error) {
+    await first.close();
+    throw error;
+  }
+  const second = await launchApp({ reuseUserData: true, noDemo: true });
+  try {
+    const recovery = second.page.locator('#save-recovery-dialog');
+    await expect(recovery).toBeVisible();
+    await recovery.getByRole('button', { name: 'Recover', exact: true }).click();
+    const password = second.page.locator('#password-dialog');
+    await expect(password).toBeVisible();
+    await password.locator('#password-input').fill('wrong-password');
+    await password.getByRole('button', { name: 'Open', exact: true }).click();
+    await expect(password).toContainText('That password did not open the file');
+    await password.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(password).toHaveCount(0);
+    await expect(second.page.locator('.tab')).toHaveCount(0);
+    expect(await second.run('dev.recoveryList')).toHaveLength(1);
+    const retry = second.run('dev.recoverAll');
+    await expect(password).toBeVisible();
+    await password.locator('#password-input').fill('recover-reader');
+    await password.getByRole('button', { name: 'Open', exact: true }).click();
+    expect(await retry).toMatchObject({ found: 1, recovered: 1 });
+    await expect(second.page.locator('.tab')).toHaveCount(1);
+    expect(await second.run('dev.documentSummary')).toMatchObject({
+      metadataTitle: 'Recovered protected edits',
+      dirty: true,
+    });
+    expect(await state(second)).toMatchObject({
+      unlocked: false,
+      allows: { copy: false, print: false },
+    });
+    // Recovery JSON cannot grant authority to its remembered source path after restart.
+    expect(await second.run('dev.saveState')).toMatchObject({ path: null, dirty: true });
+    expect(await second.run('dev.recoveryList')).toHaveLength(1);
+    expect(readFileSync(path)).toEqual(source);
+    await closeDiscarding(second);
+  } finally {
+    await second.close();
+  }
+});
+
+test('certificate recovery restores recipient restrictions before exposing the recovered tab', async () => {
+  const identity = makeIdentity('Recovery Reader', 'recovery-key');
+  const first = await launchApp({ noDemo: true });
+  await first.grantPath(workspace, true);
+  let path: string;
+  let source: Buffer;
+  try {
+    path = await protectedFile(first, 'certificate-recovery.pdf', {
+      kind: 'certificate',
+      recipients: [
+        {
+          id: 'reader',
+          name: 'Recovery Reader',
+          issuer: 'Test',
+          serial: '1',
+          validFrom: '',
+          validTo: '',
+          certificateBase64: identity.base64,
+          permissions: { print: 'none', modify: 'all', copy: false, accessibility: true },
+        },
+      ],
+    });
+    source = readFileSync(path);
+    await first.run('dev.openWithDigitalId', { path, p12: identity.p12, password: 'recovery-key' });
+    await first.run('dev.documentApply', { kind: 'metadata', value: 'Certificate checkpoint' });
+    expect(await first.run('file.autosaveNow')).toMatchObject({ written: 1 });
+    crashSecurityApp(first);
+  } catch (error) {
+    await first.close();
+    throw error;
+  }
+  const second = await launchApp({ reuseUserData: true, noDemo: true });
+  try {
+    const recovery = second.page.locator('#save-recovery-dialog');
+    await expect(recovery).toBeVisible();
+    await recovery.getByRole('button', { name: 'Recover', exact: true }).click();
+    await expect(second.page.locator('.tab')).toHaveCount(1);
+    expect(await second.run('dev.documentSummary')).toMatchObject({
+      metadataTitle: 'Certificate checkpoint',
+      dirty: true,
+    });
+    expect(await state(second)).toMatchObject({
+      encrypted: true,
+      handler: 'public-key',
+      unlocked: false,
+      allows: { copy: false, print: false, modify: true },
+    });
+    expect(await second.isEnabled('protect.unlock')).toBe(false);
+    expect(await second.isEnabled('convert.exportAllImages')).toBe(false);
+    expect(await second.isEnabled('file.print')).toBe(false);
+    expect(await second.run('dev.saveState')).toMatchObject({ path: null, dirty: true });
+    expect(await second.run('dev.recoveryList')).toHaveLength(1);
+    expect(readFileSync(path)).toEqual(source);
+    await closeDiscarding(second);
+  } finally {
+    await second.close();
+  }
 });

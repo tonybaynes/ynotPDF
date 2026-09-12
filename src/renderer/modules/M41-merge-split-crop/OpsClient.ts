@@ -45,6 +45,7 @@ export class OpsClient {
   private readonly worker: OpsWorkerLike | null;
   private readonly pending = new Map<number, Pending>();
   private nextId = 1;
+  private failure: Error | null = null;
 
   /** Spawns the module worker built from `ops.worker.ts`, or runs in-process without one. */
   static spawn(): OpsClient {
@@ -64,8 +65,7 @@ export class OpsClient {
     });
     worker.addEventListener('error', (ev: ErrorEvent) => {
       const error = new OpFailed(`The document operation stopped: ${ev.message}`);
-      for (const p of this.pending.values()) p.reject(error);
-      this.pending.clear();
+      this.stop(error);
     });
   }
 
@@ -151,6 +151,7 @@ export class OpsClient {
     op: OpsAnswer['op'],
     onProgress: OpProgress | undefined,
   ): OpHandle<T> {
+    if (this.failure) return { promise: Promise.reject(this.failure), cancel: () => undefined };
     const worker = this.worker;
     if (!worker) {
       const controller = new AbortController();
@@ -172,7 +173,11 @@ export class OpsClient {
         throw new OpFailed('The document operation answered the wrong question');
       return answer.value as T;
     });
-    worker.postMessage(request(id), transfer());
+    try {
+      worker.postMessage(request(id), transfer());
+    } catch (error) {
+      this.stop(error instanceof Error ? error : new Error(String(error)));
+    }
     return {
       promise,
       cancel: () => {
@@ -200,7 +205,13 @@ export class OpsClient {
   }
 
   dispose(): void {
-    for (const p of this.pending.values()) p.reject(new OpCancelled());
+    this.stop(new OpCancelled());
+  }
+
+  private stop(error: Error): void {
+    if (this.failure) return;
+    this.failure = error;
+    for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
     this.worker?.terminate();
   }

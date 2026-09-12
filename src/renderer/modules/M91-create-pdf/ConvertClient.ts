@@ -60,6 +60,7 @@ export class ConvertClient {
   private registry: ConverterRegistry | null = null;
   private readonly pending = new Map<number, Pending>();
   private nextId = 1;
+  private failure: Error | null = null;
 
   /** Spawns the module worker built from `create.worker.ts`, or runs in-process without one. */
   static spawn(env: ConvertEnvironment = {}): ConvertClient {
@@ -80,8 +81,7 @@ export class ConvertClient {
     });
     worker.addEventListener('error', (ev: ErrorEvent) => {
       const error = new Error(`The converter stopped: ${ev.message}`);
-      for (const p of this.pending.values()) p.reject(error);
-      this.pending.clear();
+      this.stop(error);
     });
   }
 
@@ -90,6 +90,7 @@ export class ConvertClient {
   }
 
   convert(job: ConvertJob): ConvertHandle {
+    if (this.failure) return { promise: Promise.reject(this.failure), cancel: () => undefined };
     return this.worker ? this.inWorker(this.worker, job) : this.inProcess(job);
   }
 
@@ -103,10 +104,14 @@ export class ConvertClient {
       : job.inputs.map((i) => ({ ...i, bytes: i.bytes.slice() }));
     const buffers = new Set<ArrayBuffer>();
     for (const input of inputs) buffers.add(input.bytes.buffer as ArrayBuffer);
-    worker.postMessage(
-      { kind: 'convert', id, converter: job.converter, inputs, options: job.options },
-      [...buffers],
-    );
+    try {
+      worker.postMessage(
+        { kind: 'convert', id, converter: job.converter, inputs, options: job.options },
+        [...buffers],
+      );
+    } catch (error) {
+      this.stop(error instanceof Error ? error : new Error(String(error)));
+    }
     return {
       promise,
       cancel: () => {
@@ -157,7 +162,13 @@ export class ConvertClient {
   }
 
   dispose(): void {
-    for (const p of this.pending.values()) p.reject(new ConvertCancelled());
+    this.stop(new ConvertCancelled());
+  }
+
+  private stop(error: Error): void {
+    if (this.failure) return;
+    this.failure = error;
+    for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
     this.worker?.terminate();
   }

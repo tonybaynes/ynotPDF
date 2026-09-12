@@ -12,7 +12,7 @@
  */
 
 import { chromium, expect, test, type Frame, type Page } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { realpathSync, copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -68,8 +68,9 @@ let app: App;
 let workspace: string;
 
 test.beforeAll(async () => {
+  workspace = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-m31-')));
   app = await launchApp();
-  workspace = mkdtempSync(join(tmpdir(), 'ynot-m31-'));
+  await app.grantPath(workspace, true);
   await app.run('annot.identity', { name: 'E2E Reader', initials: 'ER', email: '' });
 });
 

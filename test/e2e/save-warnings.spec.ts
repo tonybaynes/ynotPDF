@@ -1,6 +1,6 @@
 /** Audit 2: exercise an actual pipeline warning through the visible Save button. */
 import { expect, test } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { realpathSync, copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchApp } from './harness';
@@ -8,11 +8,12 @@ import { journey, closeEverything } from './journey';
 import { expectInsideWindow, expectReadable } from './layout';
 
 test('Save reviews pipeline warnings before writing; Escape cancels and consent retains unsaved work', async () => {
-  const workspace = mkdtempSync(join(tmpdir(), 'ynot-save-warnings-'));
+  const workspace = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-save-warnings-')));
   const path = join(workspace, 'warnings.pdf');
   copyFileSync(join(process.cwd(), 'test/fixtures/multipage.pdf'), path);
   const original = readFileSync(path);
   const app = await launchApp({ noDemo: true });
+  await app.grantPath(workspace, true);
   try {
     const j = journey(app);
     await app.run('file.openRecent', { path });

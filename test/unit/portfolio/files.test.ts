@@ -10,19 +10,34 @@
  * main-process suite: what is being tested is what a real filesystem does.
  */
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  realpathSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
+import * as fsPromises from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFolder, writeInto } from '../../../src/main/files';
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof fsPromises>();
+  return { ...actual, open: vi.fn(actual.open) };
+});
 
 let root: string;
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'ynot-portfolio-files-'));
+  root = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-portfolio-files-')));
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -76,6 +91,28 @@ describe('listing a folder for a new portfolio', () => {
 });
 
 describe('writing one extracted file', () => {
+  it('removes a partial output after a write failure and preserves existing files', async () => {
+    make('report.txt', 'existing');
+    const realOpen = (await vi.importActual<typeof fsPromises>('node:fs/promises')).open;
+    vi.mocked(fsPromises.open).mockImplementationOnce(async (...args) => {
+      const handle = await realOpen(...args);
+      const write = handle.writeFile.bind(handle);
+      vi.spyOn(handle, 'writeFile').mockImplementationOnce(async () => {
+        await write('partial');
+        throw new Error('simulated disk full');
+      });
+      return handle;
+    });
+    await expect(writeInto(root, 'report.txt', new Uint8Array([1, 2, 3]))).rejects.toThrow(
+      'simulated disk full',
+    );
+    expect(readFileSync(join(root, 'report.txt'), 'utf8')).toBe('existing');
+    expect(existsSync(join(root, 'report (1).txt'))).toBe(false);
+    const retry = await writeInto(root, 'report.txt', new Uint8Array([1, 2, 3]));
+    expect(retry).toBe(join(root, 'report (1).txt'));
+    expect([...readFileSync(retry)]).toEqual([1, 2, 3]);
+  });
+
   it('creates the folders on the way and answers with the path it wrote', async () => {
     const path = await writeInto(
       root,

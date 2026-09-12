@@ -19,7 +19,7 @@
  */
 
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { realpathSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SCHEMA_VERSION, unflatten, VERSION_KEY } from '../../src/shared/settings';
@@ -38,6 +38,8 @@ export interface App {
   readonly userData: string;
   /** Run a registered command by id in the renderer. */
   run(commandId: string, args?: Record<string, unknown>): Promise<unknown>;
+  /** Explicitly approves a staged test file or existing output folder, like a native dialog. */
+  grantPath(path: string, folder?: boolean): Promise<string>;
   /** All registered command ids. */
   commands(): Promise<string[]>;
   /** Whether a command's `when` clause and permission allow it right now (M70). */
@@ -124,7 +126,7 @@ let cleanupInstalled = false;
  * leaves its profiles, which is no worse than before.
  */
 function newUserData(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'ynot-e2e-'));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-e2e-')));
   createdProfiles.add(dir);
   if (!cleanupInstalled) {
     cleanupInstalled = true;
@@ -247,6 +249,20 @@ export async function launchApp(options: LaunchOptions = {}): Promise<App> {
     electron: app,
     page,
     userData,
+    grantPath: (path, folder = false) =>
+      app.evaluate(
+        ({ BrowserWindow }, request) => {
+          const win = BrowserWindow.getAllWindows()[0];
+          const hook = (
+            globalThis as unknown as {
+              __ynotGrantTestPath?: (id: number, path: string, folder: boolean) => string;
+            }
+          ).__ynotGrantTestPath;
+          if (!win || !hook) throw new Error('Test file-grant hook is unavailable');
+          return hook(win.id, request.path, request.folder);
+        },
+        { path, folder },
+      ),
     run: (id, args) =>
       page.evaluate(
         ([cid, cargs]) => {

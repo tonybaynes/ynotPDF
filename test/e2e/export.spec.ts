@@ -13,7 +13,15 @@
 
 import { expect, test } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  realpathSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -64,8 +72,9 @@ let app: App;
 let workspace: string;
 
 test.beforeAll(async () => {
-  workspace = mkdtempSync(join(tmpdir(), 'ynot-export-'));
+  workspace = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-export-')));
   app = await launchApp();
+  await app.grantPath(workspace, true);
 });
 
 test.afterAll(async () => {
@@ -106,6 +115,7 @@ async function closeAll(): Promise<void> {
 /** A fresh empty folder to export into. */
 function outDir(name: string): string {
   const dir = join(workspace, `${name}-${String(Date.now())}-${String(Math.random()).slice(2, 8)}`);
+  mkdirSync(dir, { recursive: true });
   return dir;
 }
 

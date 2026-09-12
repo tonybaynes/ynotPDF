@@ -27,10 +27,7 @@ import type { ThemeManager } from '@theme/ThemeManager';
 import { THEME_SERVICE } from '@modules/M01-theme-system/manifest';
 import { DOCUMENT_SERVICE, type DocumentService } from '@modules/M20-document-model/manifest';
 import type { OpenedDocument } from '@modules/M20-document-model/DocumentService';
-import type {
-  PreparedSecurityOpen,
-  SecurityService,
-} from '@modules/M70-encryption/SecurityService';
+import type { PreparedSecurityOpen } from '@modules/M70-encryption/SecurityService';
 // A type, so this import disappears at compile time and M11 gains no dependency on M100 in the
 // bundle. The service is optional and looked up by name (ADR 0019 §2).
 import type { RepairService } from '@modules/M100-optimise-repair/OptimiseService';
@@ -44,7 +41,7 @@ import type { ViewportState } from '@view/DocumentView';
 import { DEFAULT_OVERLAY_STATE, type OverlayState } from '@view/Overlays';
 import type { ViewState } from '@app/ui/UiState';
 import { Viewer, type SplitOrientation } from './Viewer';
-import { openWithPassword } from './password';
+import { openAuthenticatedDocument, prepareDocumentBytes } from './authenticatedOpen';
 import {
   DEFAULT_SETTINGS,
   ipcSettingsStorage,
@@ -228,26 +225,18 @@ export class ViewerService {
     // knows only the standard security handler, so such a file is not "wrong password" to it, it
     // is unreadable. M70 registers the `security` service and does the decryption with the
     // reader's digital ID; without M70 the bytes pass through untouched (ADR 0012).
-    const prepared = preparedSecurity ?? (await this.prepareBytes(file));
+    const prepared =
+      preparedSecurity ?? (await prepareDocumentBytes(this.registry, file.bytes, file.name));
     if (!prepared) return null;
 
     const attempt = (bytes: Uint8Array): Promise<OpenedDocument | null> =>
-      openWithPassword(
-        (password) =>
-          // The engine transfers the buffer into its worker, which detaches it — so every attempt
-          // gets its own copy, or the second one would find an empty ArrayBuffer.
-          service.open(bytes.slice(), {
-            path: file.path,
-            name: file.name,
-            ...(password === undefined ? {} : { password }),
-            beforeAttach: (document) => {
-              if (prepared.sourceInfo || prepared.openedAs !== null) {
-                this.registry.service<SecurityService>('security').noteSource(document, prepared);
-              }
-            },
-          }),
-        { dialogs: this.shell.dialogs, name: file.name },
-      );
+      openAuthenticatedDocument({
+        docs: service,
+        registry: this.registry,
+        dialogs: this.shell.dialogs,
+        file: { ...file, bytes },
+        prepared: { ...prepared, bytes },
+      });
 
     let opened: OpenedDocument | null;
     try {
@@ -264,19 +253,6 @@ export class ViewerService {
     await this.attach(opened.tab, opened.document);
     if (hasBridge() && file.path) await invoke('recent:add', file.path).catch(() => []);
     return opened.tab;
-  }
-
-  /**
-   * Gives a registered `security` service a chance to decrypt the bytes before the engine opens
-   * them. Returns `null` when the reader cancelled, which leaves no tab behind and shows no
-   * error, because cancelling is not a failure.
-   */
-  private async prepareBytes(file: OpenedFile): Promise<PreparedSecurityOpen | null> {
-    if (!this.registry.hasService('security')) return { bytes: file.bytes, openedAs: null };
-    const security = this.registry.service<{
-      prepareForOpen(bytes: Uint8Array, name: string): Promise<PreparedSecurityOpen | null>;
-    }>('security');
-    return security.prepareForOpen(file.bytes, file.name);
   }
 
   /**

@@ -1,5 +1,7 @@
 # The renderer/main filesystem boundary — work to do
 
+**Current status — 12 September 2026:** The “not started” status below is the historical 11 September investigation. The current audit branch implements the replacement described in [ADR 0025](../adr/0025-filesystem-capabilities.md); final integration/CI/merge is still pending. See [open work section 12](../open-work.md#12-remaining-audit-repairs--active-checkpoint-12-september-2026) for current evidence. Do not reinstate withdrawn designs from the historical notes.
+
 **Status: not started.** A first attempt was made on 2026-09-11, found real holes, and was
 reverted from `main` before it was pushed. **The code is gone** — its branch was deleted at Tony's
 instruction on the same day, so nothing of it survives anywhere. This file is therefore the whole

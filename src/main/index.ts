@@ -1,3 +1,5 @@
+import { installTestFileGrants } from './e2eCapabilities';
+import { fileCapabilities } from './fs/capabilities';
 /**
  * Electron main entry (M00): single-instance lock, app windows, native menu, IPC handlers,
  * recent files and `.pdf` file-association handling on all three OSes. M02 adds remembered
@@ -55,6 +57,7 @@ function pdfPathsFromArgv(argv: string[]): string[] {
 
 async function openPathIn(win: BrowserWindow, path: string): Promise<void> {
   try {
+    path = fileCapabilities.grant(win.id, path, ['read', 'write']);
     const file = await readFileForRenderer(path);
     recent.add(path);
     sendTo(win, 'file:openRequested', file);
@@ -202,6 +205,7 @@ if (gotLock) {
     // renderer confirms it through `theme:setNative` once ThemeManager has applied the theme.
     nativeTheme.themeSource = settings.get(THEME_KEY) === 'daylight' ? 'light' : 'dark';
     recovery = new RecoveryStore(app.getPath('userData'));
+    if (process.env['YNOT_E2E'] === '1') installTestFileGrants(recent);
     registerIpcHandlers(recent, settings, {
       onOpenPath: openPathInRenderer,
       onRendererReady: () => {

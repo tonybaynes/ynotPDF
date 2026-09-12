@@ -23,26 +23,19 @@ async function pageCountOf(bytes: Uint8Array): Promise<number> {
   return (await PDFDocument.load(bytes, { ignoreEncryption: true })).getPageCount();
 }
 
-/** Every fixture the corpus can be combined from: readable, unencrypted, with pages. */
+/** Fixtures whose catalog structures the page-copy combine implementation preserves. */
 const CORPUS = [
   'blank.pdf',
   'multipage.pdf',
   'text.pdf',
   'image.pdf',
-  'form.pdf',
   'annotated.pdf',
   'outline.pdf',
-  'layers.pdf',
-  'attachments.pdf',
   'rotated.pdf',
   'mixed-boxes.pdf',
   'page-labels.pdf',
   'links.pdf',
-  'forms-all.pdf',
   'annotations-all.pdf',
-  'javascript.pdf',
-  'xfa.pdf',
-  'pdfa-1b.pdf',
   'cjk-rtl.pdf',
   'scanned.pdf',
   'skewed.pdf',
@@ -61,6 +54,17 @@ describe('bookmarkTitle', () => {
 });
 
 describe('combine', () => {
+  it.each([
+    'form.pdf',
+    'layers.pdf',
+    'attachments.pdf',
+    'forms-all.pdf',
+    'javascript.pdf',
+    'xfa.pdf',
+    'pdfa-1b.pdf',
+  ])('refuses catalogue loss from %s', async (name) => {
+    await expect(combine([fixture(name)])).rejects.toThrow(/Cannot safely combine/);
+  });
   it('adds up: the corpus combined has as many pages as the corpus', async () => {
     const sources = CORPUS.map(fixture);
     const expected = (

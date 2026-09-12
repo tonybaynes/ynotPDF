@@ -51,6 +51,7 @@ export class WriterClient {
   private readonly worker: WriterWorkerLike | null;
   private readonly pending = new Map<number, Pending>();
   private nextId = 1;
+  private failure: Error | null = null;
 
   /** Spawns the module worker built from `writer.worker.ts`, or runs in-process without one. */
   static spawn(): WriterClient {
@@ -70,8 +71,7 @@ export class WriterClient {
     });
     worker.addEventListener('error', (ev: ErrorEvent) => {
       const error = new Error(`The writer stopped: ${ev.message}`);
-      for (const p of this.pending.values()) p.reject(error);
-      this.pending.clear();
+      this.stop(error);
     });
   }
 
@@ -81,6 +81,7 @@ export class WriterClient {
   }
 
   write(job: WriteJob): WriteHandle {
+    if (this.failure) return { promise: Promise.reject(this.failure), cancel: () => undefined };
     return this.worker ? this.writeInWorker(this.worker, job) : writeInProcess(job);
   }
 
@@ -91,10 +92,14 @@ export class WriterClient {
     });
     // The buffer is transferred, so the caller's copy is detached — always hand over a copy of
     // bytes you still need. `SaveService` does.
-    worker.postMessage(
-      { kind: 'write', id, bytes: job.bytes, plan: job.plan, options: job.options ?? {} },
-      [job.bytes.buffer as ArrayBuffer],
-    );
+    try {
+      worker.postMessage(
+        { kind: 'write', id, bytes: job.bytes, plan: job.plan, options: job.options ?? {} },
+        [job.bytes.buffer as ArrayBuffer],
+      );
+    } catch (error) {
+      this.stop(error instanceof Error ? error : new Error(String(error)));
+    }
     return {
       promise,
       cancel: () => {
@@ -125,7 +130,13 @@ export class WriterClient {
   }
 
   dispose(): void {
-    for (const p of this.pending.values()) p.reject(new WriteCancelled());
+    this.stop(new WriteCancelled());
+  }
+
+  private stop(error: Error): void {
+    if (this.failure) return;
+    this.failure = error;
+    for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
     this.worker?.terminate();
   }

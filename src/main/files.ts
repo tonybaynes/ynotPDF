@@ -3,9 +3,20 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, join, relative, resolve, sep } from 'node:path';
+import { basename, extname, join, relative, resolve, sep } from 'node:path';
+import { canonicalPath, containedBy } from './fs/capabilities';
 import type { FolderEntry, OpenedFile, ReadFolderOptions } from '../shared/ipc';
 
 export async function readFileForRenderer(path: string): Promise<OpenedFile> {
@@ -82,7 +93,11 @@ export function safeFileName(name: string): string {
     const code = ch.codePointAt(0) ?? 0;
     cleaned += code < 0x20 || code === 0x7f || UNSAFE_PUNCTUATION.includes(ch) ? '_' : ch;
   }
-  const capped = cleaned.replace(/^\.+/, '').trim().slice(0, 120).trim();
+  const capped = cleaned
+    .replace(/^\.+/, '')
+    .trim()
+    .slice(0, 120)
+    .replace(/[. ]+$/, '');
   if (capped === '') return 'attachment';
   return RESERVED_NAME.test(capped) ? `_${capped}` : capped;
 }
@@ -154,17 +169,73 @@ export async function writeInto(
   relativePath: string,
   bytes: Uint8Array,
 ): Promise<string> {
-  const base = resolve(dir);
+  const base = canonicalPath(dir);
+  if (!(await stat(base)).isDirectory()) throw new Error('The chosen folder no longer exists');
   const segments = relativePath
     .split(/[\\/]+/)
     .filter((part) => part !== '' && part !== '.' && part !== '..')
-    .map((part) => safeFileName(part));
-  if (segments.length === 0) throw new Error('The file has no usable name');
-  const target = resolve(base, ...segments);
-  const inside = target === base || target.startsWith(base.endsWith(sep) ? base : base + sep);
-  if (!inside) throw new Error('That file would be written outside the chosen folder');
-  const parent = target.slice(0, target.length - (segments.at(-1)?.length ?? 0));
-  await mkdir(parent, { recursive: true });
-  await writeFile(target, bytes);
-  return target;
+    .map(safeFileName);
+  const leaf = segments.pop();
+  if (!leaf) throw new Error('The file has no usable name');
+  let parent = base;
+  for (const segment of segments) {
+    const child = join(parent, segment);
+    try {
+      await mkdir(child);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+    const info = await lstat(child);
+    if (info.isSymbolicLink() || !info.isDirectory())
+      throw new Error('An output folder is a link or is not a directory');
+    parent = canonicalPath(child);
+    if (!containedBy(base, parent))
+      throw new Error('That file would be written outside the chosen folder');
+  }
+  // Treat case-only differences as collisions on every OS for portable extracted trees.
+  const ext = extname(leaf);
+  const stem = leaf.slice(0, leaf.length - ext.length);
+  for (let suffix = 0; suffix < 10000; suffix++) {
+    const name = suffix === 0 ? leaf : stem + ' (' + String(suffix) + ')' + ext;
+    if (
+      (await readdir(parent)).some(
+        (existing) => existing.toLocaleLowerCase('en-US') === name.toLocaleLowerCase('en-US'),
+      )
+    ) {
+      const existing = join(parent, name);
+      const info = await lstat(existing).catch(() => null);
+      if (info?.isSymbolicLink()) throw new Error('The output file is a symbolic link');
+      continue;
+    }
+    const checkedParent = canonicalPath(parent);
+    if (checkedParent !== parent || !containedBy(base, checkedParent))
+      throw new Error('The output folder changed while extracting');
+    const target = join(parent, name);
+    let handle;
+    try {
+      handle = await open(target, 'wx');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue;
+      throw error;
+    }
+    try {
+      await handle.writeFile(bytes);
+      await handle.close();
+      return target;
+    } catch (error) {
+      // Only remove a leaf this call created. A failed exclusive open never owns it.
+      await handle.close().catch(() => undefined);
+      try {
+        await unlink(target);
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'Extraction failed and its incomplete output could not be removed',
+          { cause: cleanupError },
+        );
+      }
+      throw error;
+    }
+  }
+  throw new Error('Too many files have the same output name');
 }

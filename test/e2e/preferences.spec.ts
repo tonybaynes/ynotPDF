@@ -13,7 +13,7 @@
  */
 
 import { expect, test, type Locator } from '@playwright/test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { realpathSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchApp, type App } from './harness';
@@ -71,8 +71,9 @@ async function openFixture(name: string): Promise<void> {
 }
 
 test.beforeAll(async () => {
+  scratch = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-prefs-')));
   app = await launchApp();
-  scratch = mkdtempSync(join(tmpdir(), 'ynot-prefs-'));
+  await app.grantPath(scratch, true);
   await app.electron.evaluate(({ BrowserWindow }) => {
     BrowserWindow.getAllWindows()[0]?.setSize(1280, 900);
   });
@@ -433,6 +434,7 @@ test('a setting survives a restart', async () => {
   await write('viewer.cache.megabytes', 384);
   await app.close();
   app = await launchApp({ reuseUserData: true });
+  await app.grantPath(scratch, true);
   expect(await read('viewer.cache.megabytes')).toBe(384);
   await write('viewer.cache.megabytes', undefined);
 });
@@ -499,6 +501,7 @@ test.describe('the shortcut editor', () => {
     await app.run('app.shortcuts.set', { command: 'edit.find', key: 'Mod+Alt+Y' });
     await app.close();
     app = await launchApp({ reuseUserData: true });
+    await app.grantPath(scratch, true);
     await openPreferences({ page: 'shortcuts' });
     await dialog().locator('#shortcut-search').fill('Find');
     await expect(dialog().locator('.shortcut-row[data-command="edit.find"] kbd')).toHaveText(
@@ -578,6 +581,7 @@ test.describe('customising the ribbon and the toolbar', () => {
       .uncheck();
     await app.close();
     app = await launchApp({ reuseUserData: true });
+    await app.grantPath(scratch, true);
     await app.run('app.ribbon.showTab', { tab: 'view' });
     await expect(app.page.locator('#ribbon-body [data-group="view.panes"]')).toHaveCount(0);
   });

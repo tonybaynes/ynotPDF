@@ -59,7 +59,7 @@ export function openNotePopup(
   );
   header.append(who, closeBtn);
 
-  const body = el('div.annot-popup-body', {
+  const body = el('div.annot-popup-body.annot-popup-readable-colours', {
     contenteditable: 'true',
     role: 'textbox',
     'aria-multiline': 'true',
@@ -112,12 +112,27 @@ export function openNotePopup(
     colour,
   );
 
+  // Author colours can disappear on a dark editor surface. This changes only the
+  // presentation: innerHTML retains the original colours for the document.
+  const readable = el('input', { type: 'checkbox', checked: true });
+  const viewOptions = el(
+    'label.annot-popup-readable',
+    {
+      title: 'Display note text using theme colours. Original text colours are kept when saving.',
+    },
+    readable,
+    'Use readable text colours',
+  );
+  readable.addEventListener('change', () => {
+    body.classList.toggle('annot-popup-readable-colours', readable.checked);
+  });
+
   const footer = el('div.annot-popup-footer');
   const save = button('btn btn-primary', { type: 'button' }, 'Save');
   const cancel = button('btn', { type: 'button' }, 'Cancel');
   footer.append(cancel, save);
 
-  root.append(header, toolbar, body, footer);
+  root.append(header, toolbar, viewOptions, body, footer);
   host.append(root);
   position(root, service, id, host);
 
@@ -215,16 +230,26 @@ function isPlain(html: string): boolean {
  * dropped rather than passed through, because `/RC` ends up in a file other applications parse.
  */
 export function toRichContents(html: string): string {
-  // `<strong>` and `<em>` are in the list because a paste into the popup can bring them even
-  // though `execCommand` writes `<b>` and `<i>`; `normaliseTag` turns them into the spec's tags.
-  const allowed = /<\/?(b|strong|i|em|u|br|p|span|font)(\s[^>]*)?>/gi;
-  const cleaned = html
-    .replace(/<(?!\/?(b|strong|i|em|u|br|p|span|font)\b)[^>]*>/gi, '')
-    .replace(allowed, (tag) => normaliseTag(tag));
-  return `<?xml version="1.0"?><body xmlns="http://www.w3.org/1999/xhtml">${cleaned}</body>`;
+  return (
+    '<?xml version="1.0"?><body xmlns="http://www.w3.org/1999/xhtml">' +
+    normaliseFragment(html) +
+    '</body>'
+  );
+}
+
+function normaliseFragment(html: string): string {
+  return html.replace(/<!--[\s\S]*?-->|<[^>]*>|</g, (tag) =>
+    tag === '<' ? '&lt;' : normaliseTag(tag),
+  );
 }
 
 function normaliseTag(tag: string): string {
+  const match = /^<\s*(\/?)\s*(b|strong|i|em|u|br|p|span|font)\b/i.exec(tag);
+  if (!match) return '';
+  const closing = match[1] === '/';
+  const name = (match[2] ?? '').toLowerCase();
+  const canonical = name === 'strong' ? 'b' : name === 'em' ? 'i' : name === 'font' ? 'span' : name;
+  if (closing) return canonical === 'br' ? '' : '</' + canonical + '>';
   const lower = tag.toLowerCase();
   if (lower.startsWith('<strong')) return '<b>';
   if (lower.startsWith('</strong')) return '</b>';
@@ -238,11 +263,11 @@ function normaliseTag(tag: string): string {
     return parsed === null ? '<span>' : `<span style="color:${hexOf(parsed)}">`;
   }
   if (lower.startsWith('</span') || lower.startsWith('</font')) return '</span>';
-  return lower;
+  return `<${canonical}>`;
 }
 
 /** The inverse, for showing a stored `/RC` in the popup. Tags outside the allow-list go. */
 export function sanitiseRich(rc: string): string {
   const inner = /<body[^>]*>([\s\S]*)<\/body>/i.exec(rc)?.[1] ?? rc;
-  return inner.replace(/<(?!\/?(b|i|u|br|p|span)\b)[^>]*>/gi, '');
+  return normaliseFragment(inner);
 }

@@ -147,6 +147,7 @@ export function journey(app: App): Journey {
   };
 
   const openDocument = async (path: string): Promise<void> => {
+    path = await app.grantPath(path);
     const bytes = Array.from(readFileSync(path));
     await app.run('file.openBytes', { file: { path, name: basename(path), bytes } });
     // A rendered page, or a portfolio's file list: a portfolio opens on its contents rather than

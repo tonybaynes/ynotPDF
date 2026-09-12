@@ -68,6 +68,7 @@ export class OptimiseClient {
   private readonly structure: StructureRunner;
   private readonly pending = new Map<number, Pending>();
   private nextId = 1;
+  private failure: Error | null = null;
 
   /** Spawns the module worker built from `optimise.worker.ts`, or runs in-process without one. */
   static spawn(structure: StructureRunner = ipcStructureRunner()): OptimiseClient {
@@ -88,8 +89,7 @@ export class OptimiseClient {
     });
     worker.addEventListener('error', (ev: ErrorEvent) => {
       const error = new OpFailed(`Optimising stopped: ${ev.message}`);
-      for (const p of this.pending.values()) p.reject(error);
-      this.pending.clear();
+      this.stop(error);
     });
   }
 
@@ -162,6 +162,7 @@ export class OptimiseClient {
     op: OptimiseAnswer['op'],
     onProgress: OpProgress | undefined,
   ): OptimiseHandle<T> {
+    if (this.failure) return { promise: Promise.reject(this.failure), cancel: () => undefined };
     const worker = this.worker;
     if (!worker) {
       const controller = new AbortController();
@@ -182,7 +183,11 @@ export class OptimiseClient {
       if (answer.op !== op) throw new OpFailed('Optimising answered the wrong question');
       return answer.value as T;
     });
-    worker.postMessage(request(id), transfer());
+    try {
+      worker.postMessage(request(id), transfer());
+    } catch (error) {
+      this.stop(error instanceof Error ? error : new Error(String(error)));
+    }
     return {
       promise,
       cancel: () => {
@@ -210,7 +215,13 @@ export class OptimiseClient {
   }
 
   dispose(): void {
-    for (const p of this.pending.values()) p.reject(new OpCancelled());
+    this.stop(new OpCancelled());
+  }
+
+  private stop(error: Error): void {
+    if (this.failure) return;
+    this.failure = error;
+    for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
     this.worker?.terminate();
   }

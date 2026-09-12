@@ -61,6 +61,7 @@ export class ExportClient {
   private readonly worker: ExportWorkerLike | null;
   private readonly pending = new Map<number, Pending>();
   private nextId = 1;
+  private failure: Error | null = null;
 
   /** Spawns the module worker built from `export.worker.ts`, or runs in-process without one. */
   static spawn(): ExportClient {
@@ -80,8 +81,7 @@ export class ExportClient {
     });
     worker.addEventListener('error', (ev: ErrorEvent) => {
       const error = new ExportFailed(`The exporter stopped: ${ev.message}`);
-      for (const p of this.pending.values()) p.reject(error);
-      this.pending.clear();
+      this.stop(error);
     });
   }
 
@@ -149,6 +149,14 @@ export class ExportClient {
   }
 
   terminate(): void {
+    this.stop(new ExportCancelled());
+  }
+
+  private stop(error: Error): void {
+    if (this.failure) return;
+    this.failure = error;
+    for (const pending of this.pending.values()) pending.reject(error);
+    this.pending.clear();
     this.worker?.terminate();
   }
 
@@ -157,6 +165,7 @@ export class ExportClient {
     inProcess: (ctx: ExportContext) => Promise<ExportResult>,
     job: JobOptions,
   ): ExportHandle {
+    if (this.failure) return { promise: Promise.reject(this.failure), cancel: () => undefined };
     const worker = this.worker;
     if (!worker) {
       const controller = new AbortController();
@@ -179,7 +188,11 @@ export class ExportClient {
         render: job.render,
       });
     });
-    worker.postMessage(request(id));
+    try {
+      worker.postMessage(request(id));
+    } catch (error) {
+      this.stop(error instanceof Error ? error : new Error(String(error)));
+    }
     return {
       promise,
       cancel: () => {
@@ -222,13 +235,11 @@ export class ExportClient {
     pending: Pending,
   ): Promise<void> {
     const worker = this.worker;
-    if (!worker) return;
-    if (!pending.render) {
-      worker.postMessage({ kind: 'rendered', id, token, error: 'No renderer was supplied' });
-      return;
-    }
+    if (!worker || this.failure || !this.pending.has(id)) return;
     try {
+      if (!pending.render) throw new Error('No renderer was supplied');
       const raster = await pending.render(page, dpi);
+      if (this.failure || !this.pending.has(id)) return;
       // A copy only when the caller handed us a view we do not own; the buffer is transferred.
       const data =
         raster.data instanceof Uint8Array
@@ -239,12 +250,17 @@ export class ExportClient {
         [data.buffer as ArrayBuffer],
       );
     } catch (error) {
-      worker.postMessage({
-        kind: 'rendered',
-        id,
-        token,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      if (this.failure || !this.pending.has(id)) return;
+      try {
+        worker.postMessage({
+          kind: 'rendered',
+          id,
+          token,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } catch (postError) {
+        this.stop(postError instanceof Error ? postError : new Error(String(postError)));
+      }
     }
   }
 }

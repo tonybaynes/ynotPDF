@@ -15,7 +15,7 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { realpathSync, copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchApp, type App } from './harness';
@@ -26,7 +26,7 @@ const FIXTURES = join(process.cwd(), 'test', 'fixtures');
 let workspace: string;
 
 test.beforeAll(() => {
-  workspace = mkdtempSync(join(tmpdir(), 'ynot-m04-startup-'));
+  workspace = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-m04-startup-')));
 });
 
 test.afterAll(() => {
@@ -78,6 +78,7 @@ test.describe('a fresh profile, with no demo module', () => {
 
   test.beforeAll(async () => {
     app = await launchApp({ noDemo: true });
+    await app.grantPath(workspace, true);
   });
 
   test.afterAll(async () => {
@@ -159,6 +160,7 @@ test.describe('launched with a document on the command line', () => {
   test('the file association path opens the document and the Pages panel', async () => {
     const path = stage('multipage.pdf', 'launched.pdf');
     const app = await launchApp({ noDemo: true, open: [path] });
+    await app.grantPath(workspace, true);
     try {
       await app.page.waitForSelector('.viewer-content .page', { timeout: 30_000 });
       await expect(app.page.locator('.tab')).toHaveCount(1);
@@ -216,6 +218,7 @@ test.describe('relaunch after a crash', () => {
   test('the recovery dialog is offered, and the window behind it is sound', async () => {
     const path = stage('multipage.pdf', 'crashed-startup.pdf');
     const first = await launchApp({ noDemo: true });
+    await first.grantPath(workspace, true);
     const bytes = Array.from(readFileSync(path));
     await first.run('file.openBytes', { file: { path, name: 'crashed-startup.pdf', bytes } });
     await first.page.waitForSelector('.viewer-content .page', { timeout: 30_000 });
@@ -227,6 +230,7 @@ test.describe('relaunch after a crash', () => {
     });
 
     const second = await launchApp({ noDemo: true, reuseUserData: true });
+    await second.grantPath(workspace, true);
     try {
       const dialog = second.page.locator('#save-recovery-dialog');
       await expect(dialog).toBeVisible({ timeout: 20_000 });
