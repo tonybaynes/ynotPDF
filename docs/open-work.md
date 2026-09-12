@@ -608,3 +608,32 @@ this audit branch because they are already preserved in the independent PR65 bra
 Consume that PR through main once merged; do not duplicate its implementation here.
 The broader audit checkpoint therefore covers13–24 plus assessment/handovers26–31;
 #25 is tracked by PR65. A final integrated full UI run and exact-head CI remain required.
+
+### Independent review follow-up � 12 September 2026
+
+Broad audit checkpoint8b8c179 is committed. Current main2696119 merged cleanly as3a08319;
+its full lint/build passed and4241 unit tests passed,24 skipped, with coverage gates
+passing. Follow-up4af6a7f resolves indirect MarkInfo flags before Combine's preservation
+check;32 Combine unit tests passed and the build passed afterwards.
+
+The coordinator found two additional review blockers, now repaired locally pending final
+verification/commit: attachment name truncation could change an approved .pdf suffix into
+.ps1/.cmd/.exe, and worker messageerror/malformed envelopes could strand callers. Main now
+validates the exact stable sanitized basename and passes it unchanged to the temp writer.
+Three extension regression cases failed before the repair; the registered IPC test also
+asserts rejection before confirmation, writing or opening. No executable was launched.
+All six audited worker clients settle decoding failures, validate transport envelopes before
+dispatch, remove listeners on stop and handle cancellation-post exceptions. Focused tests
+cover current/future callers and engine readiness before/after startup. ADR0024 records the
+minimal shared transport helper; it does not claim deep validation of PDF result contents.
+
+Full lint and units are running in audit-review-followup-{lint,unit}.log under the external
+work directory. A final build, coordinator review and broad PR/CI remain pending. PR65 stays
+frozen at69b77d3 awaiting CI and the coordinator's serial merge. No local UI is running or
+allocated to this audit task. Request a full UI slot only after these review blockers pass.
+
+Review follow-up verification: full units/coverage exited0,4290 passed/24 skipped,72.05s.
+The final type-only interface cleanup and test lint corrections were followed by113 focused
+worker/converter/capability/registered-IPC tests passing (1.46s). Full lint/build exited0.
+Commit and immutable-head review are next. Coordinator explicitly queues full audit UI
+after M13's focused slot and M11's full run; no audit UI lease yet.

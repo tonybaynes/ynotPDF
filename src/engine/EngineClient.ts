@@ -15,6 +15,7 @@
  * pending render — the viewer calls it on scroll so superseded tiles never reach PDFium.
  */
 
+import { assertWorkerEnvelope } from '@shared/workerMessages';
 import {
   ENGINE_METHODS,
   EngineError,
@@ -51,9 +52,12 @@ export interface RequestHandle<T> {
 /** Minimal worker surface we rely on (so tests can pass a fake). */
 export interface WorkerLike {
   postMessage(message: unknown, transfer?: Transferable[]): void;
-  addEventListener(type: 'message', listener: (ev: MessageEvent) => void): void;
+  addEventListener(type: 'message' | 'messageerror', listener: (ev: MessageEvent) => void): void;
   addEventListener(type: 'error', listener: (ev: ErrorEvent) => void): void;
-  removeEventListener?(type: 'message', listener: (ev: MessageEvent) => void): void;
+  removeEventListener?(
+    type: 'message' | 'messageerror',
+    listener: (ev: MessageEvent) => void,
+  ): void;
   removeEventListener?(type: 'error', listener: (ev: ErrorEvent) => void): void;
   terminate(): void;
 }
@@ -69,12 +73,23 @@ export class EngineClient {
   private rejectReady: (error: Error) => void = () => undefined;
   private readonly onMessage = (ev: MessageEvent): void => {
     if (this.terminated) return;
-    const msg = ev.data as RpcFromWorker;
-    if (msg.kind === 'ready') this.resolveReady();
-    else this.dispatch(msg);
+    try {
+      assertWorkerEnvelope(ev.data, 'engine');
+      const msg = ev.data as RpcFromWorker;
+      if (msg.kind === 'ready') this.resolveReady();
+      else this.dispatch(msg);
+    } catch (error) {
+      this.stop(
+        new EngineError('internal', error instanceof Error ? error.message : String(error)),
+      );
+    }
   };
   private readonly onError = (ev: ErrorEvent): void => {
     this.stop(new EngineError('internal', `engine worker crashed: ${ev.message}`));
+  };
+
+  private readonly onMessageError = (): void => {
+    this.stop(new EngineError('internal', 'engine worker message could not be read'));
   };
 
   /** The typed engine proxy. Call `PdfEngine` methods on it directly. */
@@ -99,6 +114,7 @@ export class EngineClient {
     void this.readyPromise.catch(() => undefined);
     worker.addEventListener('message', this.onMessage);
     worker.addEventListener('error', this.onError);
+    worker.addEventListener('messageerror', this.onMessageError);
     this.engine = this.buildProxy();
   }
 
@@ -123,6 +139,7 @@ export class EngineClient {
     this.failure = error;
     this.worker.removeEventListener?.('message', this.onMessage);
     this.worker.removeEventListener?.('error', this.onError);
+    this.worker.removeEventListener?.('messageerror', this.onMessageError);
     this.rejectReady(error);
     for (const p of this.pending.values()) p.reject(error);
     this.pending.clear();

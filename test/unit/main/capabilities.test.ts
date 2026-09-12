@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { basename, join, parse } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { canonicalPath, FileCapabilities } from '../../../src/main/fs/capabilities';
-import { writeInto } from '../../../src/main/files';
+import { safeFileName, writeInto } from '../../../src/main/files';
 import { assertExternalDocument, externalWebUrl } from '../../../src/main/externalFiles';
 import { validateFileRequest } from '../../../src/main/fs/ipcValidation';
 let root: string;
@@ -108,6 +108,16 @@ describe('extraction ownership', () => {
 });
 
 describe('native external-action policy', () => {
+  it.each(['ps1', 'cmd', 'exe'])(
+    'rejects a disguised .%s filename when truncation would expose that extension',
+    (extension) => {
+      const name = 'evil.' + extension + ' .'.repeat(120) + '.pdf';
+      expect(safeFileName(name)).toBe('evil.' + extension);
+      expect(() => {
+        assertExternalDocument(name);
+      }).toThrow(/cannot be opened directly/);
+    },
+  );
   it.each([
     'a.exe',
     'a.cmd',
@@ -138,6 +148,15 @@ describe('native external-action policy', () => {
       }).not.toThrow();
     },
   );
+  it('returns a stable approved filename and refuses misleading trailing punctuation', () => {
+    const safe = assertExternalDocument('quarter:one.pdf');
+    expect(safe).toBe('quarter_one.pdf');
+    expect(safeFileName(safe)).toBe(safe);
+    for (const name of ['evil.exe.pdf.', 'evil.cmd.pdf ', 'evil.ps1.pdf. '])
+      expect(() => {
+        assertExternalDocument(name);
+      }).toThrow(/cannot be opened directly/);
+  });
   it('parses web links and rejects other protocols', () => {
     expect(externalWebUrl('https://example.com')).toBe('https://example.com/');
     expect(() => externalWebUrl('file:///etc/passwd')).toThrow();

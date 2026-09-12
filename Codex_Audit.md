@@ -370,7 +370,7 @@ On the fix itself: `realpath` the parent after `mkdir` and re-check containment 
 
 ## 16. P1 — Opening a non-PDF attachment delegates executable content directly to the OS
 
-**Codex resolution (12 September 2026):** Implemented in the current audit branch; CI/merge pending. Main refuses executables, scripts, shortcuts, active web formats and unknown extensions before any OS handoff. Ordinary document types require native confirmation. The actual IPC regression proves refusal precedes confirmation, and Cancel precedes temporary-file creation/opening. HTTP(S) links are parsed and other protocols refused.
+**Codex resolution (12 September 2026):** Implemented in the current audit branch; CI/merge pending. Main refuses executables, scripts, shortcuts, active web formats and unknown extensions before any OS handoff. The exact sanitized basename must retain an approved extension and remain unchanged by another cleanup pass; truncation to an executable suffix is refused. Ordinary document types require native confirmation. The actual IPC regression proves refusal precedes confirmation, and Cancel precedes temporary-file creation/opening. HTTP(S) links are parsed and other protocols refused.
 
 **Evidence: traced; no executable payload was launched.**
 
@@ -488,7 +488,7 @@ The finding is right that the journal/group machinery uses composites too, so th
 
 ## 20. P2 — Engine-worker initialization failure leaves readiness pending indefinitely
 
-**Codex resolution (12 September 2026):** Implemented in the current audit branch under ADR 0024; CI/merge pending. Engine startup failure, crash and termination settle readiness and pending requests and reject later calls. Writer, operations, conversion, export and optimisation workers follow the same terminal-failure rule, including synchronous postMessage failure. Lifecycle regression tests pass.
+**Codex resolution (12 September 2026):** Implemented in the current audit branch under ADR 0024; CI/merge pending. Engine startup failure, crash and termination settle readiness and pending requests and reject later calls. Writer, operations, conversion, export and optimisation workers follow the same terminal-failure rule, including synchronous initial/cancellation postMessage failure, messageerror and malformed transport envelopes. Stop removes listeners. Lifecycle regression tests cover current/future requests and failures before/after engine readiness.
 
 **Evidence: reproduced using the supported fake-worker interface, A18.**
 

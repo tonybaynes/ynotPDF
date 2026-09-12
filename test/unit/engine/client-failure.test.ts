@@ -22,6 +22,46 @@ function worker() {
 }
 
 describe('engine terminal states', () => {
+  for (const ready of [false, true]) {
+    it.each([
+      ['messageerror', undefined],
+      ['message', null],
+      ['message', { kind: 'unexpected', id: 1 }],
+      ['message', { kind: 'fail', id: 1, error: null }],
+      ['message', { kind: 'fail', id: 1, error: { code: 'internal' } }],
+      ['message', { kind: 'ok', id: '1', result: {} }],
+    ])(
+      'settles every caller on invalid transport %s (ready: ' + String(ready) + ')',
+      async (type, data) => {
+        const w = worker();
+        const client = new EngineClient(w.fake);
+        if (ready) {
+          w.emit('message', { data: { kind: 'ready' } });
+          await client.ready();
+        }
+        const first = client.call('info', []);
+        const second = client.call('info', []);
+        const settled = Promise.all([
+          expect(first).rejects.toBeInstanceOf(Error),
+          expect(second).rejects.toBeInstanceOf(Error),
+        ]);
+        const readiness = ready
+          ? Promise.resolve()
+          : expect(client.ready()).rejects.toBeInstanceOf(Error);
+        w.emit(type, { data });
+        await settled;
+        await readiness;
+        const failure: unknown = await first.catch((error: unknown) => error);
+        await expect(client.ready()).rejects.toBe(failure);
+        await expect(client.call('info', [])).rejects.toBe(failure);
+        expect(client.pendingCount).toBe(0);
+        expect([...w.listeners.values()].every((set) => set.size === 0)).toBe(true);
+        client.terminate();
+        expect(w.terminate).toHaveBeenCalledTimes(1);
+      },
+    );
+  }
+
   it.each([false, true])(
     'rejects pending and late callers on failure (already ready: %s)',
     async (ready) => {

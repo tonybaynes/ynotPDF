@@ -7,6 +7,7 @@
  * ships.
  */
 
+import { assertWorkerEnvelope } from '@shared/workerMessages';
 import { combine, type CombineOptions, type CombineResult } from '@engine/ops/combine';
 import { cropPages, type CropOptions } from '@engine/ops/crop';
 import { deskewPages, type DeskewOptions, type DeskewResult } from '@engine/ops/deskew';
@@ -25,8 +26,13 @@ import type { OpsAnswer, OpsFromWorker, OpsToWorker } from './opsProtocol';
 /** Minimal worker surface we rely on, so a test can pass a fake. */
 export interface OpsWorkerLike {
   postMessage(message: OpsToWorker, transfer?: Transferable[]): void;
-  addEventListener(type: 'message', listener: (ev: MessageEvent) => void): void;
+  addEventListener(type: 'message' | 'messageerror', listener: (ev: MessageEvent) => void): void;
   addEventListener(type: 'error', listener: (ev: ErrorEvent) => void): void;
+  removeEventListener?(
+    type: 'message' | 'messageerror',
+    listener: (ev: MessageEvent) => void,
+  ): void;
+  removeEventListener?(type: 'error', listener: (ev: ErrorEvent) => void): void;
   terminate(): void;
 }
 
@@ -46,6 +52,21 @@ export class OpsClient {
   private readonly pending = new Map<number, Pending>();
   private nextId = 1;
   private failure: Error | null = null;
+  private readonly onMessage = (ev: MessageEvent): void => {
+    if (this.failure) return;
+    try {
+      assertWorkerEnvelope(ev.data, 'ops');
+      this.dispatch(ev.data as OpsFromWorker);
+    } catch (error) {
+      this.stop(error instanceof Error ? error : new Error(String(error)));
+    }
+  };
+  private readonly onError = (ev: ErrorEvent): void => {
+    this.stop(new OpFailed(`The document operation stopped: ${ev.message}`));
+  };
+  private readonly onMessageError = (): void => {
+    this.stop(new OpFailed('The document operation stopped: a worker message could not be read'));
+  };
 
   /** Spawns the module worker built from `ops.worker.ts`, or runs in-process without one. */
   static spawn(): OpsClient {
@@ -60,13 +81,9 @@ export class OpsClient {
   constructor(worker: OpsWorkerLike | null) {
     this.worker = worker;
     if (!worker) return;
-    worker.addEventListener('message', (ev: MessageEvent) => {
-      this.dispatch(ev.data as OpsFromWorker);
-    });
-    worker.addEventListener('error', (ev: ErrorEvent) => {
-      const error = new OpFailed(`The document operation stopped: ${ev.message}`);
-      this.stop(error);
-    });
+    worker.addEventListener('message', this.onMessage);
+    worker.addEventListener('error', this.onError);
+    worker.addEventListener('messageerror', this.onMessageError);
   }
 
   /** True when the work happens off the main thread. */
@@ -181,7 +198,12 @@ export class OpsClient {
     return {
       promise,
       cancel: () => {
-        if (this.pending.has(id)) worker.postMessage({ kind: 'cancel', id });
+        if (!this.pending.has(id)) return;
+        try {
+          worker.postMessage({ kind: 'cancel', id });
+        } catch (error) {
+          this.stop(error instanceof Error ? error : new Error(String(error)));
+        }
       },
     };
   }
@@ -211,6 +233,9 @@ export class OpsClient {
   private stop(error: Error): void {
     if (this.failure) return;
     this.failure = error;
+    this.worker?.removeEventListener?.('message', this.onMessage);
+    this.worker?.removeEventListener?.('error', this.onError);
+    this.worker?.removeEventListener?.('messageerror', this.onMessageError);
     for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
     this.worker?.terminate();

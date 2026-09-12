@@ -420,19 +420,20 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       if (quit) app.quit();
     },
     'shell:openTempFile': async (e, name, bytes) => {
-      assertExternalDocument(name);
+      const safeName = assertExternalDocument(name);
       const answer = await dialog.showMessageBox(requireWindow(e), {
         type: 'question',
         title: 'Open attachment in another app',
         message: 'Open "' + name + '" in its associated application?',
         detail:
+          (safeName === name ? '' : 'The temporary file will be named "' + safeName + '". ') +
           'Only open attachments from a source you trust. The other application controls how this file is handled.',
         buttons: ['Cancel', 'Open attachment'],
         defaultId: 0,
         cancelId: 0,
       });
       if (answer.response !== 1) throw new Error('Opening the attachment was cancelled');
-      const path = await writeTempFile(name, bytes);
+      const path = await writeTempFile(safeName, bytes);
       if (E2E) return path;
       const error = await shell.openPath(path);
       if (error) throw new Error(error);
