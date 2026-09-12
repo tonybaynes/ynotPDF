@@ -37,6 +37,17 @@ end without waiting to be asked for the next step:
 
 ## Purpose
 
+### Audit follow-up — recipient permissions (2026-09-12)
+
+Finding 3 separates source policy from working-byte security and recipient authority from verified
+owner-password authority (ADR 0022). The ordinary open flow carries envelope permissions into the
+document before tab attachment. Refresh cannot erase them; modify permission cannot grant copying
+or printing. Both open paths use the same policy installation, Properties reports the source, and
+certificate recipients are not offered password unlocking. A regression suite and an ordinary-Open
+UI scenario with two recipients cover these boundaries. Cross-module edits are the M11 prepared-open
+handoff, M20's optional pre-attachment callback and M13's missing print/copy permission checks;
+core document/engine contracts stay unchanged. Ordinary text-input copying remains available.
+
 Password security (AES-256/AES-128/RC4-128 legacy), permission flags,
 remove security, and certificate-based encryption, applied on save through
 qpdf.
@@ -331,8 +342,8 @@ colourblind: black and red read as the same colour):**
   registered `permissionGate` and the ribbon's tooltip gains a sentence saying which permission is
   missing and that the owner password lifts it. M70 registers the gate, so a build without M70
   leaves every command enabled and nothing else has to know. `SecurityService.allows(action)` is
-  the single answer behind it: true when unprotected, true when opened with the owner password or
-  a digital ID, otherwise what `/P` says.
+  the single answer behind it: true when unprotected or opened with verified owner-password
+  authority, otherwise the source password policy or the selected recipient's envelope permissions.
 - **A certificate-protected file cannot be re-protected on its own, and the save says so.** Such a
   file names its recipients inside sealed envelopes but does not carry their certificates, and
   nothing can encrypt to a certificate it does not have. A document opened with a digital ID and

@@ -27,6 +27,8 @@ export interface OpenedDocument {
 }
 
 export interface OpenDocumentOptions extends OpenOptions {
+  /** Install source policy before the new tab or its attachment is observable. */
+  readonly beforeAttach?: (document: Document) => void;
   /** Absolute path, or null/absent for a document that has never been saved. */
   readonly path?: string | null;
   /** Tab title override; defaults to the document's own title. */
@@ -90,7 +92,10 @@ export class DocumentService {
         return { tab: existing, document: doc };
       }
     }
-    const document = await Document.open(this.engine, bytes, options);
+    // The callback belongs to this service; functions cannot cross the engine's worker boundary.
+    const { beforeAttach, ...engineOptions } = options;
+    const document = await Document.open(this.engine, bytes, engineOptions);
+    beforeAttach?.(document);
     const tab = this.documents.open({
       title: options.title ?? document.state.title,
       path,

@@ -426,8 +426,11 @@ test.describe('document security', () => {
     expect(opened.permissions.print).toBe('none');
     const sealed = await state(app);
     expect(sealed.openedAs).toBe('Alice Adams');
-    // The document that reached PDFium is plaintext: the protection is on the file, not the tab.
-    expect(sealed.encrypted).toBe(false);
+    // PDFium holds plaintext, but Properties and permission checks retain the source policy.
+    expect(sealed.encrypted).toBe(true);
+    expect(sealed.handler).toBe('public-key');
+    expect(sealed.allows['print']).toBe(false);
+    expect(sealed.allows['modify']).toBe(false);
 
     // Change something, so the save is a real one rather than the no-op a clean document gets.
     await app.run('dev.documentApply', { kind: 'rotate', page: 0, rotation: 90 });
@@ -447,5 +450,92 @@ test.describe('document security', () => {
     );
     expect(await app.run('dev.saveState')).toMatchObject({ dirty: true });
     await closeDiscarding(app);
+  });
+
+  test('ordinary Open retains each certificate recipient’s rights in commands and Properties', async () => {
+    const reader = makeIdentity('Restricted Reader', 'reader-key');
+    const editor = makeIdentity('Restricted Editor', 'editor-key');
+    const path = await protectedFile(app, 'two-recipients.pdf', {
+      kind: 'certificate',
+      recipients: [reader, editor].map((id, index) => ({
+        id: String(index),
+        name: index === 0 ? 'Restricted Reader' : 'Restricted Editor',
+        issuer: 'Test',
+        serial: '1',
+        validFrom: '',
+        validTo: '',
+        certificateBase64: id.base64,
+        permissions: {
+          print: 'none',
+          modify: index === 0 ? 'none' : 'all',
+          copy: false,
+          accessibility: true,
+        },
+      })),
+    });
+    for (const [identity, password, modify] of [
+      [reader, 'reader-key', false],
+      [editor, 'editor-key', true],
+    ] as const) {
+      // Substitute only the native file selection; the ordinary Open command, explanatory
+      // dialog, password prompt, decryption and attachment all run unchanged.
+      await app.electron.evaluate(({ dialog }, p12) => {
+        const original = dialog.showOpenDialog.bind(dialog);
+        dialog.showOpenDialog = () => {
+          dialog.showOpenDialog = original;
+          return Promise.resolve({ canceled: false, filePaths: [p12] });
+        };
+      }, identity.p12);
+      const opening = app.run('file.openRecent', { path });
+      const explanation = app.page.getByRole('dialog', { name: 'Digital ID needed' });
+      await expect(explanation).toBeVisible();
+      await explanation.getByRole('button', { name: 'OK', exact: true }).click();
+      const passwordDialog = app.page.locator('#digital-id-dialog');
+      await expect(passwordDialog).toBeVisible();
+      await passwordDialog.locator('#digital-id-password').fill(password);
+      await passwordDialog.getByRole('button', { name: 'Open', exact: true }).click();
+      await opening;
+      const opened = await state(app);
+      expect(opened).toMatchObject({ encrypted: true, handler: 'public-key', unlocked: false });
+      expect(opened.allows).toMatchObject({ copy: false, print: false, modify });
+      expect(opened.reasonAgainstPrint).toContain('This digital ID');
+      expect(await app.isEnabled('protect.security')).toBe(modify);
+      expect(await app.isEnabled('protect.unlock')).toBe(false);
+      await expect(app.run('file.print')).rejects.toThrow(/do not allow printing/);
+      await app.run('edit.selectAll');
+      expect(await app.isEnabled('edit.copy')).toBe(false);
+      await expect(app.run('edit.copyFormatted')).rejects.toThrow(/do not allow copying/);
+      expect(await app.run('dev.snapshot', { page: 0, x0: 0, y0: 0, x1: 100, y1: 100 })).toBeNull();
+      expect(await app.run('dev.printDryRun')).toBeNull();
+      expect(
+        await app.run('dev.printToPdf', { path: join(workspace, 'forbidden.pdf') }),
+      ).toBeNull();
+      if (!modify)
+        await expect(app.run('protect.security')).rejects.toThrow(/do not allow changing/);
+      await app.page.locator('.ribbon-tab[data-tab="protect"]').click();
+      const protectButton = app.page
+        .locator('#ribbon-body')
+        .getByRole('button', { name: 'Change Protection…', exact: true });
+      if (modify) await expect(protectButton).toBeEnabled();
+      else await expect(protectButton).toBeDisabled();
+      await app.run('app.commandPalette');
+      const palette = app.page.locator('#command-palette');
+      await palette.locator('input').fill('Print');
+      // The palette lists enabled commands only.
+      await expect(palette.locator('li[data-command="file.print"]')).toHaveCount(0);
+      await app.page.keyboard.press('Escape');
+      await app.run('protect.properties');
+      const properties = app.page.locator('#security-properties-dialog');
+      await expect(properties).toContainText('Certificate security');
+      await expect(properties).toContainText('No printing');
+      await expect(properties).toContainText('no copying');
+      await app.page.keyboard.press('Escape');
+      // Copying text typed into the find box remains available; it is not PDF extraction.
+      await app.run('edit.find');
+      await app.page.locator('#find-bar .find-input').fill('my own query');
+      expect(await app.isEnabled('edit.copy')).toBe(true);
+      await app.run('edit.findClose');
+      await closeDiscarding(app);
+    }
   });
 });

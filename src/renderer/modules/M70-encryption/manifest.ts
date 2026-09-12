@@ -64,7 +64,7 @@ const isLocked = (ctx: ServiceContext): boolean => {
   const doc = ctx.service<DocumentService>(DOCUMENT_SERVICE).active;
   if (!doc) return false;
   const state = security(ctx).securityOf(doc);
-  return state.info.encrypted && !state.unlocked;
+  return state.info.handler === 'standard' && !state.unlocked;
 };
 
 function activeDocument(ctx: ServiceContext): Document {

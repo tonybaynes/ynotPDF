@@ -212,7 +212,7 @@ export default defineModule({
       icon: 'copy',
       shortcut: 'Mod+C',
       description: 'Copy the selected text',
-      when: hasService,
+      when: (ctx) => hasService(ctx) && (inTextField() !== null || service(ctx).canCopy()),
       run: async (ctx) => {
         const field = inTextField();
         if (field) return await copyFromField(field);
@@ -221,6 +221,7 @@ export default defineModule({
     },
     {
       id: 'edit.copyFormatted',
+      permission: 'copy',
       label: 'Copy with Formatting',
       category: 'Edit',
       icon: 'clipboard',
@@ -231,6 +232,7 @@ export default defineModule({
     },
     {
       id: 'edit.copyImage',
+      permission: 'copy',
       label: 'Copy Image',
       category: 'Edit',
       icon: 'image',
@@ -249,6 +251,7 @@ export default defineModule({
     },
     {
       id: 'edit.copyAsText',
+      permission: 'copy',
       label: 'Copy Selection as Plain Text',
       category: 'Edit',
       description: 'Copy the selection with no formatting at all',
@@ -409,6 +412,7 @@ export default defineModule({
     // ---- printing -------------------------------------------------------------------------------
     {
       id: 'file.print',
+      permission: 'print',
       label: 'Print…',
       category: 'File',
       icon: 'printer',
@@ -419,6 +423,7 @@ export default defineModule({
     },
     {
       id: 'file.pageSetup',
+      permission: 'print',
       label: 'Page Setup…',
       category: 'File',
       icon: 'file-cog',
@@ -428,6 +433,7 @@ export default defineModule({
     },
     {
       id: 'file.printToPdf',
+      permission: 'print',
       label: 'Print to PDF…',
       category: 'File',
       icon: 'file-output',

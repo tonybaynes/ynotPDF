@@ -302,3 +302,22 @@ close and Save As. UI tests cover the actual ribbon Save action and the certific
 warning, checking the destination remains unchanged until consent. New dialog wording is in the
 i18n catalogue. Validation results and merge status are recorded with the PR; this note describes
 the implementation, not a claim that all audit findings have been resolved.
+
+## 10. Certificate recipient permissions survive ordinary Open and refresh
+
+Codex audit finding 3, implemented on `fix/certificate-permissions`, based on finding 2's branch.
+M70 now retains the opened source policy independently of plaintext working bytes. M11 carries
+the selected recipient's permissions into M20's pre-attachment hook, before commands can observe
+the tab. Session authority distinguishes recipient access from a verified owner password; modify
+permission cannot grant copying or printing, and omitted recipient permissions fail closed.
+Refresh, including an inspection already in flight, cannot replace that captured policy.
+
+The ordinary-Open UI test found an additional gap: M13 print and copy paths did not consult the
+permission gate. Their command declarations and output callbacks now do. Contextual Copy still
+works in ordinary text inputs. Properties reports the source's certificate protection and recipient
+rights. Password unlocking is unavailable for certificate sources. Source envelope identities
+are not mistaken for certificates usable for re-encryption, so finding 2's pre-write warning remains.
+
+ADR 0022 records the design and scope. Six initial regressions failed before the fix; tests also
+cover pre-attachment ordering and the real two-recipient Open flow. Local and CI results belong
+in the PR. M92's export-permission mapping (finding 21) and other audit findings remain separate.
