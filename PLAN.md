@@ -47,7 +47,7 @@ commit and merge, then update the completion tick. Parallel tasks follow **§12*
 | 5 | M33 Measuring tools — distance, perimeter, area, calibration | [M33-measuring-tools.md](docs/modules/M33-measuring-tools.md) | ☑ |
 | 5 | M50 Page-object model — select, move, resize, align, arrange | [M50-object-model.md](docs/modules/M50-object-model.md) | ◐ |
 | 5 | M60 Form fill & AcroForm field designer | [M60-forms.md](docs/modules/M60-forms.md) | ◐ |
-| 5 | M92 Export to images, text, HTML & RTF | [M92-export.md](docs/modules/M92-export.md) | ◐ |
+| 5 | M92 Export to images, text, HTML & RTF | [M92-export.md](docs/modules/M92-export.md) | ☑ |
 | 5 | M100 Optimise (reduce size), linearise, repair, remove duplicates | [M100-optimise-repair.md](docs/modules/M100-optimise-repair.md) | ☑ |
 | 6 | M53 Header/footer, Bates numbering, watermark, background & links | [M53-headers-bates-watermarks-links.md](docs/modules/M53-headers-bates-watermarks-links.md) | ◐ |
 | 6 | M61 Field logic — validation, formatting, calculation, actions; data import/export; flatten | [M61-form-logic-data.md](docs/modules/M61-form-logic-data.md) | ☐ |
@@ -76,25 +76,25 @@ Historical CI on three OS families does not establish every architecture or
 installer acceptance gate in §3.1.
 
 **2026-09-12 completion review:** 27 of the 44 original modules had delivery
-ticks. Further reading confirmed eleven incomplete modules: **16 remain ticked,
-four have active repair tasks, seven are queued, and 17 have not started**.
-These counts describe the original briefs, not effort
+ticks. Further reading confirmed eleven incomplete modules. After the merged M92
+embedded-image and readability repairs, **17 are now ticked, ten remain reopened
+(three active and seven queued), and 17 have not started**. These counts describe the original briefs, not effort
 remaining or competitor parity. Existing audit findings remain tracked in
 `Codex_Audit.md` and `docs/open-work.md`.
 
 | Reopened module | Required completion work | Task |
 |---|---|---|
-| M11 | Full viewer UI 561 passed/4 existing skips and 11 integration passes; Windows CI raster-edge assertion is under exact-viewport investigation before signoff | M11 - Complete Fit Visible (PR59 open) |
-| M13 | PR58 merged; PR62 corrected real-input printing journeys/guards pass 14 checks, full UI/CI rerunning. Region snapshot fidelity, selection-input journeys and independent RTF application verification remain; installed Word is a valid substitute for absent WordPad, accurately recorded | M13 - Preserve annotations in PDF printing |
-| M41 | Crop ratios/geometry merged in PR55 (214f7f4), all eight CI checks green; same task continues import deskew and Combine folder/desktop-drop routes | M41 - Complete import and Combine workflows |
-| M92 | Group 4 TIFF merged in PR57 (c492bfd), all eight CI checks green; same task continues masks/intrinsic dimensions/nested images, original-vs-PNG choice and exact duplicate detection. Audit coordinates selection-text clipping | M92 - Complete image export fidelity |
+| M11 | PR59 merged as 2696119. PR67 (`a4f0eb6`) fixes real F11/reading Escape and ruler-guide interactions; six focused checks and all desktop CI checks pass. Windows ARM installer-smoke checks were still running; full local UI evidence was interrupted by the usage limit. | M11 - Complete viewer interactions |
+| M13 | PR58 merged. PR62 (`cce1f2d`) fixes the proven tab overflow and asynchronous journal-baseline race; 13 preview/guard checks pass. CI was still running. Region snapshot fidelity, genuine selection-input journeys, independent RTF application verification and printer-driver fidelity remain. | M13 - Preserve annotations in PDF printing |
+| M41 | Crop repair PR55 and import deskew/Combine folder/drop repair PR64 merged as 7c3d24d with all eight checks green. Structural preservation remains incomplete: the audit guard refuses seven original corpus files, and Split keepForms does not yet preserve AcroForm ownership. | M41 - Complete import and Combine workflows |
+| M92 | PR63 embedded-image fidelity merged as f823f14 and PR65 readability/copy-permission integration merged as 29d8e2b; both had all eight CI checks green. Masks, intrinsic dimensions, nested images, Original/PNG choice, exact deduplication and large-scale readable controls are covered. M92 is complete under its documented scope; M91's TIFF-import edge case remains separate. | M92 - Complete image export fidelity |
 | M30 | Cross-renderer appearance acceptance evidence | Queued validation work; no visual defect assumed |
 | M32 | Genuine Acrobat/Foxit XFDF fixture acceptance | Queued interoperability validation; no importer defect assumed |
 | M50 | Preserve unknown page operators during object z-order changes | Queued after active repairs and shared-code ownership clears |
 | M53 | Multi-file Bates workflow | Queued after an active task finishes and merges |
 | M60 | Image-field picture selection/button icons | Queued after active repairs and shared-code ownership clears |
 | M70 | Per-recipient certificate permission editing | Queued after active repairs and shared-code ownership clears |
-| M91 | Correct pixel decoding for valid compressed TIFF inputs | Queued after active repairs and audit ownership clears |
+| M91 | Correct pixel decoding for valid compressed TIFF inputs and the visibly truncated image-import Page option at large UI scale | Queued after active repairs and audit ownership clears |
 
 **Ordering principle (Tony, 2026-09-07): easiest-first, hardest-last.**
 Waves 0–4 give an installable, usable viewer/annotator; waves 5–7 make it an

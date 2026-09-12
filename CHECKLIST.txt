@@ -6,40 +6,40 @@ Other targets: macOS Intel/Apple Silicon and Ubuntu Desktop x64.
 
 LIVE STATUS — 2026-09-12
   Original inventory: 44 modules; 27 previously ticked.
-  Current: 16 ticked, 11 reopened (4 active, 7 queued), 17 not started.
+  Current: 17 ticked, 10 reopened (3 active, 7 queued), 17 not started.
   These are module counts, not percentage of effort or proof of product parity.
-  Four repair tasks are active. Tony permits up to TEN simultaneous tasks;
+  Three repair tasks are active. Tony permits up to TEN simultaneous tasks;
   expand only when write ownership, dependencies and test capacity allow it.
   Replace a slot only once its task is finished AND merged.
 
 ACTIVE REPAIRS (finish existing scope before new modules)
-  M11 - Complete Fit Visible
-        Content-aware fit, rotation/crop geometry, cache invalidation.
-        PR59 remains open: full viewer UI run passed 561 tests (4 existing skips),
-        final screenshots inspected; 11 current-main integration tests passed.
-        Windows CI exposed a raster-edge assertion failure; actual page/border
-        geometry is being checked at the exact failing viewport before signoff.
+  M11 - Complete viewer interactions
+        PR59 merged as 2696119 for content-aware fit, rotation/crop geometry and
+        cache invalidation. PR67 (a4f0eb6) fixes real F11/reading Escape and
+        ruler-guide interactions; six focused checks and all desktop CI checks
+        pass. Windows ARM installer-smoke checks were still running. The full
+        local UI run was interrupted by the account usage limit; do not tick yet.
   M13 - Preserve annotations in PDF printing
         Vector Print-to-PDF repair MERGED via PR58, all 8 CI checks green.
-        PR62 completes physical-print/preview snapshots; corrected real-input
-        journeys and quality guards pass 14 checks. Full UI/CI rerunning.
-        Same-task follow-up: reproduce/fix region snapshots omitting model-only
-        unsaved edits; add genuine pointer/keyboard selection journeys where
-        current tests bypass input. RTF RichEdit parsing is recorded; independent
-        application paste/style verification remains. Installed Word is accepted
-        for this check because WordPad is absent; record the actual application.
+        PR62 (cce1f2d) fixes physical-print/preview snapshots and the diagnosed
+        long-tab overflow; 13 corrected preview/guard checks pass. CI was still
+        running when this file was updated. Same-task follow-up remains: region
+        snapshots with model-only unsaved edits, genuine pointer/keyboard
+        selection journeys and styled clipboard paste into installed Word.
+        Word substitutes for absent WordPad; record the actual application.
   M41 - Complete import and Combine workflows
-        Crop ratios/geometry MERGED via PR55, all 8 CI checks green.
-        Same task now completing automatic deskew on image import, Combine's
-        promised Add folder action and external desktop file drop ingestion.
-  M92 - Complete image export fidelity
-        Group 4 TIFF repair MERGED via PR57, all 8 CI checks green.
-        Same task now completing masks, stored dimensions and nested Form images.
-        Original-format extraction stays available; decoded PNG will preserve
-        image transparency. Duplicate detection must not discard distinct images.
-        Visual follow-up: native selection text clips at 200% in export dialog;
-        audit owns shared text-fit checks and will coordinate the layout fix.
-  All four are in isolated worktrees; none is marked complete before merge.
+        Crop ratios/geometry MERGED via PR55; import deskew, Combine Add folder
+        and desktop drop MERGED via PR64 (7c3d24d), all 8 checks green.
+        Structural preservation remains open: AcroForms/Names/OCG/structure
+        catalog data are refused for seven original corpus files, and Split
+        keepForms does not yet preserve AcroForm ownership.
+  M92 - Complete image export fidelity — ✔ COMPLETE
+        PR63 embedded-image fidelity MERGED as f823f14 and PR65 readability/
+        copy-permission integration MERGED as 29d8e2b. All 8 checks were green
+        on each head; masks, intrinsic dimensions, nested images, Original/PNG
+        choice, exact deduplication and 200% readable controls are covered.
+        M91's valid TIFF dispatcher edge case remains a separate queued repair.
+  Three active repair tasks remain in isolated worktrees; M92 is merged and ticked.
   Existing broader repair work: Codex_Audit.md and docs/open-work.md.
 
 QUEUED COMPLETION REPAIRS (confirmed original scope; no new tasks yet)
@@ -49,7 +49,8 @@ QUEUED COMPLETION REPAIRS (confirmed original scope; no new tasks yet)
   M53 — implement the promised multi-file Bates workflow.
   M60 — implement image-field picture selection/button icons.
   M70 — edit certificate permissions separately for each recipient.
-  M91 — correct valid TIFF decoding when compressed/decoded byte lengths match.
+  M91 — correct valid TIFF decoding when compressed/decoded byte lengths match;
+        also fix the visibly truncated image-import Page option at large UI scale.
   Start only after an active slot has finished and merged and shared ownership
   is clear. M50/M60/M70 currently interact with audit-owned shared code.
 
@@ -68,7 +69,8 @@ MERGED REVIEW / REPAIR HISTORY
   PR57 — M92 Group 4 TIFF and single-page compression; merge c492bfd.
   PR55 — M41 fixed/custom crop ratios and rotated geometry; merge 214f7f4.
   All passed Windows, macOS, Ubuntu and Windows ARM installer checks.
-  Required follow-ups remain active in the same M13, M41 and M92 tasks.
+  Required follow-ups remain active in M11, M13 and M41; M92's reopened scope is
+  merged and ticked after PR63 and PR65.
 
 LOCAL UI TEST COORDINATION
   All local Electron runs, including focused tests, use one coordinator-owned
@@ -269,8 +271,9 @@ WAVE 5
       needs: M21 M30
       prompt: Read D:\Projects\ynotPDF\docs\modules\M60-forms.md and carry out the "Your task" section in full.
 
-[ ] M92  Export to images, text, HTML & RTF
-      status: REOPENED — bilevel TIFF compression completion active.
+[✔] M92  Export to images, text, HTML & RTF
+      status: COMPLETE — embedded-image fidelity PR63 and readability/
+      copy-permission integration PR65 are merged with all required CI green.
       model:  Opus
       needs: M11 M13
       prompt: Read D:\Projects\ynotPDF\docs\modules\M92-export.md and carry out the "Your task" section in full.
