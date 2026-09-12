@@ -84,9 +84,9 @@ remaining or competitor parity. Existing audit findings remain tracked in
 
 | Reopened module | Required completion work | Task |
 |---|---|---|
-| M11 | Full viewer UI 561 passed/4 existing skips, screenshots inspected, 11 current-main integration journeys passed; final CI pending | M11 - Complete Fit Visible (PR59 open) |
-| M13 | PR58 vector repair merged; PR62 printer/preview repair has 11 focused passes, full UI/CI running. Region snapshot fidelity, real selection-input journeys and literal RTF application evidence remain | M13 - Preserve annotations in PDF printing |
-| M41 | Crop/export integration passes 82 units and 11 UI journeys; final CI pending. Import deskew and Combine folder/desktop-drop routes remain follow-ups | M41 - Complete crop aspect ratios (PR55 open) |
+| M11 | Full viewer UI 561 passed/4 existing skips and 11 integration passes; Windows CI raster-edge assertion is under exact-viewport investigation before signoff | M11 - Complete Fit Visible (PR59 open) |
+| M13 | PR58 merged; PR62 corrected real-input printing journeys/guards pass 14 checks, full UI/CI rerunning. Region snapshot fidelity, selection-input journeys and independent RTF application verification remain; installed Word is a valid substitute for absent WordPad, accurately recorded | M13 - Preserve annotations in PDF printing |
+| M41 | Crop ratios/geometry merged in PR55 (214f7f4), all eight CI checks green; same task continues import deskew and Combine folder/desktop-drop routes | M41 - Complete import and Combine workflows |
 | M92 | Group 4 TIFF merged in PR57 (c492bfd), all eight CI checks green; same task continues masks/intrinsic dimensions/nested images, original-vs-PNG choice and exact duplicate detection. Audit coordinates selection-text clipping | M92 - Complete image export fidelity |
 | M30 | Cross-renderer appearance acceptance evidence | Queued validation work; no visual defect assumed |
 | M32 | Genuine Acrobat/Foxit XFDF fixture acceptance | Queued interoperability validation; no importer defect assumed |

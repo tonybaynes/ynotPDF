@@ -17,21 +17,21 @@ ACTIVE REPAIRS (finish existing scope before new modules)
         Content-aware fit, rotation/crop geometry, cache invalidation.
         PR59 remains open: full viewer UI run passed 561 tests (4 existing skips),
         final screenshots inspected; 11 current-main integration tests passed.
-        Final integrated CI remains the merge gate.
+        Windows CI exposed a raster-edge assertion failure; actual page/border
+        geometry is being checked at the exact failing viewport before signoff.
   M13 - Preserve annotations in PDF printing
         Vector Print-to-PDF repair MERGED via PR58, all 8 CI checks green.
-        PR62 completes physical-print/preview snapshots; 11 focused journeys
-        pass, including exact preview/prepared-sheet pixels. Full UI/CI running.
+        PR62 completes physical-print/preview snapshots; corrected real-input
+        journeys and quality guards pass 14 checks. Full UI/CI rerunning.
         Same-task follow-up: reproduce/fix region snapshots omitting model-only
         unsaved edits; add genuine pointer/keyboard selection journeys where
-        current tests bypass input. RTF RichEdit parsing is recorded; literal
-        WordPad/TextEdit application acceptance is still unestablished.
-  M41 - Complete crop aspect ratios
-        Fixed/custom ratios, rotated crop geometry, apply/undo/save/reopen.
-        PR55 current-main crop/export integration: 82 unit and 11 UI tests pass;
-        final integrated CI pending.
-        Follow-up required: automatic deskew on image import is not connected.
-        Combine also still needs its promised Add folder and desktop file drop.
+        current tests bypass input. RTF RichEdit parsing is recorded; independent
+        application paste/style verification remains. Installed Word is accepted
+        for this check because WordPad is absent; record the actual application.
+  M41 - Complete import and Combine workflows
+        Crop ratios/geometry MERGED via PR55, all 8 CI checks green.
+        Same task now completing automatic deskew on image import, Combine's
+        promised Add folder action and external desktop file drop ingestion.
   M92 - Complete image export fidelity
         Group 4 TIFF repair MERGED via PR57, all 8 CI checks green.
         Same task now completing masks, stored dimensions and nested Form images.
@@ -66,8 +66,9 @@ MERGED REVIEW / REPAIR HISTORY
   PR58 — M13 vector print appearances/snapshot; merge 753f5cb.
   PR60 — live plan/checklist and visual completion findings; merge dba7db3.
   PR57 — M92 Group 4 TIFF and single-page compression; merge c492bfd.
+  PR55 — M41 fixed/custom crop ratios and rotated geometry; merge 214f7f4.
   All passed Windows, macOS, Ubuntu and Windows ARM installer checks.
-  Required follow-ups remain active in the same M13 and M92 tasks.
+  Required follow-ups remain active in the same M13, M41 and M92 tasks.
 
 LOCAL UI TEST COORDINATION
   All local Electron runs, including focused tests, use one coordinator-owned
