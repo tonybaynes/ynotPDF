@@ -159,6 +159,28 @@ These are recommendations to the coordinator, not repairs included in this chang
 
 ## Integration and validation
 
-In progress. Full local and CI results, exact PR head, and any remaining platform limitations
-will be recorded before handing the PR to the coordinator. PLAN.md and CHECKLIST.txt are owned
-centrally and are deliberately not edited by this task.
+- Integrated origin/main `d322de7` (save/recovery repair) without conflicts. Production code
+  is unchanged between integration commit `4d6b368` and validation revision `49eb347`;
+  the latter splits the large unit stress case and adds review evidence.
+- Full local `npm test` on `49eb347`: exit 0, 197 files passed / 8 existing skips;
+  4,093 tests passed / 24 existing fixture/platform skips. Coverage gates passed.
+- Full local invisible, one-worker Playwright run: exit 0, 556 passed / 4 skipped in
+  9.6 minutes. This reconciles to `--list`: 560 tests in 40 files. All four skips are
+  unavailable private portfolio fixtures (three panel checks and one portfolio check).
+  The 31 dedicated export UI checks, including three new journeys, all passed.
+- `npm run lint` (including type checks, style/i18n rules), `npm run licenses` (44
+  production packages, all permissive), and `npm run build` passed after integration.
+- Initial Windows/Ubuntu CI timed out on the combined 5,201-pixel-wide stress case,
+  with no failed pixel assertion. It is now split by pattern, preserving every width,
+  pixel and tag check, with two-page IFD chains per case. No timeout was increased and
+  no assertion or case was removed. The revised full unit CI passed on all three OSes.
+- [PR #57](https://github.com/tonybaynes/ynotPDF/pull/57) carries the final-head CI results
+  and coordinator handoff. Full Windows/macOS/Ubuntu UI and packaging, then Windows ARM
+  installer smoke, must be green before merge; local success is not a substitute.
+  The final-head check report is kept on the PR so a later integration cannot inherit
+  an older revision's green status. Dedicated native export runs on both Mac CPUs and
+  Windows ARM are not provided by the existing workflow (see platform limits above).
+
+The known M91 production-import failure and remaining M92 embedded-image contract gap
+are reported separately above; neither is disguised as a passing check. The coordinator
+owns serial merge, PLAN.md and CHECKLIST.txt, and keeps M92 reopened for its remaining work.
