@@ -93,6 +93,13 @@ discard the undo stack. No writer, document model, main IPC, MergeService or
 OpsClient changes are part of this repair; the separate audit task owns those
 integration contracts.
 
+Coordinator review found a crop context race during asynchronous dialog/settings
+work. The helper now receives the original document and revision, rejects a
+changed context before planning, and checks the active document and planned page
+IDs before each mutation. A mid-range switch rolls back prior crop changes.
+`test/unit/ops/crop-context.test.ts` deterministically covers pending settings
+plus a tab switch, a changed revision, rollback and stable-range undo.
+
 Ratio components must be finite and between 0.01 and 1000, and width/height
 between 1:100 and 100:1. Invalid input disables Crop/Use ratio and supplies a
 worded error. Results smaller than one point are rejected without replacing the

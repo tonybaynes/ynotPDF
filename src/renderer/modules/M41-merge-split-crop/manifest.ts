@@ -373,6 +373,7 @@ const CROP_PAGES: CommandSpec = {
   run: async (ctx) => {
     const service = ops(ctx);
     const doc = service.require();
+    const cropContext = { document: doc, revision: doc.state.revision };
     const where = target(ctx);
     const page = where.indexes[0] ?? 0;
     const box = boxArg(ctx.args) ?? service.settings.cropBox;
@@ -416,7 +417,7 @@ const CROP_PAGES: CommandSpec = {
     cropRatio = answer.ratioChoice;
     await service.setSetting('cropBox', answer.box);
     await service.setSetting('cropChangesPageSize', answer.changePageSize);
-    const cropped = await applyCropChoice(service, answer, extra);
+    const cropped = await applyCropChoice(service, answer, extra, cropContext);
     service.toasts.show({ kind: 'success', text: `Cropped ${countPages(cropped)}.` });
     return service.record({ cropped, box: answer.box, rect: answer.rect });
   },
