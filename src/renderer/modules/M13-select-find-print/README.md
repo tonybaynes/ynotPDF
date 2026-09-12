@@ -4,31 +4,33 @@ Everything textual a reader does with a page, plus getting it on to paper.
 
 ## What is where
 
-| File / folder                          | What it is                                                              |
-| -------------------------------------- | ----------------------------------------------------------------------- |
-| `manifest.ts`                          | Commands, ribbon groups, the Search panel, the Snapshot tool, shortcuts |
-| `SelectFindService.ts`                 | The service everything calls into; one state per document tab           |
-| `TextService.ts`                       | The page-text cache — one `textRuns` round trip per page, ever          |
-| `settings.ts`                          | Find options, snapshot DPI, and the remembered print settings           |
-| `canvas.ts`                            | The two canvas helpers snapshots and print sheets share                 |
-| `selection/model.ts`                   | **Pure.** What is selected: two carets, a granularity, a column rect    |
-| `selection/TextSelectionController.ts` | The pointer, keyboard and repaint plumbing round that model             |
-| `selection/Highlighter.ts`             | Draws selection and search rectangles into the page text layer          |
-| `selection/rtf.ts`                     | **Pure.** The RTF writer, built in-house                                |
-| `selection/clipboard.ts`               | Text / RTF / image on to the clipboard, through main                    |
-| `find/search.ts`                       | **Pure.** The matcher: case, whole word, regex, accents, proximity      |
-| `find/FindController.ts`               | One document's hit list, and which hit is current                       |
-| `find/FindBar.ts`                      | The Ctrl+F strip                                                        |
-| `find/SearchPanel.ts`                  | The advanced-search panel: scope, options, results tree, CSV            |
-| `find/csv.ts`                          | **Pure.** Results as CSV                                                |
-| `print/imposition.ts`                  | **Pure.** Pages → sheets: n-up, booklet, tiling, scaling, auto-rotate   |
-| `print/pageRange.ts`                   | **Pure.** "2-4, 7, 9-", odd / even, reverse                             |
-| `print/plan.ts`                        | **Pure.** Settings → the plan the preview, the paper and the PDF share  |
-| `print/paper.ts`                       | The paper catalogue (`resources/print/paper-sizes.json`)                |
-| `print/render.ts`                      | One sheet → one PNG at the job's DPI                                    |
-| `print/printToPdf.ts`                  | The same imposition, written to a file — vector or raster               |
-| `print/PrintService.ts`                | Plans, renders, and talks to main                                       |
-| `print/PrintDialog.ts`                 | Our print dialog, with a live preview                                   |
+| File / folder                          | What it is                                                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `manifest.ts`                          | Commands, ribbon groups, the Search panel, the Snapshot tool, shortcuts                                 |
+| `SelectFindService.ts`                 | The service everything calls into; one state per document tab                                           |
+| `TextService.ts`                       | The page-text cache — one `textRuns` round trip per page, ever                                          |
+| `settings.ts`                          | Find options, snapshot DPI, and the remembered print settings                                           |
+| `canvas.ts`                            | The two canvas helpers snapshots and print sheets share                                                 |
+| `selection/model.ts`                   | **Pure.** What is selected: two carets, a granularity, a column rect                                    |
+| `selection/TextSelectionController.ts` | The pointer, keyboard and repaint plumbing round that model                                             |
+| `selection/Highlighter.ts`             | Draws selection and search rectangles into the page text layer                                          |
+| `selection/rtf.ts`                     | **Pure.** The RTF writer, built in-house                                                                |
+| `selection/clipboard.ts`               | Text / RTF / image on to the clipboard, through main                                                    |
+| `find/search.ts`                       | **Pure.** The matcher: case, whole word, regex, accents, proximity                                      |
+| `find/FindController.ts`               | One document's hit list, and which hit is current                                                       |
+| `find/FindBar.ts`                      | The Ctrl+F strip                                                                                        |
+| `find/SearchPanel.ts`                  | The advanced-search panel: scope, options, results tree, CSV                                            |
+| `find/csv.ts`                          | **Pure.** Results as CSV                                                                                |
+| `print/imposition.ts`                  | **Pure.** Pages → sheets: n-up, booklet, tiling, scaling, auto-rotate                                   |
+| `print/pageRange.ts`                   | **Pure.** "2-4, 7, 9-", odd / even, reverse                                                             |
+| `print/plan.ts`                        | **Pure.** Settings → the plan the preview, the paper and the PDF share                                  |
+| `print/paper.ts`                       | The paper catalogue (`resources/print/paper-sizes.json`)                                                |
+| `print/render.ts`                      | One sheet → one PNG at the job's DPI                                                                    |
+| `print/printToPdf.ts`                  | The same imposition, written to a file — vector or raster                                               |
+| `print/snapshot.ts`                    | Captures current model and engine bytes through the undo read barrier; runs M21's writer without saving |
+| `print/appearances.ts`                 | Bakes printable normal/state appearances into an isolated PDF; rejects missing drawings                 |
+| `print/PrintService.ts`                | Plans, renders, and talks to main                                                                       |
+| `print/PrintDialog.ts`                 | Our print dialog, with a live preview                                                                   |
 
 The text model itself lives one level up, in `src/renderer/view/TextLayer.ts`, because it is
 shared: M51 will reflow from the same line and paragraph grouping, M54 replaces inside it and
@@ -45,6 +47,11 @@ M111 reads it aloud.
   plan `print/plan.ts` produced, so they cannot disagree (ADR 0012).
 - **Selection is ours, not the browser's.** See ADR 0012 for why, and `selection/Highlighter.ts`
   for how the highlight stays opaque without hiding the words under it.
+
+Vector Print to PDF preserves printable comments and form fields according to the two print
+switches. It never flattens the source document. Page rotation/crop origins, n-up, booklet and
+tile clipping apply to content and appearances together. A mark without a usable appearance is
+reported before output, not silently dropped. Print as image and Greyscale use the raster route.
 
 ## What M13 does not own
 

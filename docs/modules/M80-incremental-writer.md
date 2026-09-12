@@ -39,7 +39,9 @@ end without waiting to be asked for the next step:
 
 An append-only writer that emits only changed/new objects plus a new
 xref section and trailer, preserving all prior bytes — required for
-signatures and for instant saves of large files. Becomes the default Save.
+signatures and for reducing write work on eligible large files. Becomes the
+default Save only where the explicit save-policy matrix allows it; measure
+latency rather than promising instant saves.
 
 ## Foxit 14 reference — what to emulate
 
@@ -56,10 +58,15 @@ ability to add a signature without invalidating earlier ones.
   changed objects uncompressed or in a new objstm), `/ID` update, hybrid
   files.
 - Encrypted documents: encrypt new objects with the existing key (qpdf can
-  help validate; the writing itself must be ours or via qpdf's
-  `--incremental`-like path — evaluate, ADR).
+  help validate; use a proven append-only writer. Do not assume that qpdf
+  exposes an incremental-writing option; verify the exact bundled API).
 - `Save` uses incremental when the file has prior signatures or is large
   (setting), full rewrite otherwise; "Save As (optimised)" always full.
+- This eligibility rule is subordinate to the save-policy matrix: redaction,
+  sanitisation, changing encryption and compaction require a deliberate full
+  rewrite. Never retain sensitive content in a prior revision while claiming
+  it was removed. Refuse unsupported signed edits rather than silently
+  invalidating a signature or claiming that byte preservation proves permission.
 - qpdf `--check` run in tests on every output; a "compact" (full rewrite)
   option to squash many increments.
 
@@ -103,6 +110,11 @@ None new.
 - Xref-stream and classic-table fixtures both handled.
 - A previously signed fixture stays valid (validator from M81, or `pdfsig`
   in CI) after an incremental annotation save.
+- Use a fixture whose certification policy permits that annotation (DocMDP
+  P=3, if certified). Check cryptographic integrity and modification policy
+  separately. Test encrypted, hybrid-xref and repeated-save inputs, interrupted
+  output, and undo across save boundaries. Prior-byte preservation must hold
+  against the original source, not a PDFium/pdf-lib rewrite of it.
 
 ---
 
