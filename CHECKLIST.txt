@@ -6,7 +6,7 @@ Other targets: macOS Intel/Apple Silicon and Ubuntu Desktop x64.
 
 LIVE STATUS — 2026-09-12
   Original inventory: 44 modules; 27 previously ticked.
-  Current: 23 ticked, 4 reopened/in progress, 17 not started.
+  Current: 17 ticked, 10 reopened (4 active, 6 queued), 17 not started.
   These are module counts, not percentage of effort or proof of product parity.
   Four repair tasks are active. Tony permits up to TEN simultaneous tasks;
   expand only when write ownership, dependencies and test capacity allow it.
@@ -19,17 +19,28 @@ ACTIVE REPAIRS (finish existing scope before new modules)
         Printable annotations/widgets and consistent unsaved snapshots.
   M41 - Complete crop aspect ratios
         Fixed/custom ratios, rotated crop geometry, apply/undo/save/reopen.
+        Follow-up required: automatic deskew on image import is not connected.
   M92 - Complete bilevel TIFF compression
         Group 4 compression, single/multi-page export, independent decoding.
   All four are in isolated worktrees; none is marked complete before merge.
   Existing broader repair work: Codex_Audit.md and docs/open-work.md.
 
+QUEUED COMPLETION REPAIRS (confirmed original scope; no new tasks yet)
+  M30 — demonstrate promised cross-renderer appearance equivalence.
+  M32 — validate against genuine Acrobat- and Foxit-exported XFDF fixtures.
+  M50 — preserve unknown page operators when changing object z-order.
+  M53 — implement the promised multi-file Bates workflow.
+  M60 — implement image-field picture selection/button icons.
+  M70 — edit certificate permissions separately for each recipient.
+  Start only after an active slot has finished and merged and shared ownership
+  is clear. M50/M60/M70 currently interact with audit-owned shared code.
+
 NEXT COMPLETION TRIAGE (before dispatching new-feature work)
-  Check M31 custom-stamp editing, M32 authentic FDF/XFDF interoperability,
-  M50 object preservation when changing z-order, M53 multi-file Bates,
-  M60 image-field interaction and M70 per-recipient certificate permissions
-  against their original acceptance criteria. Record required unfinished scope
-  as reopened, assign one owner and preserve the original delivery history.
+  Check M91 Unicode/import fidelity and M100 font-subsetting limits against original
+  acceptance criteria. Record required unfinished scope as reopened, assign
+  one owner and preserve original delivery history.
+  M31 reopened-custom-stamp rotation is a documented limitation beyond literal
+  placement/rotation scope; do not reopen that module solely on this evidence.
   Findings and evidence: docs/plan-review-2026-09-12.md and module review reports.
 
 
@@ -117,7 +128,8 @@ WAVE 2
       needs: M20 M11
       prompt: Read D:\Projects\ynotPDF\docs\modules\M21-save.md and carry out the "Your task" section in full.
 
-[✔] M70  Encryption, permissions & certificate security
+[ ] M70  Encryption, permissions & certificate security
+      status: REOPENED/QUEUED — individual recipient permission editing is unfinished.
       model:  Opus
       needs: M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M70-encryption.md and carry out the "Your task" section in full.
@@ -141,7 +153,8 @@ WAVE 3
       needs: M11
       prompt: Read D:\Projects\ynotPDF\docs\modules\M13-select-find-print.md and carry out the "Your task" section in full.
 
-[✔] M30  Annotations — text markup, notes, typewriter, text box, callout
+[ ] M30  Annotations — text markup, notes, typewriter, text box, callout
+      status: REOPENED/QUEUED — cross-renderer appearance acceptance evidence is incomplete.
       model:  Opus
       needs: M21 M11 M13
       prompt: Read D:\Projects\ynotPDF\docs\modules\M30-markup-annotations.md and carry out the "Your task" section in full.
@@ -169,7 +182,8 @@ WAVE 4
       needs: M30
       prompt: Read D:\Projects\ynotPDF\docs\modules\M31-shapes-ink-stamps.md and carry out the "Your task" section in full.
 
-[✔] M32  Comments panel, replies & status, FDF/XFDF, summarise
+[ ] M32  Comments panel, replies & status, FDF/XFDF, summarise
+      status: REOPENED/QUEUED — genuine Acrobat/Foxit exported fixtures still required.
       model:  Opus
       needs: M30
       prompt: Read D:\Projects\ynotPDF\docs\modules\M32-comments-panel.md and carry out the "Your task" section in full.
@@ -201,12 +215,14 @@ WAVE 5
       needs: M31
       prompt: Read D:\Projects\ynotPDF\docs\modules\M33-measuring-tools.md and carry out the "Your task" section in full.
 
-[✔] M50  Page-object model — select, move, resize, align, arrange
+[ ] M50  Page-object model — select, move, resize, align, arrange
+      status: REOPENED/QUEUED — unknown operators must survive z-order changes.
       model:  Fable 5.1  (hard - use the strongest model)
       needs: M21 M11
       prompt: Read D:\Projects\ynotPDF\docs\modules\M50-object-model.md and carry out the "Your task" section in full.
 
-[✔] M60  Form fill & AcroForm field designer
+[ ] M60  Form fill & AcroForm field designer
+      status: REOPENED/QUEUED — image-field picture selection is unfinished.
       model:  Opus
       needs: M21 M30
       prompt: Read D:\Projects\ynotPDF\docs\modules\M60-forms.md and carry out the "Your task" section in full.
@@ -225,7 +241,8 @@ WAVE 5
 
 WAVE 6
 ------
-[✔] M53  Header/footer, Bates numbering, watermark, background & links
+[ ] M53  Header/footer, Bates numbering, watermark, background & links
+      status: REOPENED/QUEUED — promised multi-file Bates runner is unfinished.
       model:  Opus
       needs: M50 M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M53-headers-bates-watermarks-links.md and carry out the "Your task" section in full.

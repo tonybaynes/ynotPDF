@@ -14,7 +14,7 @@ You are building **M82 — Handwritten signatures & initials** of ynotPDF. Carry
 end without waiting to be asked for the next step:
 
 1. Read this file completely, then `CLAUDE.md`, `PLAN.md` §2–4, §9 and §12,
-   and the briefs of your direct dependencies: [M30 Annotations — text markup, notes, typewriter, text box, callout](./M30-markup-annotations.md), [M60 Form fill & AcroForm field designer](./M60-forms.md).
+   and the briefs of your direct dependencies: [M30 Annotations — text markup, notes, typewriter, text box, callout](./M30-markup-annotations.md), [M31 ink and pressure](./M31-shapes-ink-stamps.md), [M60 Form fill & AcroForm field designer](./M60-forms.md).
    Confirm each dependency is ☑ in `PLAN.md` §0. If one is not, say so and
    stop — do not build against unfinished work.
 2. Create branch `mod/M82-handwritten-signatures` from `main` in a new git worktree and

@@ -31,11 +31,12 @@ baseline file and its reviewing task.
 
 ## First repair batch
 
-The original checklist had 27 delivered modules and 17 unstarted modules. Four
-delivered modules contain confirmed unfinished scope, so they are reopened:
-**23 ticked, four in repair, 17 unstarted**. Counts are not an estimate of effort
-remaining. `CHECKLIST.txt` is the live status window; this document records the
-review baseline and reasoning.
+The original checklist had 27 delivered modules and 17 unstarted modules. The
+first four confirmed gaps started repair tasks. Further reading established six
+more required implementation or validation gaps: **17 ticked, four active
+repairs, six queued completions, 17 unstarted**. Counts are not an estimate of
+effort remaining. `CHECKLIST.txt` is the live status window; this document records
+the review baseline and reasoning.
 
 | Task                                       | Confirmed gap                                                                                   | Boundary                                                         |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
@@ -66,12 +67,21 @@ implementation, tests, brief/build log and review report, commit their work and
 submit PRs. Required CI must pass after integrating current main; completion
 ticks follow the merge. Keep the existing audit owner on its current repairs.
 
-Before starting new features, triage the other completion findings against the
-original acceptance criteria: M31 custom-stamp editing, M32 authentic FDF/XFDF
-interoperability, M50 object preservation when changing z-order, M53 multi-file
-Bates, M60 image-field interaction, and M70 per-recipient certificate rights.
-Some are explicit staged scope; others may be required omissions. Do not label
-them complete merely because another module was expected to finish them.
+Before starting new features, finish the queued M50 unknown-operator preservation
+on reorder, M53 multi-file Bates, M60 image-field pictures and M70 per-recipient
+certificate rights. Their briefs require these workflows; deferring them to
+another module did not complete them. M30 also lacks its promised cross-renderer
+appearance comparison, and M32 lacks genuine Acrobat/Foxit-exported XFDF fixtures.
+These two are missing acceptance evidence, not demonstrated renderer/importer
+defects. All six rows are reopened and queued without creating duplicate tasks.
+
+M41's crop PR will not close its entire row: automatic deskew on image import
+is another confirmed omission. The setting is declared in M41, but M91 does not
+read it or invoke deskew. Assign that follow-up after the crop task merges and
+the audit's M91 ownership clears. M91 Unicode/import fidelity and M100 font
+subsetting breadth still need triage. M31's inability to rotate an externally
+reopened custom stamp is a documented limitation beyond its literal original
+placement requirement, so that finding alone does not reopen M31.
 
 ## Corrections applied to the plan and briefs
 

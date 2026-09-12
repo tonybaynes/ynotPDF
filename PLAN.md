@@ -30,26 +30,26 @@ commit and merge, then update the completion tick. Parallel tasks follow **§12*
 | 2 | M03 Windows on ARM (arm64) support | [M03-windows-arm.md](docs/modules/M03-windows-arm.md) | ☑ |
 | 2 | M11 Viewer — rendering, navigation, zoom, layouts | [M11-viewer.md](docs/modules/M11-viewer.md) | ◐ |
 | 2 | M21 Save, Save As, autosave & recovery | [M21-save.md](docs/modules/M21-save.md) | ☑ |
-| 2 | M70 Encryption, permissions & certificate security | [M70-encryption.md](docs/modules/M70-encryption.md) | ☑ |
+| 2 | M70 Encryption, permissions & certificate security | [M70-encryption.md](docs/modules/M70-encryption.md) | ◐ |
 | 2 | M91 Create PDF from images, web pages, clipboard, HTML/Markdown & text | [M91-create-pdf.md](docs/modules/M91-create-pdf.md) | ☑ |
 | 3 | M12 Navigation panels — thumbnails, bookmarks, layers, attachments, destinations | [M12-navigation-panels.md](docs/modules/M12-navigation-panels.md) | ☑ |
 | 3 | M13 Text selection, find, copy, snapshot & print | [M13-select-find-print.md](docs/modules/M13-select-find-print.md) | ◐ |
-| 3 | M30 Annotations — text markup, notes, typewriter, text box, callout | [M30-markup-annotations.md](docs/modules/M30-markup-annotations.md) | ☑ |
+| 3 | M30 Annotations — text markup, notes, typewriter, text box, callout | [M30-markup-annotations.md](docs/modules/M30-markup-annotations.md) | ◐ |
 | 3 | M40 Organise pages — insert, delete, extract, replace, rotate, move, labels | [M40-organise-pages.md](docs/modules/M40-organise-pages.md) | ☑ |
 | 4 | M04 UI-journey and layout test harness | [M04-ui-journey-tests.md](docs/modules/M04-ui-journey-tests.md) | ☑ |
 | 4 | M42 PDF Portfolios — create, edit, cover sheet, extract | [M42-portfolios.md](docs/modules/M42-portfolios.md) | ☑ |
 | 4 | M31 Annotations — shapes, ink & eraser, stamps, file attachments | [M31-shapes-ink-stamps.md](docs/modules/M31-shapes-ink-stamps.md) | ☑ |
-| 4 | M32 Comments panel, replies & status, FDF/XFDF, summarise | [M32-comments-panel.md](docs/modules/M32-comments-panel.md) | ☑ |
+| 4 | M32 Comments panel, replies & status, FDF/XFDF, summarise | [M32-comments-panel.md](docs/modules/M32-comments-panel.md) | ◐ |
 | 4 | M41 Merge, split, extract to files, crop, deskew & flatten | [M41-merge-split-crop.md](docs/modules/M41-merge-split-crop.md) | ◐ |
 | 4 | M72 Document properties, metadata & XMP, initial view | [M72-properties-metadata.md](docs/modules/M72-properties-metadata.md) | ☑ |
 | 4 | M130 Preferences, keyboard shortcuts editor, ribbon/QAT customisation, UI scale, i18n framework | [M130-preferences.md](docs/modules/M130-preferences.md) | ☑ |
 | | **MILESTONE 1 — usable viewer & annotator (v0.1)** — open, view, search, print, annotate, comment, organise pages, merge/split, deskew scans, save, encrypt, create PDFs, preferences | | |
 | 5 | M33 Measuring tools — distance, perimeter, area, calibration | [M33-measuring-tools.md](docs/modules/M33-measuring-tools.md) | ☑ |
-| 5 | M50 Page-object model — select, move, resize, align, arrange | [M50-object-model.md](docs/modules/M50-object-model.md) | ☑ |
-| 5 | M60 Form fill & AcroForm field designer | [M60-forms.md](docs/modules/M60-forms.md) | ☑ |
+| 5 | M50 Page-object model — select, move, resize, align, arrange | [M50-object-model.md](docs/modules/M50-object-model.md) | ◐ |
+| 5 | M60 Form fill & AcroForm field designer | [M60-forms.md](docs/modules/M60-forms.md) | ◐ |
 | 5 | M92 Export to images, text, HTML & RTF | [M92-export.md](docs/modules/M92-export.md) | ◐ |
 | 5 | M100 Optimise (reduce size), linearise, repair, remove duplicates | [M100-optimise-repair.md](docs/modules/M100-optimise-repair.md) | ☑ |
-| 6 | M53 Header/footer, Bates numbering, watermark, background & links | [M53-headers-bates-watermarks-links.md](docs/modules/M53-headers-bates-watermarks-links.md) | ☑ |
+| 6 | M53 Header/footer, Bates numbering, watermark, background & links | [M53-headers-bates-watermarks-links.md](docs/modules/M53-headers-bates-watermarks-links.md) | ◐ |
 | 6 | M61 Field logic — validation, formatting, calculation, actions; data import/export; flatten | [M61-form-logic-data.md](docs/modules/M61-form-logic-data.md) | ☐ |
 | 6 | M82 Handwritten signatures & initials | [M82-handwritten-signatures.md](docs/modules/M82-handwritten-signatures.md) | ☐ |
 | 6 | M90 OCR — searchable image, image+text, editable text | [M90-ocr.md](docs/modules/M90-ocr.md) | ☐ |
@@ -76,8 +76,9 @@ Historical CI on three OS families does not establish every architecture or
 installer acceptance gate in §3.1.
 
 **2026-09-12 completion review:** 27 of the 44 original modules had delivery
-ticks. Four are reopened below: **23 remain ticked, four are being repaired,
-17 have not started**. These counts describe the original briefs, not effort
+ticks. Further reading confirmed ten incomplete modules: **17 remain ticked,
+four have active repair tasks, six are queued, and 17 have not started**.
+These counts describe the original briefs, not effort
 remaining or competitor parity. Existing audit findings remain tracked in
 `Codex_Audit.md` and `docs/open-work.md`.
 
@@ -85,8 +86,14 @@ remaining or competitor parity. Existing audit findings remain tracked in
 |---|---|---|
 | M11 | Content-aware Fit Visible with rotated/cropped pages | M11 - Complete Fit Visible |
 | M13 | Preserve printable annotations and widgets in vector PDF output | M13 - Preserve annotations in PDF printing |
-| M41 | Implement the promised crop aspect ratios and rotated geometry | M41 - Complete crop aspect ratios |
+| M41 | Crop aspect ratios/rotated geometry; automatic deskew import hook remains a follow-up | M41 - Complete crop aspect ratios |
 | M92 | Honour bilevel TIFF compression, including single-page export | M92 - Complete bilevel TIFF compression |
+| M30 | Cross-renderer appearance acceptance evidence | Queued validation work; no visual defect assumed |
+| M32 | Genuine Acrobat/Foxit XFDF fixture acceptance | Queued interoperability validation; no importer defect assumed |
+| M50 | Preserve unknown page operators during object z-order changes | Queued after active repairs and shared-code ownership clears |
+| M53 | Multi-file Bates workflow | Queued after an active task finishes and merges |
+| M60 | Image-field picture selection/button icons | Queued after active repairs and shared-code ownership clears |
+| M70 | Per-recipient certificate permission editing | Queued after active repairs and shared-code ownership clears |
 
 **Ordering principle (Tony, 2026-09-07): easiest-first, hardest-last.**
 Waves 0–4 give an installable, usable viewer/annotator; waves 5–7 make it an
@@ -115,7 +122,7 @@ editions, platforms, evidence, acceptance criteria and explicit remaining work.
 | **Core** | Build fully; parity with Foxit is realistic | View, annotate, organise pages, forms, protect, redact, sign, OCR, optimise, compare, batch, watermarks/Bates, create-from-image/web |
 | **Pro** | Build with a feasibility gate and measured quality criteria; an initial fallback remains incomplete for parity | Text editing with reflow (see §8), auto form-field recognition, PDF/A conversion, OCR "editable text" mode |
 | **Un-parked 2026-09-08** | PDF Portfolios — create/edit/cover/extract, Tony's daily workflow | **M42** (wave 4); opening/extracting already in M12 |
-| **Parked** | Not planned unless asked — cost far exceeds value for one user | XFA forms, Acrobat-JavaScript compatibility, PDF→Word/Excel with layout fidelity, 3D/video/rich media, tag-tree accessibility editor, full preflight, cloud/ECM connectors, virtual printer driver, scanner drivers |
+| **Historically parked** | Current parity backlog; define numbered follow-up briefs and explicit acceptance before implementation | XFA forms, Acrobat-JavaScript compatibility, PDF→Word/Excel with layout fidelity, 3D/video/rich media, tag-tree accessibility editor, full preflight, cloud/ECM connectors, virtual printer driver, scanner drivers |
 
 The current parity backlog includes full tag-tree/reading-order remediation,
 high-fidelity PDF-to-Office conversion, preflight/print production, broader form

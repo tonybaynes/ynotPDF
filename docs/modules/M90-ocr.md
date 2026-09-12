@@ -14,7 +14,7 @@ You are building **M90 — OCR — searchable image, image+text, editable text**
 end without waiting to be asked for the next step:
 
 1. Read this file completely, then `CLAUDE.md`, `PLAN.md` §2–4, §9 and §12,
-   and the briefs of your direct dependencies: [M21 Save, Save As, autosave & recovery](./M21-save.md).
+   and the briefs of your direct dependencies: [M21 Save, Save As, autosave & recovery](./M21-save.md), [M41 crop and deskew](./M41-merge-split-crop.md); read [M51 text editing](./M51-text-editing.md) before editable output.
    Confirm each dependency is ☑ in `PLAN.md` §0. If one is not, say so and
    stop — do not build against unfinished work.
 2. Create branch `mod/M90-ocr` from `main` in a new git worktree and
