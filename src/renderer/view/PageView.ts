@@ -225,12 +225,16 @@ export class PageView {
       return;
     }
     ctx.save();
-    ctx.imageSmoothingEnabled = ratio !== 1;
+    // PDFium already antialiases the raster. Keep the existing nearest-pixel blit policy:
+    // browser interpolation can change when canvas readback switches rendering backends.
+    ctx.imageSmoothingEnabled = false;
     // Tiles live in bucket pixels; overlays and the canvas window live at the exact zoom.
     // Snap destination edges together so neighbouring tiles cannot leave transparent seams.
     const left = Math.round(x);
     const top = Math.round(y);
-    ctx.drawImage(bitmap, left, top, Math.round(x + width) - left, Math.round(y + height) - top);
+    const targetWidth = Math.round(x + width) - left;
+    const targetHeight = Math.round(y + height) - top;
+    ctx.drawImage(bitmap, left, top, targetWidth, targetHeight);
     ctx.restore();
     this.painted.add(id);
   }

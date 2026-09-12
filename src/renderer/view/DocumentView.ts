@@ -107,6 +107,7 @@ export class DocumentView {
   private disposed = false;
   private suppressScroll = false;
   private fitRequest = 0;
+  private contentGeneration = 0;
   private readonly readContentBounds: DocumentViewOptions['contentBounds'];
 
   constructor(options: DocumentViewOptions) {
@@ -262,6 +263,7 @@ export class DocumentView {
    * correctly decide there was nothing to do. The caller drops the stale tiles first.
    */
   refresh(): void {
+    this.contentGeneration++;
     for (const view of this.views.values()) view.invalidate();
     this.paint({ force: true });
   }
@@ -785,6 +787,7 @@ export class DocumentView {
     if (view.hasPlaceholder) return;
     const geometry = view.geometry;
     const flags = this.flags;
+    const generation = this.contentGeneration;
     const bitmap = await this.renderer.placeholder({
       doc: this.doc,
       docKey: this.docKey,
@@ -798,6 +801,7 @@ export class DocumentView {
     const live = this.views.get(page);
     if (
       live === view &&
+      generation === this.contentGeneration &&
       view.geometry === geometry &&
       flagsEqual(flags, this.flags) &&
       !view.hasPlaceholder

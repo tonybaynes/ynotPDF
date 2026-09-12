@@ -119,3 +119,13 @@ the other pane at a different zoom. All six pass together. These product changes
 `Viewer.ts`, `DocumentView.ts` and `PageView.ts`; the engine contract stays unchanged.
 Main `753f5cb` (PR 58's print repair) is integrated. Earlier head `61d0c2e` and its passing
 full suite are superseded; final integrated unit/UI/platform results remain tracked in PR 59.
+
+The integrated full run on `68a11c6` exposed one existing layer-render assertion failure:
+560 passed, four private-fixture skips and one failure accounted for all 565 tests. Isolated
+diagnostics showed identical opaque source bitmaps and draw coordinates before and after a
+layer round trip, but canvas ink counts differed (4,523 versus 4,563). Clearing destination
+regions did not resolve it. Restoring the viewer's existing `imageSmoothingEnabled = false`
+policy while retaining the scale compensation did: all six raster journeys and both existing
+layer tests pass together with their assertions unchanged. This records interpolation
+sensitivity; it does not claim a proved browser backend cause. A content-refresh generation
+also prevents an old placeholder from painting after a layer edit with unchanged geometry.
