@@ -44,6 +44,67 @@ test.afterAll(async () => {
   await app.close();
 });
 
+/** Keep geometry in CI logs even when a passing retry means no trace artifact is uploaded. */
+async function expectWindowSoundWithDiagnostics(): Promise<void> {
+  try {
+    await expectWindowSound(app.page);
+  } catch (error) {
+    const geometry = await app.page
+      .evaluate(() => {
+        const viewport = document.documentElement.clientWidth;
+        const elements = [...document.querySelectorAll('*')];
+        const describe = (element: Element) => {
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return {
+            tag: element.tagName,
+            id: element.id,
+            className: element.getAttribute('class'),
+            text: element.textContent?.slice(0, 100),
+            rect: {
+              x: rect.x,
+              y: rect.y,
+              width: rect.width,
+              right: rect.right,
+              bottom: rect.bottom,
+            },
+            clientWidth: element.clientWidth,
+            scrollWidth: element.scrollWidth,
+            display: style.display,
+            position: style.position,
+            overflowX: style.overflowX,
+            minWidth: style.minWidth,
+            flexWrap: style.flexWrap,
+            font: style.font,
+            parent: element.parentElement
+              ? {
+                  tag: element.parentElement.tagName,
+                  id: element.parentElement.id,
+                  className: element.parentElement.getAttribute('class'),
+                  overflowX: getComputedStyle(element.parentElement).overflowX,
+                }
+              : null,
+          };
+        };
+        return {
+          viewport,
+          body: describe(document.body),
+          overRight: elements
+            .filter((element) => {
+              const rect = element.getBoundingClientRect();
+              return rect.width > 0 && rect.height > 0 && rect.right > viewport + 1;
+            })
+            .map(describe),
+          status: elements.filter((element) => element.closest('.statusbar')).map(describe),
+          tabs: elements.filter((element) => element.matches('.tabstrip, .tab')).map(describe),
+        };
+      })
+      .catch((captureError: unknown) => ({ captureError: String(captureError) }));
+    console.error(`M13 window geometry: ${JSON.stringify(geometry)}`);
+    throw error;
+  }
+}
+
 async function preview(previous?: string): Promise<string> {
   const image = app.page.locator('.print-preview-image');
   await expect(image).toBeVisible();
@@ -239,7 +300,7 @@ test('M13 — the settled preview and prepared printer sheet include unsaved tex
   expect(await app.run('dev.documentJournal')).toEqual(journal);
   await app.page.keyboard.press('ControlOrMeta+z');
   expect(await app.run('dev.documentJournal')).not.toEqual(journal);
-  await expectWindowSound(app.page);
+  await expectWindowSoundWithDiagnostics();
 });
 
 test('M13 — unresolved preview reports its error, excluded comments load, and a closed dialog cannot publish late work', async () => {
@@ -280,7 +341,7 @@ test('M13 — unresolved preview reports its error, excluded comments load, and 
     'no usable normal appearance',
   );
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expectWindowSound(app.page);
+  await expectWindowSoundWithDiagnostics();
 });
 
 for (const authority of ['none', 'low', 'full'] as const) {
@@ -342,7 +403,7 @@ for (const authority of ['none', 'low', 'full'] as const) {
         .click();
     }
     expect(await app.run('dev.securityState')).toEqual(before);
-    await expectWindowSound(app.page);
+    await expectWindowSoundWithDiagnostics();
   });
 }
 
@@ -415,6 +476,6 @@ for (const [mode, rotation] of [
     const spool = await preparedSheets();
     expect(await pixelHashes(spool)).toEqual(await pixelHashes(previews));
     expect(await app.run('dev.documentJournal')).toEqual(before);
-    await expectWindowSound(app.page);
+    await expectWindowSoundWithDiagnostics();
   });
 }
