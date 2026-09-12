@@ -108,60 +108,64 @@ describe('CCITT Group 4 TIFF interoperability', () => {
     }
   });
   for (const width of [1, 7, 8, 9, 17, 63, 64, 65, 1728, 2560, 2625, 5201]) {
-    it(`independently decodes every pixel at width ${String(width)}, ignoring row padding`, () => {
-      const sources = [
-        picture(width, 1, () => 255),
-        picture(width, 2, () => 0),
-        picture(width, 9, (x, y) => ((x + y) % 2 ? 255 : 0)),
-        picture(width, 11, (x, y) => ((x * 17 + y * 43) % 29 < 13 ? 255 : 0)),
-        picture(width, 7, (x, y) => (x < width / 2 + y - 3 ? 255 : 0)),
-      ];
-      const frames = sources.map((source) => frame(source, true));
-      const before = frames.map((f) => (f.kind === 'mono' ? f.mono.data.slice() : null));
-      const bytes = encodeTiff(frames, { compression: 'group4', dpi: { x: 150, y: 300 } });
-      const decoded = decode(bytes);
-      expect(decoded).toHaveLength(sources.length);
-      for (const [i, ifd] of decoded.entries()) {
-        const source = must(sources[i]);
-        expect([ifd.width, ifd.height]).toEqual([source.width, source.height]);
-        expect(UTIF.toRGBA8(ifd)).toEqual(greyToRgba(source));
-        expect(ifd.t258).toEqual([1]);
-        expect(ifd.t259).toEqual([4]);
-        expect(ifd.t262).toEqual([0]);
-        expect(ifd.t266).toEqual([1]);
-        expect(ifd.t277).toEqual([1]);
-        expect(ifd.t278).toEqual([source.height]);
-        expect(ifd.t282).toEqual([150]);
-        expect(ifd.t283).toEqual([300]);
-        expect(ifd.t293).toEqual([0]);
-        expect(ifd.t296).toEqual([2]);
-        const start = must((ifd.t273 as number[])[0]);
-        const length = must((ifd.t279 as number[])[0]);
-        expect(start).toBeGreaterThanOrEqual(8);
-        expect(length).toBeGreaterThan(0);
-        expect(start + length).toBeLessThan(bytes.length);
-        if (i > 0) {
-          const previous = must(decoded[i - 1]);
-          expect(start).toBeGreaterThanOrEqual(
-            must((previous.t273 as number[])[0]) + must((previous.t279 as number[])[0]),
-          );
+    const patterns = {
+      black: picture(width, 2, () => 0),
+      alternating: picture(width, 9, (x, y) => ((x + y) % 2 ? 255 : 0)),
+      noise: picture(width, 11, (x, y) => ((x * 17 + y * 43) % 29 < 13 ? 255 : 0)),
+      shifted: picture(width, 7, (x, y) => (x < width / 2 + y - 3 ? 255 : 0)),
+    };
+    // Each pattern keeps every pixel from the original stress case and a two-IFD chain.
+    // Separate tests keep cumulative encoder work below the CI per-test time budget.
+    for (const [name, source] of Object.entries(patterns)) {
+      it(`independently decodes ${name} at width ${String(width)}, ignoring row padding`, () => {
+        const sources = [picture(width, 1, () => 255), source];
+        const frames = sources.map((source) => frame(source, true));
+        const before = frames.map((f) => (f.kind === 'mono' ? f.mono.data.slice() : null));
+        const bytes = encodeTiff(frames, { compression: 'group4', dpi: { x: 150, y: 300 } });
+        const decoded = decode(bytes);
+        expect(decoded).toHaveLength(sources.length);
+        for (const [i, ifd] of decoded.entries()) {
+          const source = must(sources[i]);
+          expect([ifd.width, ifd.height]).toEqual([source.width, source.height]);
+          expect(UTIF.toRGBA8(ifd)).toEqual(greyToRgba(source));
+          expect(ifd.t258).toEqual([1]);
+          expect(ifd.t259).toEqual([4]);
+          expect(ifd.t262).toEqual([0]);
+          expect(ifd.t266).toEqual([1]);
+          expect(ifd.t277).toEqual([1]);
+          expect(ifd.t278).toEqual([source.height]);
+          expect(ifd.t282).toEqual([150]);
+          expect(ifd.t283).toEqual([300]);
+          expect(ifd.t293).toEqual([0]);
+          expect(ifd.t296).toEqual([2]);
+          const start = must((ifd.t273 as number[])[0]);
+          const length = must((ifd.t279 as number[])[0]);
+          expect(start).toBeGreaterThanOrEqual(8);
+          expect(length).toBeGreaterThan(0);
+          expect(start + length).toBeLessThan(bytes.length);
+          if (i > 0) {
+            const previous = must(decoded[i - 1]);
+            expect(start).toBeGreaterThanOrEqual(
+              must((previous.t273 as number[])[0]) + must((previous.t279 as number[])[0]),
+            );
+          }
         }
-      }
-      expect(frames.map((f) => (f.kind === 'mono' ? f.mono.data : null))).toEqual(before);
-      // The final IFD really terminates; a decoder's cycle guard must not hide a malformed chain.
-      const view = new DataView(bytes.buffer);
-      let at = view.getUint32(4, true);
-      const seen = new Set<number>();
-      for (const _source of sources) {
-        expect(_source.width).toBeGreaterThan(0);
-        expect(at % 2).toBe(0);
-        expect(at).toBeGreaterThan(0);
-        expect(seen.has(at)).toBe(false);
-        seen.add(at);
-        at = view.getUint32(at + 2 + 12 * view.getUint16(at, true), true);
-      }
-      expect(at).toBe(0);
-    });
+        expect(frames.map((f) => (f.kind === 'mono' ? f.mono.data : null))).toEqual(before);
+        // The final IFD really terminates; a decoder's cycle guard must not hide a malformed chain.
+        const view = new DataView(bytes.buffer);
+        let at = view.getUint32(4, true);
+        const seen = new Set<number>();
+        for (const _source of sources) {
+          expect(_source.width).toBeGreaterThan(0);
+          expect(at % 2).toBe(0);
+          expect(at).toBeGreaterThan(0);
+          expect(seen.has(at)).toBe(false);
+          seen.add(at);
+          at = view.getUint32(at + 2 + 12 * view.getUint16(at, true), true);
+        }
+        expect(at).toBe(0);
+      });
+    }
   }
 
   it('compresses repeated text-like rows and starts each frame with a fresh reference row', () => {

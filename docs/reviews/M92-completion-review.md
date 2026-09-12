@@ -103,6 +103,15 @@ These are recommendations to the coordinator, not repairs included in this chang
   three-channel due to jpeg-js. Embedded image masks/colour spaces are a separate fidelity
   concern; the ADR's mask-applied promise and later build-log exclusion disagree.
 
+  **Keep M92's overall completion row open after the TIFF repair.** The original scope
+  asks to export all embedded images, preserving DCT/JPX format, and excludes only Office.
+  ADR 0019 additionally promises stored dimensions and soft-mask-applied RGBA. Current
+  `PdfiumEngine.storedPixels` explicitly omits `/SMask` and assigns alpha 255; complex
+  colour spaces instead return `renderedImage` dimensions. `exportEmbeddedImages` passes
+  that RGBA to `encodePngRgb`, which writes RGB only. The later build-log narrowing did
+  not amend the accepted contract. Track a separate embedded-image fidelity repair and
+  clarify mask semantics for raw DCT/JPX passthrough; do not expand this TIFF PR.
+
 ## Hidden dependencies, stale notes and quality risks
 
 - M92 depends on M100's portable public encoder, M41's range controls, M40 progress,
@@ -115,6 +124,14 @@ These are recommendations to the coordinator, not repairs included in this chang
   pixels, and PDFium separately decodes that exact strip to pixel equality. M91 uses the
   affected dispatcher; repair its decoder adapter separately. This is not an invalid G4
   stream, and avoiding that test size would conceal a real interoperability risk.
+
+  Confirmed through the actual production `decodeTiffPages` adapter on integrated main
+  `d322de7`: a temporary desired-behaviour probe imported the generated 17 by 2 black
+  frame, preserved its dimensions and 150/300 DPI, but failed pixel equality with 81
+  incorrect RGB channels (27 of 34 pixels). Vitest exited 1. The probe was removed after
+  recording the result; no M91 file was modified. This is separate from the passing
+  independent-decoder export tests and is not counted as a green integration check.
+
 - M92 accumulates every encoded output, and multi-page TIFF retains all reduced frames.
   Reusing M100 requires a transient byte per pixel for each mono frame. Large-document
   memory is therefore not bounded solely by a one-page render; budget/streaming work is
