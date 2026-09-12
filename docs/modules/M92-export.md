@@ -370,7 +370,7 @@ on both projects), 3 607 unit tests with the coverage gates, and 459 Playwright 
   to be slow, both can be cancelled, and a cancelled write says how many files it got to.
 - **Docs**: ADR 0019, `docs/shortcuts.md`, a module README.
 
-**The engine change, and the bug the acceptance test found.** `pageImages` (ADR 0019) is one new
+**Original adapter history, superseded by the ADR 0027 follow-up below.** `pageImages` (ADR 0019) is one new
 optional `PdfEngine` method. Its first cut answered with `FPDFImageObj_GetRenderedBitmap`, which
 renders an image at the size the _page draws it_ — so `image.pdf`'s one 64×64 PNG, drawn once at
 256 pt and once at 128 pt rotated, came back as two different pictures and was exported twice. The
@@ -431,13 +431,9 @@ dependency to a real one), `docs/shortcuts.md` and `PLAN.md` §0. **No IPC chann
 - **Greyscale and bilevel JPEG.** `jpeg-js` encodes 4:2:0 colour only, so a greyscale JPEG is grey
   pixels in three channels. The dialog says so in words rather than pretending otherwise; PNG and
   TIFF keep grey at one channel and mono at one bit.
-- **Indexed, CMYK and ICCBased images come out of "export all images" as a render** rather than as
-  their stored samples, because reading those needs the colour space as well as the stream. They
-  are still the right picture in the common case. Named here so the next person knows where the
-  line is.
-- **`/SMask` is not applied** to a stored picture. The transparency a page applies when it draws a
-  picture belongs to the drawing, not to the picture — and applying it would make the same logo on
-  two hundred pages two hundred different files again.
+- **Complex colour spaces and image masks were incomplete in the original build.** The follow-up
+  below decodes at stored dimensions and retains image-level alpha. The earlier rationale that
+  `/SMask` belongs only to placement was incorrect; it belongs to the image dictionary.
 - **A File ▸ Export backstage page.** `BackstageSlot` is a fixed list in M02's contract (ADR 0004);
   adding one would be a contract change for a second route to five commands that are already on
   the Convert tab, in the palette and on a shortcut.
@@ -445,6 +441,39 @@ dependency to a real one), `docs/shortcuts.md` and `PLAN.md` §0. **No IPC chann
   as text and RTF; "export the selection to a file" would be a third path to the same bytes.
 
 ### Completion follow-up — 2026-09-12
+
+#### Embedded-image fidelity repair — ADR 0027
+
+The remaining completion work preserves the existing `pageImages` contract: original
+single-filter JPEG/JPEG 2000 streams remain byte-for-byte originals; decoded images have
+their intrinsic stored dimensions and image-level masks applied to RGBA. PNG output must
+retain that alpha. An image dictionary's `/SMask` belongs to that image; the earlier
+build-log rationale excluding it was incorrect. Page clipping, placement rotation and
+page graphics-state opacity are not intrinsic image data.
+
+PDFium's public `GetBitmap` ignores masks. `GetRenderedBitmap` applies masks but also the
+placement matrix and clip. The repair decodes isolated image dictionaries at intrinsic
+dimensions through PDFium, without changing live page objects. Nested Form XObjects are
+traversed with resource inheritance, cycle detection and a work budget. Repeated decoded
+images may be deduplicated only when dimensions, encoding and all RGBA bytes agree; masks
+with different alpha must remain distinct. Existing public client/IPC/permission contracts,
+M100's encoder and M91's TIFF importer remain owned separately.
+
+The dialog offers remembered **Original formats** and **PNG with transparency** choices.
+The first keeps single-filter JPEG/JP2 bytes unchanged and explains omitted external masks;
+the second decodes all images to RGBA and writes alpha-bearing PNG. HTML separately requests
+native page appearances so rotation, clipping and ancestor opacity are retained without
+sibling-object contamination. This does not promise complete HTML page reconstruction.
+
+Verification uses synthetic independently specified pixels, masks, colour spaces,
+placements and repeated/nested resources, plus real Export All Images dialog output.
+See [ADR 0027](../adr/0027-embedded-image-fidelity.md) and the completion review for the
+precise contract, bounds and current validation evidence.
+Known inherited limits remain: accumulated export results are not flat-memory streaming;
+native-select clipping belongs to the shared UI audit; CI's ARM installer smoke does not
+run dedicated export journeys and macOS CI does not separately exercise both CPU families.
+
+#### CCITT Group 4 TIFF repair — merged in PR #57
 
 CCITT Group 4 now exports black-and-white TIFF pages, separately or in a multi-page file,
 with resolution tags, correct polarity and byte-aligned source-row handling. The export

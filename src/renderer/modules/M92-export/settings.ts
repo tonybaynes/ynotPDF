@@ -33,6 +33,7 @@ export interface ExportSettings {
   readonly imageAnnotations: boolean;
   readonly imageForms: boolean;
   // ---- embedded images ----
+  readonly embeddedOutput: 'original' | 'png';
   readonly embeddedNamePattern: string;
   readonly embeddedMinPixels: number;
   readonly embeddedKeepDuplicates: boolean;
@@ -66,6 +67,7 @@ export const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
   imageAnnotations: true,
   imageForms: true,
   embeddedNamePattern: DEFAULT_EMBEDDED_PATTERN,
+  embeddedOutput: 'original',
   embeddedMinPixels: DEFAULT_MIN_PIXELS,
   embeddedKeepDuplicates: false,
   textEncoding: 'utf-8',
@@ -96,6 +98,7 @@ const KEYS: Readonly<Record<keyof ExportSettings, string>> = {
   imageAnnotations: 'image.annotations',
   imageForms: 'image.forms',
   embeddedNamePattern: 'embedded.namePattern',
+  embeddedOutput: 'embedded.output',
   embeddedMinPixels: 'embedded.minPixels',
   embeddedKeepDuplicates: 'embedded.keepDuplicates',
   textEncoding: 'text.encoding',
@@ -133,6 +136,11 @@ export const COLOUR_OPTIONS: ReadonlyArray<{ readonly value: ColourMode; readonl
     { value: 'grey', label: 'Greyscale' },
     { value: 'mono', label: 'Black and white (1 bit)' },
   ];
+
+export const EMBEDDED_OUTPUT_OPTIONS = [
+  { value: 'original', label: 'Original formats' },
+  { value: 'png', label: 'PNG with transparency' },
+] as const;
 
 export const DITHER_OPTIONS: ReadonlyArray<{ readonly value: Dither; readonly label: string }> = [
   { value: 'floyd-steinberg', label: 'Diffuse the error (better for photographs)' },
@@ -298,6 +306,14 @@ export const EXPORT_SETTINGS_SCHEMA: SettingsSchema = {
       title: 'Draw form fields on exported pages',
       section: 'Images',
       default: DEFAULT_EXPORT_SETTINGS.imageForms,
+      live: true,
+    },
+    'embedded.output': {
+      type: 'enum',
+      title: 'Embedded image output',
+      section: 'Pictures inside a document',
+      default: DEFAULT_EXPORT_SETTINGS.embeddedOutput,
+      options: EMBEDDED_OUTPUT_OPTIONS,
       live: true,
     },
     'embedded.namePattern': {
@@ -480,6 +496,7 @@ export async function readExportSettings(storage: SettingsStorage): Promise<Expo
     imageAnnotations: bool(at('imageAnnotations'), d.imageAnnotations),
     imageForms: bool(at('imageForms'), d.imageForms),
     embeddedNamePattern: text(at('embeddedNamePattern'), d.embeddedNamePattern),
+    embeddedOutput: oneOf(at('embeddedOutput'), EMBEDDED_OUTPUT_OPTIONS, d.embeddedOutput),
     embeddedMinPixels: number(at('embeddedMinPixels'), d.embeddedMinPixels, 1, 512),
     embeddedKeepDuplicates: bool(at('embeddedKeepDuplicates'), d.embeddedKeepDuplicates),
     textEncoding: oneOf(at('textEncoding'), ENCODING_OPTIONS, d.textEncoding),

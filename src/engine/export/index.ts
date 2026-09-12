@@ -17,6 +17,7 @@ export * from './html';
 export * from './rtf';
 export {
   encodePngRgb,
+  encodePngRgba,
   encodePngGrey,
   encodePngMono,
   readPngHeader,

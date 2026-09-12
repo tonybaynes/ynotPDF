@@ -216,7 +216,7 @@ const EXPORT_ALL_IMAGES: CommandSpec = {
   label: 'Export all images…',
   category: 'Convert',
   icon: 'images',
-  description: 'Every picture inside the document, in the format the document stores it in',
+  description: 'Export original embedded pictures or PNG files with image transparency',
   permission: 'extract-for-accessibility',
   when: hasDocument,
   async run(ctx): Promise<ExportOutcome | null> {
@@ -226,11 +226,13 @@ const EXPORT_ALL_IMAGES: CommandSpec = {
       const namePattern = stringArg(ctx.args, 'namePattern');
       const minPixels = numberArg(ctx.args, 'minPixels');
       const keepDuplicates = boolArg(ctx.args, 'keepDuplicates');
+      const output = stringArg(ctx.args, 'output');
       return await service.exportEmbedded(
         {
           ...(namePattern === undefined ? {} : { namePattern }),
           ...(minPixels === undefined ? {} : { minPixels }),
           ...(keepDuplicates === undefined ? {} : { keepDuplicates }),
+          ...(output === 'original' || output === 'png' ? { output } : {}),
         },
         destinationOf(ctx.args),
       );
@@ -240,6 +242,7 @@ const EXPORT_ALL_IMAGES: CommandSpec = {
     if (!answer) return null;
     await service.remember({
       embeddedNamePattern: answer.namePattern,
+      embeddedOutput: answer.output,
       embeddedMinPixels: answer.minPixels,
       embeddedKeepDuplicates: answer.keepDuplicates,
     });

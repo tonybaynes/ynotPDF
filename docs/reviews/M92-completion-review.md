@@ -2,8 +2,8 @@
 
 Reviewed 2026-09-12 against origin/main `b9c570af44b9a0d40efe01e2495d1c2943d1a0ab`,
 the supplied worktree's initial HEAD. Later integration and validation are recorded below.
-This is a bounded TIFF export repair and a documentation review, not a claim that the
-whole editor or every external PDF has been certified.
+The first phase repaired TIFF export; the subsequent embedded-image phase is recorded at
+the end. These bounded repairs do not certify the whole editor or every external PDF.
 
 ## Reading completed
 
@@ -105,8 +105,8 @@ These are recommendations to the coordinator, not repairs included in this chang
 
   **Keep M92's overall completion row open after the TIFF repair.** The original scope
   asks to export all embedded images, preserving DCT/JPX format, and excludes only Office.
-  ADR 0019 additionally promises stored dimensions and soft-mask-applied RGBA. Current
-  `PdfiumEngine.storedPixels` explicitly omits `/SMask` and assigns alpha 255; complex
+  ADR 0019 additionally promises stored dimensions and soft-mask-applied RGBA. At that
+  phase, `PdfiumEngine.storedPixels` explicitly omitted `/SMask` and assigned alpha 255; complex
   colour spaces instead return `renderedImage` dimensions. `exportEmbeddedImages` passes
   that RGBA to `encodePngRgb`, which writes RGB only. The later build-log narrowing did
   not amend the accepted contract. Track a separate embedded-image fidelity repair and
@@ -181,6 +181,65 @@ These are recommendations to the coordinator, not repairs included in this chang
   an older revision's green status. Dedicated native export runs on both Mac CPUs and
   Windows ARM are not provided by the existing workflow (see platform limits above).
 
-The known M91 production-import failure and remaining M92 embedded-image contract gap
-are reported separately above; neither is disguised as a passing check. The coordinator
-owns serial merge, PLAN.md and CHECKLIST.txt, and keeps M92 reopened for its remaining work.
+The TIFF-phase M91 production-import failure and M92 embedded-image contract gap were
+reported separately above. The coordinator owns serial merge, PLAN.md and CHECKLIST.txt.
+
+## Embedded-image continuation — 2026-09-12
+
+Started from merged PR #57, origin/main `c492bfd936e270ebea6f257e7885c6f2f556f62a`, on
+`codex/M92-embedded-image-fidelity`. [ADR 0027](../adr/0027-embedded-image-fidelity.md)
+records the coordinator-approved optional engine argument and intrinsic/appearance split.
+
+The previous stored-pixel shortcut and placement-sized colour fallback are replaced with
+isolated image-dictionary decoding at intrinsic dimensions. PDFium applies Decode,
+SMask/Mask, Matte and colour conversion. Original single-filter JPEG/JP2 bytes stay exact;
+PNG with transparency decodes every encoding and preserves RGBA alpha. Named colour-space
+resolution handles base/alternate positions without rewriting colorants, tint functions,
+profile streams or palette references. Nested form traversal preserves resource contexts
+and composed matrices, rejects cycles, and has explicit work/allocation limits.
+
+Deduplication now checks encoding, dimensions and every byte, including alpha; a hash
+only selects candidates. Two deliberately colliding FNV inputs both survive. Repeated
+decoded occurrences have distinct transferable buffers, preventing duplicate-buffer RPC
+errors. Exports read current edits and password-protected documents through the existing
+snapshot path, with source saves verified unchanged.
+
+Review identified that HTML also consumed this API: intrinsic pixels would lose the
+rotation/clip previously baked into complex-colour images. HTML now requests native
+appearances in a disposable document. Only each image and its ancestor forms are active
+for transparent rendering; sibling paths/images/text are excluded. The matrix conversion
+keeps rectangles in original page coordinates. This repair does not claim complete HTML
+vector, annotation, page-layout or backdrop-dependent blend fidelity.
+
+Validation evidence for this continuation:
+
+- 27 dedicated real-PDFium unit cases cover known pixels/alpha, odd-width bilevel rows,
+  Gray Decode inversion, RGB, Indexed, CMYK, ICCBased, Separation, DeviceN, colour-key and
+  hard masks, Matte, differing mask dimensions, masked JPEG/JP2, wrapped filter chains,
+  inline images, nested/repeated resources, exact collisions, buffer transfer, encryption,
+  current edits and read-only saves. The appearance tests independently specify rotation,
+  inner and ancestor clipping, group opacity, sibling isolation and CropBox/page rotation.
+- Full local unit/coverage run: 200 files passed / 8 skipped; 4,142 tests passed / 24
+  existing skips, including the inline named-colour and ancestor-clip refinements.
+  Lint/type checks, build and licenses (44 permissive production packages) passed.
+  CI must validate the final committed head after integration.
+- Real Export All Images ribbon/dialog/Worker/filesystem journey passed: original byte
+  equality, decoded PNG masks, repeated placements, remembered options and explicit
+  headless override. Three Graphite screenshots at 200% scale were inspected and readable.
+- The second focused UI test exports HTML through its dialog, opens that actual file in
+  Chromium and checks decoded canvas pixels plus computed positions. Its run and inspected
+  screenshot, final lint/build, full UI and cross-platform results are recorded on the PR
+  before handoff; implementation or extraction tests alone are not HTML UI evidence.
+
+UPNG (already supplied through pdf-lib) and jpeg-js independently decode output; expected
+samples are synthetic constants. The tiny lossless JP2 and sRGB profile fixtures were
+generated with OpenJPEG/LittleCMS through Pillow; no customer or commercial-product art
+was copied. No production dependency was added.
+
+Remaining limits are explicit: export results still accumulate; appearance rendering has
+per-image and per-page bounds rather than whole-document streaming. The shared native
+select CSS and permission/client audit have separate ownership. The previously observed
+M91 TIFF-import dispatcher failure is independent of this repair. Existing Windows ARM
+installer smoke does not exercise these journeys, and macOS CI does not independently
+prove both CPU families. The coordinator retains completion/merge ownership until all
+required integration checks and separately owned fixes are complete.

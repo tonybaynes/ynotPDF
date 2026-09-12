@@ -15,8 +15,8 @@
  * - **Pages are rendered one at a time and the pixels are handed straight on** to the export
  *   worker, which encodes them while the engine renders the next one. Nothing holds a whole
  *   document's worth of bitmaps.
- * - **Files are written one at a time** through `file:writeInto` (M42's channel), so a 500-page
- *   export costs one page of memory rather than five hundred.
+ * - **Files are written one at a time** through `file:writeInto` (M42's channel). Embedded-image
+ *   and HTML exports still accumulate source images/results; they are not flat-memory streams.
  */
 
 import type { ShellServices } from '@app/services';
@@ -30,7 +30,7 @@ import {
   ExportFailed,
   IMAGE_FORMATS,
   documentStem,
-  encodePngRgb,
+  encodePngRgba,
   isExportCancelled,
   type EmbeddedImageLike,
   type ExportPage,
@@ -271,12 +271,10 @@ export class ExportService {
   private async pageImages(doc: Document, enginePage: number): Promise<ExportPageImage[]> {
     const engine = doc.engine;
     if (typeof engine.pageImages !== 'function') return [];
-    let images: ReadonlyArray<EmbeddedImageLike>;
-    try {
-      images = await engine.pageImages(doc.handle, enginePage);
-    } catch {
-      return [];
-    }
+    const images = await engine.pageImages(doc.handle, enginePage, {
+      output: 'png',
+      purpose: 'appearance',
+    });
     const out: ExportPageImage[] = [];
     for (const image of images) {
       const withRect = image as EmbeddedImageLike & {
@@ -288,7 +286,7 @@ export class ExportService {
         out.push({
           rect,
           mediaType: 'image/png',
-          bytes: encodePngRgb(image.data, image.width, image.height, {
+          bytes: encodePngRgba(image.data, image.width, image.height, {
             level: this.settingsValue.compressionLevel,
           }),
         });
@@ -307,6 +305,7 @@ export class ExportService {
   async embeddedImages(
     doc: Document,
     options: {
+      readonly output?: ExportSettings['embeddedOutput'];
       readonly onProgress?: (fraction: number, message: string) => void;
       readonly signal?: AbortSignal;
     } = {},
@@ -324,13 +323,11 @@ export class ExportService {
       options.onProgress?.(index / Math.max(1, pages.length), `Page ${String(index + 1)}`);
       const enginePage = doc.enginePage(page.id);
       if (enginePage === undefined) continue;
-      try {
-        for (const image of await engine.pageImages(doc.handle, enginePage)) {
-          // The engine numbers pages as *it* has them; the reader counts the ones on screen.
-          out.push({ ...image, page: index });
-        }
-      } catch {
-        // A page whose objects cannot be read has no pictures, rather than failing the export.
+      for (const image of await engine.pageImages(doc.handle, enginePage, {
+        output: options.output ?? 'original',
+      })) {
+        // The engine numbers pages as *it* has them; the reader counts the ones on screen.
+        out.push({ ...image, page: index });
       }
     }
     return out;
@@ -537,6 +534,7 @@ export class ExportService {
   /** Every picture inside the document. */
   async exportEmbedded(
     options: {
+      readonly output?: ExportSettings['embeddedOutput'];
       readonly namePattern?: string;
       readonly minPixels?: number;
       readonly keepDuplicates?: boolean;
@@ -552,6 +550,7 @@ export class ExportService {
       (report, signal) => {
         const promise = (async () => {
           const images = await this.embeddedImages(doc, {
+            output: options.output ?? settings.embeddedOutput,
             onProgress: (fraction, message) => {
               report(fraction * 0.6, message);
             },
