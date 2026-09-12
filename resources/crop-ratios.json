@@ -1,0 +1,6 @@
+[
+  { "value": "square", "label": "Square (1:1)", "width": 1, "height": 1 },
+  { "value": "landscape", "label": "Landscape (4:3)", "width": 4, "height": 3 },
+  { "value": "portrait", "label": "Portrait (3:4)", "width": 3, "height": 4 },
+  { "value": "wide", "label": "Widescreen (16:9)", "width": 16, "height": 9 }
+]

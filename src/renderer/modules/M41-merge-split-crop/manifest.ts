@@ -36,6 +36,10 @@ import { askCrop } from './cropDialog';
 import { askFlatten } from './flattenDialog';
 import { askDeskew, type DeskewRow } from './deskewDialog';
 import { cropTool } from './cropTool';
+import { FREE_CROP_RATIO, readCropRatio } from './cropRatio';
+import { askCropRatio } from './cropRatioField';
+import { applyCropChoice } from './applyCropChoice';
+import { cropPreview } from './cropPreview';
 import { CROP_BOXES, MERGE_SETTINGS_SCHEMA } from './settings';
 
 export { MergeService, MERGE_SERVICE } from './MergeService';
@@ -43,6 +47,7 @@ export { registerMergeCodecs } from './commands';
 
 /** Set in `activate`, so the tool reaches the live service without a captured context. */
 let live: MergeService | null = null;
+let cropRatio = FREE_CROP_RATIO;
 
 const ops = (ctx: ServiceContext): MergeService => ctx.service<MergeService>(MERGE_SERVICE);
 
@@ -368,6 +373,7 @@ const CROP_PAGES: CommandSpec = {
   run: async (ctx) => {
     const service = ops(ctx);
     const doc = service.require();
+    const cropContext = { document: doc, revision: doc.state.revision };
     const where = target(ctx);
     const page = where.indexes[0] ?? 0;
     const box = boxArg(ctx.args) ?? service.settings.cropBox;
@@ -383,6 +389,12 @@ const CROP_PAGES: CommandSpec = {
     }
 
     const boxes = await service.pageBoxes(page, doc);
+    const geometry = service.viewer?.pane.pageView(page)?.geometry;
+    const extra = geometry?.extraRotation ?? 0;
+    const picture = cropPreview(doc, page, extra, service.settings.cropMarginPoints).catch(
+      () => null,
+    );
+    const initial = rectArg({ rect: ctx.args['initialRect'] });
     const unit = ctx.service<Registry>('registry').hasService(VIEWER_SERVICE)
       ? ctx.service<ViewerService>(VIEWER_SERVICE).settings.rulerUnits
       : 'mm';
@@ -393,23 +405,19 @@ const CROP_PAGES: CommandSpec = {
       pageLabel: doc.state.pages[page]?.label ?? String(page + 1),
       boxes,
       box,
+      ratioChoice: cropRatio,
+      rotation: geometry?.rotation ?? doc.state.pages[page]?.rotation ?? 0,
       changePageSize: service.settings.cropChangesPageSize,
       rangeContext: service.organise.rangeContext(doc),
-      ...(givenRect === undefined ? {} : { initial: givenRect }),
-      preview: async () => await pagePicture(service, page),
-      detectMargins: async () => await service.whiteMarginRect(page, doc),
+      ...(initial === undefined ? {} : { initial }),
+      preview: async () => await picture,
+      detectMargins: async () => (await picture)?.ink ?? null,
     });
     if (!answer) return null;
+    cropRatio = answer.ratioChoice;
     await service.setSetting('cropBox', answer.box);
     await service.setSetting('cropChangesPageSize', answer.changePageSize);
-    const cropped = await service.crop({
-      target: service.organise.targetOf(answer.pages, doc),
-      box: answer.box,
-      // Margins rather than the rectangle, so a run of differently sized pages each keeps its
-      // own proportions instead of every one being cut to the first page's box.
-      margins: answer.margins,
-      changePageSize: answer.changePageSize,
-    });
+    const cropped = await applyCropChoice(service, answer, extra, cropContext);
     service.toasts.show({ kind: 'success', text: `Cropped ${countPages(cropped)}.` });
     return service.record({ cropped, box: answer.box, rect: answer.rect });
   },
@@ -643,11 +651,23 @@ const CROP_TOOL_COMMAND: CommandSpec = {
   icon: 'crop',
   shortcut: 'Mod+Shift+C',
   permission: 'modify',
-  description: 'Drag a rectangle on the page, then press Enter to crop to it',
+  description: 'Drag a rectangle on the page, then press Enter to review and crop it',
   when: hasDocument,
   run: (ctx) => {
     ctx.service<{ activate(id: string): void }>(SERVICE.tools).activate('tool.crop');
     return null;
+  },
+};
+
+const CROP_RATIO: CommandSpec = {
+  id: 'organize.cropRatio',
+  label: 'Crop Aspect Ratio…',
+  category: 'Organize',
+  icon: 'crop',
+  when: hasDocument,
+  run: async (ctx) => {
+    const answer = await askCropRatio(ops(ctx).dialogs, cropRatio);
+    if (answer) cropRatio = answer;
   },
 };
 
@@ -738,6 +758,7 @@ export default defineModule({
     COMBINE,
     SPLIT,
     CROP_TOOL_COMMAND,
+    CROP_RATIO,
     CROP_PAGES,
     REMOVE_WHITE_MARGINS,
     FLATTEN,
@@ -754,14 +775,15 @@ export default defineModule({
         const doc = live?.document;
         return doc?.state.pages[page]?.cropBox ?? null;
       },
+      geometry: (page) => live?.viewer?.pane.pageView(page)?.geometry ?? null,
       overlayFor: (page) => {
         const viewer = live?.viewer;
         return viewer?.pane.pageView(page)?.layers.tool ?? null;
       },
       commit: (page, rect) => {
-        void live?.run('organize.cropPages', { pages: [page], rect });
+        void live?.run('organize.cropPages', { pages: [page], initialRect: rect });
       },
-      ratio: () => null,
+      ratio: () => readCropRatio(cropRatio) ?? null,
       step: () => 1,
     }),
   ],
@@ -786,7 +808,7 @@ export default defineModule({
           kind: 'split',
           command: CROP_TOOL_COMMAND.id,
           size: 'large',
-          menu: [CROP_PAGES.id, REMOVE_WHITE_MARGINS.id],
+          menu: [CROP_PAGES.id, CROP_RATIO.id, REMOVE_WHITE_MARGINS.id],
         },
         {
           kind: 'split',
