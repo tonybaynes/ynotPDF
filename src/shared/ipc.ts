@@ -506,7 +506,8 @@ export interface IpcInvokeMap {
   'window:getState': { args: []; result: WindowState };
   /**
    * Enters or leaves OS full screen (M11, ADR 0009). The renderer cannot do this itself; the
-   * resulting state comes back on `window:stateChanged`. Passing nothing toggles.
+   * resulting state comes back on `window:stateChanged`. Passing nothing toggles. Resolves only
+   * after the transition has settled (macOS animates it), so the result is the real new state.
    */
   'window:setFullScreen': { args: [fullScreen?: boolean]; result: boolean };
   /** Number of open app windows (tests). */
