@@ -352,3 +352,18 @@ saving. Full verification and the final commit/CI status are recorded in the PR.
 
 Findings 1–3 were merged as PRs 51, 52 and 53 on 12 September 2026 after all platform checks passed.
 Tony has authorized completing every remaining audit finding and merging the verified fixes.
+
+### PR 54 final validation follow-up
+
+The full UI run exposed a lazy annotation read that completed after its page was removed,
+republishing an orphan annotation. Document.loadAnnotations now checks that the document is
+still open and the page still exists at the same engine binding before publishing. A deferred
+engine-read unit regression covers delete/read-completion/undo/reload; all 52 document tests
+and all 22 document-operation UI tests passed locally after the fix.
+
+The original 249fe88 full local run was 547 passed, 6 skipped, 4 failed. Three failures were
+clipboard reads: even a direct Electron main-process writeText/readText and ClipboardItem
+write/read probe returned empty data on this desktop. Those same clipboard tests passed in
+the Windows CI run. No clipboard assertions or skips were weakened. The fourth was the
+annotation race above, also reproduced in CI. CI additionally reported thumbnail navigation
+and narrow ribbon interaction failures that require review on the updated commit.

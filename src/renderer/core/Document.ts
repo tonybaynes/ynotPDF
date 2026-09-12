@@ -565,6 +565,11 @@ export class Document {
     const index = this.enginePage(pageId);
     if (index === undefined) return this.annotations(pageId);
     const list = await this.engine.annotations(this.handle, index);
+    // A page can be removed or rebound while its lazy engine read is in flight.
+    // Never publish old annotations onto a deleted page (or after document closure).
+    if (this.closed || this.pageIndex(pageId) < 0 || this.enginePage(pageId) !== index) {
+      return this.annotations(pageId);
+    }
     const model = this.adoptAnnotations(pageId, list);
     this.store.set((s) => ({ annotations: { ...s.annotations, [pageId]: model } }));
     return model;
