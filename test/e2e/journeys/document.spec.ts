@@ -164,6 +164,7 @@ test('M41 — the crop tool takes a rectangle dragged on the page and crops to i
     'the crop tool drew no rectangle where it was dragged',
   ).toBeVisible({ timeout: 10_000 });
   await app.page.keyboard.press('Enter');
+  await j.clickDialogButton('#ops-crop', 'Crop');
   await app.page.waitForTimeout(1000);
 
   expect(await cropWidth(), 'the page was not cropped').toBeLessThan(before);

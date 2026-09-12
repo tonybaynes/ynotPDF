@@ -117,9 +117,13 @@ forge (BSD), pkcs11js (MIT, later).
 - Sign with a test .p12 ⇒ `pdfsig` reports a valid signature; modify the
   file ⇒ reports invalid; our panel agrees in both cases.
 - B-T with a public test TSA ⇒ timestamp token present and valid.
-- Certify P=2 then add an annotation via incremental save ⇒ status
+- Certify P=3 then add an annotation via incremental save ⇒ status
   "Valid, form/annotation changes allowed"; edit text ⇒ "Invalid: changes
   not permitted".
+- Certify P=2: allowed form filling/signing succeeds, but adding an annotation
+  is rejected or reported as a prohibited modification. Test P=1, P=2 and P=3
+  separately, including FieldMDP locks. Cryptographic validity, trust and
+  permitted-modification status are distinct results.
 - Two signatures from two IDs both valid.
 - Trust store: untrusted signer shows "Unknown signer" until trusted.
 
@@ -266,7 +270,13 @@ colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+2026-09-12 review correction: annotation changes require DocMDP P=3, not P=2.
+See ISO 32000-1 Table 254 and the
+[PDF Association signature overview](https://pdfa.org/wp-content/uploads/2025/05/0-1-16_15-YulianEugene-Document_Security_Authenticity-untagged.pdf).
+Test timestamps using deterministic local fixtures; public TSA availability
+must not be the only CI oracle. Verify OS-store signing with non-exportable
+keys; listing certificates or invoking a certificate utility is not proof of
+a signing implementation. Do not export private keys merely to fit a library.
 
 ## Build log (fill in at merge)
 
