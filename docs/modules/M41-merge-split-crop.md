@@ -311,7 +311,7 @@ through the engine and the other four through the write plan, so the crop tool
 mints one of those per page and gets undo for nothing. The only gap was
 *reading* Trim/Bleed/Art — the model records them as `null` because
 `PdfEngine.pageSize` never returned them — so this module adds one additive
-engine method, `pageBoxes(doc, page)` (ADR 0018). Nothing re-encodes; a
+engine method, `pageBoxes(doc, page)` (ADR 0017). Nothing re-encodes; a
 cropped page is the same content in a smaller window.
 
 **"Remove white margins"** renders the page at 100 dpi, walks the rows and
@@ -453,9 +453,8 @@ needs.
   widget the file never drew is kept and reported rather than silently lost.
 - **Office inputs to Combine** wait for M93, as the brief says. Everything M91
   converts already works.
-- **A ratio constraint on the crop drag** is in the tool (`CropToolHost.ratio`)
-  but nothing offers it in the UI yet: the dialog is where a ratio belongs and it
-  is already the tallest of the five. It is one select away when it is wanted.
+- **A ratio constraint on the crop drag** was initially deferred. The September
+  2026 completion repair below supplies the shared tool/dialog UI.
 
 **Three bugs the tests found, and one Tony's files found.**
 
@@ -488,3 +487,28 @@ existing import changed.
 the page centre at +2.3°, −1.1° and +7.5°, plus a blank page and a highlight
 over a word. The skew is in the content stream, so the angle is exact and all
 three pages share one image XObject, which is how "no re-encoding" is provable.
+
+### Crop-ratio completion repair — 12 September 2026
+
+Independent implementation for Tony from the original brief and the existing
+page-box/geometry contracts; no competitor assets or code used.
+
+- Crop Aspect Ratio is available in the Crop Tool menu and command palette.
+  Free, fixed presets from `resources/crop-ratios.json`, and Custom width : height
+  share one session choice with the crop dialog. Components accept 0.01–1000;
+  ratios accept 1:100–100:1. Invalid values disable the action with a worded error.
+- Dragging, all eight handles and keyboard resizing preserve the selected ratio
+  in displayed coordinates, including page and view rotation and offset boxes.
+  Enter opens the Crop pages review dialog with the drawn rectangle.
+- The preview and white-margin detection use the same rotation. Margins are
+  explicitly measured from the unrotated CropBox; every target page retains the
+  requested displayed ratio even when page sizes/rotations differ. Results under
+  one point are rejected before any page changes; a range is one undo entry.
+- The existing page-box commands and save writer remain the persistence path.
+  Ratio choice is session UI state; saved boxes survive reopening. No content is
+  re-encoded and no dependency was added.
+- Tests: `test/unit/ops/crop-ratio.test.ts` and
+  `test/e2e/journeys/crop-ratio.spec.ts`; the existing M41 drag journey now presses
+  Crop in the review dialog. See the PR for completed lint/unit/e2e/platform runs
+  and [the completion review](../reviews/M41-completion-review.md) for the full
+  assigned Markdown reading record and remaining scope outside this repair.
