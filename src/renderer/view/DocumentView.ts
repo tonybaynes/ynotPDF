@@ -12,7 +12,7 @@
  *   and the tests share one description of where the reader is.
  */
 
-import type { PageSize, Rotation } from '@shared/pdf';
+import type { PageSize, PdfRect, Rotation } from '@shared/pdf';
 import type { ToolSpec } from '@shared/module';
 import type { DocHandle } from '@engine/PdfEngine';
 import { PageGeometry } from '@engine/geometry';
@@ -29,6 +29,7 @@ import {
 import { bucketKey, bucketZoom, clampFactor, fitZoom, zoomAboutPoint, type FitMode } from './zoom';
 import { orderByDistance, tilesForRect, TILE_SIZE, type TileCoord } from './tiles';
 import type { RenderFlags, TileRenderer, TileRequest } from './TileRenderer';
+import { visibleRowBounds } from './ContentBounds';
 
 /** Gap between pages and padding around the content, CSS px. */
 export const PAGE_GAP = 16;
@@ -54,6 +55,8 @@ export interface DocumentViewOptions {
   readonly docKey: string;
   readonly doc: DocHandle;
   readonly pageSizes: ReadonlyArray<PageSize>;
+  /** Bounds in unrotated PDF space, supplied by the document's bounded cache. */
+  readonly contentBounds?: (page: number) => Promise<PdfRect>;
   readonly flags?: RenderFlags;
   readonly layout?: LayoutMode;
   readonly zoom?: number;
@@ -103,12 +106,15 @@ export class DocumentView {
   private idle = 0;
   private disposed = false;
   private suppressScroll = false;
+  private fitRequest = 0;
+  private readonly readContentBounds: DocumentViewOptions['contentBounds'];
 
   constructor(options: DocumentViewOptions) {
     this.renderer = options.renderer;
     this.docKey = options.docKey;
     this.doc = options.doc;
     this.sizes = options.pageSizes;
+    this.readContentBounds = options.contentBounds;
     this.onStateChange = options.onStateChange;
     this.onFrame = options.onFrame;
     this.activeTool = options.activeTool;
@@ -255,6 +261,7 @@ export class DocumentView {
   }
 
   setFit(fit: FitMode): void {
+    this.fitRequest++;
     this.fitMode = fit;
     if (fit) {
       this.applyFit();
@@ -274,6 +281,7 @@ export class DocumentView {
    * Whatever content was under that point stays under it.
    */
   zoomAt(zoom: number, anchorX: number, anchorY: number, fit: FitMode = null): void {
+    this.fitRequest++;
     const target = clampFactor(zoom);
     if (target === this.zoomFactor && fit === this.fitMode) return;
     const box = this.scroller.getBoundingClientRect();
@@ -318,12 +326,14 @@ export class DocumentView {
 
   /** Jumps to a page (0-based), putting its top edge just below the content padding. */
   goToPage(page: number, options: { readonly top?: number } = {}): void {
+    this.fitRequest++;
     const target = Math.min(Math.max(0, Math.round(page)), Math.max(0, this.sizes.length - 1));
     this.currentPage = target;
     if (!this.table.continuous) {
       this.relayout({ keepPage: true });
       this.setScroll({ left: this.scroller.scrollLeft, top: options.top ?? 0 });
       this.paint();
+      if (this.fitMode === 'visible') this.applyFit();
       this.emit();
       return;
     }
@@ -334,6 +344,7 @@ export class DocumentView {
       top: options.top ?? rect.y - CONTENT_PADDING,
     });
     this.paint();
+    if (this.fitMode === 'visible') this.applyFit();
     this.emit();
   }
 
@@ -376,6 +387,7 @@ export class DocumentView {
     const top =
       land === 'top' ? 0 : Math.max(0, this.content.offsetHeight - this.scroller.clientHeight);
     this.setScroll({ left: this.scroller.scrollLeft, top });
+    if (this.fitMode === 'visible') this.applyFit();
     this.emit();
   }
 
@@ -417,6 +429,7 @@ export class DocumentView {
 
   /** The page sizes changed (a page rotated, was inserted or removed). */
   setPageSizes(sizes: ReadonlyArray<PageSize>): void {
+    this.fitRequest++;
     this.sizes = sizes;
     for (const [index, view] of [...this.views]) {
       const size = sizes[index];
@@ -483,10 +496,16 @@ export class DocumentView {
 
   /** Recomputes the fit zoom, if a fit mode is held. */
   private applyFit(): void {
+    const request = ++this.fitRequest;
     if (!this.fitMode) return;
-    const row =
-      this.table.rows[Math.max(0, rowOfPage(this.table, this.currentPage))] ?? this.table.rows[0];
+    // Build for the *new* layout mode; the displayed table may still be the previous mode.
+    const table = this.buildTable();
+    const row = table.rows[Math.max(0, rowOfPage(table, this.currentPage))] ?? table.rows[0];
     const pages = row?.pages ?? [0];
+    if (this.fitMode === 'visible' && this.readContentBounds) {
+      void this.applyVisibleFit(pages, request);
+      return;
+    }
     const sizes = pages.map((p) => this.sizes[p]).filter((s): s is PageSize => Boolean(s));
     if (sizes.length === 0) return;
     const zoom = fitZoom(
@@ -503,6 +522,68 @@ export class DocumentView {
       this.viewRotation,
     );
     this.zoomFactor = zoom;
+  }
+
+  /** Edits invalidate both a pending fit and any result already displayed. */
+  invalidateContentBounds(): void {
+    this.applyFit();
+  }
+
+  private async applyVisibleFit(pages: ReadonlyArray<number>, request: number): Promise<void> {
+    // Let the synchronous layout/scroll part of the initiating command finish first.
+    await Promise.resolve();
+    if (this.disposed || request !== this.fitRequest) return;
+    const left = this.scroller.scrollLeft;
+    const top = this.scroller.scrollTop;
+    const read = this.readContentBounds;
+    if (!read) return;
+    const page = this.currentPage;
+    const boxes = await Promise.all(
+      pages.map(async (p) => {
+        const size = this.sizes[p];
+        if (!size) return null;
+        // A failed read still leaves a usable page-width fit. Failed cache entries can retry.
+        const box = await Promise.resolve()
+          .then(() => read(p))
+          .catch(() => new PageGeometry(size).box);
+        return [p, box] as const;
+      }),
+    );
+    if (
+      this.disposed ||
+      request !== this.fitRequest ||
+      this.fitMode !== 'visible' ||
+      page !== this.currentPage ||
+      left !== this.scroller.scrollLeft ||
+      top !== this.scroller.scrollTop
+    )
+      return;
+    const bounds = new Map(boxes.filter((b) => b !== null));
+    const unitTable = layoutPages(this.sizes, {
+      mode: this.mode,
+      zoom: 1,
+      gap: 0,
+      padding: 0,
+      rotation: this.viewRotation,
+    });
+    const unit = visibleRowBounds(unitTable, this.sizes, bounds, this.viewRotation);
+    if (!unit || unit.width <= 0 || this.scroller.clientWidth <= 0) return;
+    const gap = pages.length > 1 ? PAGE_GAP : 0;
+    const available = Math.max(1, this.scroller.clientWidth - CONTENT_PADDING * 2 - gap);
+    // Round down, so the status bar's whole-percent precision never clips the right edge.
+    this.zoomFactor = clampFactor(Math.floor((available / unit.width) * 100) / 100);
+    this.relayout();
+    const ink = visibleRowBounds(this.table, this.sizes, bounds, this.viewRotation);
+    const row = this.table.rows[rowOfPage(this.table, page)];
+    if (ink) {
+      const rowOffset = this.table.continuous ? 0 : (row?.y ?? 0) - CONTENT_PADDING;
+      this.setScroll({
+        left: ink.x + this.contentOffsetX - CONTENT_PADDING,
+        top: ink.y - rowOffset - CONTENT_PADDING,
+      });
+    }
+    this.paint({ force: true });
+    this.emit();
   }
 
   /**
@@ -563,7 +644,10 @@ export class DocumentView {
   private updateCurrentPage(): void {
     if (!this.table.continuous) return;
     const page = pageAt(this.table, this.scroller.scrollTop, this.scroller.clientHeight);
-    if (page !== this.currentPage) this.currentPage = page;
+    if (page !== this.currentPage) {
+      this.currentPage = page;
+      if (this.fitMode === 'visible') this.applyFit();
+    }
   }
 
   /**

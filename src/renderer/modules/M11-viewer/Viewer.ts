@@ -15,6 +15,7 @@ import type { PageSize, Rotation } from '@shared/pdf';
 import type { ToolSpec } from '@shared/module';
 import { el } from '@app/dom';
 import { DocumentView, type ViewportState } from '@view/DocumentView';
+import { contentBounds, ContentBoundsCache } from '@view/ContentBounds';
 import { Loupe } from '@view/Loupe';
 import { Overlays, type OverlayState } from '@view/Overlays';
 import { PerfHud } from '@view/PerfHud';
@@ -58,6 +59,7 @@ export class Viewer {
   private readonly paneHosts: HTMLElement[] = [];
   private readonly disposers: Array<() => void> = [];
   private readonly hud: PerfHud;
+  private readonly boundsCache = new ContentBoundsCache();
 
   private overlayState: OverlayState;
   private flags: RenderFlags;
@@ -100,12 +102,21 @@ export class Viewer {
       this.document.store.select(
         (s) => s.pages,
         () => {
+          this.boundsCache.clear();
           const sizes = this.pageSizes();
           for (const pane of this.panes) pane.setPageSizes(sizes);
           this.syncOverlays();
         },
         { immediate: false },
       ),
+      this.document.on('document:revision', () => {
+        this.boundsCache.clear();
+        for (const pane of this.panes) pane.invalidateContentBounds();
+      }),
+      this.document.on('layer:changed', () => {
+        this.boundsCache.clear();
+        for (const pane of this.panes) pane.invalidateContentBounds();
+      }),
     );
   }
 
@@ -403,6 +414,7 @@ export class Viewer {
   }
 
   dispose(): void {
+    this.boundsCache.clear();
     this.stopAutoScroll();
     this.loupe?.close();
     this.hud.stop();
@@ -424,6 +436,21 @@ export class Viewer {
       docKey: this.tabId,
       doc: this.document.handle,
       pageSizes: this.pageSizes(),
+      contentBounds: (index) => {
+        const page = this.document.page(index);
+        const enginePage = this.document.enginePage(page.id);
+        const size = pageSizeOf(page);
+        const hidden = new Set(
+          this.document.state.layers.filter((l) => !l.visible).map((l) => l.engineId),
+        );
+        return this.boundsCache.get(page.id, async () => {
+          const objects =
+            enginePage === undefined
+              ? []
+              : await this.document.engine.pageObjects(this.document.handle, enginePage);
+          return contentBounds(objects, size, hidden);
+        });
+      },
       flags: this.flags,
       layout: options.layout,
       zoom: options.zoom,
