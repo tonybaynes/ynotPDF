@@ -121,3 +121,34 @@ application, undo/redo and save/reopen. A second journey exercises Custom and
 Free at 200% UI scale with High Contrast and layout/readability assertions.
 Final local and exact-head CI results are recorded in the PR and coordinator
 handoff; this file does not turn a pending run into a completion claim.
+
+## Import and Combine completion follow-up — September 2026
+
+The separate import follow-up now implements the remaining M41 omissions identified
+above: image-only automatic straightening, Add folder with optional recursion, and
+external desktop File ingestion in Combine. The full assigned Markdown review remains
+applicable; M50 unknown-operator preservation and M60 image-field selection remain
+separate work owned by the coordinator. Full M41 status stays with that coordinator.
+
+The approved integration point is M91 `CreateService.convert`. It reads the scan
+preference only for image conversions and uses a private worker and temporary PDFium
+engine to measure the completed PDF geometry before applying existing deskew matrices.
+The disabled result is returned by identity. Synthetic positive/negative scan angles,
+blank/straight pages, multipage TIFF, anisotropic DPI, page boxes and stored image
+streams are checked against real PDFium and pdf-lib. The shared worker clients and
+audit-owned source/catalog/IPC contracts are unchanged.
+
+Native folder selection uses the existing picker and descendant reader. Desktop drops
+use File bytes and never create a filesystem grant. Read failures are named without
+discarding readable neighbours. Optional renderer-side cancellation/progress hooks pass
+through `MergeService.sourceFor`, `OrganiseService.pdfBytesOf` and
+`CreateService.convertFile`; tests prove cancellation propagation and suppression of
+late results. Existing PDFs retain their original bytes and source shape.
+
+Three real UI journeys exercise the native-picker boundary, folder recursion, actual
+Chromium File objects delivered to the drop handler, keyboard range validation,
+reordering, cancel/reopen, image creation with the preference off/on, and M40 image
+insertion with undo/redo and save/reopen. Read-only diagnostics measure saved geometry
+and angles; commands under test are invoked through visible UI. Dialog screenshots are
+captured for inspection. Exact local and CI completion results belong in the final PR
+handoff rather than being assumed from the presence of these tests.

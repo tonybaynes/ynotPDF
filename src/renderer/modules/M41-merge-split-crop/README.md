@@ -65,3 +65,10 @@ skew detection, the flatten render hash, "remove white margins" — against real
 `test/unit/engine/ops.test.ts`. The DOM half is proved by Playwright in
 `test/e2e/document-ops.spec.ts`, which is why the dialogs, the tool and the service are out of the
 coverage gate.
+
+The optional image-import hook is private to M41: `importDeskewClient` owns one
+short-lived worker per converted image PDF, and `importDeskewEngine` owns its temporary
+PDFium instance. M91 calls it only when `scan.autoDeskew` is true. Combine's folder,
+file-picker and external File-drop inputs share `combineInputs`; cancelling the dialog
+propagates through the existing services to the active converter and deskew worker.
+`test/e2e/journeys/import-combine.spec.ts` exercises these visible flows and persistence.

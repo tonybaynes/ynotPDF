@@ -43,6 +43,7 @@ import {
 import { DEFAULT_WEB_OPTIONS, type WebConvertOptions } from '@engine/create/web/WebConverter';
 import markdownStylesheet from '../../../../resources/create/markdown.css?raw';
 import { ConvertClient, type ConvertHandle } from './ConvertClient';
+import { startImportDeskew } from '@modules/M41-merge-split-crop/importDeskewClient';
 import {
   askBlankOptions,
   askHtmlOptions,
@@ -258,45 +259,67 @@ export class CreateService {
     hooks: { readonly progress?: ConvertProgress; readonly signal?: AbortSignal } = {},
   ): ConvertHandle {
     const needsWindow = kind === 'html' || kind === 'web';
-    const first = needsWindow ? this.local : this.client;
-    const start = (client: ConvertClient): ConvertHandle =>
-      client.convert({
-        converter: kind,
-        inputs,
-        options,
-        ...(hooks.progress === undefined ? {} : { onProgress: hooks.progress }),
-      });
-    let current = start(first);
+    let current: ConvertHandle | null = null;
     let cancelled = false;
-    const promise = current.promise.catch(async (error: unknown) => {
-      if (
-        cancelled ||
-        needsWindow ||
-        !(error instanceof ConvertUnsupported) ||
-        error.reason !== 'no-decoder'
-      ) {
-        throw error;
-      }
-      current = start(this.local);
-      return current.promise;
-    });
-    hooks.signal?.addEventListener('abort', () => {
+    const cancel = (): void => {
       cancelled = true;
-      current.cancel();
-    });
-    return {
-      promise,
-      cancel: () => {
-        cancelled = true;
-        current.cancel();
-      },
+      current?.cancel();
     };
+    const check = (): void => {
+      if (cancelled || hooks.signal?.aborted) throw new ConvertCancelled();
+    };
+    hooks.signal?.addEventListener('abort', cancel);
+    this.disposers.push(cancel);
+    const promise = (async () => {
+      check();
+      // Read the current preference once per image conversion, including clipboard, drops,
+      // M40 insertion and Combine. Existing PDFs and other conversion families never enter it.
+      const straighten =
+        kind === 'image' && (await this.settingsStorage.get('scan.autoDeskew')) === true;
+      check();
+      const progress: ConvertProgress | undefined =
+        hooks.progress &&
+        ((fraction, message) =>
+          hooks.progress?.(straighten && fraction !== null ? fraction * 0.6 : fraction, message));
+      const start = (client: ConvertClient): ConvertHandle =>
+        client.convert({
+          converter: kind,
+          inputs,
+          options,
+          ...(progress === undefined ? {} : { onProgress: progress }),
+        });
+      current = start(needsWindow ? this.local : this.client);
+      let result: ConvertResult;
+      try {
+        result = await current.promise;
+      } catch (error) {
+        check();
+        if (needsWindow || !(error instanceof ConvertUnsupported) || error.reason !== 'no-decoder')
+          throw error;
+        current = start(this.local);
+        result = await current.promise;
+      }
+      check();
+      if (!straighten) return result;
+      current = startImportDeskew(result, (fraction, message) =>
+        hooks.progress?.(fraction === null ? null : 0.6 + fraction * 0.4, message),
+      );
+      const straightened = await current.promise;
+      check();
+      return straightened;
+    })().finally(() => {
+      hooks.signal?.removeEventListener('abort', cancel);
+      const at = this.disposers.indexOf(cancel);
+      if (at >= 0) this.disposers.splice(at, 1);
+    });
+    return { promise, cancel };
   }
 
   /** Converts one file by its type with default options — M40's insert-from-file path. */
   async convertFile(
     file: OpenedFile | ConvertInput,
     options?: Record<string, unknown>,
+    hooks: { readonly progress?: ConvertProgress; readonly signal?: AbortSignal } = {},
   ): Promise<ConvertResult> {
     const converter = this.routing.require({
       name: file.name,
@@ -305,7 +328,7 @@ export class CreateService {
     const kind = converter.id as CreateKind;
     const input: ConvertInput = { name: file.name, bytes: file.bytes, path: file.path ?? '' };
     const defaults = await this.defaultsFor(kind);
-    return this.convert(kind, [input], { ...defaults, ...options }).promise;
+    return this.convert(kind, [input], { ...defaults, ...options }, hooks).promise;
   }
 
   /** The whole headless flow: convert, open, report. Used by `create.convert`. */

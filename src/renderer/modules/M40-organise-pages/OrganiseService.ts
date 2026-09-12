@@ -572,17 +572,27 @@ export class OrganiseService {
   }
 
   /** Turns any file the app understands into PDF bytes: a PDF as-is, anything else via M91. */
-  async pdfBytesOf(file: OpenedFile | { name: string; bytes: Uint8Array }): Promise<Uint8Array> {
+  async pdfBytesOf(
+    file: OpenedFile | { name: string; bytes: Uint8Array },
+    hooks: {
+      readonly signal?: AbortSignal;
+      readonly progress?: (fraction: number | null, message: string) => void;
+    } = {},
+  ): Promise<Uint8Array> {
     if (looksLikePdf(file.name, file.bytes)) return file.bytes;
     const creates = this.creates;
     if (!creates) {
       throw new Error(`${file.name} is not a PDF, and the converters are not available.`);
     }
-    const result = await creates.convertFile({
-      name: file.name,
-      bytes: file.bytes,
-      path: 'path' in file ? file.path : '',
-    });
+    const result = await creates.convertFile(
+      {
+        name: file.name,
+        bytes: file.bytes,
+        path: 'path' in file ? file.path : '',
+      },
+      undefined,
+      hooks,
+    );
     return result.bytes;
   }
 
