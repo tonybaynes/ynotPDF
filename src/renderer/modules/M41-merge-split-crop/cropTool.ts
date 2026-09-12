@@ -5,16 +5,18 @@
  * Coordinates arrive in PDF user space (`ToolPointerEvent`), and that is the space the rectangle
  * is kept in — so a zoom, a scroll or a window resize repaints it in the right place without any
  * arithmetic beyond the one conversion the overlay needs. The rectangle can never leave the
- * page: `clampRect` is applied on every change rather than only at the end, so a drag that runs
+ * page: `fitCropRatio` is applied on every change rather than only at the end, so a drag that runs
  * off the edge stops at the edge instead of snapping back when it is let go.
  *
- * Keyboard: arrow keys nudge the nearest edge by a point, `Shift` by ten; `Tab` moves between
- * handles; `Mod+A` selects the whole page. Every one of those exists because a drag is not a
+ * Keyboard: arrow keys resize the displayed right/bottom edge by a point, `Shift` by ten;
+ * `Mod+A` selects the whole page. Every one of those exists because a drag is not a
  * keyboard path, and the tool has to have one.
  */
 
 import { el } from '@app/dom';
-import { clampRect, constrainRatio } from '@engine/ops/crop';
+import type { PageGeometry } from '@engine/geometry';
+import { fitCropRatio, pageCropRatio } from './cropRatio';
+import { cropDrag } from './cropDrag';
 import type { ToolPointerEvent, ToolSpec } from '@shared/module';
 import type { PdfRect } from '@shared/pdf';
 
@@ -25,6 +27,7 @@ export type CropHandle = (typeof HANDLES)[number];
 export interface CropToolHost {
   /** The page currently under the tool, and the box the rectangle lives inside. */
   pageBox(page: number): PdfRect | null;
+  geometry(page: number): PageGeometry | null;
   /** Turns a page-space rectangle into the overlay's own pixels. */
   overlayFor(page: number): HTMLElement | null;
   /** Called when the reader finishes a rectangle and asks for it to be applied. */
@@ -44,6 +47,8 @@ export function cropTool(host: CropToolHost): ToolSpec {
   let dragging: {
     readonly from: { x: number; y: number };
     readonly handle: CropHandle | null;
+    readonly pointerId: number;
+    readonly initial: PdfRect | null;
   } | null = null;
   let overlay: HTMLElement | null = null;
   let frame: HTMLElement | null = null;
@@ -82,23 +87,20 @@ export function cropTool(host: CropToolHost): ToolSpec {
 
   const paint = (): void => {
     if (page === null || !rect || !frame) return;
-    const box = host.pageBox(page);
-    if (!box) return;
-    const width = box.x1 - box.x0;
-    const height = box.y1 - box.y0;
-    frame.style.left = `${String(((rect.x0 - box.x0) / width) * 100)}%`;
-    frame.style.width = `${String(((rect.x1 - rect.x0) / width) * 100)}%`;
-    // The overlay counts down from the top; PDF space counts up from the bottom.
-    frame.style.top = `${String(((box.y1 - rect.y1) / height) * 100)}%`;
-    frame.style.height = `${String(((rect.y1 - rect.y0) / height) * 100)}%`;
+    const geometry = host.geometry(page);
+    if (!geometry) return;
+    const shown = geometry.rectToDevice(rect, 1);
+    frame.style.left = `${String((shown.x / geometry.width) * 100)}%`;
+    frame.style.width = `${String((shown.width / geometry.width) * 100)}%`;
+    frame.style.top = `${String((shown.y / geometry.height) * 100)}%`;
+    frame.style.height = `${String((shown.height / geometry.height) * 100)}%`;
   };
 
   const setRect = (next: PdfRect): void => {
     if (page === null) return;
-    const box = host.pageBox(page);
-    if (!box) return;
-    const ratio = host.ratio();
-    rect = ratio === null ? clampRect(next, box) : constrainRatio(clampRect(next, box), ratio, box);
+    const geometry = host.geometry(page);
+    if (!geometry) return;
+    rect = fitCropRatio(next, geometry.box, pageCropRatio(host.ratio(), geometry.rotation));
     paint();
   };
 
@@ -109,25 +111,12 @@ export function cropTool(host: CropToolHost): ToolSpec {
     handle: CropHandle | null,
     current: PdfRect | null,
   ): PdfRect => {
-    if (handle === null || !current) {
-      return {
-        x0: Math.min(from.x, to.x),
-        x1: Math.max(from.x, to.x),
-        y0: Math.min(from.y, to.y),
-        y1: Math.max(from.y, to.y),
-      };
-    }
-    const next = { ...current };
-    if (handle.includes('w')) next.x0 = to.x;
-    if (handle.includes('e')) next.x1 = to.x;
-    if (handle.includes('n')) next.y1 = to.y;
-    if (handle.includes('s')) next.y0 = to.y;
-    return {
-      x0: Math.min(next.x0, next.x1),
-      x1: Math.max(next.x0, next.x1),
-      y0: Math.min(next.y0, next.y1),
-      y1: Math.max(next.y0, next.y1),
-    };
+    const geometry = page === null ? null : host.geometry(page);
+    if (!geometry) return { x0: 0, y0: 0, x1: 0, y1: 0 };
+    const a = geometry.toDevice(from, 1);
+    const b = geometry.toDevice(to, 1);
+    const shown = current ? geometry.rectToDevice(current, 1) : null;
+    return geometry.rectToPage(cropDrag(a, b, shown, handle, host.ratio(), geometry), 1);
   };
 
   const handleUnder = (event: ToolPointerEvent): CropHandle | null => {
@@ -151,22 +140,33 @@ export function cropTool(host: CropToolHost): ToolSpec {
       if (page !== null && page !== event.page) clear();
       page = event.page;
       if (!ensureFrame(page)) return undefined;
-      dragging = { from: { x: event.x, y: event.y }, handle };
+      dragging = {
+        from: { x: event.x, y: event.y },
+        handle,
+        pointerId: event.original.pointerId,
+        initial: rect,
+      };
       if (handle === null) rect = null;
       (event.original.target as Element | null)?.setPointerCapture?.(event.original.pointerId);
       return true;
     },
 
     onPointerMove: (event) => {
-      if (!dragging || page === null) return undefined;
-      setRect(dragged(dragging.from, { x: event.x, y: event.y }, dragging.handle, rect));
+      if (!dragging || page === null || event.original.pointerId !== dragging.pointerId)
+        return undefined;
+      setRect(
+        dragged(dragging.from, { x: event.x, y: event.y }, dragging.handle, dragging.initial),
+      );
       return true;
     },
 
     onPointerUp: (event) => {
-      if (!dragging || page === null) return undefined;
+      if (!dragging || page === null || event.original.pointerId !== dragging.pointerId)
+        return undefined;
       const wasHandle = dragging.handle !== null;
-      setRect(dragged(dragging.from, { x: event.x, y: event.y }, dragging.handle, rect));
+      setRect(
+        dragged(dragging.from, { x: event.x, y: event.y }, dragging.handle, dragging.initial),
+      );
       dragging = null;
       (event.original.target as Element | null)?.releasePointerCapture?.(event.original.pointerId);
       // A click rather than a drag means "the whole page", which is what a reader who taps the
@@ -201,20 +201,23 @@ export function cropTool(host: CropToolHost): ToolSpec {
         return true;
       }
       const step = host.step() * (event.shiftKey ? 10 : 1);
-      const nudge: Partial<Record<string, Partial<PdfRect>>> = {
-        ArrowLeft: { x1: -step },
-        ArrowRight: { x1: step },
-        ArrowUp: { y0: step },
-        ArrowDown: { y0: -step },
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) || !rect)
+        return undefined;
+      const geometry = host.geometry(page);
+      if (!geometry) return undefined;
+      const shown = geometry.rectToDevice(rect, 1);
+      const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight';
+      const delta = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -step : step;
+      const to = {
+        x: shown.x + shown.width + (horizontal ? delta : 0),
+        y: shown.y + shown.height + (horizontal ? 0 : delta),
       };
-      const delta = nudge[event.key];
-      if (!delta || !rect) return undefined;
-      setRect({
-        x0: rect.x0 + (delta.x0 ?? 0),
-        x1: rect.x1 + (delta.x1 ?? 0),
-        y0: rect.y0 + (delta.y0 ?? 0),
-        y1: rect.y1 + (delta.y1 ?? 0),
-      });
+      setRect(
+        geometry.rectToPage(
+          cropDrag(to, to, shown, horizontal ? 'e' : 's', host.ratio(), geometry),
+          1,
+        ),
+      );
       return true;
     },
   };
