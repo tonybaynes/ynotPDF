@@ -321,3 +321,34 @@ are not mistaken for certificates usable for re-encryption, so finding 2's pre-w
 ADR 0022 records the design and scope. Six initial regressions failed before the fix; tests also
 cover pre-attachment ordering and the real two-recipient Open flow. Local and CI results belong
 in the PR. M92's export-permission mapping (finding 21) and other audit findings remain separate.
+
+## 11. Save and recovery integrity (Codex audit 4–12)
+
+Findings 4–12 are implemented on fix/save-recovery-integrity, with ADR 0023. Security commands
+restore both the intent and in-memory passwords on undo/redo. Saves and autosaves share a queue
+per document; engine/model snapshots use a command read barrier and a mutation revision. A stale
+save cancels before writing, or retains dirty state if edits arrived during the filesystem write.
+Save As updates the model and tab path and stops the previous watcher.
+
+Recovery v2 checkpoints the current engine, model, ID bindings, writer provenance and portfolio
+blobs. It never replays the session journal against already-saved bytes. SHA-256 addressed binary
+inputs are published before the atomic manifest, verified on read, and collected after they cease
+to be referenced. Pathless dirty documents with no journal are recoverable. Recovery retains its
+record until save/discard; another crash still offers it. The viewport is attached after restoration.
+Normal saves retain undo history; recovered sessions start a fresh undo history while keeping all
+checkpoint edits and write intents. Legacy v1 journals lack a trustworthy base and are retained for
+manual recovery, with an explicit message, rather than risking double application.
+
+Finding 11 moved into this batch because it shares the recovery boundary: initial fingerprints
+come from the exact opening buffer and cover the whole file. A changed/unknown destination yields
+a pathless recovery copy. Finding 12 also moved forward: checkpoint publication depends on atomic
+writes. Short writes loop, flush failures propagate, and all failed paths clean up their temp file.
+
+Regression evidence includes real PDFium/writer recovery cycles, undo past Save and branching,
+annotation identities, portfolio replacement/addition/cover bytes, a pathless zero-command document,
+missing recovery binaries, concurrent saves, and filesystem fault injection. The built app's test
+survives Save/edit/two process crashes, renders the recovered document and retains recovery until
+saving. Full verification and the final commit/CI status are recorded in the PR.
+
+Findings 1–3 were merged as PRs 51, 52 and 53 on 12 September 2026 after all platform checks passed.
+Tony has authorized completing every remaining audit finding and merging the verified fixes.

@@ -315,9 +315,8 @@ export class SecurityService {
       addRecipients: () => this.pickRecipients(),
     });
     if (!result) return null;
-    const command = new SetSecurityCommand(document, result.intent, result.secrets, entry.secrets);
+    const command = this.securityCommand(document, result.intent, result.secrets, entry);
     await document.apply(command);
-    entry.secrets = result.secrets;
     this.shell.toasts.show({
       kind: 'info',
       text: `${describeIntent(result.intent)} — applied when you save.`,
@@ -356,8 +355,7 @@ export class SecurityService {
       });
       if (password === null) return false;
     }
-    await document.apply(new SetSecurityCommand(document, NO_SECURITY, {}, entry.secrets));
-    entry.secrets = {};
+    await document.apply(this.securityCommand(document, NO_SECURITY, {}, entry));
     this.shell.invalidate();
     return true;
   }
@@ -863,13 +861,24 @@ export class SecurityService {
       ...(str('user', '') === '' ? {} : { user: str('user', '') }),
       ...(str('owner', '') === '' ? {} : { owner: str('owner', '') }),
     };
-    await document.apply(new SetSecurityCommand(document, intent, secrets, entry.secrets));
-    entry.secrets = secrets;
+    await document.apply(this.securityCommand(document, intent, secrets, entry));
     this.shell.invalidate();
     return intent;
   }
 
   // ---- internals -------------------------------------------------------------------------------
+
+  private securityCommand(
+    document: Document,
+    intent: SecurityIntent,
+    secrets: Secrets,
+    entry: Entry,
+  ): SetSecurityCommand {
+    return new SetSecurityCommand(document, intent, secrets, entry.secrets, (next) => {
+      // A command retained by undo must never revive a closed document's passwords.
+      if (this.entries.get(document.id) === entry) entry.secrets = next;
+    });
+  }
 
   private ensure(document: Document): Entry {
     let entry = this.entries.get(document.id);

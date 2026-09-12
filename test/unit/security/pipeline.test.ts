@@ -168,6 +168,32 @@ describe('running the stages', () => {
 describe('the encryption stage', () => {
   const s = security();
 
+  it('restores both passwords on undo and redo, including undo of Remove Security', async () => {
+    const { doc } = await openFake();
+    const service = serviceFor(doc);
+    service.load();
+    await service.applyIntentDirectly(doc, { user: 'open-A', owner: 'owner-A' });
+    await service.applyIntentDirectly(doc, { user: 'open-B', owner: 'owner-B' });
+    const check = async (expected: string, rejected: string): Promise<void> => {
+      const { bytes } = await runStage(service, doc);
+      expect(await s.isOwnerPassword(bytes, `owner-${expected}`)).toBe(true);
+      expect(await s.isOwnerPassword(bytes, `owner-${rejected}`)).toBe(false);
+      await expect(s.decrypt(bytes, `open-${expected}`)).resolves.toBeDefined();
+      await expect(s.decrypt(bytes, `open-${rejected}`)).rejects.toThrow();
+    };
+    await doc.undo.undo();
+    await check('A', 'B');
+    await doc.undo.redo();
+    await check('B', 'A');
+    await service.applyIntentDirectly(doc, { kind: 'none' });
+    expect((await s.inspect((await runStage(service, doc)).bytes)).encrypted).toBe(false);
+    await doc.undo.undo();
+    await check('B', 'A');
+    const journal = JSON.stringify(doc.undo.journal.map((command) => command.toJSON?.()));
+    expect(journal).not.toMatch(/open-[AB]|owner-[AB]/);
+    service.dispose();
+  }, 40_000);
+
   it('leaves an unprotected document alone, byte for byte', async () => {
     const { doc, service } = await protectedDocument(NO_SECURITY);
     const input = fixture('multipage.pdf');

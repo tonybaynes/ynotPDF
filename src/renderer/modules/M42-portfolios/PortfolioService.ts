@@ -242,6 +242,9 @@ export class PortfolioService {
     if (!this.registry.hasService(DOCUMENT_SERVICE)) return;
     const document = this.registry.service<DocumentService>(DOCUMENT_SERVICE).get(tab.id);
     if (!document) return;
+    // Recovery installed the current portfolio before attaching the tab. The engine still
+    // contains its older catalogue until Save; reading it must not overwrite recovered edits.
+    if (portfolioOfDocument(document)) return;
     try {
       const collection = await document.engine.collection(document.handle);
       if (collection === null) return;

@@ -373,14 +373,15 @@ test.describe('quitting with unsaved work', () => {
 });
 
 test.describe('recovery after a crash', () => {
-  test('a killed app offers the work back, and replaying it restores the edits', async () => {
+  test('Save, edit and two crashes restore a checkpoint without applying the saved rotation twice', async () => {
     const path = stage('multipage.pdf', 'crashed.pdf');
-    const before = readFileSync(path);
 
     // ---- the session that is about to be killed ------------------------------------------------
     const first = await launchApp();
     await openPath(first, path);
     await first.run('dev.documentApply', { kind: 'rotate', page: 0, rotation: 90 });
+    expect(((await first.run('file.save')) as { saved: boolean }).saved).toBe(true);
+    const before = readFileSync(path);
     await first.run('dev.documentApply', { kind: 'metadata', value: 'Lost and found' });
     await first.run('dev.addBookmark', { title: 'Where I was', page: 1 });
     expect((await saveState(first)).dirty).toBe(true);
@@ -425,9 +426,24 @@ test.describe('recovery after a crash', () => {
       // Recovered, not saved: the reader still has to decide whether to keep it.
       expect(restored.dirty).toBe(true);
 
-      // And the record is gone, so the next launch does not offer it again.
+      // A second crash before saving must still offer the recovered work.
       const remaining = (await second.run('dev.recoveryList')) as unknown[];
-      expect(remaining).toEqual([]);
+      expect(remaining).toHaveLength(1);
+      await expect(second.page.locator('canvas').first()).toBeVisible();
+      crash(second);
+      const third = await launchApp({ reuseUserData: true });
+      try {
+        const recovery = third.page.locator('#save-recovery-dialog');
+        await expect(recovery).toBeVisible({ timeout: 20_000 });
+        await recovery.getByRole('button', { name: 'Recover' }).click();
+        await expect(third.page.locator('.tab')).toHaveCount(1, { timeout: 20_000 });
+        await expect.poll(async () => (await summary(third)).metadataTitle).toBe('Lost and found');
+        expect((await summary(third)).rotations[0]).toBe(90);
+        expect(((await third.run('file.save')) as { saved: boolean }).saved).toBe(true);
+        expect(await third.run('dev.recoveryList')).toEqual([]);
+      } finally {
+        await third.close();
+      }
     } finally {
       await second.close();
     }

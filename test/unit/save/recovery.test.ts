@@ -62,12 +62,16 @@ describe('the fingerprint', () => {
     expect(hashBytes(bytes)).toBe(hashBytes(bytes.slice()));
   });
 
-  it('samples both ends of a large file, and notices a change at either', () => {
+  it('hashes the whole of a large file, including its middle', () => {
     const size = 5 * 1024 * 1024;
     const big = new Uint8Array(size).map((_v, i) => i % 253);
     const base = fingerprintBytes(big);
     expect(base.size).toBe(size);
-    expect(base.hash).toContain('-');
+    expect(base.hash).toHaveLength(16);
+    const middleChanged = big.slice();
+    const middle = Math.floor(size / 2);
+    middleChanged[middle] = (middleChanged[middle] ?? 0) ^ 0xff;
+    expect(sameSource(base, fingerprintBytes(middleChanged))).toBe(false);
 
     const headChanged = big.slice();
     headChanged[0] = (headChanged[0] ?? 0) ^ 0xff;
@@ -141,11 +145,12 @@ describe('replaying a record', () => {
   it('puts the model back exactly where it was', async () => {
     const doc = await editedDocument();
     const wanted = doc.snapshot();
-    const record = buildRecoveryRecord(doc, { id: 'r', source: null, now: NOW });
+    const source = fingerprintBytes(new Uint8Array([1, 2, 3]));
+    const record = buildRecoveryRecord(doc, { id: 'r', source, now: NOW });
     await doc.close();
 
     const { doc: fresh } = await openFake();
-    const outcome = await replayRecord(fresh, record, null);
+    const outcome = await replayRecord(fresh, record, source);
     expect(outcome.applied).toBe(4);
     expect(outcome.skipped).toBe(0);
     expect(fresh.snapshot()).toEqual(wanted);
@@ -166,6 +171,8 @@ describe('replaying a record', () => {
     const { doc: fresh } = await openFake();
     const outcome = await replayRecord(fresh, record, fingerprintBytes(new Uint8Array([9, 9])));
     expect(outcome.sourceChanged).toBe(true);
+    expect(outcome.applied).toBe(0);
+    expect(fresh.undo.state.length).toBe(0);
     expect(describeOutcome(record, outcome)).toContain('changed since then');
     await fresh.close();
   });
@@ -181,11 +188,12 @@ describe('replaying a record', () => {
         () => undefined,
       ),
     );
-    const record = buildRecoveryRecord(doc, { id: 'r', source: null, now: NOW });
+    const source = fingerprintBytes(new Uint8Array([1, 2, 3]));
+    const record = buildRecoveryRecord(doc, { id: 'r', source, now: NOW });
     await doc.close();
 
     const { doc: fresh } = await openFake();
-    const outcome = await replayRecord(fresh, record, null);
+    const outcome = await replayRecord(fresh, record, source);
     expect(outcome.applied).toBe(1);
     expect(outcome.skipped).toBe(1);
     expect(outcome.skippedTypes).toEqual(['mystery.change']);

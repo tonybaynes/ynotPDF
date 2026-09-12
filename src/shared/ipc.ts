@@ -391,6 +391,8 @@ export interface IpcInvokeMap {
   'recovery:list': { args: []; result: RecoveryEntry[] };
   /** Writes one autosave record. `id` must be `[A-Za-z0-9_-]{1,120}`. */
   'recovery:save': { args: [id: string, payload: string]; result: void };
+  'recovery:putBlob': { args: [id: string, bytes: Uint8Array]; result: string };
+  'recovery:readBlob': { args: [id: string, hash: string]; result: Uint8Array };
   'recovery:read': { args: [id: string]; result: string | null };
   'recovery:discard': { args: [id: string]; result: void };
   'recovery:clear': { args: []; result: void };
@@ -646,6 +648,8 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'file:suspendWatch',
   'recovery:list',
   'recovery:save',
+  'recovery:putBlob',
+  'recovery:readBlob',
   'recovery:read',
   'recovery:discard',
   'recovery:clear',

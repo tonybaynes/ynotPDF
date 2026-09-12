@@ -247,6 +247,8 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     },
     'recovery:list': () => deps.recovery.list(),
     'recovery:save': (_e, id, payload) => deps.recovery.save(id, payload),
+    'recovery:putBlob': (_e, id, bytes) => deps.recovery.putBlob(id, bytes),
+    'recovery:readBlob': (_e, id, hash) => deps.recovery.readBlob(id, hash),
     'recovery:read': (_e, id) => deps.recovery.read(id),
     'recovery:discard': (_e, id) => deps.recovery.discard(id),
     'recovery:clear': () => deps.recovery.clear(),
