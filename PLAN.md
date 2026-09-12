@@ -82,19 +82,28 @@ These counts describe the original briefs, not effort
 remaining or competitor parity. Existing audit findings remain tracked in
 `Codex_Audit.md` and `docs/open-work.md`.
 
+**Execution checkpoint, 2026-09-12:** the four module tasks and the audit task
+were interrupted by the account's weekly usage limit and subsequently resumed
+in the same tasks. Preserve those owners and worktrees; do not create replacements
+or completion ticks. CI continues independently. Current integrated
+local checks passed for M13 (20, then 13 preview/guard tests after its tab fix),
+M41 (9), M92 (8) and audit PR65 (32). M41 PR64 is now merged as 7c3d24d;
+the same task continues with Combine/Split document-structure preservation.
+See CHECKLIST.txt for exact revisions and remaining acceptance work.
+
 | Reopened module | Required completion work | Task |
 |---|---|---|
-| M11 | Full viewer UI 561 passed/4 existing skips and 11 integration passes; Windows CI raster-edge assertion is under exact-viewport investigation before signoff | M11 - Complete Fit Visible (PR59 open) |
-| M13 | PR58 merged; PR62 corrected real-input printing journeys/guards pass 14 checks, full UI/CI rerunning. Region snapshot fidelity, selection-input journeys and independent RTF application verification remain; installed Word is a valid substitute for absent WordPad, accurately recorded | M13 - Preserve annotations in PDF printing |
-| M41 | Crop ratios/geometry merged in PR55 (214f7f4), all eight CI checks green; same task continues import deskew and Combine folder/desktop-drop routes | M41 - Complete import and Combine workflows |
-| M92 | Group 4 TIFF merged in PR57 (c492bfd), all eight CI checks green; same task continues masks/intrinsic dimensions/nested images, original-vs-PNG choice and exact duplicate detection. Audit coordinates selection-text clipping | M92 - Complete image export fidelity |
+| M11 | PR59 Fit Visible/raster repair merged as 2696119. PR67 repairs confirmed full-screen/reading Escape failures; all six real-input/guide/performance checks pass, full UI and CI pending. First-attempt Windows scrolling measured 59.9341 fps; other targets remain qualified | M11 - Complete viewer interactions |
+| M13 | PR58 merged. PR62 fixes the diagnosed tab overflow with a positioned tab container; final 13 preview/guard tests pass, fresh CI pending. Region snapshot fidelity, selection-input journeys and independent RTF application verification remain; installed Word substitutes for absent WordPad, accurately recorded | M13 - Preserve annotations in PDF printing |
+| M41 | Crop repair PR55 and import deskew/Combine folder/drop repair PR64 merged (7c3d24d), all eight CI checks green. Same task now implements AcroForm preservation and Split keepForms before Names/attachments, layers and tags. Audit refusal prevents loss but does not satisfy whole-corpus acceptance | M41 - Complete import and Combine workflows |
+| M92 | Group 4 TIFF merged in PR57. PR63 intrinsic image fidelity and separate HTML appearance passed full local UI; test-only Blink width correction passed focused checks, fresh CI pending. Audit PR65 addresses export/status readability; broader copy-permission gate remains unmerged | M92 - Complete image export fidelity |
 | M30 | Cross-renderer appearance acceptance evidence | Queued validation work; no visual defect assumed |
 | M32 | Genuine Acrobat/Foxit XFDF fixture acceptance | Queued interoperability validation; no importer defect assumed |
 | M50 | Preserve unknown page operators during object z-order changes | Queued after active repairs and shared-code ownership clears |
 | M53 | Multi-file Bates workflow | Queued after an active task finishes and merges |
 | M60 | Image-field picture selection/button icons | Queued after active repairs and shared-code ownership clears |
 | M70 | Per-recipient certificate permission editing | Queued after active repairs and shared-code ownership clears |
-| M91 | Correct pixel decoding for valid compressed TIFF inputs | Queued after active repairs and audit ownership clears |
+| M91 | Correct pixel decoding for valid compressed TIFF inputs; fix visibly truncated image-import Page option at large UI scale | Queued after active repairs and audit ownership clears |
 
 **Ordering principle (Tony, 2026-09-07): easiest-first, hardest-last.**
 Waves 0–4 give an installable, usable viewer/annotator; waves 5–7 make it an
