@@ -167,7 +167,10 @@ test('M92 — positioned HTML in Chromium keeps rotated/clipped colour images an
         });
         try {
           await win.loadURL(target);
-          const pictures = (await win.webContents.executeJavaScript(`(async () => {
+          const results = [];
+          for (const zoom of [1, 1.25]) {
+            win.webContents.setZoomFactor(zoom);
+            const pictures = (await win.webContents.executeJavaScript(`(async () => {
           const pictures=[...document.querySelectorAll('.pic img')];
           await Promise.all(pictures.map(image=>image.decode()));
           return pictures.map(image=>{
@@ -176,24 +179,27 @@ test('M92 — positioned HTML in Chromium keeps rotated/clipped colour images an
             const context=canvas.getContext('2d'); context.drawImage(image,0,0);
             const at=(x,y)=>Array.from(context.getImageData(x,y,1,1).data);
             const style=getComputedStyle(image.parentElement);
-            return {size:[canvas.width,canvas.height],topLeft:at(5,5),bottomLeft:at(5,15),topRight:at(15,5),bottomRight:at(15,15),left:parseFloat(style.left),top:parseFloat(style.top),width:parseFloat(style.width)};
+            return {size:[canvas.width,canvas.height],topLeft:at(5,5),bottomLeft:at(5,15),topRight:at(15,5),bottomRight:at(15,15),left:parseFloat(style.left),top:parseFloat(style.top),width:parseFloat(style.width),authoredWidth:image.parentElement.style.width};
           });
         })()`)) as Array<{
-            size: number[];
-            topLeft: number[];
-            bottomLeft: number[];
-            topRight: number[];
-            bottomRight: number[];
-            left: number;
-            top: number;
-            width: number;
-          }>;
+              size: number[];
+              topLeft: number[];
+              bottomLeft: number[];
+              topRight: number[];
+              bottomRight: number[];
+              left: number;
+              top: number;
+              width: number;
+              authoredWidth: string;
+            }>;
+            results.push({ zoom, pictures });
+          }
           let screenshot: number[] = [];
           if (capture) {
             await win.webContents.executeJavaScript("document.body.style.zoom = '3'");
             screenshot = Array.from((await win.webContents.capturePage()).toPNG());
           }
-          return { pictures, screenshot };
+          return { results, screenshot };
         } finally {
           win.destroy();
         }
@@ -203,26 +209,35 @@ test('M92 — positioned HTML in Chromium keeps rotated/clipped colour images an
         capture: !!process.env['M92_CAPTURE_DIR'],
       },
     );
-    const shown = browserResult.pictures;
     const captures = process.env['M92_CAPTURE_DIR'];
     if (captures)
       writeFileSync(join(captures, 'appearance-html.png'), Buffer.from(browserResult.screenshot));
-    expect(shown).toHaveLength(2);
-    expect(shown.map((p) => p.size)).toEqual([
-      [20, 20],
-      [20, 20],
-    ]);
-    expect(shown[0]?.topLeft).toEqual([0, 255, 0, 128]);
-    expect(shown[0]?.bottomLeft).toEqual([255, 0, 0, 128]);
-    expect(shown[0]?.topRight[3]).toBe(0);
-    expect(shown[1]?.topLeft[3]).toBe(0);
-    expect(shown[1]?.bottomLeft).toEqual([255, 0, 0, 63]);
-    expect(shown[1]?.bottomRight[3]).toBe(0); // page clip outside the nested forms
-    expect(must(shown[0]).left).toBeCloseTo((20 * 4) / 3, 2);
-    expect(must(shown[1]).left).toBeCloseTo((55 * 4) / 3, 2);
-    for (const picture of shown) {
-      expect(picture.top).toBeCloseTo((20 * 4) / 3, 2);
-      expect(picture.width).toBeCloseTo((20 * 4) / 3, 2);
+    for (const { zoom, pictures: shown } of browserResult.results) {
+      expect(shown).toHaveLength(2);
+      expect(shown.map((p) => p.size)).toEqual([
+        [20, 20],
+        [20, 20],
+      ]);
+      expect(shown[0]?.topLeft).toEqual([0, 255, 0, 128]);
+      expect(shown[0]?.bottomLeft).toEqual([255, 0, 0, 128]);
+      expect(shown[0]?.topRight[3]).toBe(0);
+      expect(shown[1]?.topLeft[3]).toBe(0);
+      expect(shown[1]?.bottomLeft).toEqual([255, 0, 0, 63]);
+      expect(shown[1]?.bottomRight[3]).toBe(0); // page clip outside the nested forms
+      expect(must(shown[0]).left).toBeCloseTo((20 * 4) / 3, 2);
+      expect(must(shown[1]).left).toBeCloseTo((55 * 4) / 3, 2);
+      for (const picture of shown) {
+        expect(picture.top).toBeCloseTo((20 * 4) / 3, 2);
+        expect(picture.authoredWidth).toBe('20pt');
+        // Blink lays out boxes on a 1/64 CSS-pixel grid. CI correctly reports 26.6562px
+        // for 20pt; a 0.005px decimal tolerance is narrower than that layout unit.
+        // https://chromium.googlesource.com/chromium/src/+/HEAD/third_party/blink/renderer/platform/geometry/layout_unit_test.cc
+        const expectedWidth = (20 * 4) / 3;
+        expect(
+          Math.abs(picture.width - expectedWidth),
+          `HTML zoom ${zoom}: expected 20pt (${expectedWidth}px), measured ${picture.width}px`,
+        ).toBeLessThanOrEqual(1 / 64);
+      }
     }
     await expectWindowSound(app.page);
   } finally {
