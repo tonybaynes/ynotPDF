@@ -12,6 +12,14 @@ LIVE STATUS — 2026-09-12
   expand only when write ownership, dependencies and test capacity allow it.
   Replace a slot only once its task is finished AND merged.
 
+TASK EXECUTION — 2026-09-12 11:08 UTC
+  All four module tasks and the audit task stopped at the account's weekly
+  usage limit. Their worktrees and committed PRs are preserved; no task was
+  replaced or marked complete. CI can continue independently. Resume the same
+  owners when task execution is available; never create duplicate module tasks.
+  M13's last local integration command exited 0: all 20 checks passed before
+  its task stopped. No Electron UI process remains; the local slot is released.
+
 ACTIVE REPAIRS (finish existing scope before new modules)
   M11 - Complete Fit Visible
         Content-aware fit, rotation/crop geometry, cache invalidation.
@@ -26,7 +34,9 @@ ACTIVE REPAIRS (finish existing scope before new modules)
         PR62 physical-print/preview repair has all 8 CI checks green and a local
         full run of 567 passes/4 existing skips; integrated focused checks pass.
         Merge held: both Linux runs retried the tile journey after a 29-pixel
-        body right-edge overflow. Output pixels passed; DOM diagnosis is queued.
+        body right-edge overflow. Output pixels passed; nine local diagnostics
+        did not reproduce it. Integrated head 3aa7d13 adds failure-only CI logs;
+        all 20 local print/viewer/guard checks pass, fresh CI pending.
         Same-task follow-up: reproduce/fix region snapshots omitting model-only
         unsaved edits; add genuine pointer/keyboard selection journeys where
         current tests bypass input. RTF RichEdit parsing is recorded; independent
@@ -36,14 +46,18 @@ ACTIVE REPAIRS (finish existing scope before new modules)
         Crop ratios/geometry MERGED via PR55, all 8 CI checks green.
         PR64 implements automatic deskew on image import, Combine Add folder
         and external desktop file drops. Full local UI: 567 passed with zero
-        skips/retries/failures; 4241 unit passes/9 existing skips. CI pending.
+        skips/retries/failures; 4241 unit passes/9 existing skips. Integrated
+        head 2e912c2 adds main's viewer repair: 617 affected units and all nine
+        import/Combine/Fit Visible journeys pass. Final CI pending.
         Coordinator inspected actual Combine and image-import screenshots.
   M92 - Complete image export fidelity
         Group 4 TIFF repair MERGED via PR57, all 8 CI checks green.
         PR63 implements masks, intrinsic dimensions, nested images, original/PNG
         choices, exact deduplication and separate HTML appearance semantics.
         Full local UI: 562 passed/4 existing skips. Test-only Blink fractional
-        width correction passed focused tests; fresh platform CI pending.
+        width correction passed focused tests. Integrated head d9fe33f passes
+        358 affected units and all eight export/HTML/Fit Visible journeys;
+        fresh platform CI pending.
         Audit PR65 fixes export/status readability; original/PNG integration
         check follows PR63 merge. Broader copy-permission gate is unmerged.
   All four are in isolated worktrees; none is marked complete before merge.

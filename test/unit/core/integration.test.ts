@@ -406,7 +406,9 @@ describe('a whole session, journalled and replayed', () => {
     try {
       await doc.loadAnnotations(doc.page(0).id);
       const before = doc.snapshot();
-      const hashes = await Promise.all([0, 1, 2].map((i) => pageHash(doc, i)));
+      // PDFium can yield during a progressive render and does not permit re-entrant renders.
+      const hashes: string[] = [];
+      for (const index of [0, 1, 2]) hashes.push(await pageHash(doc, index));
 
       await doc.apply(new RotatePagesCommand(doc, [doc.page(0).id], 180, true));
       await doc.apply(new MovePageCommand(doc, doc.page(0).id, 2));
@@ -416,7 +418,7 @@ describe('a whole session, journalled and replayed', () => {
       while (doc.undo.canUndo) await doc.undoLast();
 
       expect(doc.snapshot()).toEqual(before);
-      expect(await Promise.all([0, 1, 2].map((i) => pageHash(doc, i)))).toEqual(hashes);
+      for (const index of [0, 1, 2]) expect(await pageHash(doc, index)).toEqual(hashes[index]);
       expect(doc.isDirty).toBe(false);
     } finally {
       await doc.close();

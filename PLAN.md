@@ -82,6 +82,13 @@ These counts describe the original briefs, not effort
 remaining or competitor parity. Existing audit findings remain tracked in
 `Codex_Audit.md` and `docs/open-work.md`.
 
+**Execution checkpoint, 2026-09-12 11:08 UTC:** the four module tasks and
+the audit task stopped at the account's weekly usage limit. Preserve and
+resume those owners and worktrees when execution is available; do not create
+replacements or completion ticks. CI continues independently. Current integrated
+local checks passed for M13 (20), M41 (9), M92 (8) and audit PR65 (32).
+See CHECKLIST.txt for exact revisions and remaining acceptance work.
+
 | Reopened module | Required completion work | Task |
 |---|---|---|
 | M11 | PR59 Fit Visible/raster repair merged as 2696119 with all eight CI checks green. Same-task follow-up must reproduce/repair potentially missing full-screen/reading Escape exit, exercise real ruler drags and record actual performance measurements | M11 - Complete Fit Visible |
