@@ -42,17 +42,19 @@ async function fixture(rotation: number): Promise<string> {
   return path;
 }
 
-const crop = async () =>
-  (await app.run('dev.pageBoxes', { page: 0 })) as {
+const crop = async (page = 0) =>
+  (await app.run('dev.pageBoxes', { page })) as {
     crop: { x0: number; y0: number; x1: number; y1: number };
   };
+
+const rangeBoxes = async () => Promise.all([crop(0), crop(1)]);
 
 test('M41 — rotated crop ratio drag, dialog, range, undo, save and reopen agree', async () => {
   app = await launchApp({ noDemo: true });
   const j = journey(app);
   const path = await fixture(90);
   await j.openDocument(path);
-  const before = await crop();
+  const before = await rangeBoxes();
   await palette('Crop Aspect Ratio');
   const chooser = app.page.locator('#crop-ratio-dialog');
   await chooser.getByLabel('Aspect ratio', { exact: true }).selectOption('wide');
@@ -76,12 +78,19 @@ test('M41 — rotated crop ratio drag, dialog, range, undo, save and reopen agre
   await expectReadable(dialog);
   await dialog.getByLabel('Apply to', { exact: true }).fill('all');
   await dialog.getByRole('button', { name: 'Crop', exact: true }).click();
-  const after = await crop();
-  expect((after.crop.y1 - after.crop.y0) / (after.crop.x1 - after.crop.x0)).toBeCloseTo(16 / 9, 4);
+  // A page's boxes change before the complete range is committed to undo history.
+  await expect(app.page.getByText('Cropped 2 pages.', { exact: true })).toBeVisible();
+  const quickAccess = app.page.getByRole('toolbar', { name: 'Quick access toolbar' });
+  await expect(quickAccess.getByRole('button', { name: /^Undo\b/ })).toBeEnabled();
+  const after = await rangeBoxes();
+  for (const { crop } of after)
+    expect((crop.y1 - crop.y0) / (crop.x1 - crop.x0)).toBeCloseTo(16 / 9, 4);
   await app.page.keyboard.press('ControlOrMeta+z');
-  await expect.poll(crop).toEqual(before);
+  await expect.poll(rangeBoxes).toEqual(before);
+  await expect(quickAccess.getByRole('button', { name: /^Redo\b/ })).toBeEnabled();
   await app.page.keyboard.press('ControlOrMeta+Shift+z');
-  await expect.poll(crop).toEqual(after);
+  await expect.poll(rangeBoxes).toEqual(after);
+  await expect(quickAccess.getByRole('button', { name: /^Undo\b/ })).toBeEnabled();
   await j.clickRibbon('home', 'Save');
   await expect
     .poll(async () => ((await app.run('dev.saveState')) as { dirty: boolean }).dirty)
@@ -91,7 +100,7 @@ test('M41 — rotated crop ratio drag, dialog, range, undo, save and reopen agre
     expect(page.getCropBox().height / page.getCropBox().width).toBeCloseTo(16 / 9, 4);
   await closeEverything(app);
   await j.openDocument(path);
-  await expect.poll(crop).toEqual(after);
+  await expect.poll(rangeBoxes).toEqual(after);
   await expectWindowSound(app.page);
 });
 
