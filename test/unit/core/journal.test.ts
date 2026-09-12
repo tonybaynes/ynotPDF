@@ -35,6 +35,20 @@ import {
 import { PDFIUM_SUPPORT } from './fakeEngine';
 import { annotationSource, loadAllAnnotations, must, openFake, RICH_SPEC } from './helpers';
 
+it('does not report a missing lazy annotation target as an applied change', async () => {
+  const { doc } = await openFake();
+  await loadAllAnnotations(doc);
+  const target = must(doc.annotations(doc.page(0).id)[0]);
+  await doc.apply(new UpdateAnnotationCommand(doc, target.id, { contents: 'Recovered' }));
+  const { doc: fresh } = await openFake();
+  const result = await replayJournal(fresh, serialiseJournal(doc).entries);
+  expect(result).toEqual({ applied: 0, skipped: 1, skippedTypes: [COMMAND_ID.updateAnnotation] });
+  await fresh.loadAnnotations(fresh.page(0).id);
+  expect(fresh.annotations(fresh.page(0).id)[0]?.contents).not.toBe('Recovered');
+  await fresh.close();
+  await doc.close();
+});
+
 /** Applies the standard mixed workload used by several tests below. */
 async function applyWorkload(doc: Document): Promise<void> {
   await loadAllAnnotations(doc);
@@ -291,12 +305,14 @@ describe('journal round-trip, for any sequence', () => {
 
     await fc.assert(
       fc.asyncProperty(fc.array(stepArb, { minLength: 1, maxLength: 25 }), async (steps) => {
+        let actualChanges = 0;
         const build = async (doc: Document): Promise<void> => {
           for (const step of steps) {
             const pages = doc.state.pages;
             const page =
               pages[step.kind === 'insert' ? 0 : (step as { page: number }).page % pages.length];
             if (!page) continue;
+            const before = JSON.stringify({ ...doc.state, revision: 0, writeIntents: [] });
             doc.breakMerge();
             switch (step.kind) {
               case 'rotate':
@@ -331,6 +347,8 @@ describe('journal round-trip, for any sequence', () => {
                 );
                 break;
             }
+            if (before !== JSON.stringify({ ...doc.state, revision: 0, writeIntents: [] }))
+              actualChanges++;
           }
         };
 
@@ -346,7 +364,8 @@ describe('journal round-trip, for any sequence', () => {
         const { doc: fresh } = await openFake(RICH_SPEC, PDFIUM_SUPPORT);
         await loadAllAnnotations(fresh);
         const result = await replayJournal(fresh, file.entries);
-        expect(result.skipped).toBe(0);
+        expect(result.applied).toBe(actualChanges);
+        expect(result.skipped).toBe(file.entries.length - actualChanges);
         expect(fresh.snapshot()).toEqual(expected);
       }),
       { numRuns: 40 },

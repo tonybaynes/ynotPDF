@@ -95,7 +95,12 @@ export class DocumentService {
     // The callback belongs to this service; functions cannot cross the engine's worker boundary.
     const { beforeAttach, ...engineOptions } = options;
     const document = await Document.open(this.engine, bytes, engineOptions);
-    beforeAttach?.(document);
+    try {
+      beforeAttach?.(document);
+    } catch (error) {
+      await document.close();
+      throw error;
+    }
     const tab = this.documents.open({
       title: options.title ?? document.state.title,
       path,

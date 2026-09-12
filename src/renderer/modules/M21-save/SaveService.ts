@@ -47,15 +47,15 @@ import {
 } from './dialogs';
 import { buildWritePlan } from './plan';
 import {
-  buildRecoveryRecord,
+  checkpointRecord,
   fingerprintBytes,
   listRecoverable,
-  replayRecord,
   describeOutcome,
   ipcRecoveryStorage,
   type RecoveryRecord,
   type RecoveryStorage,
   type SourceFingerprint,
+  sameSource,
 } from './recovery';
 import {
   DEFAULT_SAVE_SETTINGS,
@@ -68,6 +68,9 @@ import {
 import { LAST_FOLDER_KEY } from './settings';
 import { WriterClient } from './WriterClient';
 import { t } from '@modules/M130-preferences/i18n';
+import { openWithPassword } from '@modules/M11-viewer/password';
+import type { SecurityService } from '@modules/M70-encryption/SecurityService';
+import type { ViewerService } from '@modules/M11-viewer/ViewerService';
 
 export const SAVE_SERVICE = 'save';
 
@@ -120,6 +123,7 @@ interface Entry {
   source: SourceFingerprint | null;
   recoveryId: string;
   saving: boolean;
+  saveChain: Promise<unknown>;
   /** Set while the reader is being asked about a change on disk, so we ask once. */
   askingAboutDisk: boolean;
 }
@@ -291,9 +295,10 @@ export class SaveService {
       path,
       readOnly: false,
       readOnlyReason: '',
-      source: null,
+      source: document.sourceIdentity ? { ...document.sourceIdentity, modifiedAt: 0 } : null,
       recoveryId: `${this.sessionToken}-${document.id}`,
       saving: false,
+      saveChain: Promise.resolve(),
       askingAboutDisk: false,
     };
     this.entries.set(document.id, entry);
@@ -302,14 +307,22 @@ export class SaveService {
         this.reportUnsaved();
       }),
     );
-    if (path) await this.refreshPath(entry, path);
+    if (path) {
+      entry.saveChain = this.refreshPath(entry, path);
+      await entry.saveChain;
+    }
     this.reportUnsaved();
   }
 
   /** Re-probes a path, updates the read-only state and (re)starts the watcher. */
   private async refreshPath(entry: Entry, path: string): Promise<void> {
     const probe = await this.probe(path);
+    const previousPath = entry.path;
     entry.path = path;
+    entry.document.store.set({ path });
+    if (previousPath && previousPath !== path && hasBridge()) {
+      await invoke('file:watch', previousPath, false).catch(() => undefined);
+    }
     entry.readOnly = probe.readOnly;
     entry.readOnlyReason = readOnlyReason(probe);
     this.documents.update(entry.tabId, { path, readOnly: probe.readOnly });
@@ -346,7 +359,9 @@ export class SaveService {
       if (entry.tabId !== tabId) continue;
       this.entries.delete(id);
       // The document is going: its unsaved work is not at stake any more, so drop the record.
-      void this.recoveryStorage.discard(entry.recoveryId);
+      void entry.saveChain
+        .then(() => this.recoveryStorage.discard(entry.recoveryId))
+        .catch(() => undefined);
       if (entry.path && hasBridge())
         void invoke('file:watch', entry.path, false).catch(() => undefined);
     }
@@ -389,11 +404,15 @@ export class SaveService {
    * Save (Ctrl+S). A document with no changes is left alone; one that has never been saved, or
    * cannot be written where it is, goes to Save As with a message saying why.
    */
-  async save(document: Document): Promise<SaveOutcome> {
+  save(document: Document): Promise<SaveOutcome> {
+    return this.queueSave(document, () => this.saveNow(document));
+  }
+
+  private async saveNow(document: Document): Promise<SaveOutcome> {
     const entry = this.entries.get(document.id);
     if (!entry) return { saved: false, path: null, reason: 'failed', message: 'Unknown document' };
     if (!document.isDirty) return { saved: false, path: null, reason: 'clean' };
-    if (!entry.path) return this.saveAs(document);
+    if (!entry.path) return this.saveAsNow(document);
     if (entry.readOnly) {
       const answer = await askAboutReadOnly(this.shell.dialogs, {
         title: document.state.title,
@@ -402,13 +421,25 @@ export class SaveService {
       if (answer === 'cancel') {
         return { saved: false, path: null, reason: 'read-only', message: entry.readOnlyReason };
       }
-      return this.saveAs(document);
+      return this.saveAsNow(document);
     }
     return this.writeTo(entry, entry.path, { backup: this.settingsValue.keepBackup });
   }
 
   /** Save As (Ctrl+Shift+S). Asks for a path, remembers the folder, then writes. */
-  async saveAs(document: Document): Promise<SaveOutcome> {
+  saveAs(document: Document): Promise<SaveOutcome> {
+    return this.queueSave(document, () => this.saveAsNow(document));
+  }
+
+  private queueSave(document: Document, task: () => Promise<SaveOutcome>): Promise<SaveOutcome> {
+    const entry = this.entries.get(document.id);
+    if (!entry) return Promise.resolve({ saved: false, path: null, reason: 'failed' });
+    const run = entry.saveChain.then(task, task);
+    entry.saveChain = run.catch(() => undefined);
+    return run;
+  }
+
+  private async saveAsNow(document: Document): Promise<SaveOutcome> {
     const entry = this.entries.get(document.id);
     if (!entry) return { saved: false, path: null, reason: 'failed', message: 'Unknown document' };
     if (!hasBridge()) {
@@ -452,12 +483,26 @@ export class SaveService {
     const document = entry.document;
     const consent = await this.askBeforeSaving(entry, path);
     if (consent === 'cancel') return { saved: false, path: null, reason: 'cancelled' };
-    if (consent === 'saveAs') return this.saveAs(document);
+    if (consent === 'saveAs') return this.saveAsNow(document);
 
-    const { plan, warnings: planWarnings } = buildWritePlan(document);
     entry.saving = true;
     this.shell.invalidate();
     try {
+      const {
+        plan,
+        warnings: planWarnings,
+        revision,
+      } = await document.undo.capture(() => ({
+        ...buildWritePlan(document),
+        revision: document.undo.revision,
+      }));
+      const assertCurrent = (): void => {
+        if (!document.undo.isCurrent(revision)) {
+          throw new WriteCancelled(
+            'The document changed during saving. Save again to include the latest edits.',
+          );
+        }
+      };
       // Plan warnings are known before any expensive work; do not build bytes the reader declined.
       await this.reviewWarnings(document, path, planWarnings);
       // Plaintext for the writer when a stage owns the protection (M70): pdf-lib cannot rewrite
@@ -465,10 +510,14 @@ export class SaveService {
       // once the writer has finished. Without a stage this stays false and an encrypted document
       // is refused by the writer, which is what the warning above was about.
       const removeSecurity = this.stageHandlesSecurity(document.id);
-      const base = await document.engine.save(document.handle, { removeSecurity });
+      const base = await document.undo.capture(() => {
+        assertCurrent();
+        return document.engine.save(document.handle, { removeSecurity });
+      });
       const written = await this.runWriter(document, base, plan, path);
       if (!written) return { saved: false, path: null, reason: 'cancelled' };
 
+      assertCurrent();
       const staged = await runSaveStages([...this.stages.values()], {
         bytes: written.bytes,
         context: {
@@ -489,6 +538,7 @@ export class SaveService {
         warnings.filter((warning) => !planWarnings.includes(warning)),
       );
 
+      assertCurrent();
       const result = await this.writeBytes(path, staged.bytes, options.backup);
       if (!result.ok) {
         return await this.handleWriteFailure(entry, result.message);
@@ -496,8 +546,11 @@ export class SaveService {
 
       entry.source = fingerprintBytes(staged.bytes, result.modifiedAt);
       if (warnings.length === 0) {
-        await this.recoveryStorage.discard(entry.recoveryId);
-        document.undo.markSaved();
+        await document.undo.capture(async () => {
+          if (document.undo.isCurrent(revision))
+            await this.recoveryStorage.discard(entry.recoveryId);
+          document.undo.markSaved(revision);
+        });
       } else {
         // Consent permits writing the available result, not pretending every model edit was
         // persisted. String warnings have no reliable severity classification (ADR 0021).
@@ -681,7 +734,7 @@ export class SaveService {
       reason: entry.readOnlyReason,
     });
     if (answer === 'cancel') return { saved: false, path: null, reason: 'read-only', message };
-    return this.saveAs(entry.document);
+    return this.saveAsNow(entry.document);
   }
 
   // ---- autosave --------------------------------------------------------------------------------
@@ -692,7 +745,12 @@ export class SaveService {
     const minutes = this.settingsValue.autosaveMinutes;
     if (minutes <= 0) return;
     this.autosaveTimer = setInterval(() => {
-      void this.autosaveNow();
+      void this.autosaveNow().catch(() => {
+        this.shell.toasts.show({
+          kind: 'warning',
+          text: 'Recovery information could not be updated. Please save your work.',
+        });
+      });
     }, minutes * 60_000);
   }
 
@@ -702,12 +760,27 @@ export class SaveService {
     for (const entry of this.entries.values()) {
       const document = entry.document;
       if (document.isClosed || !document.isDirty || entry.saving) continue;
-      const record = buildRecoveryRecord(document, {
-        id: entry.recoveryId,
-        source: entry.source,
-        now: this.now(),
+      const run = entry.saveChain.then(async () => {
+        if (document.isClosed || !document.isDirty || document.undo.inTransaction) return false;
+        const security = this.registry.hasService('security')
+          ? this.registry.service<SecurityService>('security').securityOf(document)
+          : undefined;
+        const record = await checkpointRecord(
+          document,
+          this.recoveryStorage,
+          {
+            id: entry.recoveryId,
+            source: entry.source,
+            now: this.now(),
+          },
+          security ? { info: security.info, openedAs: security.openedAs } : undefined,
+        );
+        if (document.isClosed || !this.entries.has(document.id)) return false;
+        await this.recoveryStorage.save(entry.recoveryId, JSON.stringify(record));
+        return true;
       });
-      await this.recoveryStorage.save(entry.recoveryId, JSON.stringify(record));
+      entry.saveChain = run.catch(() => undefined);
+      if (!(await run)) continue;
       written++;
     }
     return written;
@@ -744,25 +817,75 @@ export class SaveService {
 
   /** Reopens one record's source and replays its journal into it. */
   async recoverOne(record: RecoveryRecord): Promise<boolean> {
-    if (!record.path || !hasBridge()) {
-      this.shell.toasts.show({
-        kind: 'warning',
-        text: `"${record.title}" was never saved, so there is no file to put the changes back into.`,
-      });
-      await this.recoveryStorage.discard(record.id);
-      return false;
-    }
     try {
-      const file = await invoke('file:read', record.path);
-      const opened = await this.docs.open(file.bytes.slice(), {
-        path: file.path,
-        name: file.name,
-      });
-      const current = fingerprintBytes(file.bytes);
-      const outcome = await replayRecord(opened.document, record, current);
+      if (this.docs.all().some((doc) => this.entries.get(doc.id)?.recoveryId === record.id))
+        return false;
+      if (record.path && this.documents.tabs.some((tab) => tab.path === record.path)) {
+        throw new Error('Close the already-open document before recovering this copy.');
+      }
+      const checkpoint = record.checkpoint;
+      // Version 1 kept the complete session journal but no matching base. Even a matching disk
+      // fingerprint can describe bytes from a later Save and double-apply earlier edits.
+      if (!checkpoint) {
+        throw new Error(
+          'This older recovery record has no verified checkpoint. It has been kept for manual recovery; no changes were applied.',
+        );
+      }
+      const disk =
+        record.path && hasBridge()
+          ? await invoke('file:read', record.path).catch(() => null)
+          : null;
+      const sourceChanged =
+        record.path !== null &&
+        !sameSource(record.source, disk ? fingerprintBytes(disk.bytes) : null);
+      const recoveredPath = sourceChanged ? null : record.path;
+      const file = {
+        bytes: await this.recoveryStorage.readBlob(record.id, checkpoint.engine),
+        path: recoveredPath,
+        name: record.title,
+      };
+      const blobs = new Map<string, Uint8Array>();
+      if (checkpoint) {
+        for (const [key, hash] of Object.entries(checkpoint.blobs)) {
+          blobs.set(key, await this.recoveryStorage.readBlob(record.id, hash));
+        }
+      }
+      const opened = await openWithPassword(
+        (password) =>
+          this.docs.open(file.bytes.slice(), {
+            path: file.path,
+            name: file.name,
+            ...(password === undefined ? {} : { password }),
+            beforeAttach: (document) => {
+              if (!checkpoint) return;
+              document.restoreCheckpoint(checkpoint.document);
+              document.store.set({ path: recoveredPath });
+              for (const [key, bytes] of blobs) document.blobs.set(key, bytes);
+              if (checkpoint.security && this.registry.hasService('security')) {
+                this.registry.service<SecurityService>('security').noteSource(document, {
+                  bytes: file.bytes,
+                  sourceInfo: checkpoint.security.info,
+                  openedAs: checkpoint.security.openedAs,
+                  permissions: checkpoint.security.info.permissions,
+                });
+              }
+            },
+          }),
+        { dialogs: this.shell.dialogs, name: file.name },
+      );
+      if (!opened) return false;
+      const outcome = { applied: record.changes, skipped: 0, skippedTypes: [], sourceChanged };
       const tab = this.documents.get(opened.tab.id);
       if (tab) await this.adopt(tab, opened.document);
-      await this.recoveryStorage.discard(record.id);
+      const entry = this.entries.get(opened.document.id);
+      if (entry) {
+        entry.recoveryId = record.id;
+        entry.source = record.source;
+      }
+      opened.document.undo.markUnsaved();
+      if (this.registry.hasService('viewer')) {
+        await this.registry.service<ViewerService>('viewer').attach(opened.tab, opened.document);
+      }
       this.shell.toasts.show({
         kind: outcome.skipped > 0 || outcome.sourceChanged ? 'warning' : 'success',
         text: describeOutcome(record, outcome),
