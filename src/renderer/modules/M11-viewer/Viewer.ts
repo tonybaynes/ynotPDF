@@ -15,6 +15,7 @@ import type { PageSize, Rotation } from '@shared/pdf';
 import type { ToolSpec } from '@shared/module';
 import { el } from '@app/dom';
 import { DocumentView, type ViewportState } from '@view/DocumentView';
+import { contentBounds, ContentBoundsCache } from '@view/ContentBounds';
 import { Loupe } from '@view/Loupe';
 import { Overlays, type OverlayState } from '@view/Overlays';
 import { PerfHud } from '@view/PerfHud';
@@ -58,6 +59,7 @@ export class Viewer {
   private readonly paneHosts: HTMLElement[] = [];
   private readonly disposers: Array<() => void> = [];
   private readonly hud: PerfHud;
+  private readonly boundsCache = new ContentBoundsCache();
 
   private overlayState: OverlayState;
   private flags: RenderFlags;
@@ -69,6 +71,7 @@ export class Viewer {
   private autoScrollSpeed: number;
   private autoScrollDirection = 1;
   private syncing = false;
+  private readonly mirroredScroll = new Map<number, { left: number; top: number }>();
 
   constructor(options: ViewerOptions) {
     this.tabId = options.tabId;
@@ -100,12 +103,21 @@ export class Viewer {
       this.document.store.select(
         (s) => s.pages,
         () => {
+          this.boundsCache.clear();
           const sizes = this.pageSizes();
           for (const pane of this.panes) pane.setPageSizes(sizes);
           this.syncOverlays();
         },
         { immediate: false },
       ),
+      this.document.on('document:revision', () => {
+        this.boundsCache.clear();
+        for (const pane of this.panes) pane.invalidateContentBounds();
+      }),
+      this.document.on('layer:changed', () => {
+        this.boundsCache.clear();
+        for (const pane of this.panes) pane.invalidateContentBounds();
+      }),
     );
   }
 
@@ -252,6 +264,7 @@ export class Viewer {
 
   setSplit(orientation: SplitOrientation, options: ViewerOptions): void {
     if (orientation === this.splitMode) return;
+    this.mirroredScroll.clear();
     if (orientation === 'off') {
       const [, second] = this.panes;
       second?.dispose();
@@ -290,6 +303,7 @@ export class Viewer {
 
   setSyncScroll(sync: boolean): void {
     this.syncScroll = sync;
+    this.mirroredScroll.clear();
     if (sync) this.mirrorScroll(this.activePane);
   }
 
@@ -403,6 +417,7 @@ export class Viewer {
   }
 
   dispose(): void {
+    this.boundsCache.clear();
     this.stopAutoScroll();
     this.loupe?.close();
     this.hud.stop();
@@ -424,6 +439,21 @@ export class Viewer {
       docKey: this.tabId,
       doc: this.document.handle,
       pageSizes: this.pageSizes(),
+      contentBounds: (index) => {
+        const page = this.document.page(index);
+        const enginePage = this.document.enginePage(page.id);
+        const size = pageSizeOf(page);
+        const hidden = new Set(
+          this.document.state.layers.filter((l) => !l.visible).map((l) => l.engineId),
+        );
+        return this.boundsCache.get(page.id, async () => {
+          const objects =
+            enginePage === undefined
+              ? []
+              : await this.document.engine.pageObjects(this.document.handle, enginePage);
+          return contentBounds(objects, size, hidden);
+        });
+      },
       flags: this.flags,
       layout: options.layout,
       zoom: options.zoom,
@@ -453,13 +483,25 @@ export class Viewer {
   /** Copies the active pane's scroll fraction to the other one. */
   private mirrorScroll(from: number): void {
     if (this.syncing) return;
+    const source = this.panes[from];
+    if (!source) return;
+    const mirrored = this.mirroredScroll.get(from);
+    if (mirrored?.left === source.state.scrollLeft && mirrored.top === source.state.scrollTop)
+      return;
+    this.mirroredScroll.delete(from);
     this.syncing = true;
     try {
-      const source = this.panes[from];
-      if (!source) return;
       const fraction = source.scrollFraction;
       for (const [index, pane] of this.panes.entries()) {
-        if (index !== from) pane.setScrollFraction(fraction);
+        if (index !== from) {
+          pane.setScrollFraction(fraction);
+          // Scroll events arrive after this guard is released. Do not echo their rounded
+          // positions back into the source pane and move its fitted content a few pixels.
+          this.mirroredScroll.set(index, {
+            left: pane.state.scrollLeft,
+            top: pane.state.scrollTop,
+          });
+        }
       }
     } finally {
       this.syncing = false;
@@ -519,7 +561,8 @@ export class Viewer {
     const focus = (): void => {
       if (this.splitMode !== 'off' && this.activePane !== index) this.setActivePane(index);
     };
-    scroller.addEventListener('pointerdown', focus);
+    // Page tools consume pointer-down; choose the pane before their bubbling handlers run.
+    scroller.addEventListener('pointerdown', focus, { capture: true });
     scroller.addEventListener('focusin', focus);
 
     const onWheel = (event: WheelEvent): void => {
@@ -608,7 +651,7 @@ export class Viewer {
     scroller.addEventListener('keydown', onKey);
 
     this.disposers.push(() => {
-      scroller.removeEventListener('pointerdown', focus);
+      scroller.removeEventListener('pointerdown', focus, { capture: true });
       scroller.removeEventListener('focusin', focus);
       scroller.removeEventListener('wheel', onWheel);
       scroller.removeEventListener('pointerdown', onMiddleDown);
