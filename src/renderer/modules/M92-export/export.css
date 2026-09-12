@@ -34,6 +34,11 @@
   width: 8ch;
 }
 
+/* UI scale changes rem width: stack fields before native values become unreadable. */
+#export-images-dialog .form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+
 /* A hidden row must take no space at all: `[hidden]` loses to `display: grid` on `.field`. */
 #export-images-dialog .field[hidden],
 #export-text-dialog .field[hidden],

@@ -18,6 +18,7 @@ import {
   expectNoOverlap,
   expectNothingClipped,
   expectReadable,
+  expectNativeValueFits,
 } from './layout';
 
 let app: App;
@@ -54,6 +55,29 @@ async function withFault(css: string, check: () => Promise<void>): Promise<strin
 }
 
 let faults = 0;
+
+test('native text-fit check catches selected text even without scroll overflow', async () => {
+  await app.page.evaluate(() => {
+    const select = document.createElement('select');
+    select.id = 'native-value-probe';
+    select.style.cssText = 'position:fixed;left:20px;top:200px;width:65px;z-index:9999';
+    select.append(new Option('A deliberately long selected option', 'one'));
+    document.body.append(select);
+  });
+  const field = app.page.locator('#native-value-probe');
+  try {
+    expect(await field.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await expect(expectNativeValueFits(field)).rejects.toThrow(/Native value.*available/);
+    await field.evaluate((node) => {
+      (node as HTMLElement).style.width = '650px';
+    });
+    await expectNativeValueFits(field);
+  } finally {
+    await field.evaluate((node) => {
+      node.remove();
+    });
+  }
+});
 
 const body = (): Locator => app.page.locator('body');
 

@@ -27,6 +27,9 @@ import {
   DPI_PRESETS,
   ENCODING_OPTIONS,
   FORMAT_OPTIONS,
+  FORMAT_HINTS,
+  DITHER_HINTS,
+  TIFF_COMPRESSION_HINTS,
   LAYOUT_OPTIONS,
   LINE_ENDING_OPTIONS,
   SEPARATOR_OPTIONS,
@@ -145,6 +148,7 @@ export async function askImageOptions(
         label: 'Format',
         value: settings.imageFormat,
         choices: FORMAT_OPTIONS,
+        hint: FORMAT_HINTS[settings.imageFormat],
       });
       const dpi = numberField({
         label: 'Resolution (dpi)',
@@ -162,6 +166,7 @@ export async function askImageOptions(
         label: 'Black and white method',
         value: settings.imageDither,
         choices: DITHER_OPTIONS,
+        hint: DITHER_HINTS[settings.imageDither],
       });
       const threshold = numberField({
         label: 'Black and white threshold',
@@ -185,6 +190,7 @@ export async function askImageOptions(
         label: 'TIFF compression',
         value: settings.tiffCompression,
         choices: TIFF_COMPRESSION_OPTIONS,
+        hint: TIFF_COMPRESSION_HINTS[settings.tiffCompression],
       });
       const multiPage = checkbox({
         label: 'Put every page in one TIFF file',
@@ -207,6 +213,19 @@ export async function askImageOptions(
         const isTiff = chosenFormat === 'tiff';
         const isJpeg = chosenFormat === 'jpeg';
         const isMono = colour.input.value === 'mono';
+        for (const [element, hint] of [
+          [format.element, FORMAT_HINTS[chosenFormat]],
+          [dither.element, DITHER_HINTS[dither.input.value as ExportSettings['imageDither']]],
+          [
+            tiffCompression.element,
+            TIFF_COMPRESSION_HINTS[
+              tiffCompression.input.value as ExportSettings['tiffCompression']
+            ],
+          ],
+        ] as const) {
+          const description = element.querySelector('.field-hint');
+          if (description) description.textContent = hint;
+        }
         const invalidGroup4 = isTiff && tiffCompression.input.value === 'group4' && !isMono;
         quality.element.hidden = !isJpeg;
         level.element.hidden =
@@ -234,6 +253,7 @@ export async function askImageOptions(
       range.onChange(paint);
       format.input.addEventListener('change', paint);
       colour.input.addEventListener('change', paint);
+      dither.input.addEventListener('change', paint);
       tiffCompression.input.addEventListener('change', paint);
       dpi.input.addEventListener('input', paint);
       multiPage.input.addEventListener('change', paint);
