@@ -84,10 +84,10 @@ remaining or competitor parity. Existing audit findings remain tracked in
 
 | Reopened module | Required completion work | Task |
 |---|---|---|
-| M11 | Content-aware Fit Visible with rotated/cropped pages | M11 - Complete Fit Visible |
-| M13 | Vector PDF appearances; physical print/preview snapshot remains a follow-up | M13 - Preserve annotations in PDF printing |
-| M41 | Crop aspect ratios/rotated geometry; automatic deskew import hook remains a follow-up | M41 - Complete crop aspect ratios |
-| M92 | Bilevel TIFF compression; extracted-image masks/dimensions remain a follow-up | M92 - Complete bilevel TIFF compression |
+| M11 | Content-aware Fit Visible; repair confirmed bucket/display tile-scaling mismatch | M11 - Complete Fit Visible (PR59 open) |
+| M13 | Vector appearances merged in PR58; same task now completing physical-print/preview snapshots | M13 - Preserve annotations in PDF printing |
+| M41 | Crop ratios/geometry; import deskew and Combine folder/desktop-drop routes remain follow-ups | M41 - Complete crop aspect ratios (PR55 open) |
+| M92 | Bilevel TIFF; extracted-image masks/dimensions and native selection-text clipping remain follow-ups | M92 - Complete bilevel TIFF compression (PR57 open) |
 | M30 | Cross-renderer appearance acceptance evidence | Queued validation work; no visual defect assumed |
 | M32 | Genuine Acrobat/Foxit XFDF fixture acceptance | Queued interoperability validation; no importer defect assumed |
 | M50 | Preserve unknown page operators during object z-order changes | Queued after active repairs and shared-code ownership clears |
@@ -647,3 +647,9 @@ Existing audit repairs retain their own owner. To make that safe:
    Coordinate full local Electron e2e runs; multiple hidden suites still compete
    for CPU/GPU and can race on OS clipboard state. Shared-file exceptions must be
    agreed with their owner before edits, then listed in the PR.
+10. **Visual evidence (Tony, 2026-09-12).** Strengthen real end-to-end journeys and
+    occasionally capture representative screenshots at relevant themes/scales.
+    Inspect the images, not just DOM rectangles: settled-render evidence exposed
+    a real tile-scaling mismatch that geometry checks missed. Measure displayed
+    native-field text as well as element boxes. Use synthetic fixtures, retain
+    evidence, and never relax assertions or update baselines to conceal a defect.
