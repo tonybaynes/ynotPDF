@@ -14,8 +14,12 @@ test.beforeAll(async () => {
   // Intercept the final native delivery boundary. Main still writes real sheets and HTML,
   // loads its print window and waits for the images. No test can reach a physical printer.
   await app.electron.evaluate(({ app: electronApp }) => {
-    const state = globalThis as typeof globalThis & { m13Spool?: string[] };
+    const state = globalThis as typeof globalThis & {
+      m13Spool?: string[];
+      m13SpoolSerial?: number;
+    };
     state.m13Spool = [];
+    state.m13SpoolSerial = 0;
     electronApp.on('web-contents-created', (_event, contents) => {
       contents.print = (_options, callback) => {
         try {
@@ -27,6 +31,7 @@ test.beforeAll(async () => {
           state.m13Spool = [...html.matchAll(/<img src="([^"]+)"/g)].map((match) =>
             readFileSync(join(dirname(path), match[1] ?? '')).toString('base64'),
           );
+          state.m13SpoolSerial = (state.m13SpoolSerial ?? 0) + 1;
           callback?.(true, '');
         } catch (error) {
           callback?.(false, String(error));
@@ -73,6 +78,34 @@ async function pixelHashes(pngs: string[]): Promise<string[]> {
       return `${size.width}x${size.height}:${createHash('sha256').update(image.toBitmap()).digest('hex')}`;
     });
   }, pngs);
+}
+
+async function resetSpool(): Promise<number> {
+  return app.electron.evaluate(() => {
+    const state = globalThis as typeof globalThis & { m13Spool: string[]; m13SpoolSerial: number };
+    state.m13Spool = [];
+    return state.m13SpoolSerial + 1;
+  });
+}
+
+async function waitForSpool(serial: number, sheets: number): Promise<void> {
+  await expect
+    .poll(() =>
+      app.electron.evaluate(() => {
+        const state = globalThis as typeof globalThis & {
+          m13Spool: string[];
+          m13SpoolSerial: number;
+        };
+        return { serial: state.m13SpoolSerial, sheets: state.m13Spool.length };
+      }),
+    )
+    .toEqual({ serial, sheets });
+}
+
+async function preparedSheets(): Promise<string[]> {
+  return app.electron.evaluate(
+    () => (globalThis as typeof globalThis & { m13Spool: string[] }).m13Spool,
+  );
 }
 
 test('M13 — the settled preview and prepared printer sheet include unsaved text, custom stamp and designed field', async () => {
@@ -181,11 +214,11 @@ test('M13 — the settled preview and prepared printer sheet include unsaved tex
   await dialog.getByLabel('Form fields', { exact: true }).check();
   await preview(url);
   await app.page.screenshot({ path: test.info().outputPath('print-options.png') });
+  const serial = await resetSpool();
   await dialog.getByRole('button', { name: 'Print', exact: true }).click();
+  await waitForSpool(serial, 1);
   await expect(app.page.getByText('Sent 1 sheets to the printer', { exact: true })).toBeVisible();
-  const spool = await app.electron.evaluate(
-    () => (globalThis as typeof globalThis & { m13Spool: string[] }).m13Spool,
-  );
+  const spool = await preparedSheets();
   expect(spool).toHaveLength(1);
   expect(await pixelHashes(spool)).toEqual(await pixelHashes([withAll]));
   writeFileSync(
@@ -360,13 +393,13 @@ for (const [mode, rotation] of [
     }
     expect(previews.length).toBeGreaterThan(0);
     if (mode === 'tile') expect(previews.length).toBeGreaterThan(2);
+    const serial = await resetSpool();
     await dialog.getByRole('button', { name: 'Print', exact: true }).click();
+    await waitForSpool(serial, previews.length);
     await expect(
       app.page.getByText(`Sent ${previews.length} sheets to the printer`, { exact: true }).last(),
     ).toBeVisible();
-    const spool = await app.electron.evaluate(
-      () => (globalThis as typeof globalThis & { m13Spool: string[] }).m13Spool,
-    );
+    const spool = await preparedSheets();
     expect(await pixelHashes(spool)).toEqual(await pixelHashes(previews));
     expect(await app.run('dev.documentJournal')).toEqual(before);
   });

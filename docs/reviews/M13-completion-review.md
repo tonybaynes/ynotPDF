@@ -152,7 +152,16 @@ a blob fetch disallowed by the existing CSP; the encrypted-fixture helper initia
 requested output filename. The corrected probe samples decoded canvas pixels and compares them
 with native-decoded prepared printer sheets. No CSP or shared contract was changed.
 
-Final focused/full UI, visual inspection and platform CI results are pending. Physical printer
+The follow-up checkpoint on integrated main `c492bfd` passes 4,139 unit tests with coverage
+(24 existing optional skips), and all 11 focused invisible UI journeys. The printer probe resets
+its capture for each job and waits for that job's unique completion serial before exact decoded
+pixel comparisons; repeated status toasts cannot substitute an earlier job's sheets. Settled
+preview, actual prepared sheet, error, n-up, booklet and tile screenshots were inspected: unsaved
+text/stamp/field content survives, intended source rotations and crop placement remain visible,
+and no new dialog layout defect was found. Screenshots are retained outside the worktree.
+
+Full local UI and platform CI results will be recorded in the follow-up PR before handoff, against
+its final head (discovery currently lists 571 tests in 42 files). Physical printer
 hardware and driver fidelity require hardware testing; automated journeys intercept only the
 native delivery boundary after main has prepared its actual HTML and sheet images. No physical
 test jobs are sent, and no existing hardware limitation is presented as automated evidence.

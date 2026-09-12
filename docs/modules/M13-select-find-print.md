@@ -480,10 +480,12 @@ document revision; queued edits or authority changes stop preparation before pri
 Preview is always 96 DPI; physical/dry-run output above 150 DPI requires high-quality print
 permission. Raster Print to PDF uses the same appearance preparation and cancellation checks.
 
-**Validation in progress:** unit coverage checks real PDFium content at all source rotations,
+**Validation checkpoint:** unit coverage checks real PDFium content at all source rotations,
 independent annotation/form switches, selected pages, cancellation before capture and after open,
 handle disposal, one snapshot per multi-sheet job, and spool cancellation on source changes.
 Actual-dialog journeys compare settled preview PNGs against the real prepared print-window PNGs,
 with native delivery intercepted so no physical printer receives a test job. Synthetic screenshots
-are inspected, and encrypted fixtures exercise no/low/full print authority. Final lint, full unit,
-full UI and platform CI results will be recorded before handoff; this entry does not mark M13 done.
+are inspected, and encrypted fixtures exercise no/low/full print authority. Integrated main
+`c492bfd` passes 4,139 unit tests with coverage (24 existing skips) and all 11 focused UI journeys,
+including exact preview/spool pixels for each current print job. Final lint, full UI and platform
+CI results will be recorded in the follow-up PR before handoff; this entry does not mark M13 done.
