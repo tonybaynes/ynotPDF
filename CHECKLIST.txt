@@ -15,19 +15,28 @@ LIVE STATUS — 2026-09-12
 ACTIVE REPAIRS (finish existing scope before new modules)
   M11 - Complete Fit Visible
         Content-aware fit, rotation/crop geometry, cache invalidation.
-        PR59 remains open: corrected tile scaling and layer refresh pass eight
-        affected UI tests; final screenshots inspected, full-suite signoff running.
+        PR59 remains open: full viewer UI run passed 561 tests (4 existing skips),
+        final screenshots inspected; 11 current-main integration tests passed.
+        Final integrated CI remains the merge gate.
   M13 - Preserve annotations in PDF printing
         Vector Print-to-PDF repair MERGED via PR58, all 8 CI checks green.
-        Same task now completing physical-print/preview snapshots; full M13
-        stays unticked until those paths preserve writer-only unsaved edits.
+        PR62 completes physical-print/preview snapshots; 11 focused journeys
+        pass, including exact preview/prepared-sheet pixels. Full UI/CI running.
+        Same-task follow-up: reproduce/fix region snapshots omitting model-only
+        unsaved edits; add genuine pointer/keyboard selection journeys where
+        current tests bypass input. RTF RichEdit parsing is recorded; literal
+        WordPad/TextEdit application acceptance is still unestablished.
   M41 - Complete crop aspect ratios
         Fixed/custom ratios, rotated crop geometry, apply/undo/save/reopen.
+        PR55 current-main crop/export integration: 82 unit and 11 UI tests pass;
+        final integrated CI pending.
         Follow-up required: automatic deskew on image import is not connected.
         Combine also still needs its promised Add folder and desktop file drop.
   M92 - Complete image export fidelity
         Group 4 TIFF repair MERGED via PR57, all 8 CI checks green.
-        Same task now completing extracted-image masks and stored dimensions.
+        Same task now completing masks, stored dimensions and nested Form images.
+        Original-format extraction stays available; decoded PNG will preserve
+        image transparency. Duplicate detection must not discard distinct images.
         Visual follow-up: native selection text clips at 200% in export dialog;
         audit owns shared text-fit checks and will coordinate the layout fix.
   All four are in isolated worktrees; none is marked complete before merge.
