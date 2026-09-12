@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { Qpdf, type QpdfFactory } from '../../../src/engine/security/qpdf';
 import { PDFDocument, degrees } from 'pdf-lib';
-import { launchApp, fixturePath, type App } from '../harness';
+import { launchApp, type App } from '../harness';
 import { journey } from '../journey';
 import { expectNothingClipped, expectReadable, expectWindowSound } from '../layout';
 
@@ -174,7 +174,7 @@ test('M13 — the settled preview and prepared printer sheet include unsaved tex
   source.addPage([595.28, 841.89]).drawText('Snapshot print review', { x: 40, y: 780, size: 18 });
   await app.run('file.openBytes', {
     file: {
-      path: fixturePath('preview-source.pdf'),
+      path: null,
       name: 'preview-source.pdf',
       bytes: [...(await source.save())],
     },
@@ -319,7 +319,7 @@ test('M13 — unresolved preview reports its error, excluded comments load, and 
   );
   await app.run('file.openBytes', {
     file: {
-      path: fixturePath('preview-error.pdf'),
+      path: null,
       name: 'preview-error.pdf',
       bytes: [...(await source.save())],
     },
@@ -371,7 +371,7 @@ for (const authority of ['none', 'low', 'full'] as const) {
     if (!bytes) throw new Error('qpdf did not create encrypted fixture');
     await app.run('file.openBytes', {
       file: {
-        path: fixturePath(`print-${authority}.pdf`),
+        path: null,
         name: `print-${authority}.pdf`,
         bytes: [...bytes],
       },
@@ -437,7 +437,7 @@ for (const [mode, rotation] of [
     );
     await app.run('file.openBytes', {
       file: {
-        path: fixturePath(`imposed-${mode}.pdf`),
+        path: null,
         name: `imposed-${mode}.pdf`,
         bytes: [...(await source.save())],
       },
@@ -489,7 +489,7 @@ test('M13 — scrolling and switching a long tab strip contains screen-reader st
     (_, index) => `Long synthetic document ${index + 1} for tab overflow.pdf`,
   );
   for (const name of names) {
-    await app.run('file.openBytes', { file: { path: fixturePath(name), name, bytes } });
+    await app.run('file.openBytes', { file: { path: null, name, bytes } });
   }
   const strip = app.page.locator('#tabstrip');
   expect(await strip.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
@@ -504,6 +504,19 @@ test('M13 — scrolling and switching a long tab strip contains screen-reader st
   await app.page.locator('.annot-editor').fill('Unsaved accessible status');
   await app.page.keyboard.press('Control+Enter');
   await expect(first).toHaveAccessibleName(/Modified/);
+  // Adding the empty box marks the tab dirty before the asynchronous text edit commits.
+  await expect
+    .poll(() => app.run('dev.documentJournal'))
+    .toMatchObject({
+      entries: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'annot.update',
+          payload: expect.objectContaining({
+            patch: expect.objectContaining({ contents: 'Unsaved accessible status' }),
+          }),
+        }),
+      ]),
+    });
   const journal = await app.run('dev.documentJournal');
   for (const tab of [last, first, last, first]) {
     await tab.click();
