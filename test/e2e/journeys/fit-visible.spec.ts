@@ -196,6 +196,7 @@ test('M11 — deleting the fitted object and undoing refreshes the content bound
 test('M11 — continuous and book navigation fit the current row, and split panes fit independently', async () => {
   await open();
   const j = journey(app);
+  await j.clickRibbon('view', 'Tool: Hand');
   await j.clickRibbon('view', 'Layout: Continuous');
   await j.clickRibbon('view', 'Fit Visible');
   await expectInk(0, 0);

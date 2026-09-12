@@ -88,3 +88,8 @@ for independent fitting and zoom. An additional M50 observation was passed to th
 the Delete Object ribbon click cleared a selected object without incrementing document
 revision, whereas the Delete key performed the edit and undo correctly. No M50 repair or
 claim that its broader acceptance scope passed is included here.
+
+M50's `ObjectController` also consumes pointer-down in capture phase at its outer host,
+before the viewer receives it. With Edit Object active, a click in another split pane therefore
+does not activate that pane. The viewer journey explicitly selects the Hand tool; the object-tool
+interaction remains assigned to M50 and was reported to the coordinator with its source location.
