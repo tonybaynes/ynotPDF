@@ -20,7 +20,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { realpathSync, copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchApp, type App, type WindowSize } from './harness';
@@ -48,7 +48,7 @@ const BIG_DIALOGS = [
 let workspace: string;
 
 test.beforeAll(() => {
-  workspace = mkdtempSync(join(tmpdir(), 'ynot-m04-matrix-'));
+  workspace = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-m04-matrix-')));
 });
 
 test.afterAll(() => {
@@ -102,6 +102,7 @@ for (const scale of SCALES) {
 
     test.beforeAll(async () => {
       app = await launchApp({ noDemo: true, settings: { 'ui.scale': scale } });
+      await app.grantPath(workspace, true);
       // The scale really is the one asked for, at the first paint rather than after a command.
       const applied = await app.page.evaluate(() =>
         getComputedStyle(document.documentElement).getPropertyValue('--ui-scale').trim(),

@@ -1,3 +1,4 @@
+import { fileCapabilities } from './fs/capabilities';
 /**
  * Application windows (M00, multi-window in M02). Every window is a `BrowserWindow` with
  * `contextIsolation: true`, `sandbox: true`, the preload bridge, and the `--ynot-e2e` flag
@@ -154,6 +155,7 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
     });
   }
   win.on('closed', () => {
+    fileCapabilities.clear(win.id);
     windows.delete(win);
     options.onClosed?.(win.id);
   });

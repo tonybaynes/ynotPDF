@@ -15,7 +15,7 @@
  */
 
 import type { PDFDocument } from 'pdf-lib';
-import { PDFName, type PDFPage } from 'pdf-lib';
+import { PDFName, PDFDict, PDFBool, type PDFPage } from 'pdf-lib';
 import type { PdfRect } from '@shared/pdf';
 import { writeOutlineTree, type OutlineEntry } from './outline';
 import {
@@ -115,6 +115,28 @@ export async function combine(
     if (wanted.length === 0) {
       warnings.push(`${source.name} contributed no pages`);
       continue;
+    }
+    const unsupported = [
+      ['AcroForm', 'interactive forms'],
+      ['Names', 'named destinations or embedded files'],
+      ['OCProperties', 'layer visibility settings'],
+      ['StructTreeRoot', 'accessibility tags'],
+      ['MarkInfo', 'accessibility marking'],
+    ].filter(([key]) => {
+      if (key === undefined || !doc.catalog.has(PDFName.of(key))) return false;
+      if (key !== 'MarkInfo') return true;
+      const info = doc.catalog.lookup(PDFName.of(key));
+      return (
+        !(info instanceof PDFDict) ||
+        ['Marked', 'UserProperties', 'Suspects'].some(
+          (flag) => info.lookup(PDFName.of(flag)) === PDFBool.True,
+        )
+      );
+    });
+    if (unsupported.length) {
+      throw new OpFailed(
+        `Cannot safely combine ${source.name}: this version cannot preserve its ${unsupported.map(([, label]) => label).join(', ')}. Keep these PDFs as separate files or in a portfolio. No combined document was created.`,
+      );
     }
     loaded.push({ source, doc, pages: wanted });
   }

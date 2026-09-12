@@ -13,7 +13,14 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  realpathSync,
+  copyFileSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readComments } from '../../src/engine/xfdf';
@@ -67,8 +74,9 @@ let app: App;
 let workspace: string;
 
 test.beforeAll(async () => {
+  workspace = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-m32-')));
   app = await launchApp();
-  workspace = mkdtempSync(join(tmpdir(), 'ynot-m32-'));
+  await app.grantPath(workspace, true);
   await app.run('annot.identity', { name: 'E2E Reader', initials: 'ER', email: '' });
 });
 

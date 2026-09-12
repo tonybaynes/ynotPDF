@@ -68,7 +68,7 @@ import {
 import { LAST_FOLDER_KEY } from './settings';
 import { WriterClient } from './WriterClient';
 import { t } from '@modules/M130-preferences/i18n';
-import { openWithPassword } from '@modules/M11-viewer/password';
+import { openAuthenticatedDocument } from '@modules/M11-viewer/authenticatedOpen';
 import type { SecurityService } from '@modules/M70-encryption/SecurityService';
 import type { ViewerService } from '@modules/M11-viewer/ViewerService';
 
@@ -794,8 +794,7 @@ export class SaveService {
   }
 
   /**
-   * Offers what a crash left behind, on launch. Recovering reopens each source and replays its
-   * journal, so the reader gets their edits back rather than a copy of a file.
+   * Offers complete recovery checkpoints on launch. No applied journal is replayed.
    */
   async offerRecovery(): Promise<{ recovered: number; discarded: number }> {
     if (!this.settingsValue.recoverOnLaunch) return { recovered: 0, discarded: 0 };
@@ -815,7 +814,7 @@ export class SaveService {
     return { recovered, discarded: 0 };
   }
 
-  /** Reopens one record's source and replays its journal into it. */
+  /** Restores one checkpoint through the shared protected-document opening flow. */
   async recoverOne(record: RecoveryRecord): Promise<boolean> {
     try {
       if (this.docs.all().some((doc) => this.entries.get(doc.id)?.recoveryId === record.id))
@@ -850,29 +849,26 @@ export class SaveService {
           blobs.set(key, await this.recoveryStorage.readBlob(record.id, hash));
         }
       }
-      const opened = await openWithPassword(
-        (password) =>
-          this.docs.open(file.bytes.slice(), {
-            path: file.path,
-            name: file.name,
-            ...(password === undefined ? {} : { password }),
-            beforeAttach: (document) => {
-              if (!checkpoint) return;
-              document.restoreCheckpoint(checkpoint.document);
-              document.store.set({ path: recoveredPath });
-              for (const [key, bytes] of blobs) document.blobs.set(key, bytes);
-              if (checkpoint.security && this.registry.hasService('security')) {
-                this.registry.service<SecurityService>('security').noteSource(document, {
-                  bytes: file.bytes,
-                  sourceInfo: checkpoint.security.info,
-                  openedAs: checkpoint.security.openedAs,
-                  permissions: checkpoint.security.info.permissions,
-                });
-              }
-            },
-          }),
-        { dialogs: this.shell.dialogs, name: file.name },
-      );
+      const opened = await openAuthenticatedDocument({
+        docs: this.docs,
+        registry: this.registry,
+        dialogs: this.shell.dialogs,
+        file,
+        beforeAttach: (document) => {
+          if (!checkpoint) return;
+          document.restoreCheckpoint(checkpoint.document);
+          document.store.set({ path: recoveredPath });
+          for (const [key, bytes] of blobs) document.blobs.set(key, bytes);
+          if (checkpoint.security && this.registry.hasService('security')) {
+            this.registry.service<SecurityService>('security').noteSource(document, {
+              bytes: file.bytes,
+              sourceInfo: checkpoint.security.info,
+              openedAs: checkpoint.security.openedAs,
+              permissions: checkpoint.security.info.permissions,
+            });
+          }
+        },
+      });
       if (!opened) return false;
       const outcome = { applied: record.changes, skipped: 0, skippedTypes: [], sourceChanged };
       const tab = this.documents.get(opened.tab.id);
@@ -941,12 +937,23 @@ export class SaveService {
     const path = entry.path;
     if (!path) return;
     const tabId = entry.tabId;
+    const opened = await openAuthenticatedDocument({
+      docs: this.docs,
+      registry: this.registry,
+      dialogs: this.shell.dialogs,
+      file: { bytes, path: null, name: entry.document.state.title },
+    });
+    if (!opened) return;
     await this.documents.close(tabId, { force: true });
-    const opened = await this.docs.open(bytes.slice(), { path });
     const tab = this.documents.get(opened.tab.id);
     if (tab) await this.adopt(tab, opened.document);
     const reopened = this.entries.get(opened.document.id);
-    if (reopened) reopened.source = fingerprintBytes(bytes);
+    if (reopened) {
+      await this.refreshPath(reopened, path);
+      reopened.source = fingerprintBytes(bytes);
+    }
+    if (this.registry.hasService('viewer'))
+      await this.registry.service<ViewerService>('viewer').attach(opened.tab, opened.document);
     this.shell.toasts.show({
       kind: 'info',
       text: `Reloaded "${opened.document.state.title}" from disk.`,

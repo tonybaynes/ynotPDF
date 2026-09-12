@@ -447,6 +447,7 @@ export interface IpcInvokeMap {
     args: [bytes: Uint8Array];
     result: { bytes: Uint8Array; repaired: boolean; warnings: string[] };
   };
+  'recent:open': { args: [path: string]; result: OpenedFile };
   'recent:list': { args: []; result: RecentFile[] };
   'recent:add': { args: [path: string]; result: RecentFile[] };
   'recent:clear': { args: []; result: RecentFile[] };
@@ -665,6 +666,7 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'optimise:linearise',
   'optimise:check',
   'optimise:repair',
+  'recent:open',
   'recent:list',
   'recent:add',
   'recent:clear',

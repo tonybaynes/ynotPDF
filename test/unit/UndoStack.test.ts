@@ -2,6 +2,119 @@ import { describe, expect, it, vi } from 'vitest';
 import { command, CompositeCommand, SetPropertyCommand, type Command } from '@core/Command';
 import { UndoStack } from '@core/UndoStack';
 
+describe('failure-atomic composites', () => {
+  it('restores the pre-undo state when an earlier child refuses to undo', async () => {
+    const values: string[] = [];
+    const stack = new UndoStack();
+    const first = command(
+      'a',
+      'A',
+      () => {
+        values.push('a');
+      },
+      () => {
+        throw new Error('undo fault');
+      },
+    );
+    await stack.push(new CompositeCommand('batch', 'Batch', [first, logCmd(values, 'b')]));
+    stack.markSaved();
+    await expect(stack.undo()).rejects.toThrow('undo fault');
+    expect(values).toEqual(['a', 'b']);
+    expect(stack.canUndo).toBe(true);
+    expect(stack.canRedo).toBe(false);
+    expect(stack.isDirty).toBe(false);
+  });
+  it.each(['group', 'transaction'])('keeps a failed %s rollback visibly dirty', async (mode) => {
+    const stack = new UndoStack();
+    const log: string[] = [];
+    const bad = command(
+      'bad',
+      'Bad',
+      () => {
+        log.push('bad');
+      },
+      () => {
+        throw new Error('rollback fault');
+      },
+    );
+    if (mode === 'group') {
+      await expect(
+        stack.group('Batch', async () => {
+          await stack.push(bad);
+          throw new Error('group fault');
+        }),
+      ).rejects.toThrow(/could not be rolled back/);
+    } else {
+      stack.beginTransaction('Batch');
+      await stack.push(bad);
+      await expect(stack.rollback()).rejects.toThrow(/could not be rolled back/);
+    }
+    expect(log).toEqual(['bad']);
+    expect(stack.isDirty).toBe(true);
+    await expect(stack.capture(() => 'bytes')).rejects.toThrow(/could not be rolled back/);
+  });
+  it('rolls back successful children on initial apply and redo failure', async () => {
+    const log: string[] = [];
+    const undo = new UndoStack();
+    let fail = true;
+    const last = command(
+      'fail',
+      'Fail',
+      () => {
+        if (fail) throw new Error('child failed');
+        log.push('b');
+      },
+      () => {
+        log.pop();
+      },
+    );
+    const composite = new CompositeCommand('batch', 'Batch', [logCmd(log, 'a'), last]);
+    await expect(undo.push(composite)).rejects.toThrow('child failed');
+    expect(log).toEqual([]);
+    expect(undo.isDirty).toBe(false);
+    expect(undo.canUndo).toBe(false);
+    fail = false;
+    await undo.push(composite);
+    await undo.undo();
+    fail = true;
+    await expect(undo.redo()).rejects.toThrow('child failed');
+    expect(log).toEqual([]);
+    expect(undo.canRedo).toBe(true);
+  });
+
+  it('latches dirty state and refuses save snapshots when rollback itself fails', async () => {
+    const undo = new UndoStack();
+    let value = 0;
+    const composite = new CompositeCommand('batch', 'Batch', [
+      command(
+        'a',
+        'A',
+        () => {
+          value++;
+        },
+        () => {
+          throw new Error('rollback failed');
+        },
+      ),
+      command(
+        'b',
+        'B',
+        () => {
+          throw new Error('apply failed');
+        },
+        () => undefined,
+      ),
+    ]);
+    await expect(undo.push(composite)).rejects.toThrow(/could not be rolled back/);
+    expect(value).toBe(1);
+    expect(undo.isDirty).toBe(true);
+    undo.markSaved();
+    expect(undo.isDirty).toBe(true);
+    await expect(undo.capture(() => 'save')).rejects.toThrow(/could not be rolled back/);
+    await expect(undo.push(logCmd([], 'c'))).rejects.toThrow(/could not be rolled back/);
+  });
+});
+
 /** A command that appends/removes a value on a log, optionally async. */
 function logCmd(
   log: string[],

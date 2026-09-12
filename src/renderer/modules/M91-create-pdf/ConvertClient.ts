@@ -5,6 +5,7 @@
  * behaviour under test is the behaviour that ships.
  */
 
+import { assertWorkerEnvelope } from '@shared/workerMessages';
 import { createRegistry, type ConverterRegistry } from '@engine/create/registry';
 import {
   ConvertCancelled,
@@ -20,8 +21,13 @@ import type { ConvertFromWorker, ConvertToWorker } from './createProtocol';
 /** Minimal worker surface we rely on, so a test can pass a fake. */
 export interface ConvertWorkerLike {
   postMessage(message: ConvertToWorker, transfer?: Transferable[]): void;
-  addEventListener(type: 'message', listener: (ev: MessageEvent) => void): void;
+  addEventListener(type: 'message' | 'messageerror', listener: (ev: MessageEvent) => void): void;
   addEventListener(type: 'error', listener: (ev: ErrorEvent) => void): void;
+  removeEventListener?(
+    type: 'message' | 'messageerror',
+    listener: (ev: MessageEvent) => void,
+  ): void;
+  removeEventListener?(type: 'error', listener: (ev: ErrorEvent) => void): void;
   terminate(): void;
 }
 
@@ -60,6 +66,22 @@ export class ConvertClient {
   private registry: ConverterRegistry | null = null;
   private readonly pending = new Map<number, Pending>();
   private nextId = 1;
+  private failure: Error | null = null;
+  private readonly onMessage = (ev: MessageEvent): void => {
+    if (this.failure) return;
+    try {
+      assertWorkerEnvelope(ev.data, 'convert');
+      this.dispatch(ev.data as ConvertFromWorker);
+    } catch (error) {
+      this.stop(error instanceof Error ? error : new Error(String(error)));
+    }
+  };
+  private readonly onError = (ev: ErrorEvent): void => {
+    this.stop(new Error(`The converter stopped: ${ev.message}`));
+  };
+  private readonly onMessageError = (): void => {
+    this.stop(new Error('The converter stopped: a worker message could not be read'));
+  };
 
   /** Spawns the module worker built from `create.worker.ts`, or runs in-process without one. */
   static spawn(env: ConvertEnvironment = {}): ConvertClient {
@@ -75,14 +97,9 @@ export class ConvertClient {
     this.worker = worker;
     this.env = env;
     if (!worker) return;
-    worker.addEventListener('message', (ev: MessageEvent) => {
-      this.dispatch(ev.data as ConvertFromWorker);
-    });
-    worker.addEventListener('error', (ev: ErrorEvent) => {
-      const error = new Error(`The converter stopped: ${ev.message}`);
-      for (const p of this.pending.values()) p.reject(error);
-      this.pending.clear();
-    });
+    worker.addEventListener('message', this.onMessage);
+    worker.addEventListener('error', this.onError);
+    worker.addEventListener('messageerror', this.onMessageError);
   }
 
   get offThread(): boolean {
@@ -90,6 +107,7 @@ export class ConvertClient {
   }
 
   convert(job: ConvertJob): ConvertHandle {
+    if (this.failure) return { promise: Promise.reject(this.failure), cancel: () => undefined };
     return this.worker ? this.inWorker(this.worker, job) : this.inProcess(job);
   }
 
@@ -103,14 +121,23 @@ export class ConvertClient {
       : job.inputs.map((i) => ({ ...i, bytes: i.bytes.slice() }));
     const buffers = new Set<ArrayBuffer>();
     for (const input of inputs) buffers.add(input.bytes.buffer as ArrayBuffer);
-    worker.postMessage(
-      { kind: 'convert', id, converter: job.converter, inputs, options: job.options },
-      [...buffers],
-    );
+    try {
+      worker.postMessage(
+        { kind: 'convert', id, converter: job.converter, inputs, options: job.options },
+        [...buffers],
+      );
+    } catch (error) {
+      this.stop(error instanceof Error ? error : new Error(String(error)));
+    }
     return {
       promise,
       cancel: () => {
-        if (this.pending.has(id)) worker.postMessage({ kind: 'cancel', id });
+        if (!this.pending.has(id)) return;
+        try {
+          worker.postMessage({ kind: 'cancel', id });
+        } catch (error) {
+          this.stop(error instanceof Error ? error : new Error(String(error)));
+        }
       },
     };
   }
@@ -157,7 +184,16 @@ export class ConvertClient {
   }
 
   dispose(): void {
-    for (const p of this.pending.values()) p.reject(new ConvertCancelled());
+    this.stop(new ConvertCancelled());
+  }
+
+  private stop(error: Error): void {
+    if (this.failure) return;
+    this.failure = error;
+    this.worker?.removeEventListener?.('message', this.onMessage);
+    this.worker?.removeEventListener?.('error', this.onError);
+    this.worker?.removeEventListener?.('messageerror', this.onMessageError);
+    for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
     this.worker?.terminate();
   }

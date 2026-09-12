@@ -15,6 +15,7 @@
  * pending render — the viewer calls it on scroll so superseded tiles never reach PDFium.
  */
 
+import { assertWorkerEnvelope } from '@shared/workerMessages';
 import {
   ENGINE_METHODS,
   EngineError,
@@ -51,8 +52,13 @@ export interface RequestHandle<T> {
 /** Minimal worker surface we rely on (so tests can pass a fake). */
 export interface WorkerLike {
   postMessage(message: unknown, transfer?: Transferable[]): void;
-  addEventListener(type: 'message', listener: (ev: MessageEvent) => void): void;
+  addEventListener(type: 'message' | 'messageerror', listener: (ev: MessageEvent) => void): void;
   addEventListener(type: 'error', listener: (ev: ErrorEvent) => void): void;
+  removeEventListener?(
+    type: 'message' | 'messageerror',
+    listener: (ev: MessageEvent) => void,
+  ): void;
+  removeEventListener?(type: 'error', listener: (ev: ErrorEvent) => void): void;
   terminate(): void;
 }
 
@@ -62,6 +68,29 @@ export class EngineClient {
   private nextId = 1;
   private readonly readyPromise: Promise<void>;
   private terminated = false;
+  private failure: EngineError | null = null;
+  private resolveReady: () => void = () => undefined;
+  private rejectReady: (error: Error) => void = () => undefined;
+  private readonly onMessage = (ev: MessageEvent): void => {
+    if (this.terminated) return;
+    try {
+      assertWorkerEnvelope(ev.data, 'engine');
+      const msg = ev.data as RpcFromWorker;
+      if (msg.kind === 'ready') this.resolveReady();
+      else this.dispatch(msg);
+    } catch (error) {
+      this.stop(
+        new EngineError('internal', error instanceof Error ? error.message : String(error)),
+      );
+    }
+  };
+  private readonly onError = (ev: ErrorEvent): void => {
+    this.stop(new EngineError('internal', `engine worker crashed: ${ev.message}`));
+  };
+
+  private readonly onMessageError = (): void => {
+    this.stop(new EngineError('internal', 'engine worker message could not be read'));
+  };
 
   /** The typed engine proxy. Call `PdfEngine` methods on it directly. */
   readonly engine: PdfEngine;
@@ -77,27 +106,21 @@ export class EngineClient {
 
   constructor(worker: WorkerLike) {
     this.worker = worker;
-    this.readyPromise = new Promise<void>((resolve) => {
-      worker.addEventListener('message', (ev: MessageEvent) => {
-        const msg = ev.data as RpcFromWorker;
-        if (msg.kind === 'ready') {
-          resolve();
-          return;
-        }
-        this.dispatch(msg);
-      });
+    this.readyPromise = new Promise<void>((resolve, reject) => {
+      this.resolveReady = resolve;
+      this.rejectReady = reject;
     });
-    worker.addEventListener('error', (ev: ErrorEvent) => {
-      const error = new EngineError('internal', `engine worker crashed: ${ev.message}`);
-      for (const p of this.pending.values()) p.reject(error);
-      this.pending.clear();
-    });
+    // Failure may precede the first ready() caller. Preserve rejection without an unhandled one.
+    void this.readyPromise.catch(() => undefined);
+    worker.addEventListener('message', this.onMessage);
+    worker.addEventListener('error', this.onError);
+    worker.addEventListener('messageerror', this.onMessageError);
     this.engine = this.buildProxy();
   }
 
   /** Resolves once the worker has signalled readiness. */
   ready(): Promise<void> {
-    return this.readyPromise;
+    return this.failure ? Promise.reject(this.failure) : this.readyPromise;
   }
 
   /** Number of requests awaiting a reply. */
@@ -107,11 +130,20 @@ export class EngineClient {
 
   /** Stops the worker. All in-flight calls reject. */
   terminate(): void {
+    this.stop(new EngineError('internal', 'engine client terminated'));
+  }
+
+  private stop(error: EngineError): void {
+    if (this.terminated) return;
     this.terminated = true;
-    this.worker.terminate();
-    const error = new EngineError('internal', 'engine client terminated');
+    this.failure = error;
+    this.worker.removeEventListener?.('message', this.onMessage);
+    this.worker.removeEventListener?.('error', this.onError);
+    this.worker.removeEventListener?.('messageerror', this.onMessageError);
+    this.rejectReady(error);
     for (const p of this.pending.values()) p.reject(error);
     this.pending.clear();
+    this.worker.terminate();
   }
 
   /** Low-level call. Prefer the typed `engine` proxy. */
@@ -131,7 +163,9 @@ export class EngineClient {
     if (this.terminated) {
       return {
         id,
-        promise: Promise.reject(new EngineError('internal', 'engine client terminated')),
+        promise: Promise.reject(
+          this.failure ?? new EngineError('internal', 'engine client terminated'),
+        ),
         cancel: () => undefined,
       };
     }
@@ -153,7 +187,13 @@ export class EngineClient {
         reject,
         progress,
       });
-      this.worker.postMessage(request, collectTransferables(plainArgs));
+      try {
+        this.worker.postMessage(request, collectTransferables(plainArgs));
+      } catch (error) {
+        this.stop(
+          new EngineError('internal', error instanceof Error ? error.message : String(error)),
+        );
+      }
     });
     return {
       id,
@@ -170,8 +210,16 @@ export class EngineClient {
     if (!p) return;
     this.pending.delete(id);
     const msg: RpcToWorker = { kind: 'cancel', id };
-    if (!this.terminated) this.worker.postMessage(msg);
     p.reject(new EngineError('cancelled', `${p.method} was cancelled`));
+    if (!this.terminated) {
+      try {
+        this.worker.postMessage(msg);
+      } catch (error) {
+        this.stop(
+          new EngineError('internal', error instanceof Error ? error.message : String(error)),
+        );
+      }
+    }
   }
 
   /** Cancels every pending render (optionally only those of `doc`). Returns how many. */

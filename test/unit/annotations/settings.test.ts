@@ -41,6 +41,18 @@ import {
   parseHexColour,
 } from '@modules/M30-markup-annotations/presets';
 import { toRichContents, sanitiseRich } from '@modules/M30-markup-annotations/NotePopup';
+
+it('reconstructs rich-text formatting without event, navigation or layout attributes', () => {
+  const hostile =
+    '<p style="position:fixed;z-index:999999" onclick="alert(1)"><b id="shell">bold</b><span style="color:#112233;position:absolute" onmouseover="x()">text</span><img src=x onerror="x()"></p>';
+  const expected = '<p><b>bold</b><span style="color:#112233">text</span></p>';
+  expect(sanitiseRich(hostile)).toBe(expected);
+  expect(sanitiseRich(toRichContents(hostile))).toBe(expected);
+  expect(sanitiseRich(expected)).toBe(expected);
+  expect(sanitiseRich('<u style="font-size:9999px" autofocus>underlined</u><')).toBe(
+    '<u>underlined</u>&lt;',
+  );
+});
 import { must } from '../find/helpers';
 
 describe('tool defaults', () => {

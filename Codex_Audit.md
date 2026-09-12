@@ -1,5 +1,7 @@
 # ynotPDF — Codex audit for Tony and Claude Code
 
+**Repair status — 12 September 2026:** Findings 1–12 are merged (PRs #51–54), and #23 was already fixed by PR #49. The resolution notes below distinguish work in the current audit branch from merged repairs. PR #65 carries screenshot-led readability checks and fixes; its final CI/merge is pending. Sections 26–31 remain dated assessments, not additional feature-module requests. The original audit and Claude comments are retained as historical evidence.
+
 Audit date: 11 September 2026. Author: Codex. Requested destination: `D:\Projects\ynotPDF\Codex_Audit.md`.
 
 **Assessment:** the project has a substantial, coherent implementation and a useful test suite. Its main weakness is the integration between document state, undo, recovery, saving and security. Several ordinary workflows can lose changes or protection while reporting success. Resolve those paths before relying on ynotPDF for the only copy of important work. There is no evidence here that the project needs a rewrite.
@@ -93,7 +95,7 @@ Root cause in one sentence: `Entry.info` conflates _what the source file declare
 
 ## 4. P1 — Undoing a password change does not restore the password used by Save
 
-**Codex resolution (12 September 2026):** Implemented in the recovery batch: command do/undo updates the session password binding as well as intent. Real encryption tests verify A/B undo, redo and undo of Remove Security; passwords remain absent from JSON.
+**Codex resolution (12 September 2026):** Merged in PR #54 (`d322de7`). Implemented in the recovery batch: command do/undo updates the session password binding as well as intent. Real encryption tests verify A/B undo, redo and undo of Remove Security; passwords remain absent from JSON.
 
 **Evidence: reproduced at the encryption-client boundary, A17.**
 
@@ -111,7 +113,7 @@ A consequence the finding doesn't mention: `canReprotect(entry)` at [SecuritySer
 
 ## 5. P1 — Edits made during an asynchronous save can be incorrectly marked saved
 
-**Codex resolution (12 September 2026):** Implemented in the recovery batch: saves are serialized per document, engine/model reads share a command barrier, and mutation revisions include pending edits. Stale output cancels before writing; edits during the disk write stay dirty. Same-length undo/branch and overlapping save tests cover this.
+**Codex resolution (12 September 2026):** Merged in PR #54 (`d322de7`). Implemented in the recovery batch: saves are serialized per document, engine/model reads share a command barrier, and mutation revisions include pending edits. Stale output cancels before writing; edits during the disk write stay dirty. Same-length undo/branch and overlapping save tests cover this.
 
 **Evidence: reproduced, A03.**
 
@@ -134,7 +136,7 @@ Overlapping saves are correctly flagged as related. `entry.saving` is set but on
 
 ## 6. P1 — Recovery can apply already-saved changes a second time
 
-**Codex resolution (12 September 2026):** Implemented with recovery v2 checkpoints (ADR 0023): current engine bytes and model restore together without replaying saved history. Records survive recovery and a second crash. Normal Save keeps undo; recovery starts a fresh undo history. Legacy v1 records are retained for manual recovery because their matching base cannot be reconstructed safely.
+**Codex resolution (12 September 2026):** Merged in PR #54 (`d322de7`). Implemented with recovery v2 checkpoints (ADR 0023): current engine bytes and model restore together without replaying saved history. Records survive recovery and a second crash. Normal Save keeps undo; recovery starts a fresh undo history. Legacy v1 records are retained for manual recovery because their matching base cannot be reconstructed safely.
 
 **Evidence: reproduced with the real PDFium engine and full-rewrite writer, A01.**
 
@@ -159,7 +161,7 @@ The finding is right that this is not sufficient alone, and the reason is worth 
 
 ## 7. P1 — Save As updates the tab path but leaves the document's source path stale
 
-**Codex resolution (12 September 2026):** Implemented in the recovery batch: Save As updates Document.state.path and the tab, stops the old watcher, and serializes initial path probing with saves.
+**Codex resolution (12 September 2026):** Merged in PR #54 (`d322de7`). Implemented in the recovery batch: Save As updates Document.state.path and the tab, stops the old watcher, and serializes initial path probing with saves.
 
 **Evidence: reproduced, A02.**
 
@@ -179,7 +181,7 @@ Findings 7 and 8 compound in a specific, testable way: a new document that is Sa
 
 ## 8. P1 — Recovery discards unsaved documents because it has no base bytes
 
-**Codex resolution (12 September 2026):** Implemented in the recovery batch: binary engine checkpoints make pathless documents recoverable, including dirty documents with no commands. Missing/failed recovery retains the record.
+**Codex resolution (12 September 2026):** Merged in PR #54 (`d322de7`). Implemented in the recovery batch: binary engine checkpoints make pathless documents recoverable, including dirty documents with no commands. Missing/failed recovery retains the record.
 
 **Evidence: reproduced, A04.**
 
@@ -199,7 +201,7 @@ The finding's last sentence is easy to skim and is important: a newly created do
 
 ## 9. P1 — Existing annotation edits can be counted as recovered without being restored
 
-**Codex resolution (12 September 2026):** Implemented in the recovery batch: checkpoint restoration installs model IDs, bindings and loaded state before attachment, avoiding lazy-target replay. The legacy journal API now counts actual model changes; a missing annotation target is reported skipped. Real annotation save/recovery tests verify restored edits.
+**Codex resolution (12 September 2026):** Merged in PR #54 (`d322de7`). Implemented in the recovery batch: checkpoint restoration installs model IDs, bindings and loaded state before attachment, avoiding lazy-target replay. The legacy journal API now counts actual model changes; a missing annotation target is reported skipped. Real annotation save/recovery tests verify restored edits.
 
 **Evidence: reproduced using the actual model/commands with the fake engine fixture, A05.**
 
@@ -219,7 +221,7 @@ On identity: the recommendation is right that a session-generated identifier is 
 
 ## 10. P1 — Portfolio edits have no recovery codecs or persisted attachment blobs
 
-**Codex resolution (12 September 2026):** Implemented through the shared checkpoint format rather than portfolio command replay: portfolio state, cover engine bytes and attachment blobs persist together. Real recovery/save tests verify replacement and added attachment bytes exactly. Binary content is SHA-256 addressed and checked on read.
+**Codex resolution (12 September 2026):** Merged in PR #54 (`d322de7`). Implemented through the shared checkpoint format rather than portfolio command replay: portfolio state, cover engine bytes and attachment blobs persist together. Real recovery/save tests verify replacement and added attachment bytes exactly. Binary content is SHA-256 addressed and checked on read.
 
 **Evidence: reproduced codec lookup, A07; traced serialization and save-plan behaviour.**
 
@@ -239,7 +241,7 @@ One caution on "preserve the original embedded bytes exactly where that is the c
 
 ## 11. P2 — Recovery's source-change check is incomplete and occurs after replay
 
-**Codex resolution (12 September 2026):** Implemented alongside recovery: source identity is captured before the opening buffer is transferred and covers every byte. Changed or unverifiable destinations open as pathless recovery copies. Legacy journal-only records are never automatically applied to an uncertain base.
+**Codex resolution (12 September 2026):** Merged in PR #54 (`d322de7`). Implemented alongside recovery: source identity is captured before the opening buffer is transferred and covers every byte. Changed or unverifiable destinations open as pathless recovery copies. Legacy journal-only records are never automatically applied to an uncertain base.
 
 **Evidence: reproduced fingerprint weakness, A06; traced initialization and replay order.**
 
@@ -261,7 +263,7 @@ Cheap interim improvement while the full identity/checkpoint design is pending: 
 
 ## 12. P1 — Atomic saving ignores short writes and flush failures
 
-**Codex resolution (12 September 2026):** Implemented alongside checkpoint storage: atomic writes complete short writes, reject zero progress and flush failures, propagate directory errors and clean up temp files. Six filesystem fault tests verify complete output or an intact original.
+**Codex resolution (12 September 2026):** Merged in PR #54 (`d322de7`). Implemented alongside checkpoint storage: atomic writes complete short writes, reject zero progress and flush failures, propagate directory errors and clean up temp files. Six filesystem fault tests verify complete output or an intact original.
 
 **Evidence: reproduced with filesystem fault injection, A10.**
 
@@ -289,6 +291,8 @@ On the short write itself: `handle.write(bytes)` returning fewer bytes is rare b
 
 ## 13. P1 — Combining PDFs loses their AcroForm field tree without a warning
 
+**Codex resolution (12 September 2026):** Implemented in the current audit branch; CI/merge pending. Combine refuses catalog-owned forms, name trees, layer configuration and accessibility tags/marking that cannot yet be preserved. It creates no partial output and tells Tony to keep the files separate or use a portfolio. This is explicit loss prevention, not form/tag merging. Unit cases cover catalog structures; the real-app form refusal regression passes.
+
 **Evidence: reproduced with real PDF bytes and pdf-lib, A16.**
 
 [combine.ts:139](D:/Projects/ynotPDF/src/engine/ops/combine.ts:139) copies source pages into a new document, but does not merge the catalog's AcroForm field tree. A16 generated a one-page PDF with one text field, combined it, and reopened the result: one page remained, but `getForm().getFields()` returned zero. There were no warnings. A retained widget appearance can make the result look acceptable while interactive form functionality is gone.
@@ -310,6 +314,8 @@ A practical note on the forms work specifically: duplicate field names are the h
 
 ## 14. P1 — Bulk extraction silently overwrites colliding or existing files
 
+**Codex resolution (12 September 2026):** Implemented in the current audit branch; CI/merge pending. Extraction reserves each leaf with exclusive creation and returns the actual numbered name for collisions, including sanitised and case-only names. A partial-write fault removes only the newly created incomplete leaf; the pre-existing file remains byte-identical and retry succeeds.
+
 **Evidence: reproduced on scratch files, A15.**
 
 [files.ts:156](D:/Projects/ynotPDF/src/main/files.ts:156) sanitizes path segments and writes with `writeFile()`'s replacement behaviour. [PortfolioService.ts:798](D:/Projects/ynotPDF/src/renderer/modules/M42-portfolios/PortfolioService.ts:798) calls that helper for extracted files without a collision decision.
@@ -330,6 +336,8 @@ Two additions:
 The closing sentence — don't report "extracted all" if files were overwritten or skipped — connects this to finding 2. The honest outcome type for a bulk operation is a per-file result list, not a boolean.
 
 ## 15. P1 — Extraction can follow a junction outside the selected directory
+
+**Codex resolution (12 September 2026):** Implemented in the current audit branch with ADR 0025; CI/merge pending. Chosen roots are canonical existing directories, linked child folders are rejected, and containment is checked before writing. Native junction and missing-root tests pass. This does not claim resistance to another local process swapping directories between filesystem calls.
 
 **Evidence: reproduced on Windows entirely inside the audit scratch area, A09; known in the hardening notes.**
 
@@ -362,6 +370,8 @@ On the fix itself: `realpath` the parent after `mkdir` and re-check containment 
 
 ## 16. P1 — Opening a non-PDF attachment delegates executable content directly to the OS
 
+**Codex resolution (12 September 2026):** Implemented in the current audit branch; CI/merge pending. Main refuses executables, scripts, shortcuts, active web formats and unknown extensions before any OS handoff. The exact sanitized basename must retain an approved extension and remain unchanged by another cleanup pass; truncation to an executable suffix is refused. Ordinary document types require native confirmation. The actual IPC regression proves refusal precedes confirmation, and Cancel precedes temporary-file creation/opening. HTTP(S) links are parsed and other protocols refused.
+
 **Evidence: traced; no executable payload was launched.**
 
 [NavigationService.ts:486](D:/Projects/ynotPDF/src/renderer/modules/M12-navigation-panels/NavigationService.ts:486) sends every non-PDF attachment to `shell:openTempFile`. [ipc.ts:359](D:/Projects/ynotPDF/src/main/ipc.ts:359) writes the bytes and calls `shell.openPath()` with no executable-type policy or application-level trust decision. Filename sanitization does not make an executable or script harmless.
@@ -387,6 +397,8 @@ Policy suggestion, since the finding leaves it open: block by **allowlist**, not
 
 ## 17. P2 — Annotation rich text retains arbitrary CSS and event attributes
 
+**Codex resolution (12 September 2026):** Implemented in the current audit branch; CI/merge pending. Both incoming and outgoing rich note fragments use the same tag/attribute allowlist. Imported hostile PDF /RC tests pass: no form, iframe, image, duplicate app ID or positioning survives, while bold and colour data remain. Screenshot inspection additionally found dark authored text unreadable on the dark editor; an editor-only readable-colours toggle now preserves stored colours, verified by an all-theme contrast test, original-colour toggle, real saved-PDF colour assertion and inspected High Contrast screenshot.
+
 **Evidence: reproduced string sanitization, A08; traced HTML sink.**
 
 [NotePopup.ts:69](D:/Projects/ynotPDF/src/renderer/modules/M30-markup-annotations/NotePopup.ts:69) assigns `sanitiseRich(rich)` to `innerHTML`. [sanitiseRich](D:/Projects/ynotPDF/src/renderer/modules/M30-markup-annotations/NotePopup.ts:245) allows selected tag names without stripping their attributes. A08 directly verified that a paragraph with fixed positioning, a very high z-index, arbitrary colours and an `onclick` attribute survived. The serialization helper also retains attributes on some allowed tags.
@@ -411,6 +423,8 @@ I agree with the finding's care about the CSP claim, and would add why it still 
 
 ## 18. P2 — Main-process filesystem IPC has no per-window path authority
 
+**Codex resolution (12 September 2026):** Implemented in the current audit branch under ADR 0025; CI/merge pending. Privileged handlers require a registered window and its main frame. Native selections and explicit Recent opening grant canonical per-window read/write authority. Listing Recent and recovery JSON grant nothing; settings reveal remains read-only. Malformed payload, sender/frame, two-window and settings escalation tests pass. Dropped documents stay pathless until Save As.
+
 **Evidence: traced; known and explicitly deferred.**
 
 [preload/index.ts:23](D:/Projects/ynotPDF/src/preload/index.ts:23) restricts channel names, but exposes generic invocation arguments. [ipc.ts:149](D:/Projects/ynotPDF/src/main/ipc.ts:149) accepts renderer-selected paths for reads, writes and related operations. The handler registration at line 478 does not provide a central sender/path authorization layer. TypeScript types are not runtime validation.
@@ -433,6 +447,8 @@ If 14, 15 and 16 are each patched in place first, every one of those patches bec
 The note that "TypeScript types are not runtime validation" deserves to stay prominent. [preload/index.ts:23](src/preload/index.ts:23) restricts channel _names_ but passes arguments through unvalidated, so the entire typed IPC surface is compile-time only. A runtime schema at the handler boundary is worth having on its own merits — it catches ordinary bugs, not just hostile input — and is a good first increment that delivers value before the full capability design is agreed.
 
 ## 19. P2 — A failed composite command can leave an untracked partial edit
+
+**Codex resolution (12 September 2026):** Implemented in the current audit branch under ADR 0024; CI/merge pending. Composite failures compensate completed children in reverse order. Failed compensation records all errors and latches UndoStack integrity failure, preventing further mutation or save/checkpoint capture until the document is reopened. Fault tests cover apply, undo/redo and rollback failures; individual multi-step commands still own their internal rollback.
 
 **Evidence: reproduced with a faulting child command, A11.**
 
@@ -472,6 +488,8 @@ The finding is right that the journal/group machinery uses composites too, so th
 
 ## 20. P2 — Engine-worker initialization failure leaves readiness pending indefinitely
 
+**Codex resolution (12 September 2026):** Implemented in the current audit branch under ADR 0024; CI/merge pending. Engine startup failure, crash and termination settle readiness and pending requests and reject later calls. Writer, operations, conversion, export and optimisation workers follow the same terminal-failure rule, including synchronous initial/cancellation postMessage failure, messageerror and malformed transport envelopes. Stop removes listeners. Lifecycle regression tests cover current/future requests and failures before/after engine readiness.
+
 **Evidence: reproduced using the supported fake-worker interface, A18.**
 
 [EngineClient.ts:80](D:/Projects/ynotPDF/src/engine/EngineClient.ts:80) creates a readiness promise with no rejection path. Its error handler rejects existing requests but does not reject readiness or mark the client terminal. The M10 activation path awaits `client.ready()`.
@@ -496,6 +514,8 @@ Agree about applying the same review to the writer worker client. "Promise with 
 
 ## 21. P2 — Image export uses accessibility permission instead of ordinary copying permission
 
+**Codex resolution (12 September 2026):** Implemented in the current audit branch; CI/merge pending. Both image-export commands now require ordinary copy permission, matching text/HTML/RTF export. Standard-password and certificate-recipient UI cases enforce denied exports and owner-authorised output. This gate is separate from M92’s image-fidelity repair.
+
 **Evidence: traced command declarations and permission mapping.**
 
 [M92 manifest:139](D:/Projects/ynotPDF/src/renderer/modules/M92-export/manifest.ts:139) and [line 220](D:/Projects/ynotPDF/src/renderer/modules/M92-export/manifest.ts:220) mark page-image export and embedded-image export as `extract-for-accessibility`. Text, HTML and RTF export use `copy`.
@@ -516,6 +536,8 @@ Two adjacent mappings worth confirming in the same pass:
 The closing caveat is correct and worth carrying into the commit message: this is about ynotPDF honouring its own declared permission model, not a claim that PDF permissions are an enforcement boundary against other software. Getting that distinction into the repository's own words will stop someone later arguing the whole mapping is pointless.
 
 ## 22. P2 — Recovery bypasses the normal password and digital-ID opening flow
+
+**Codex resolution (12 September 2026):** Implemented in the current audit branch under ADR 0026; CI/merge pending. Open, recovery and reload share certificate preparation and password retry. Actual crash tests verify wrong-password/Cancel retains the record, retry restores edits, and certificate checkpoints retain recipient restrictions without owner authority. An ungranted remembered path restores as a pathless copy. Certificate working checkpoints are already decrypted local copies; no claim of encrypted archival recovery is made.
 
 **Evidence: traced; separate from the reproduced plaintext-save issue.**
 
@@ -571,6 +593,8 @@ The audit's two "do not" instructions — don't add a retry, don't widen the len
 
 ## 24. P2 — The licence gate does not faithfully enforce the written dependency policy
 
+**Codex resolution (12 September 2026):** The technical gate is implemented in the current audit branch; CI/merge pending. A real SPDX parser preserves grouping, arrays require every obligation, MPL is refused and UNLICENSED is root-only. Build manifests now include bundled dev dependencies and workers; font/opaque-binary hashes and packaged notices are inventoried. The strict licenses:release gate intentionally rejects currently incomplete wrapper/compiled-component notice reviews. Those distribution prerequisites remain open for M131; see docs/security/artifact-notices.md. Package metadata is not treated as a distribution-rights decision.
+
 **Evidence: source inspection; current production inventory passed.**
 
 [check-licenses.ts:25](D:/Projects/ynotPDF/scripts/check-licenses.ts:25) includes `MPL-2.0` despite the project's stated no-copyleft/permissive-only policy. It also allows `UNLICENSED` for every package although the comment says that exception is for the private root package.
@@ -599,6 +623,8 @@ Agree that the npm production inventory does not cover Electron, fonts, icons, W
 
 ## 25. P2 — macOS and Linux screenshot comparisons still skip without baselines
 
+**Codex resolution (12 September 2026):** PR #65 implements the agreed alternative to unstable cross-platform pixel baselines: geometry, contrast, keyboard focus and native-value fit checks across four themes and three scales, with retained screenshots. Existing Windows pixel baselines/tolerances remain. Screenshot inspection found and repaired status-bar overlap and truncated export values. After integration with merged M11, 32 focused UI tests and 331 affected unit tests pass; final platform CI/merge remains pending.
+
 **Evidence: inspected committed snapshot inventory and test skip logic; known coverage gap.**
 
 [visual.spec.ts:77](D:/Projects/ynotPDF/test/e2e/visual.spec.ts:77) skips screenshot comparisons on a platform without seeded images. The committed baselines are Windows-only. Consequently, successful macOS/Linux UI jobs do not demonstrate those ten screenshot comparisons passed. Other layout, keyboard, theme and UI tests on those platforms still provide real coverage.
@@ -616,6 +642,8 @@ My suggestion: keep pixel comparison **Windows-only**, where the baselines are a
 Agree without reservation on the reporting point: **skipped comparisons must be visible in the CI summary.** A green job that silently skipped ten of its assertions is the exact failure mode this section is about, and it is the cheapest part to fix.
 
 ## 26. Verification results and what they mean
+
+**Codex resolution (12 September 2026):** The table below describes the original audit run only. New local and exact-commit CI results are recorded with the repair PRs and docs/open-work.md; skipped tests are never counted as passes. The current audit branch still requires final full-suite and platform validation before merge.
 
 The fresh audit snapshot used Node **26.7.0** and npm **11.19.0** on Windows. Exit codes were captured from the commands, not inferred from the last line of a pipeline.
 
@@ -647,6 +675,8 @@ The "most valuable next tests" list matches my own reading of where the risk con
 
 ## 27. Architecture and maintainability assessment
 
+**Codex resolution (12 September 2026):** Assessment retained. The repairs strengthen shared save/checkpoint, filesystem authority, protected-open and worker lifecycle contracts through ADRs 0023–0026. They do not replace the existing architecture. The coordinator owns current module status in PLAN.md/CHECKLIST.txt; the old figures below are historical.
+
 The overall design is suitable to continue: strict TypeScript, a small DOM-based shell, service/command registration, a worker-backed engine abstraction, document commands and undo, sparse write plans, a full-rewrite writer, and ordered save stages. There is no audit finding that justifies substituting a frontend framework or replacing the PDF stack wholesale.
 
 The highest maintenance cost is the number of overlapping representations: engine bytes/handles, document model, lazy object records, module state, blob storage, undo journal, tab metadata and saved source files. The reproduced defects occur where one representation advances while another does not. A shared lifecycle contract for identity, revisions, checkpointing, hydration, permissions and save success would address multiple findings more effectively than isolated special cases.
@@ -671,6 +701,8 @@ The warning against "creating another parallel service with duplicate bookkeepin
 
 ## 28. Product scope and release readiness
 
+**Codex resolution (12 September 2026):** Release limitations retained and made explicit. Signing, notarisation, update/rollback and unfinished feature modules remain with their planned owners. A strict component/notice release gate is now available and reports actual unresolved inputs. This audit repair series is not a commercial-parity or release-readiness claim.
+
 [PLAN.md](D:/Projects/ynotPDF/PLAN.md:13) marks **27 of 44 modules complete** and 17 remaining. This is module count, not a reliable percentage of remaining effort. Major remaining work includes text editing with reflow, OCR, incremental writing, signatures, redaction, comparison, PDF/A, batch/CLI and release engineering. These are planned gaps, not newly discovered defects in supposedly implemented modules.
 
 The project already supports substantial viewing, page organization, annotations, forms, portfolios, creation/export, security and optimization workflows. Its aspiration to rival commercial editors is understandable, but green module completion should not yet be represented as broad commercial-editor parity or release readiness. The interoperability and failure-path findings explain why.
@@ -688,6 +720,8 @@ The related point: a module marked complete in `PLAN.md` currently means "its ow
 Agree on preserving the documented limitations verbatim — round-tripped form actions, parked XFA and Acrobat JavaScript, the unsupported optimisation encoders. The risk during a repair push is scope creeping into them incidentally ("while I'm in here"), which is how documented limitations quietly become undocumented partial implementations.
 
 ## 29. Review coverage by project area
+
+**Codex resolution (12 September 2026):** Coverage assessment retained. New tests add filesystem fault injection, malformed IPC/sender boundaries, protected crash recovery, hostile rich-text input, catalog refusal and actual UI screenshot inspection. This does not claim exhaustive PDF fuzzing, competitor interoperability or a penetration test of deployed installers.
 
 This matrix records the breadth of review without implying an independent exhaustive proof of each subsystem. “Suite” means the existing tests were run; it does not imply every feature had a new adversarial probe.
 
@@ -722,6 +756,8 @@ The exclusion of private customer PDFs from the snapshot is correct practice and
 
 ## 30. Current repair state and stale handover information
 
+**Codex resolution (12 September 2026):** Dated status banners now distinguish historical handovers from the active repair log and ADR 0025. Findings 1–12 and 23 are merged; remaining source changes and PR65 validation are recorded separately. Original audit text and Claude comments remain intact for provenance.
+
 The reboot-related repairs must be read as history against their commits. The shared-fixture paths, post-restore notes/checklist updates, macOS preferences repair and dropped-file path repair have landed in the audited main lineage. The old checklist omissions and unsafe bare-filename dropped-file fallback are **not outstanding findings** here.
 
 [docs/open-work.md](D:/Projects/ynotPDF/docs/open-work.md) and parts of [renderer-filesystem-boundary.md](D:/Projects/ynotPDF/docs/security/renderer-filesystem-boundary.md) still contain statements from before those merges. The parent-folder [Codex handover](D:/Projects/AGENTS.md) is also an explicitly dated earlier snapshot. Preserve useful investigation history, but add a current status section with commit/PR links so a new session does not repeat repairs or resurrect withdrawn explanations.
@@ -739,6 +775,8 @@ A small addition on the same theme: **this audit document will itself go stale, 
 The note about not reviving an unconditional "wrong key must throw" assertion is genuinely useful institutional memory — it is exactly the correct-looking test that gets re-added by someone who hasn't met the underlying AES-CBC padding subtlety. It belongs in a comment beside that test, not only in this report.
 
 ## 31. Suggested repair order and retained reproduction material
+
+**Codex resolution (12 September 2026):** The suggested order below is historical. The save/recovery batch is merged; the remaining audit contracts and regressions are being verified together, with UI repairs independently reviewed in PR65. The central Review PDF editor plan task coordinates integration and serial merges. Release prerequisites and new feature modules remain explicit follow-up work rather than being silently declared complete.
 
 Repair the data/protection paths first: findings **1–7 and 12**, followed by the remaining recovery findings **8–11 and 22**. Treat these as a coordinated document-lifecycle effort with explicit source/checkpoint semantics. Then address form preservation and filesystem/attachment handling (**13–18**), transaction/worker resilience (**19–20**), export permissions (**21**) and the testing/policy gaps (**23–25**). Finding 23 is a small independent CI fix that can be completed while the larger design is being reviewed.
 

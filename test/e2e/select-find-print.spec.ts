@@ -12,7 +12,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { realpathSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchApp, type App } from './harness';
@@ -93,8 +93,9 @@ let app: App;
 let scratch: string;
 
 test.beforeAll(async () => {
+  scratch = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-m13-')));
   app = await launchApp();
-  scratch = mkdtempSync(join(tmpdir(), 'ynot-m13-'));
+  await app.grantPath(scratch, true);
 });
 
 test.afterAll(async () => {
@@ -521,6 +522,7 @@ test.describe('advanced search', () => {
 
   test('a folder search finds a known string across the fixtures', async () => {
     await open('text.pdf');
+    await app.grantPath(FIXTURES, true);
     expect(await app.run('dev.setSearchFolder', { path: FIXTURES })).toBe(FIXTURES);
     await app.run('edit.search', { query: 'Sphinx', run: true });
     const state = await until(panelState, (s) => !s.running && s.hits.length > 0, 90_000);
@@ -532,6 +534,7 @@ test.describe('advanced search', () => {
 
   test('a folder search can be stopped part way through', async () => {
     await open('text.pdf');
+    await app.grantPath(FIXTURES, true);
     await app.run('dev.setSearchFolder', { path: FIXTURES });
     await app.run('edit.search', { query: 'e', run: true });
     await until(panelState, (s) => s.running || s.hits.length > 0, 5000);

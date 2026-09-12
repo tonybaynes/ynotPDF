@@ -12,7 +12,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { realpathSync, copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -56,8 +56,9 @@ let app: App;
 let workspace: string;
 
 test.beforeAll(async () => {
+  workspace = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-m60-')));
   app = await launchApp();
-  workspace = mkdtempSync(join(tmpdir(), 'ynot-m60-'));
+  await app.grantPath(workspace, true);
 });
 
 test.afterAll(async () => {

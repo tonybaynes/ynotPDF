@@ -34,9 +34,12 @@ class FakeWorker implements ConvertWorkerLike {
     this.transfers.push(transfer ?? []);
   }
 
-  addEventListener(type: 'message' | 'error', listener: (ev: never) => void): void {
+  addEventListener(
+    type: 'message' | 'error' | 'messageerror',
+    listener: (ev: never) => void,
+  ): void {
     if (type === 'message') this.message = listener as (ev: MessageEvent) => void;
-    else this.error = listener as (ev: ErrorEvent) => void;
+    else if (type === 'error') this.error = listener as (ev: ErrorEvent) => void;
   }
 
   terminate(): void {

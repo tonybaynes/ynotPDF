@@ -142,6 +142,17 @@
   outline-offset: 1px;
 }
 
+.annot-popup-readable {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Preserve authored colour attributes while keeping the editor readable by default. */
+.annot-popup-readable-colours * {
+  color: var(--fg) !important;
+}
+
 .annot-popup-footer {
   display: flex;
   justify-content: flex-end;

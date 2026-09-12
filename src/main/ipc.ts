@@ -36,7 +36,10 @@ import { optimiseTasks } from './optimise';
 import { readClipboard } from './webpdf/clipboard';
 import { decodeWithNativeImage } from './webpdf/decodeImage';
 import type { WebPdfPrinter } from './webpdf/WebPdfPrinter';
-import { allWindows, broadcast, getMainWindow } from './window';
+import { allWindows, broadcast } from './window';
+import { fileCapabilities } from './fs/capabilities';
+import { assertExternalDocument, externalWebUrl } from './externalFiles';
+import { validateFileRequest } from './fs/ipcValidation';
 
 /**
  * Upper bound on waiting for an OS full-screen transition to settle. macOS takes ~600 ms;
@@ -77,7 +80,13 @@ const E2E = process.env['YNOT_E2E'] === '1';
 
 function windowOf(event: { readonly sender: unknown }): BrowserWindow | null {
   const win = BrowserWindow.fromWebContents(event.sender as Electron.WebContents);
-  return win && !win.isDestroyed() ? win : getMainWindow();
+  return win && !win.isDestroyed() && allWindows().includes(win) ? win : null;
+}
+
+function requireWindow(event: { readonly sender: unknown }): BrowserWindow {
+  const win = windowOf(event);
+  if (!win) throw new Error('An application window is required');
+  return win;
 }
 
 /**
@@ -123,7 +132,9 @@ async function saveDialog(
   const result = win
     ? await dialog.showSaveDialog(win, dialogOptions)
     : await dialog.showSaveDialog(dialogOptions);
-  return result.canceled || !result.filePath ? null : result.filePath;
+  return result.canceled || !result.filePath || !win
+    ? null
+    : fileCapabilities.grant(win.id, result.filePath, ['read', 'write']);
 }
 
 export function registerIpcHandlers(recent: RecentFiles, settings: Settings, deps: IpcDeps): void {
@@ -147,18 +158,16 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
         : await dialog.showOpenDialog(options);
       const path = result.filePaths[0];
       if (result.canceled || !path) return null;
-      const file = await readFileForRenderer(path);
+      const selected = fileCapabilities.grant(requireWindow(e).id, path, ['read', 'write']);
+      const file = await readFileForRenderer(selected);
       recent.add(path);
       recentChanged();
       return file;
     },
-    'file:read': async (_e, path) => {
-      const file = await readFileForRenderer(path);
-      recent.add(path);
-      recentChanged();
-      return file;
-    },
-    'file:write': (_e, path, bytes) => writeBytes(path, bytes),
+    'file:read': (e, path) =>
+      readFileForRenderer(fileCapabilities.check(requireWindow(e).id, path, 'read')),
+    'file:write': (e, path, bytes) =>
+      writeBytes(fileCapabilities.check(requireWindow(e).id, path, 'write'), bytes),
     'file:saveDialog': (e, defaultPath) =>
       saveDialog(windowOf(e), defaultPath === undefined ? {} : { defaultPath }),
     'file:saveAsDialog': (e, options) => saveDialog(windowOf(e), options ?? {}),
@@ -174,11 +183,22 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
         : await dialog.showOpenDialog(dialogOptions);
       if (result.canceled) return [];
       // Deliberately not added to Recent: a certificate is not a document the reader reopens.
-      return Promise.all(result.filePaths.map((path) => readFileForRenderer(path)));
+      return Promise.all(
+        result.filePaths.map((path) =>
+          readFileForRenderer(fileCapabilities.grant(requireWindow(e).id, path, ['read'])),
+        ),
+      );
     },
-    'file:readFolder': (_e, path, options) => readFolder(path, options),
-    'file:writeInto': (_e, dir, relativePath, bytes) => writeInto(dir, relativePath, bytes),
-    'file:writeAtomic': async (_e, path, bytes, options) => {
+    'file:readFolder': (e, path, options) =>
+      readFolder(fileCapabilities.check(requireWindow(e).id, path, 'read', true), options),
+    'file:writeInto': (e, dir, relativePath, bytes) =>
+      writeInto(
+        fileCapabilities.check(requireWindow(e).id, dir, 'write', true),
+        relativePath,
+        bytes,
+      ),
+    'file:writeAtomic': async (e, path, bytes, options) => {
+      path = fileCapabilities.check(requireWindow(e).id, path, 'write');
       // Our own write must not come back as "someone changed your file"; the mute is set before
       // the bytes land and expires by itself, and is lifted early when the write fails.
       deps.watchers.suspend(path);
@@ -193,7 +213,7 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
         throw error;
       }
     },
-    'file:probe': (_e, path) => probeFile(path),
+    'file:probe': (e, path) => probeFile(fileCapabilities.check(requireWindow(e).id, path, 'read')),
 
     // ---- document security (M70, ADR 0011) -----------------------------------------------------
     'security:inspect': async (_e, bytes) => security().inspect(bytes),
@@ -243,12 +263,14 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     },
 
     'file:watch': (e, path, watching) => {
+      path = fileCapabilities.check(requireWindow(e).id, path, 'read');
       const win = windowOf(e);
       if (!win) return;
       if (watching) deps.watchers.watch(path, win.id);
       else deps.watchers.unwatch(path, win.id);
     },
-    'file:suspendWatch': (_e, path, ms) => {
+    'file:suspendWatch': (e, path, ms) => {
+      path = fileCapabilities.check(requireWindow(e).id, path, 'write');
       deps.watchers.suspend(path, ms);
     },
     'recovery:list': () => deps.recovery.list(),
@@ -259,7 +281,17 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     'recovery:discard': (_e, id) => deps.recovery.discard(id),
     'recovery:clear': () => deps.recovery.clear(),
     'recent:list': () => recent.list(),
-    'recent:add': (_e, path) => {
+    'recent:open': async (e, path) => {
+      if (!recent.list().some((entry) => entry.path === path))
+        fileCapabilities.check(requireWindow(e).id, path, 'write');
+      const selected = fileCapabilities.grant(requireWindow(e).id, path, ['read', 'write']);
+      const file = await readFileForRenderer(selected);
+      recent.add(selected);
+      recentChanged();
+      return file;
+    },
+    'recent:add': (e, path) => {
+      path = fileCapabilities.check(requireWindow(e).id, path, 'write');
       const list = recent.add(path);
       recentChanged();
       return list;
@@ -269,7 +301,9 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       recentChanged();
       return list;
     },
-    'recent:pin': (_e, path, pinned) => {
+    'recent:pin': (e, path, pinned) => {
+      if (!recent.list().some((entry) => entry.path === path))
+        fileCapabilities.check(requireWindow(e).id, path, 'read');
       const list = recent.pin(path, pinned);
       recentChanged();
       return list;
@@ -286,7 +320,7 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
     'settings:reset': (_e, prefixes) => {
       settings.reset(prefixes);
     },
-    'settings:path': () => settings.path,
+    'settings:path': (e) => fileCapabilities.grant(requireWindow(e).id, settings.path, ['read']),
     'settings:get': (_e, key) => settings.get(key),
     'settings:set': (_e, key, value) => {
       settings.set(key, value);
@@ -332,6 +366,7 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       windowOf(e)?.setTitle(title);
     },
     'window:new': (e, path) => {
+      if (path) path = fileCapabilities.check(requireWindow(e).id, path, 'write');
       deps.openWindow(path, windowOf(e));
     },
     'window:getState': (e) => {
@@ -384,20 +419,33 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       deps.closeBroker.answerQuit(quit);
       if (quit) app.quit();
     },
-    'shell:openTempFile': async (_e, name, bytes) => {
-      const path = await writeTempFile(name, bytes);
+    'shell:openTempFile': async (e, name, bytes) => {
+      const safeName = assertExternalDocument(name);
+      const answer = await dialog.showMessageBox(requireWindow(e), {
+        type: 'question',
+        title: 'Open attachment in another app',
+        message: 'Open "' + name + '" in its associated application?',
+        detail:
+          (safeName === name ? '' : 'The temporary file will be named "' + safeName + '". ') +
+          'Only open attachments from a source you trust. The other application controls how this file is handled.',
+        buttons: ['Cancel', 'Open attachment'],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (answer.response !== 1) throw new Error('Opening the attachment was cancelled');
+      const path = await writeTempFile(safeName, bytes);
       if (E2E) return path;
       const error = await shell.openPath(path);
       if (error) throw new Error(error);
       return path;
     },
     'shell:openExternal': async (_e, url) => {
-      if (!/^https?:\/\//.test(url)) throw new Error('Only http(s) URLs may be opened');
+      url = externalWebUrl(url);
       if (E2E) return;
       await shell.openExternal(url);
     },
-    'shell:showItemInFolder': (_e, path) => {
-      shell.showItemInFolder(path);
+    'shell:showItemInFolder': (e, path) => {
+      shell.showItemInFolder(fileCapabilities.check(requireWindow(e).id, path, 'read'));
     },
     'devtools:toggle': (e) => {
       windowOf(e)?.webContents.toggleDevTools();
@@ -434,12 +482,18 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       const result = win
         ? await dialog.showOpenDialog(win, options)
         : await dialog.showOpenDialog(options);
-      return result.canceled ? null : (result.filePaths[0] ?? null);
+      const path = result.filePaths[0];
+      return result.canceled || !path
+        ? null
+        : fileCapabilities.grant(requireWindow(e).id, path, ['read', 'write'], true);
     },
     'search:folder': (e, request) => {
       const win = windowOf(e);
       if (!win) throw new Error('No window to search from');
-      return deps.searches.start(win, request);
+      return deps.searches.start(win, {
+        ...request,
+        root: fileCapabilities.check(win.id, request.root, 'read', true),
+      });
     },
     'search:cancel': (_e, jobId) => {
       deps.searches.cancel(jobId);
@@ -488,7 +542,11 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
         ? await dialog.showOpenDialog(win, dialogOptions)
         : await dialog.showOpenDialog(dialogOptions);
       if (result.canceled) return [];
-      return Promise.all(result.filePaths.map((path) => readFileForRenderer(path)));
+      return Promise.all(
+        result.filePaths.map((path) =>
+          readFileForRenderer(fileCapabilities.grant(requireWindow(e).id, path, ['read'])),
+        ),
+      );
     },
     'webpdf:render': (_e, request) => deps.webpdf.render(request),
     'webpdf:cancel': (_e, jobId) => {
@@ -503,6 +561,12 @@ export function registerIpcHandlers(recent: RecentFiles, settings: Settings, dep
       event: Electron.IpcMainInvokeEvent,
       ...args: unknown[]
     ) => unknown;
-    ipcMain.handle(channel, (event, ...args: unknown[]) => handler(event, ...args));
+    ipcMain.handle(channel, (event, ...args: unknown[]) => {
+      requireWindow(event);
+      if (event.senderFrame !== event.sender.mainFrame)
+        throw new Error('Only the application main frame may use this channel');
+      validateFileRequest(channel, args);
+      return handler(event, ...args);
+    });
   }
 }

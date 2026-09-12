@@ -12,7 +12,14 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import {
+  realpathSync,
+  copyFileSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fixturePath, launchApp, type App } from './harness';
@@ -53,8 +60,9 @@ let app: App;
 let workspace: string;
 
 test.beforeAll(async () => {
-  workspace = mkdtempSync(join(tmpdir(), 'ynot-ops-'));
+  workspace = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-ops-')));
   app = await launchApp();
+  await app.grantPath(workspace, true);
 });
 
 test.afterAll(async () => {
@@ -116,6 +124,17 @@ async function closeAll(): Promise<void> {
 
 test.describe('the commands are all reachable', () => {
   test.afterEach(closeAll);
+
+  test('Combine refuses catalog-owned form structures without opening a partial result', async () => {
+    const before = readFileSync(join(FIXTURES, 'form.pdf'));
+    await expect(
+      app.run('convert.combineFiles', {
+        files: [fileArg('blank.pdf'), fileArg('form.pdf')],
+      }),
+    ).rejects.toThrow(/cannot preserve.*forms/i);
+    await expect(app.page.locator('.tab')).toHaveCount(0);
+    expect(readFileSync(join(FIXTURES, 'form.pdf'))).toEqual(before);
+  });
 
   test('every command is registered, and the ones that need a document are off without one', async () => {
     const ids = await app.commands();
@@ -222,7 +241,7 @@ test.describe('split', () => {
 
   test('the parts are written into the folder that was chosen', async () => {
     await open('multipage.pdf');
-    const folder = mkdtempSync(join(workspace, 'split-'));
+    const folder = realpathSync.native(mkdtempSync(join(workspace, 'split-')));
     const result = (await app.run('organize.splitDocument', {
       by: 'count',
       pages: 2,

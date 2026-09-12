@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'electron-vite';
+import { buildInputs } from './scripts/lib/build-inputs';
 
 /**
  * Three build entries (main, preload, renderer). The PDF engine Worker
@@ -23,6 +24,7 @@ const aliases = {
 
 export default defineConfig({
   main: {
+    plugins: [buildInputs('main')],
     resolve: { alias: aliases },
     build: {
       externalizeDeps: true,
@@ -35,6 +37,7 @@ export default defineConfig({
     },
   },
   preload: {
+    plugins: [buildInputs('preload')],
     resolve: { alias: aliases },
     build: {
       externalizeDeps: true,
@@ -46,8 +49,9 @@ export default defineConfig({
     },
   },
   renderer: {
+    plugins: [buildInputs('renderer')],
     resolve: { alias: aliases },
-    worker: { format: 'es' },
+    worker: { format: 'es', plugins: () => [buildInputs('worker')] },
     // M10: the PDFium wasm is inlined into the engine worker bundle (`?inline`).
     assetsInclude: ['**/*.wasm'],
     build: {

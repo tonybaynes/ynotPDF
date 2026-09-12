@@ -12,6 +12,7 @@
  * Node — the same functions run in-process, so what the tests exercise is what ships.
  */
 
+import { assertWorkerEnvelope } from '@shared/workerMessages';
 import { hasBridge, invoke } from '@shared/ipc';
 import {
   OpCancelled,
@@ -32,8 +33,13 @@ import type { OptimiseAnswer, OptimiseFromWorker, OptimiseToWorker } from './opt
 /** Minimal worker surface we rely on, so a test can pass a fake. */
 export interface OptimiseWorkerLike {
   postMessage(message: OptimiseToWorker, transfer?: Transferable[]): void;
-  addEventListener(type: 'message', listener: (ev: MessageEvent) => void): void;
+  addEventListener(type: 'message' | 'messageerror', listener: (ev: MessageEvent) => void): void;
   addEventListener(type: 'error', listener: (ev: ErrorEvent) => void): void;
+  removeEventListener?(
+    type: 'message' | 'messageerror',
+    listener: (ev: MessageEvent) => void,
+  ): void;
+  removeEventListener?(type: 'error', listener: (ev: ErrorEvent) => void): void;
   terminate(): void;
 }
 
@@ -68,6 +74,22 @@ export class OptimiseClient {
   private readonly structure: StructureRunner;
   private readonly pending = new Map<number, Pending>();
   private nextId = 1;
+  private failure: Error | null = null;
+  private readonly onMessage = (ev: MessageEvent): void => {
+    if (this.failure) return;
+    try {
+      assertWorkerEnvelope(ev.data, 'optimise');
+      this.dispatch(ev.data as OptimiseFromWorker);
+    } catch (error) {
+      this.stop(error instanceof Error ? error : new Error(String(error)));
+    }
+  };
+  private readonly onError = (ev: ErrorEvent): void => {
+    this.stop(new OpFailed(`Optimising stopped: ${ev.message}`));
+  };
+  private readonly onMessageError = (): void => {
+    this.stop(new OpFailed('Optimising stopped: a worker message could not be read'));
+  };
 
   /** Spawns the module worker built from `optimise.worker.ts`, or runs in-process without one. */
   static spawn(structure: StructureRunner = ipcStructureRunner()): OptimiseClient {
@@ -83,14 +105,9 @@ export class OptimiseClient {
     this.worker = worker;
     this.structure = structure;
     if (!worker) return;
-    worker.addEventListener('message', (ev: MessageEvent) => {
-      this.dispatch(ev.data as OptimiseFromWorker);
-    });
-    worker.addEventListener('error', (ev: ErrorEvent) => {
-      const error = new OpFailed(`Optimising stopped: ${ev.message}`);
-      for (const p of this.pending.values()) p.reject(error);
-      this.pending.clear();
-    });
+    worker.addEventListener('message', this.onMessage);
+    worker.addEventListener('error', this.onError);
+    worker.addEventListener('messageerror', this.onMessageError);
   }
 
   /** True when the arithmetic happens off the main thread. */
@@ -162,6 +179,7 @@ export class OptimiseClient {
     op: OptimiseAnswer['op'],
     onProgress: OpProgress | undefined,
   ): OptimiseHandle<T> {
+    if (this.failure) return { promise: Promise.reject(this.failure), cancel: () => undefined };
     const worker = this.worker;
     if (!worker) {
       const controller = new AbortController();
@@ -182,11 +200,20 @@ export class OptimiseClient {
       if (answer.op !== op) throw new OpFailed('Optimising answered the wrong question');
       return answer.value as T;
     });
-    worker.postMessage(request(id), transfer());
+    try {
+      worker.postMessage(request(id), transfer());
+    } catch (error) {
+      this.stop(error instanceof Error ? error : new Error(String(error)));
+    }
     return {
       promise,
       cancel: () => {
-        if (this.pending.has(id)) worker.postMessage({ kind: 'cancel', id });
+        if (!this.pending.has(id)) return;
+        try {
+          worker.postMessage({ kind: 'cancel', id });
+        } catch (error) {
+          this.stop(error instanceof Error ? error : new Error(String(error)));
+        }
       },
     };
   }
@@ -210,7 +237,16 @@ export class OptimiseClient {
   }
 
   dispose(): void {
-    for (const p of this.pending.values()) p.reject(new OpCancelled());
+    this.stop(new OpCancelled());
+  }
+
+  private stop(error: Error): void {
+    if (this.failure) return;
+    this.failure = error;
+    this.worker?.removeEventListener?.('message', this.onMessage);
+    this.worker?.removeEventListener?.('error', this.onError);
+    this.worker?.removeEventListener?.('messageerror', this.onMessageError);
+    for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
     this.worker?.terminate();
   }

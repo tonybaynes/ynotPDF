@@ -14,7 +14,15 @@
 
 import { chromium, expect, test, type Frame } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, copyFileSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import {
+  realpathSync,
+  chmodSync,
+  copyFileSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -45,7 +53,7 @@ interface Summary {
 let workspace: string;
 
 test.beforeAll(() => {
-  workspace = mkdtempSync(join(tmpdir(), 'ynot-save-'));
+  workspace = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-save-')));
 });
 
 test.afterAll(() => {
@@ -94,6 +102,7 @@ test.describe('save', () => {
 
   test.beforeAll(async () => {
     app = await launchApp();
+    await app.grantPath(workspace, true);
   });
   test.afterAll(async () => {
     await app.close();
@@ -231,6 +240,7 @@ test.describe('read-only files', () => {
 
   test.beforeAll(async () => {
     app = await launchApp();
+    await app.grantPath(workspace, true);
     path = stage('blank.pdf', 'locked.pdf');
     // Read-only on all three: Node maps the mode to the read-only attribute on Windows.
     chmodSync(path, 0o444);
@@ -284,6 +294,7 @@ test.describe('the close flow', () => {
 
   test.beforeAll(async () => {
     app = await launchApp();
+    await app.grantPath(workspace, true);
   });
   test.afterAll(async () => {
     await app.close();
@@ -356,6 +367,7 @@ test.describe('the close flow', () => {
 test.describe('quitting with unsaved work', () => {
   test('the app asks first, and goes when the reader says not to save', async () => {
     const app = await launchApp();
+    await app.grantPath(workspace, true);
     const path = stage('blank.pdf', 'quit-me.pdf');
     await openPath(app, path);
     await app.run('dev.documentApply', { kind: 'rotate', page: 0, rotation: 90 });
@@ -378,6 +390,7 @@ test.describe('recovery after a crash', () => {
 
     // ---- the session that is about to be killed ------------------------------------------------
     const first = await launchApp();
+    await first.grantPath(workspace, true);
     await openPath(first, path);
     await first.run('dev.documentApply', { kind: 'rotate', page: 0, rotation: 90 });
     expect(((await first.run('file.save')) as { saved: boolean }).saved).toBe(true);
@@ -396,6 +409,7 @@ test.describe('recovery after a crash', () => {
 
     // ---- the next launch, with the same user-data directory ------------------------------------
     const second = await launchApp({ reuseUserData: true });
+    await second.grantPath(workspace, true);
     try {
       const dialog = second.page.locator('#save-recovery-dialog');
       await expect(dialog).toBeVisible({ timeout: 20_000 });
@@ -432,6 +446,7 @@ test.describe('recovery after a crash', () => {
       await expect(second.page.locator('canvas').first()).toBeVisible();
       crash(second);
       const third = await launchApp({ reuseUserData: true });
+      await third.grantPath(workspace, true);
       try {
         const recovery = third.page.locator('#save-recovery-dialog');
         await expect(recovery).toBeVisible({ timeout: 20_000 });

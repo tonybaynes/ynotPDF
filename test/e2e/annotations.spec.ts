@@ -13,12 +13,20 @@
  */
 
 import { chromium, expect, test, type Frame, type Page } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  realpathSync,
+  copyFileSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { PDFDict, PDFDocument, PDFHexString, PDFName, PDFString } from 'pdf-lib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { launchApp, type App } from './harness';
-import { expectReadable } from './layout';
+import { expectInsideWindow, expectReadable } from './layout';
 
 const FIXTURES = join(process.cwd(), 'test', 'fixtures');
 
@@ -63,8 +71,9 @@ let app: App;
 let workspace: string;
 
 test.beforeAll(async () => {
+  workspace = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-m30-')));
   app = await launchApp();
-  workspace = mkdtempSync(join(tmpdir(), 'ynot-m30-'));
+  await app.grantPath(workspace, true);
   // Answer the identity question once, up front: every annotation carries an author, and the
   // dialog would otherwise block the first one in every test.
   await app.run('annot.identity', { name: 'E2E Reader', initials: 'ER', email: '' });
@@ -169,6 +178,90 @@ async function until<T>(probe: () => Promise<T>, ready: (value: T) => boolean, t
 }
 
 // ---- the commands and the tools ---------------------------------------------------------------
+
+test('untrusted rich note content cannot replace app layout or introduce interactive elements', async () => {
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([400, 400]);
+  const rich =
+    '<p id="ribbon" class="ribbon-body" style="position:fixed;inset:0;z-index:2147483647">' +
+    '<b>Readable bold note</b><span style="color:#112233;position:fixed;inset:0"> coloured text</span>' +
+    '<form><input autofocus value="Fake password" /></form>' +
+    '<iframe src="https://example.invalid/steal"></iframe>' +
+    '<img src="https://example.invalid/track" onerror="document.body.remove()" /></p>';
+  page.node.set(
+    PDFName.of('Annots'),
+    pdf.context.obj([
+      pdf.context.register(
+        pdf.context.obj({
+          Type: 'Annot',
+          Subtype: 'Text',
+          Rect: [100, 200, 120, 220],
+          Contents: PDFString.of('Readable bold note coloured text'),
+          RC: PDFString.of(rich),
+          T: PDFString.of('Synthetic note'),
+          Name: 'Comment',
+          F: 4,
+        }),
+      ),
+    ]),
+  );
+  const path = join(workspace, 'hostile-note.pdf');
+  writeFileSync(path, await pdf.save());
+  try {
+    await openPath(path);
+    await app.run('annot.selectAll');
+    const note = must(
+      (await annotations()).find((row) => row.subtype === 'Text'),
+      'imported note',
+    );
+    // Prove the PDF reader delivered the hostile source, not an already-sanitised fixture.
+    expect(note.extra['richContents']).toContain('position:fixed');
+    await app.run('annot.edit', { id: note.id });
+    const popup = app.page.locator('#annot-popup');
+    const body = popup.locator('.annot-popup-body');
+    await expect(popup).toBeVisible();
+    await expect(body.locator('b')).toHaveText('Readable bold note');
+    await expect(body).toContainText('coloured text');
+    await expect(
+      body.locator('input, form, iframe, img, script, [id], [class], [onerror]'),
+    ).toHaveCount(0);
+    expect(await body.innerHTML()).not.toMatch(/position|z-index|inset|https:/);
+    // Default readable colours affect presentation only; the authored colour survives.
+    expect(await body.innerHTML()).toContain('#112233');
+    for (const theme of ['graphite', 'midnight', 'daylight', 'high-contrast']) {
+      await app.run('view.theme.set.' + theme);
+      await expectReadable(body);
+    }
+    await popup.getByLabel('Use readable text colours').uncheck();
+    await expect(body.locator('span')).toHaveCSS('color', 'rgb(17, 34, 51)');
+    await popup.getByLabel('Use readable text colours').check();
+    await expectReadable(body);
+    await expect(app.page.locator('#ribbon')).toHaveCount(1);
+    await expectInsideWindow(popup);
+    const screenshot = test.info().outputPath('sanitised-rich-note.png');
+    await app.page.screenshot({ path: screenshot });
+    await test.info().attach('sanitised rich note', { path: screenshot, contentType: 'image/png' });
+    await popup.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(popup).toHaveCount(0);
+    await expect
+      .poll(
+        async () => (await annotations()).find((row) => row.id === note.id)?.extra['richContents'],
+      )
+      .toContain('#112233');
+    expect(await app.run('file.save')).toMatchObject({ saved: true });
+    const savedPdf = await PDFDocument.load(readFileSync(path));
+    const savedNote = savedPdf.getPages()[0]?.node.Annots()?.lookup(0, PDFDict);
+    const savedValue = savedNote?.lookup(PDFName.of('RC'));
+    const savedRich =
+      savedValue instanceof PDFString || savedValue instanceof PDFHexString
+        ? savedValue.decodeText()
+        : null;
+    expect(savedRich).toContain('#112233');
+    expect(savedRich).not.toMatch(/position|onerror|iframe|input/);
+  } finally {
+    await closeAll();
+  }
+});
 
 test.describe('the module is wired in', () => {
   test.afterEach(closeAll);

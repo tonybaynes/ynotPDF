@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "artifacts": [
+    {
+      "id": "pdfium-wasm",
+      "package": "@hyzyla/pdfium",
+      "version": "2.1.13",
+      "file": "node_modules/@hyzyla/pdfium/dist/pdfium.wasm",
+      "source": "https://github.com/paulocoutinhox/pdfium-lib/releases/tag/7243",
+      "provenance": "Byte-identical to release/node/pdfium.wasm in release7243 wasm.tgz. Build configuration selects chromium/7243 and Emscripten4.0.10; exact source checkout is not attested by the archive.",
+      "reviewComplete": false,
+      "notices": [],
+      "openItems": [
+        "Obtain and review the complete compiled-component and notice inventory for the pinned binary, including PDFium dependencies and Emscripten runtime."
+      ],
+      "sha256": "71aec412a303a0405baee21c3d6d3f30ad2033dc02444130fe476be3976e2d09"
+    },
+    {
+      "id": "qpdf-wasm",
+      "package": "@neslinesli93/qpdf-wasm",
+      "version": "0.3.0",
+      "file": "node_modules/@neslinesli93/qpdf-wasm/dist/qpdf.js",
+      "source": "https://github.com/neslinesli93/qpdf-wasm/blob/e661db2d17e391a9fbe6b350b4ea6dbd8c385891/Dockerfile",
+      "provenance": "Published package includes WebAssembly in its JavaScript artifact. Source build recipe pins qpdf856d32c610334855d30e96d25eb5f9636fb62f08, zlib21767c654d31d2dccdde4330529775c6c5fd5389, jpeg-turbo7aa2a898c564041a24b09d0a6e780aaa632d08d3 and Emscripten3.1.74. No local Docker build performed.",
+      "reviewComplete": false,
+      "notices": [],
+      "openItems": [
+        "Obtain a complete wrapper licence notice: the npm package declares ISC but ships no ISC licence text.",
+        "Review and bundle notices for qpdf and all compiled dependencies/runtime."
+      ],
+      "sha256": "c0e8fe62e0c3385dd8cb5d6b613f74d87a4138a3a3343e2add45a067a14d0884"
+    }
+  ]
+}

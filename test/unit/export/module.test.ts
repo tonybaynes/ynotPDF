@@ -298,7 +298,8 @@ describe('the manifest', () => {
 
   it('gates every export on the permission the PDF can withhold', () => {
     const byId = new Map((manifest.commands ?? []).map((c) => [c.id, c]));
-    expect(byId.get('convert.exportImages')?.permission).toBe('extract-for-accessibility');
+    expect(byId.get('convert.exportImages')?.permission).toBe('copy');
+    expect(byId.get('convert.exportAllImages')?.permission).toBe('copy');
     expect(byId.get('convert.exportText')?.permission).toBe('copy');
     expect(byId.get('convert.exportHtml')?.permission).toBe('copy');
     expect(byId.get('convert.exportRtf')?.permission).toBe('copy');

@@ -136,7 +136,7 @@ const EXPORT_IMAGES: CommandSpec = {
   icon: 'file-image',
   shortcut: 'Mod+Shift+E',
   description: 'PNG, JPEG, TIFF or BMP at a resolution you choose',
-  permission: 'extract-for-accessibility',
+  permission: 'copy',
   when: hasDocument,
   async run(ctx): Promise<ExportOutcome | null> {
     const service = exports_(ctx);
@@ -217,7 +217,7 @@ const EXPORT_ALL_IMAGES: CommandSpec = {
   category: 'Convert',
   icon: 'images',
   description: 'Every picture inside the document, in the format the document stores it in',
-  permission: 'extract-for-accessibility',
+  permission: 'copy',
   when: hasDocument,
   async run(ctx): Promise<ExportOutcome | null> {
     const service = exports_(ctx);

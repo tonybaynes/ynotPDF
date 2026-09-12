@@ -14,7 +14,7 @@
  * - `subscribe` notifies after every change so menus and the status bar can update.
  */
 
-import { CompositeCommand, type Command } from './Command';
+import { CompositeCommand, CommandRollbackError, type Command } from './Command';
 
 export interface UndoStackState {
   readonly canUndo: boolean;
@@ -35,6 +35,11 @@ export class UndoStack {
   private savedIndex = 0;
   private mutationRevision = 0;
   private pendingMutations = 0;
+  private failure: CommandRollbackError | null = null;
+
+  get integrityFailure(): CommandRollbackError | null {
+    return this.failure;
+  }
 
   /** Changes for queued edits too, so a pending edit cannot be marked saved. */
   get revision(): number {
@@ -48,6 +53,7 @@ export class UndoStack {
   /** Reads engine and model together between commands; never call apply from inside this. */
   capture<T>(read: () => T | Promise<T>): Promise<T> {
     const run = this.chain.then(() => {
+      if (this.failure) throw this.failure;
       if (this.inTransaction) throw new Error('Finish the current edit before saving.');
       return read();
     });
@@ -91,7 +97,10 @@ export class UndoStack {
 
   get isDirty(): boolean {
     return (
-      this.pendingMutations > 0 || this.inTransaction || this.savedIndex !== this.undoList.length
+      this.failure !== null ||
+      this.pendingMutations > 0 ||
+      this.inTransaction ||
+      this.savedIndex !== this.undoList.length
     );
   }
 
@@ -162,10 +171,7 @@ export class UndoStack {
       await fn();
     } catch (error) {
       this.groupStack.pop();
-      for (let i = entry.commands.length - 1; i >= 0; i--) {
-        const c = entry.commands[i];
-        if (c) await c.undo();
-      }
+      await this.rollbackCommands(entry.commands, error);
       throw error;
     }
     this.groupStack.pop();
@@ -227,9 +233,28 @@ export class UndoStack {
   async rollback(): Promise<void> {
     const entry = this.groupStack.pop();
     if (!entry) throw new Error('rollback() without beginTransaction()');
-    for (let i = entry.commands.length - 1; i >= 0; i--) {
-      const c = entry.commands[i];
-      if (c) await c.undo();
+    await this.rollbackCommands(entry.commands);
+  }
+
+  private async rollbackCommands(
+    commands: ReadonlyArray<Command>,
+    original?: unknown,
+  ): Promise<void> {
+    const failures: unknown[] = [];
+    for (const command of [...commands].reverse()) {
+      try {
+        await command.undo();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0) {
+      this.failure = new CommandRollbackError(
+        original === undefined ? failures : [original, ...failures],
+      );
+      this.savedIndex = -1;
+      this.notify();
+      throw this.failure;
     }
     this.notify();
   }
@@ -258,6 +283,7 @@ export class UndoStack {
 
   /** Drops all history, including any open transaction. The saved marker resets to "clean". */
   clear(): void {
+    this.failure = null;
     this.undoList = [];
     this.redoList = [];
     this.savedIndex = 0;
@@ -298,11 +324,23 @@ export class UndoStack {
   private enqueue(task: () => void | Promise<void>): Promise<void> {
     this.pendingMutations++;
     this.mutationRevision++;
-    const run = this.chain.then(task).finally(() => {
-      this.pendingMutations--;
-      this.mutationRevision++;
-      this.notify();
-    });
+    const run = this.chain
+      .then(() => {
+        if (this.failure) throw this.failure;
+        return task();
+      })
+      .catch((error: unknown) => {
+        if (error instanceof CommandRollbackError) {
+          this.failure = error;
+          this.savedIndex = -1;
+        }
+        throw error;
+      })
+      .finally(() => {
+        this.pendingMutations--;
+        this.mutationRevision++;
+        this.notify();
+      });
     // Keep the chain alive even when a task rejects.
     this.chain = run.catch(() => undefined);
     return run;

@@ -7,7 +7,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { realpathSync, copyFileSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchApp, type App } from '../harness';
@@ -20,8 +20,9 @@ let app: App;
 let workspace: string;
 
 test.beforeAll(async () => {
+  workspace = realpathSync.native(mkdtempSync(join(tmpdir(), 'ynot-m04-files-')));
   app = await launchApp({ noDemo: true });
-  workspace = mkdtempSync(join(tmpdir(), 'ynot-m04-files-'));
+  await app.grantPath(workspace, true);
 });
 
 test.afterAll(async () => {
@@ -128,6 +129,7 @@ test('M70 — a password set in the Protect dialog is asked for when the file is
   // right — it would be absurd to ask the reader for a password they typed a moment ago — so the
   // question this test asks (does the file ask?) can only be asked by a fresh launch.
   const second = await launchApp({ noDemo: true, open: [path] });
+  await second.grantPath(workspace, true);
   try {
     const ask = second.page.locator('#password-dialog');
     await expect(ask, 'the protected file opened without asking for a password').toBeVisible({

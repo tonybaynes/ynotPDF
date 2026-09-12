@@ -1,5 +1,7 @@
 # Open work, 2026-09-11
 
+**Current status — 12 September 2026:** Sections 1–11 below preserve earlier investigations. For active audit repairs, verification and worktrees, start at section 12. Findings 1–12 merged in PRs #51–54; #23 was fixed by PR #49. Remaining audit repairs are not yet merged. The Review PDF editor plan task owns the current module trackers, UI test lease and serial merges.
+
 Everything left unfinished on the night `main` was restored to `f1034ba`. Written down because
 five branches and six worktrees are more than anyone should have to reconstruct from memory.
 
@@ -367,3 +369,271 @@ write/read probe returned empty data on this desktop. Those same clipboard tests
 the Windows CI run. No clipboard assertions or skips were weakened. The fourth was the
 annotation race above, also reproduced in CI. CI additionally reported thumbnail navigation
 and narrow ribbon interaction failures that require review on the updated commit.
+
+## 12. Remaining audit repairs — active checkpoint, 12 September 2026
+
+This is an in-progress handover, not a completion claim. Worktree:
+D:\Projects\ynotPDF-audit-rest, branch fix/audit-remaining, based on 9982f5b.
+All changes for findings 13–25 are currently uncommitted. PR 54 for findings
+4–12 remains open; macOS/Linux checks and one Windows check passed, with
+remaining Windows/ARM checks running at this checkpoint. Do not merge until
+all required checks pass. Findings 1–3 are merged; 23 was fixed upstream in PR 49.
+
+Implemented and under verification:
+
+- 13: Combine refuses catalog-dependent forms, names, layers and tags whose
+  structures cannot yet be preserved. Unit tests cover refusal and unchanged sources.
+- 14–16/18: per-window canonical filesystem grants, native selection/recent-open
+  authority, runtime filesystem request validation, exclusive numbered extraction,
+  linked-folder rejection, and native confirmation with an attachment type allowlist.
+  The E2E harness stages authority through a main-process-only test hook; there is no
+  renderer grant channel or product-handler bypass. Dropped files remain pathless.
+- 17: shared rich-text input/output allowlist sanitisation.
+- 19: composite command rollback and an integrity latch after failed rollback.
+- 20: engine readiness and pending requests settle on failure/shutdown; five other
+  worker clients reject pending/future requests after terminal failure.
+- 21: all content exports require copy permission, including recipient restrictions.
+- 22: shared authenticated Open/recovery/reload helper. Protected recovery acceptance
+  tests remain to be completed. ADR 0026 records certificate checkpoint limitations.
+- 24: real SPDX expression parser and conjunctive array policy; packaged binary/font
+  notices and an artifact inventory gate remain unfinished.
+- 25: cross-platform geometry/contrast/focus checks at three scales and four themes.
+  Windows pixel baselines remain; absent macOS/Linux pixel baselines are explicit skips.
+
+Latest local evidence: full unit suite 4,118 passed / 24 skipped with coverage gate
+passing, typecheck passed, and all 12 new visual layout checks passed. The full UI
+suite is still running. Its folder-search case exposed missing explicit fixture-folder
+staging in the harness; two search tests now grant that folder and need a targeted rerun.
+Counts apply to the working tree at each run, not an as-yet nonexistent final commit.
+Logs are outside the repo in:
+C:\Users\tonyb\Documents\Codex\2026-09-11\d-projects-ynotpdf\work\
+
+Before completion: finish protected recovery and hostile-note/combine UI regressions;
+finish packaged notices; review capability escalation and extraction failure paths;
+resolve full UI failures; update each original audit finding without deleting Claude's
+comments; distinguish findings 26–31 assessment notes from unbuilt product modules;
+run final checks on committed state, push, wait for CI and merge. Preserve original
+and Claude worktrees. Remove only our safely merged worktrees/branches afterwards.
+
+Coordination: Tony's Review PDF editor plan task owns PLAN.md/future-module brief
+corrections and four independent worktrees (M11 Fit Visible, M13 vector printing
+appearances, M41 crop aspect ratio, M92 CCITT G4 TIFF). This audit task owns the shared
+contracts/ADRs 0023–0026, filesystem IPC, authenticated opening, worker clients,
+permissions, combine policy, audit notes and open-work. Coordinate shared test harness
+changes and serialize full local UI runs/merges with that task.
+
+### Checkpoint update — PR 54 merged
+
+PR 54 merged on 12 September 2026 at 07:19 UTC as
+`d322de7b43070979fac5ff586a16e39ddbda4d47`, after all eight CI jobs passed,
+including both ARM installer smoke checks. Findings 1–12 are now merged.
+The remaining repair work above is still uncommitted and incomplete.
+
+The full remaining-audit UI run ended with 545 passed, 4 skipped and 10 failed.
+Nine creation/import cases and one folder-search case lacked explicit fixture-folder
+access staging. After correcting those test setup grants, all 58 create/search/print
+UI tests passed (33.8 seconds). The separate 12 geometry/contrast/focus checks passed.
+No UI process from this audit task remains active at this checkpoint. A final full run
+on the completed, committed repair state remains required.
+
+### Tony's visual review preference — 12 September 2026
+
+Tony explicitly welcomes stronger end-to-end tests and actual screenshot inspection
+of the running application, to catch problems before he meets them. Capture synthetic
+fixtures only, retain useful evidence, inspect the images (not just their existence),
+and turn confirmed defects into regression tests. Cover themes, UI scales, panels,
+dialogs, keyboard focus and real save/reopen workflows. Keep test windows hidden.
+
+The expanded visual-layout suite captures start/focus, a document with both panels,
+and Preferences across four themes at 100/150/200 percent. Initial run: 8 passed,
+4 failed; all four 200-percent cases exposed clipped Ready status text. Visual inspection
+also showed zoom and theme controls overlapping at 150 percent. Statusbar CSS now
+wraps controls to available space and gives the zoom field sufficient width, pending
+focused rerun and inspection of the resulting screenshots. CI retains these PNGs for
+seven days even on passing jobs. No pixel-baseline tolerances were relaxed.
+
+### Visual review result — status bar correction
+
+The corrected statusbar passed all 28 focused UI tests: 12 theme/scale captures,
+6 existing window/scale tests and 10 existing Windows screenshot comparisons
+(50.7 seconds, exit 0). Existing pixel baselines and tolerances were unchanged.
+Build and focused ESLint passed. These are local working-tree results, not a final
+merged/CI claim; the statusbar and test changes remain part of the unfinished audit batch.
+
+Actual images inspected before/after: Midnight document/panels at 150 percent,
+High Contrast document/panels at 200 percent, and Daylight Preferences at 100/200
+percent. The zoom/theme overlap is gone, Ready and Fit width are fully visible,
+and the right status controls use a second row when necessary. Preferences remains
+opaque, with visible focus and a reachable Close button; its long content scrolls.
+The synthetic comments fixture deliberately includes overlapping markups; those
+are document content, not a newly introduced shell layout fault.
+
+Successful captures live outside the repository under the review work folder:
+`visual-review-fixed-results/visual-layout-visual-layou-f76b7-nces-readable-and-reachable/document-and-panels.png`
+(Midnight 150 percent),
+`visual-review-fixed-results/visual-layout-visual-layou-66c6b-nces-readable-and-reachable/document-and-panels.png`
+(High Contrast 200 percent), and
+`visual-review-fixed-results/visual-layout-visual-layou-55c9f-nces-readable-and-reachable/preferences.png`
+(Daylight 200 percent). The suite captured 36 distinct views; only representative
+images were individually inspected, not every captured image.
+
+Additional open visual finding: M92's independent screenshot review exposed native
+select text truncation at 200 percent in Format, black-and-white method and TIFF
+compression. I inspected its high-contrast image and confirmed the clipped choices.
+Coordinator has this follow-up; standard scrollWidth checks miss native select text.
+An opt-in native-field width regression and M92 layout/label repair remain required.
+Do not mark this issue resolved on the strength of existing geometry tests.
+
+Fit-label follow-up: all 12 theme/scale cases passed again (17.8 seconds, exit 0),
+now measuring each real Fit page / Fit width / Fit visible label in the input's
+computed font against its available content width. Focused ESLint passed. The
+200-percent High Contrast Fit visible screenshot was individually inspected and
+shows the full label. Evidence is in visual-fit-label-results, matching the other
+capture paths above, under fit-visible-label.png. This validates the label layout,
+not M11's separate fit geometry/raster repair; that remains owned by the M11 task.
+
+### Independent UI repair branch
+
+The screenshot-led statusbar fix and stronger visual-layout checks have also been copied
+into a small independent worktree, D:\Projects\ynotPDF-ui-review, branch
+codex/ui-readable-controls, based on origin/main at 214f7f4. That branch contains no
+unfinished security/recovery audit code. It adds short M92 native choice labels with
+dynamic wrapping explanations and a grid that stacks with UI scale; enum values and
+permission gates are unchanged. A reusable opt-in native-field text-width test catches
+what scrollWidth misses. It is exercised against a narrow select and the actual old
+long TIFF label, temporarily restored in the real dialog.
+
+Initial independent results: 26 UI tests passed, 165 export unit tests passed, full lint
+(including typecheck/styles/i18n) and build passed. Group4 screenshots from all four
+200-percent themes were inspected and show full choice/explanation and reachable footer
+buttons. Upper Format/Method captures are queued behind coordinator's local UI lease,
+then this small branch should be committed/pushed for CI. PR63 is not yet merged;
+Original/PNG option integration verification must follow it. Keep this dependency explicit.
+
+Use C:\Users\tonyb\AppData\Local\Temp\ynotpdf-ui-slot.json before any local Electron
+run. Only coordinator task 01a09469-799c-7d20-8cc5-168ca554d892 assigns the lease;
+ownerThreadId must match this task 01a08f69-dfd6-71c0-a622-badd897cf217. Notify release
+after actual process exit. CI runs are independent. Do not overwrite coordinator PLAN
+or CHECKLIST changes. Once the UI PR merges, integrate it back into audit-rest and resolve
+its duplicate uncommitted statusbar/visual-layout changes to the improved implementation.
+
+UI PR #65 is now pushed at 6cececa on codex/ui-readable-controls, clean worktree.
+Final upper Format/Method captures passed with five focused tests; High Contrast 200%
+images were inspected. Coordinator independently reviewed all three HC sections and
+will serialize merge after required CI. No local UI process is active; lease released.
+
+### Additional audit regressions — 12 September 2026
+
+Extraction now removes its exclusively created partial leaf after write/close failure,
+without removing an existing collision. A fault-injected disk-full test writes partial
+bytes before throwing, proves the original survives, and retries the same numbered name.
+39 focused filesystem tests passed. Required folder-search options are validated too.
+Settings-path escalation through recent:add, recent:open and window:new has E2E assertions.
+
+Two new security UI cases exercise actual crash/restart: wrong standard password then
+Cancel must keep recovery, retry must restore edits and restrictions; certificate working
+checkpoints must restore recipient rights without owner authority. Both assert that a
+remembered JSON source path grants no filesystem authority and recovery stays pathless.
+Added imported hostile /RC note and Combine form-catalog refusal cases. Typecheck and
+focused ESLint pass; build passes. Six focused UI tests are queued behind M41's lease;
+these new E2E cases have not run yet. Coordinator owns the lease file.
+
+Audit 24 evidence: installed @hyzyla/pdfium/dist/pdfium.wasm is byte-identical to
+pdfium-lib release7243 release/node/pdfium.wasm, SHA256
+71aec412a303a0405baee21c3d6d3f30ad2033dc02444130fe476be3976e2d09.
+Downloaded archive SHA256 efd95da1a8fcf162e63639176b57d9e60fb01b301d740d949f40365522d9eaf5.
+Archive stored outside repo in work/pdfium-7243-wasm.tgz and contains no license notices.
+Upstream tag7243 modules/config.py selects PDFium chromium/7243 and Emscripten4.0.10;
+current branch SHA591ce25a21001d8c26888e8b3af5426e90585dbe. This proves the binary
+release match, not reproducibility from today's branch tip. Build defaults disable V8,
+XFA and partition_alloc. Qpdf-wasm0.3.0 pinned gitHead's Dockerfile was READ ONLY (no
+Docker run): qpdf856d32c610334855d30e96d25eb5f9636fb62f08, zlib21767c654d31d2dccdde4330529775c6c5fd5389,
+jpeg-turbo7aa2a898c564041a24b09d0a6e780aaa632d08d3, Emscripten3.1.74.
+Artifact inventory/notices gate is still NOT IMPLEMENTED. Coordinator notified of possible
+minimal electron.vite.config.ts/electron-builder.yml/package scripts changes; no shared
+build-config edits yet. Do not claim #24 complete from parser tests alone.
+
+### Verification and release-gate checkpoint — 12 September 2026
+
+PR65 is pushed at69b77d3b826b1df516979e06e56b2ae0aed77441 after merging M11's
+main2696119. Full lint/build and331 view/export unit tests pass. All32 focused
+visual/layout/FitVisible UI tests passed38.5s exit0; lease released to coordinator.
+Final platform CI/merge is still pending. Do not independently merge; the central
+Review PDF editor plan task owns serial merges, assignments and all local UI leases.
+
+The broad audit branch full unit run passed4126 tests,24 skipped, coverage gates pass
+(exit0,49.68s with two workers). Full lint also exited0. Six focused security/boundary/
+rich-note/Combine cases are now passing: initial4/6, then2/2 after correcting the test
+fixture filename and the dev recovery result shape. These were test setup corrections,
+not production failures. Unknown-sender/auxiliary-window/child-frame IPC unit tests pass.
+
+Actual rich-note screenshot inspection exposed poor contrast for valid authored dark
+colours. The note editor now defaults to readable theme colours, with a checkbox for
+viewing original colours; original inline colour attributes remain in the saved fragment.
+A strengthened one-case UI test cycles four themes, toggles the display mode, saves and
+checks the real PDF /RC. This final variation is built/queued but has not run yet.
+Screenshot path from before the readability fix:
+work/audit-security-ui-results/annotations-untrusted-rich-26676-roduce-interactive-elements/sanitised-rich-note.png.
+
+Audit24 technical changes are now implemented: actual Vite build-input manifests for
+main/preload/renderer/workers include bundled dev dependencies such as Lucide, increasing
+the gate from44 production packages to45 runtime/bundled packages. Downloaded fonts and
+opaque PDFium/qpdf artifacts have pinned hashes. out/notices is included by the existing
+packaging pattern. npm run licenses:release deliberately exits1 for four known incomplete
+wrapper/compiled-component notice reviews; ordinary development builds print these blockers
+and never report releaseReady. See docs/security/artifact-notices.md. No complete compiled
+SBOM or distribution-rights conclusion is claimed. Those prerequisites belong to M131.
+The strict gate was actually executed and rejected the current missing reviews;16 focused
+inventory/SPDX tests pass. Shared build configuration changes are coordinator-approved.
+
+Codex_Audit.md now has a resolution note for every numbered section, preserving original
+text and every Claude comment. Historical handovers have current-status banners. The
+remaining audit source is STILL UNCOMMITTED pending the one-case M30 verification, then
+checkpoint commit, integration of current main/mergedUI, final full checks, PR/CI and serial
+merge. PR66 carries a coordinator-owned fix for nonreentrant PDFium page-hash tests;
+consume it via main rather than duplicating it. M91's long Page select label is a recorded
+visual follow-up after its import branch merges; no fix yet. Original/PNG export option
+verification remains dependent on PR63.
+
+M30 final focused UI case passed (1/1,3.0s,exit0). It measures contrast in all four
+themes, toggles original/readable colours and verifies preserved colour in the saved
+PDF /RC. Its first run exposed a test assumption about PDFString versus PDFHexString;
+both valid PDF string encodings are now handled. Final High Contrast screenshot was
+individually inspected: note words and checkbox are readable and Save/Cancel accessible.
+Evidence: work/audit-note-readable-final-results/annotations-untrusted-rich-26676-roduce-interactive-elements/sanitised-rich-note.png.
+No UI process remains active; coordinator has the lease again.
+
+The duplicate uncommitted statusbar/visual-layout/CI screenshot changes were removed from
+this audit branch because they are already preserved in the independent PR65 branch.
+Consume that PR through main once merged; do not duplicate its implementation here.
+The broader audit checkpoint therefore covers13–24 plus assessment/handovers26–31;
+#25 is tracked by PR65. A final integrated full UI run and exact-head CI remain required.
+
+### Independent review follow-up � 12 September 2026
+
+Broad audit checkpoint8b8c179 is committed. Current main2696119 merged cleanly as3a08319;
+its full lint/build passed and4241 unit tests passed,24 skipped, with coverage gates
+passing. Follow-up4af6a7f resolves indirect MarkInfo flags before Combine's preservation
+check;32 Combine unit tests passed and the build passed afterwards.
+
+The coordinator found two additional review blockers, now repaired locally pending final
+verification/commit: attachment name truncation could change an approved .pdf suffix into
+.ps1/.cmd/.exe, and worker messageerror/malformed envelopes could strand callers. Main now
+validates the exact stable sanitized basename and passes it unchanged to the temp writer.
+Three extension regression cases failed before the repair; the registered IPC test also
+asserts rejection before confirmation, writing or opening. No executable was launched.
+All six audited worker clients settle decoding failures, validate transport envelopes before
+dispatch, remove listeners on stop and handle cancellation-post exceptions. Focused tests
+cover current/future callers and engine readiness before/after startup. ADR0024 records the
+minimal shared transport helper; it does not claim deep validation of PDF result contents.
+
+Full lint and units are running in audit-review-followup-{lint,unit}.log under the external
+work directory. A final build, coordinator review and broad PR/CI remain pending. PR65 stays
+frozen at69b77d3 awaiting CI and the coordinator's serial merge. No local UI is running or
+allocated to this audit task. Request a full UI slot only after these review blockers pass.
+
+Review follow-up verification: full units/coverage exited0,4290 passed/24 skipped,72.05s.
+The final type-only interface cleanup and test lint corrections were followed by113 focused
+worker/converter/capability/registered-IPC tests passing (1.46s). Full lint/build exited0.
+Commit and immutable-head review are next. Coordinator explicitly queues full audit UI
+after M13's focused slot and M11's full run; no audit UI lease yet.

@@ -76,6 +76,7 @@ let app: App;
 
 test.beforeAll(async () => {
   app = await launchApp();
+  await app.grantPath(fixtures, true);
 });
 
 test.afterAll(async () => {

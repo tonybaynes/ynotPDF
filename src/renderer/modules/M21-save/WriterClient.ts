@@ -10,6 +10,7 @@
  * behaviour under test is the behaviour that ships.
  */
 
+import { assertWorkerEnvelope } from '@shared/workerMessages';
 import { FullRewriteWriter } from '@engine/writers/FullRewriteWriter';
 import {
   WriteCancelled,
@@ -24,8 +25,13 @@ import type { WriterFromWorker, WriterToWorker } from './writerProtocol';
 /** Minimal worker surface we rely on, so a test can pass a fake. */
 export interface WriterWorkerLike {
   postMessage(message: WriterToWorker, transfer?: Transferable[]): void;
-  addEventListener(type: 'message', listener: (ev: MessageEvent) => void): void;
+  addEventListener(type: 'message' | 'messageerror', listener: (ev: MessageEvent) => void): void;
   addEventListener(type: 'error', listener: (ev: ErrorEvent) => void): void;
+  removeEventListener?(
+    type: 'message' | 'messageerror',
+    listener: (ev: MessageEvent) => void,
+  ): void;
+  removeEventListener?(type: 'error', listener: (ev: ErrorEvent) => void): void;
   terminate(): void;
 }
 
@@ -51,6 +57,22 @@ export class WriterClient {
   private readonly worker: WriterWorkerLike | null;
   private readonly pending = new Map<number, Pending>();
   private nextId = 1;
+  private failure: Error | null = null;
+  private readonly onMessage = (ev: MessageEvent): void => {
+    if (this.failure) return;
+    try {
+      assertWorkerEnvelope(ev.data, 'writer');
+      this.dispatch(ev.data as WriterFromWorker);
+    } catch (error) {
+      this.stop(error instanceof Error ? error : new Error(String(error)));
+    }
+  };
+  private readonly onError = (ev: ErrorEvent): void => {
+    this.stop(new Error(`The writer stopped: ${ev.message}`));
+  };
+  private readonly onMessageError = (): void => {
+    this.stop(new Error('The writer stopped: a worker message could not be read'));
+  };
 
   /** Spawns the module worker built from `writer.worker.ts`, or runs in-process without one. */
   static spawn(): WriterClient {
@@ -65,14 +87,9 @@ export class WriterClient {
   constructor(worker: WriterWorkerLike | null) {
     this.worker = worker;
     if (!worker) return;
-    worker.addEventListener('message', (ev: MessageEvent) => {
-      this.dispatch(ev.data as WriterFromWorker);
-    });
-    worker.addEventListener('error', (ev: ErrorEvent) => {
-      const error = new Error(`The writer stopped: ${ev.message}`);
-      for (const p of this.pending.values()) p.reject(error);
-      this.pending.clear();
-    });
+    worker.addEventListener('message', this.onMessage);
+    worker.addEventListener('error', this.onError);
+    worker.addEventListener('messageerror', this.onMessageError);
   }
 
   /** True when writing happens off the main thread. */
@@ -81,6 +98,7 @@ export class WriterClient {
   }
 
   write(job: WriteJob): WriteHandle {
+    if (this.failure) return { promise: Promise.reject(this.failure), cancel: () => undefined };
     return this.worker ? this.writeInWorker(this.worker, job) : writeInProcess(job);
   }
 
@@ -91,14 +109,23 @@ export class WriterClient {
     });
     // The buffer is transferred, so the caller's copy is detached — always hand over a copy of
     // bytes you still need. `SaveService` does.
-    worker.postMessage(
-      { kind: 'write', id, bytes: job.bytes, plan: job.plan, options: job.options ?? {} },
-      [job.bytes.buffer as ArrayBuffer],
-    );
+    try {
+      worker.postMessage(
+        { kind: 'write', id, bytes: job.bytes, plan: job.plan, options: job.options ?? {} },
+        [job.bytes.buffer as ArrayBuffer],
+      );
+    } catch (error) {
+      this.stop(error instanceof Error ? error : new Error(String(error)));
+    }
     return {
       promise,
       cancel: () => {
-        if (this.pending.has(id)) worker.postMessage({ kind: 'cancel', id });
+        if (!this.pending.has(id)) return;
+        try {
+          worker.postMessage({ kind: 'cancel', id });
+        } catch (error) {
+          this.stop(error instanceof Error ? error : new Error(String(error)));
+        }
       },
     };
   }
@@ -125,7 +152,16 @@ export class WriterClient {
   }
 
   dispose(): void {
-    for (const p of this.pending.values()) p.reject(new WriteCancelled());
+    this.stop(new WriteCancelled());
+  }
+
+  private stop(error: Error): void {
+    if (this.failure) return;
+    this.failure = error;
+    this.worker?.removeEventListener?.('message', this.onMessage);
+    this.worker?.removeEventListener?.('error', this.onError);
+    this.worker?.removeEventListener?.('messageerror', this.onMessageError);
+    for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
     this.worker?.terminate();
   }
