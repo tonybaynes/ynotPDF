@@ -11,9 +11,14 @@ class WorkerPort implements ImportDeskewWorker {
   terminate = vi.fn();
   message: (event: MessageEvent<ImportDeskewAnswer>) => void = () => undefined;
   error: (event: ErrorEvent) => void = () => undefined;
-  addEventListener(type: 'message' | 'error', listener: (event: never) => void): void {
+  messageerror: (event: MessageEvent) => void = () => undefined;
+  addEventListener(
+    type: 'message' | 'error' | 'messageerror',
+    listener: (event: never) => void,
+  ): void {
     if (type === 'message') this.message = listener as typeof this.message;
-    else this.error = listener as typeof this.error;
+    else if (type === 'error') this.error = listener as typeof this.error;
+    else this.messageerror = listener as typeof this.messageerror;
   }
   reply(data: ImportDeskewAnswer): void {
     this.message({ data } as MessageEvent<ImportDeskewAnswer>);
@@ -28,6 +33,48 @@ const converted: ConvertResult = {
 const result = { bytes: new Uint8Array([4, 5]), pageCount: 1, warnings: ['Blank page'] };
 
 describe('private image straightening worker lifecycle', () => {
+  it.each([
+    null,
+    {},
+    { kind: 'unexpected' },
+    { kind: 'failed' },
+    { kind: 'progress', fraction: NaN, message: 'Measuring' },
+    { kind: 'progress', fraction: 2, message: 'Measuring' },
+    { kind: 'done' },
+    { kind: 'done', result: { ...result, bytes: [1, 2] } },
+    { kind: 'done', result: { ...result, bytes: new Uint8Array() } },
+    { kind: 'done', result: { ...result, pageCount: 1.5 } },
+    { kind: 'done', result: { ...result, pageCount: 0 } },
+    { kind: 'done', result: { ...result, warnings: [1] } },
+  ])('rejects malformed runtime answers and ignores late success: %j', async (answer) => {
+    const port = new WorkerPort();
+    const job = startImportDeskew(converted, undefined, () => port);
+    const rejected = expect(job.promise).rejects.toThrow('invalid worker message');
+    port.message({ data: answer } as MessageEvent<ImportDeskewAnswer>);
+    port.reply({ kind: 'done', result });
+    job.cancel();
+    await rejected;
+    expect(port.terminate).toHaveBeenCalledTimes(1);
+  });
+  it('settles unreadable transport messages and progress callback failures', async () => {
+    for (const failure of ['messageerror', 'progress']) {
+      const port = new WorkerPort();
+      const job = startImportDeskew(
+        converted,
+        () => {
+          throw new Error('Progress failed');
+        },
+        () => port,
+      );
+      const rejected = expect(job.promise).rejects.toThrow();
+      if (failure === 'messageerror') port.messageerror({} as MessageEvent);
+      else port.reply({ kind: 'progress', fraction: null, message: 'Measuring' });
+      port.reply({ kind: 'done', result });
+      job.cancel();
+      await rejected;
+      expect(port.terminate).toHaveBeenCalledTimes(1);
+    }
+  });
   it('copies the input before transfer and preserves title/warnings on success', async () => {
     const port = new WorkerPort();
     const progress = vi.fn();
