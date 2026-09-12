@@ -6,7 +6,7 @@ import { Qpdf, type QpdfFactory } from '../../../src/engine/security/qpdf';
 import { PDFDocument, degrees } from 'pdf-lib';
 import { launchApp, fixturePath, type App } from '../harness';
 import { journey } from '../journey';
-import { expectNothingClipped, expectReadable } from '../layout';
+import { expectNothingClipped, expectReadable, expectWindowSound } from '../layout';
 
 let app: App;
 test.beforeAll(async () => {
@@ -119,11 +119,12 @@ test('M13 — the settled preview and prepared printer sheet include unsaved tex
     },
   });
   const j = journey(app);
-  const field = (await app.run('form.place', {
-    role: 'text',
-    page: 0,
-    rect: { x0: 60, y0: 620, x1: 280, y1: 650 },
-  })) as { name: string };
+  await j.clickRibbon('form', 'Text field');
+  await j.dragOnPageAt([0.1, 0.23], [0.47, 0.265]);
+  await expect.poll(async () => ((await app.run('dev.formFields')) as unknown[]).length).toBe(1);
+  const fields = (await app.run('dev.formFields')) as Array<{ name: string }>;
+  const field = fields[0];
+  if (!field) throw new Error('The Text field tool created no field');
   await j.clickRibbon('form', 'Fill In Form');
   await app.page
     .locator('.layer-widget')
@@ -138,8 +139,17 @@ test('M13 — the settled preview and prepared printer sheet include unsaved tex
     width: 120,
     height: 60,
   });
-  await app.run('draw.stamp', { page: 0, x: 150, y: 250, stamp });
-  await app.run('annot.identity', { name: 'Print reviewer', initials: 'PR', email: '' });
+  await j.openPanel('nav.stamps');
+  await j.clickPanelTile('nav.stamps', `.stamp-tile[data-stamp="${String(stamp)}"]`);
+  await j.clickPageAt([0.25, 0.7]);
+  await expect
+    .poll(
+      async () =>
+        ((await app.run('dev.annotations', { page: 0 })) as Array<{ subtype: string }>).filter(
+          (annotation) => annotation.subtype === 'Stamp',
+        ).length,
+    )
+    .toBe(1);
   await j.clickRibbon('comment', 'Text Box');
   await j.dragOnPageAt([0.55, 0.3], [0.9, 0.38]);
   await app.page.locator('.annot-editor').fill('Unsaved preview text');
@@ -229,6 +239,7 @@ test('M13 — the settled preview and prepared printer sheet include unsaved tex
   expect(await app.run('dev.documentJournal')).toEqual(journal);
   await app.page.keyboard.press('ControlOrMeta+z');
   expect(await app.run('dev.documentJournal')).not.toEqual(journal);
+  await expectWindowSound(app.page);
 });
 
 test('M13 — unresolved preview reports its error, excluded comments load, and a closed dialog cannot publish late work', async () => {
@@ -269,6 +280,7 @@ test('M13 — unresolved preview reports its error, excluded comments load, and 
     'no usable normal appearance',
   );
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expectWindowSound(app.page);
 });
 
 for (const authority of ['none', 'low', 'full'] as const) {
@@ -330,6 +342,7 @@ for (const authority of ['none', 'low', 'full'] as const) {
         .click();
     }
     expect(await app.run('dev.securityState')).toEqual(before);
+    await expectWindowSound(app.page);
   });
 }
 
@@ -402,5 +415,6 @@ for (const [mode, rotation] of [
     const spool = await preparedSheets();
     expect(await pixelHashes(spool)).toEqual(await pixelHashes(previews));
     expect(await app.run('dev.documentJournal')).toEqual(before);
+    await expectWindowSound(app.page);
   });
 }
