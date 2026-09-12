@@ -426,8 +426,10 @@ needs.
 - **Batch hooks for M120.** Every operation is a pure function over bytes in
   `src/engine/ops/`, with an options object and an `AbortSignal`. M120 registers
   them by name; nothing needs a document or a window.
-- **The preference M130 renders and M91 reads**, `scan.autoDeskew`, is declared
-  here in this module's settings schema.
+- **The preference M130 renders**, `scan.autoDeskew`, is declared here in this
+  module's settings schema. Completion review on 12 September 2026 confirmed
+  that M91's import path still does not read it; the automatic import hook is
+  unfinished original scope and needs a separate repair.
 
 **What Tony should know.**
 

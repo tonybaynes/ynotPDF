@@ -15,7 +15,7 @@
 
 import { el } from '@app/dom';
 import type { PageGeometry } from '@engine/geometry';
-import { fitCropRatio, pageCropRatio, usableCrop } from './cropRatio';
+import { fitCropRatio, pageCropRatio } from './cropRatio';
 import { cropDrag } from './cropDrag';
 import type { ToolPointerEvent, ToolSpec } from '@shared/module';
 import type { PdfRect } from '@shared/pdf';
@@ -185,7 +185,7 @@ export function cropTool(host: CropToolHost): ToolSpec {
         clear();
         return true;
       }
-      if (event.key === 'Enter' && rect && usableCrop(rect)) {
+      if (event.key === 'Enter' && rect) {
         const onPage = page;
         const chosen = rect;
         clear();

@@ -390,7 +390,9 @@ const CROP_PAGES: CommandSpec = {
     const boxes = await service.pageBoxes(page, doc);
     const geometry = service.viewer?.pane.pageView(page)?.geometry;
     const extra = geometry?.extraRotation ?? 0;
-    const picture = cropPreview(doc, page, extra, service.settings.cropMarginPoints);
+    const picture = cropPreview(doc, page, extra, service.settings.cropMarginPoints).catch(
+      () => null,
+    );
     const initial = rectArg({ rect: ctx.args['initialRect'] });
     const unit = ctx.service<Registry>('registry').hasService(VIEWER_SERVICE)
       ? ctx.service<ViewerService>(VIEWER_SERVICE).settings.rulerUnits

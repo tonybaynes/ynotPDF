@@ -47,6 +47,15 @@ overrides its old branch/co-author/merge instructions.
   axes too. The repair uses the existing `PageGeometry` contract for overlays,
   previews, detection and ratio orientation. Range application plans every page
   before mutating, and rejects a page whose result would be smaller than 1 pt.
+- **M41 automatic deskew on image import, confirmed still missing on main
+  `d322de7`.** The original scope explicitly requires M91's from-images path to
+  call deskew when `scan.autoDeskew` is enabled. A repository search finds the
+  setting only in M41's schema/default/reader (`settings.ts`); neither M91 nor
+  `src/engine/create` refers to deskew/straightening. The manual
+  `organize.autoDeskew` command does not supply this import hook. The build-log
+  claim that M91 reads this preference is therefore premature. Recommend a
+  separate M41/M91 completion task with an on/off image-import journey. This
+  crop-only PR does not complete M41 as a whole while that omission remains.
 - **M50 unknown operators under z-order, documented and code-confirmed.** The
   original brief says never lose unknown operators. ADR 0018 and the build log
   explicitly exempt reordered pages; `model.ts:plannedObjectsFor` returns
