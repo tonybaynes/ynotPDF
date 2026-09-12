@@ -124,6 +124,10 @@ async function expectInk(page: number, rotation: number, pane?: number): Promise
       if (!pageElement || !canvas || !context) throw new Error('Fitted page raster is missing');
       const c = canvas.getBoundingClientRect(),
         v = scroll.getBoundingClientRect();
+      const p = pageElement.getBoundingClientRect();
+      const style = getComputedStyle(pageElement);
+      const borderLeft = Number.parseFloat(style.borderLeftWidth);
+      const borderTop = Number.parseFloat(style.borderTopWidth);
       const sx = canvas.width / c.width,
         sy = canvas.height / c.height;
       const row = context.getImageData(
@@ -169,23 +173,40 @@ async function expectInk(page: number, rotation: number, pane?: number): Promise
       ).data;
       let holes = 0;
       for (let p = 0; p < interior.length; p += 4) if (!black(interior, p)) holes++;
+      const rect = (r: DOMRect): { left: number; top: number; width: number; height: number } => ({
+        left: r.left,
+        top: r.top,
+        width: r.width,
+        height: r.height,
+      });
       return {
         left: c.left - v.left + left / sx,
         right: c.left - v.left + right / sx,
         top: c.top - v.top + top / sy,
-        borderLeft: pageElement.clientLeft,
-        borderTop: pageElement.clientTop,
+        expected: {
+          left: p.left - v.left + borderLeft + args.x * args.zoom,
+          right: p.left - v.left + borderLeft + (args.x + args.width) * args.zoom,
+          top: p.top - v.top + borderTop + args.y * args.zoom,
+        },
+        dpr: window.devicePixelRatio,
+        border: { left: borderLeft, top: borderTop },
+        pageRect: rect(p),
+        canvasRect: rect(c),
+        viewportRect: rect(v),
+        scroll: { left: scroll.scrollLeft, top: scroll.scrollTop },
+        canvasSize: { width: canvas.width, height: canvas.height },
         holes,
       };
     },
-    { page, zoom, width: ink.width, height: ink.height },
+    { page, zoom, x: ink.x, y: ink.y, width: ink.width, height: ink.height },
   );
-  // Locate the midpoint of the antialiased edge; interior pixels must still be solid black.
-  expect(Math.abs(raster.left - (16 + raster.borderLeft))).toBeLessThanOrEqual(1);
-  expect(Math.abs(raster.top - (16 + raster.borderTop))).toBeLessThanOrEqual(1);
-  expect(Math.abs(raster.right - (16 + raster.borderLeft + ink.width * zoom))).toBeLessThanOrEqual(
-    1,
-  );
+  // Fit placement above permits scroll rounding. Independently compare raster to the actual
+  // content origin: clientLeft/clientTop round fractional rendered borders to integer CSS px.
+  // Keep the same one-CSS-pixel raster bound and include measurements in CI failure output.
+  const diagnostic = JSON.stringify({ page, rotation, zoom, raster });
+  expect(Math.abs(raster.left - raster.expected.left), diagnostic).toBeLessThanOrEqual(1);
+  expect(Math.abs(raster.top - raster.expected.top), diagnostic).toBeLessThanOrEqual(1);
+  expect(Math.abs(raster.right - raster.expected.right), diagnostic).toBeLessThanOrEqual(1);
   expect(raster.holes, 'solid ink must have no transparent or white tile seams').toBe(0);
 }
 

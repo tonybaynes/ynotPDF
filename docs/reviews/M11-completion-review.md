@@ -129,3 +129,22 @@ policy while retaining the scale compensation did: all six raster journeys and b
 layer tests pass together with their assertions unchanged. This records interpolation
 sensitivity; it does not claim a proved browser backend cause. A content-refresh generation
 also prevents an old placeholder from painting after a layer edit with unchanged geometry.
+
+Windows CI on `915fd68` then failed the new raster assertion at 381% and 180° view rotation:
+the right edge differed by 1.5 CSS pixels from ideal viewport padding. An initial trace-step
+count incorrectly identified 270°; those wider-viewport captures are controls, not a reproduction.
+Fractional-DPR controls independently exposed that `clientLeft`/`clientTop` round the rendered
+page border: for example, a 1 CSS-pixel border occupies 2/3 CSS pixels at DPR 1.5. The raster
+oracle now uses the measured page border-box origin plus computed border width and synthetic
+PDF coordinates. It keeps the separate fit-placement assertion, the one-CSS-pixel raster bound
+and the zero-hole interior check. Failure messages include zoom, rotation, DPR, all three measured
+rectangles, scroll offsets, computed borders and raster/expected edges.
+
+The exact failure was reproduced with the original assertion at a 795px-wide scroller, DPR 1,
+381% and 180°: ideal right edge 779px, actual geometric right edge 778.5px, raster edge 777.5px.
+The original oracle conflated the permitted half-pixel scroll offset with one pixel of raster
+quantization. The corrected oracle passes without changing its one-pixel bound; the interior
+has zero holes. All four rotations pass at DPR 1, 1.25, 1.5 and 2 in the narrow viewport, and
+both previously failing wider fractional-DPR controls pass. The exact 180° screenshot was
+visually inspected. No production rendering change was needed for this expectation repair.
+Main `214f7f4` (PR 55's crop repair) is integrated; final CI results are tracked in PR 59.
