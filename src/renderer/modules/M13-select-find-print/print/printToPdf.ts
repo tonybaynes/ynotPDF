@@ -7,17 +7,19 @@
  *
  * - **off (default): vector.** Each source page is embedded as a Form XObject and drawn into its
  *   place. The text stays text, so the result is searchable and sharp at any zoom — and the
- *   acceptance test can read the imposition back out of the file with `textRuns`. The cost is
- *   that pdf-lib embeds a page's *content*, so annotation and form-widget appearances do not come
- *   with it.
+ *   acceptance test can read the imposition back out of the file with `textRuns`. Printable
+ *   annotation and widget appearances are baked into an isolated snapshot first.
  * - **on: raster.** Each sheet is the rendered bitmap the printer would have received, so
  *   everything visible on screen — annotations, widgets, Night Mode off — is in the file. Bigger,
  *   and no text.
  *
- * The dialog says which is which; nothing here decides for the reader.
+ * Greyscale uses PDFium's raster colour conversion, as described in the dialog.
  */
 
-import { PDFDocument, degrees } from 'pdf-lib';
+import { PDFDocument, PDFName, degrees, rgb } from 'pdf-lib';
+import { effectiveBox, readRotation } from '@engine/ops/pdfdoc';
+import { intersectRect } from '@engine/geometry';
+import { bakePrintAppearances } from './appearances';
 import type { DocHandle, PdfEngine } from '@engine/PdfEngine';
 import { yieldMacrotask } from '@engine/yield';
 import type { Placement, Sheet } from './imposition';
@@ -31,19 +33,31 @@ export interface PrintToPdfOptions {
   readonly asImage: boolean;
   readonly render: Omit<SheetRenderOptions, 'engine' | 'doc'>;
   readonly title?: string;
+  /** Materialised model + engine snapshot supplied by the document-facing caller. */
+  readonly bytes?: Uint8Array;
   readonly onProgress?: (done: number, total: number) => void;
   readonly signal?: AbortSignal;
 }
 
 /** Builds the imposed document and returns its bytes. */
 export async function printToPdf(options: PrintToPdfOptions): Promise<Uint8Array> {
+  options.signal?.throwIfAborted();
   const out = await PDFDocument.create();
   out.setProducer('ynotPDF');
   out.setCreator('ynotPDF');
   if (options.title) out.setTitle(options.title);
 
-  if (options.asImage) {
-    await drawRasterSheets(out, options);
+  if (options.asImage || options.render.grayscale) {
+    // PDFium performs colour conversion; arbitrary ICC/pattern colours cannot be converted by
+    // changing a handful of content operators. The dialog explicitly describes this raster route.
+    if (options.bytes) {
+      const snapshot = await options.engine.open(options.bytes.slice());
+      try {
+        await drawRasterSheets(out, { ...options, doc: snapshot });
+      } finally {
+        await options.engine.close(snapshot);
+      }
+    } else await drawRasterSheets(out, options);
   } else {
     await drawVectorSheets(out, options);
   }
@@ -70,8 +84,48 @@ async function drawRasterSheets(out: PDFDocument, options: PrintToPdfOptions): P
 async function drawVectorSheets(out: PDFDocument, options: PrintToPdfOptions): Promise<void> {
   // The engine is the source of truth for bytes, so the pages that get embedded are the ones a
   // save would produce right now — not the ones that were on disk when the document opened.
-  const bytes = await options.engine.save(options.doc);
-  const source = await PDFDocument.load(bytes, { ignoreEncryption: true });
+  const bytes = options.bytes ?? (await options.engine.save(options.doc, { removeSecurity: true }));
+  const source = await PDFDocument.load(bytes, { updateMetadata: false });
+  options.signal?.throwIfAborted();
+  const wanted = new Set(
+    options.sheets.flatMap((sheet) =>
+      sheet.placements.filter((p) => p.page >= 0).map((p) => p.page),
+    ),
+  );
+  bakePrintAppearances(source, wanted, options.render);
+  // embedPage ignores /Rotate and defaults to MediaBox. Normalize the visible crop into
+  // displayed page coordinates before applying n-up/booklet rotations or displayed tile clips.
+  const normalized = await PDFDocument.create();
+  const normalizedPages = new Map<number, ReturnType<PDFDocument['addPage']>>();
+  for (const index of wanted) {
+    options.signal?.throwIfAborted();
+    const original = source.getPage(index);
+    if (!original.node.get(PDFName.of('Contents'))) {
+      original.node.set(
+        PDFName.of('Contents'),
+        source.context.register(source.context.flateStream('')),
+      );
+    }
+    const box = intersectRect(
+      effectiveBox(original.node, 'crop'),
+      effectiveBox(original.node, 'media'),
+    );
+    const rotation = readRotation(original.node) as Placement['rotation'];
+    const swap = rotation === 90 || rotation === 270;
+    const width = swap ? box.y1 - box.y0 : box.x1 - box.x0;
+    const height = swap ? box.x1 - box.x0 : box.y1 - box.y0;
+    const form = await normalized.embedPage(original, {
+      left: box.x0,
+      bottom: box.y0,
+      right: box.x1,
+      top: box.y1,
+    });
+    const page = normalized.addPage([width, height]);
+    draw(page, form, { page: index, x: 0, y: 0, width, height, scale: 1, rotation });
+    normalizedPages.set(index, page);
+  }
+  // Complete nested embedders before these pages themselves are copied into the output.
+  await normalized.flush();
   const total = options.sheets.length;
   const embedded = new Map<string, Awaited<ReturnType<PDFDocument['embedPage']>>>();
 
@@ -80,7 +134,7 @@ async function drawVectorSheets(out: PDFDocument, options: PrintToPdfOptions): P
     const page = out.addPage([sheet.width, sheet.height]);
     for (const placement of sheet.placements) {
       if (placement.page < 0) continue;
-      const sourcePage = source.getPage(placement.page);
+      const sourcePage = normalizedPages.get(placement.page);
       if (!sourcePage) continue;
       const key = keyOf(placement);
       let form = embedded.get(key);
@@ -96,6 +150,22 @@ async function drawVectorSheets(out: PDFDocument, options: PrintToPdfOptions): P
         embedded.set(key, form);
       }
       draw(page, form, placement);
+      if (placement.border)
+        page.drawRectangle({
+          x: placement.x,
+          y: placement.y,
+          width: placement.width,
+          height: placement.height,
+          borderWidth: 0.5,
+          borderColor: rgb(0, 0, 0), // ynot-allow-color: printed rule on paper, not interface chrome
+        });
+      if (placement.label)
+        page.drawText(placement.label, {
+          x: placement.x + 4,
+          y: placement.y + 4,
+          size: 8,
+          color: rgb(0, 0, 0), // ynot-allow-color: printed tile label
+        });
     }
     options.onProgress?.(index + 1, total);
     await yieldMacrotask();
