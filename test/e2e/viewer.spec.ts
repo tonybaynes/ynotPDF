@@ -223,7 +223,14 @@ test.describe('acceptance: 500-page scroll at ≥ 55 fps with bounded memory', (
       return await perf();
     };
 
-    const attempt = async (): Promise<{ idle: PerfSample; sample: PerfSample; ratio: number }> => {
+    interface Measurement {
+      idleSamples: PerfSample[];
+      idle: PerfSample;
+      sample: PerfSample;
+      ratio: number;
+    }
+    const measurements: Measurement[] = [];
+    const attempt = async (): Promise<Measurement> => {
       await settle(app.page);
       // Idle is the median of three one-second samples rather than one of them. A shared runner
       // has quiet seconds and busy seconds, and a single sample taken in a quiet one inflates the
@@ -235,7 +242,9 @@ test.describe('acceptance: 500-page scroll at ≥ 55 fps with bounded memory', (
       await app.run('dev.viewerPerf', { reset: true });
       await spin(150, true);
       const sample = await perf();
-      return { idle, sample, ratio: sample.fps / idle.fps };
+      const measurement = { idleSamples: idles, idle, sample, ratio: sample.fps / idle.fps };
+      measurements.push(measurement);
+      return measurement;
     };
 
     /**
@@ -272,6 +281,20 @@ test.describe('acceptance: 500-page scroll at ≥ 55 fps with bounded memory', (
       if (clears(next) || next.ratio > best.ratio) best = next;
     }
     const { idle, sample } = best;
+    const report = {
+      platform: process.platform,
+      architecture: process.arch,
+      viewport: await app.viewportSize(),
+      dpr: await app.page.evaluate(() => window.devicePixelRatio),
+      criteria: { relative: RELATIVE, absoluteFps: ABSOLUTE_FPS, headroomFps: HEADROOM_FPS },
+      selectedAttempt: measurements.indexOf(best) + 1,
+      measurements,
+    };
+    console.info('M11_SCROLL_PERFORMANCE', JSON.stringify(report));
+    await test.info().attach('m11-scroll-performance', {
+      body: Buffer.from(JSON.stringify(report, null, 2)),
+      contentType: 'application/json',
+    });
 
     expect(sample.frames).toBeGreaterThan(100);
     expect(idle.frames).toBeGreaterThan(40);
