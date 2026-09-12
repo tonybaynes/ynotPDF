@@ -289,6 +289,17 @@ colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
+- **Fit Visible completion (2026-09-12, Tony's repair pass).** Use the existing engine
+  `pageObjects()` bounds in PDF space, clipped through `PageGeometry` to the displayed
+  CropBox/MediaBox, with document and view rotations composed once. Fit the outer content
+  edges of the current row, retaining the real inner margins and fixed facing-page gap;
+  position the content's left/top edges at the viewport padding. Blank pages use their
+  displayed page box. A 64-entry LRU per viewer shares bounds reads between split panes;
+  page-model changes, document revisions and layer changes invalidate it. Request generations
+  and scroll/page checks reject stale asynchronous results. This is our own geometry design,
+  not copied from a competing product. Object bounds are conservative: this does not detect
+  white margins within a raster image or trace arbitrary clipping paths inside form objects.
+
 - **One store slice, extended additively.** `ui.view` (M02) stays the single source of view
   state; M11 adds `rotation`, `spread`, `split` and the `facing-continuous` layout to it
   (ADR 0009) and drives M02's existing `view.*` commands rather than registering them again.
@@ -443,9 +454,8 @@ when M11 is present), `vitest.config.ts` (coverage include and gates), `PLAN.md`
 **Deferred, and why:**
 
 - **Page transitions** - explicitly out of scope in the brief ("skip").
-- **Fit Visible fits the page width, not the inked bounding box.** Doing it properly needs the
-  content bounding box, which means `pageObjects()` per page: a per-page engine round trip on
-  every fit. M13 will already be walking text runs, so it is worth revisiting when it has.
+- **Fit Visible originally fitted page width.** Addressed in the 2026-09-12 completion repair
+  below using cached `pageObjects()` bounds; the earlier M13 dependency was unnecessary.
 - **The loupe magnifies the on-screen canvas** rather than asking the engine for a second render
   at the loupe's own scale. At 2-8x over an already-crisp tile that is what the eye wants and it
   costs nothing while the pointer sweeps; a re-render would be sharper at 8x over a low-zoom
@@ -484,3 +494,13 @@ Verified locally: the bookmark test 10/10 with no retries (from 1/10), the full 
 212/212 with no flakes, 2 144 unit tests. Shared files touched: `test/e2e/viewer.spec.ts`,
 `src/renderer/modules/M11-viewer/{ViewerService,Viewer,manifest}.ts`, and the one call in
 `src/renderer/modules/M12-navigation-panels/NavigationService.ts`.
+
+### Completion repair, 2026-09-12 — Fit Visible
+
+The repair replaces the page-width stand-in with bounds-aware zoom and positioning. It uses
+stable model-to-engine page mapping, a bounded cache shared between split panes, and refreshes
+after editing, undo/redo, page geometry changes and layer visibility changes. The pure tests
+exercise actual PDFium bounds and composed rotations; the UI journeys press the ribbon and
+measure the content edges, facing spacing, blank fallback, resizing, manual zoom and edits.
+See [the completion review](../reviews/M11-completion-review.md) for the reading record,
+scope distinctions, validation results and remaining platform/quality limitations.
