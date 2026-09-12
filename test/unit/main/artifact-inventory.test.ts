@@ -1,13 +1,81 @@
-import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type * as Fs from 'node:fs';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   bundledPackageDirectories,
+  collectPackageNotices,
   releaseProblems,
   verifyArtifactReview,
   type ArtifactReview,
 } from '../../../scripts/lib/artifact-inventory';
 
+vi.mock('node:fs', async (importOriginal) => {
+  const original = await importOriginal<typeof Fs>();
+  return { ...original, openSync: vi.fn(original.openSync) };
+});
+
+const scratch: string[] = [];
+afterEach(() => {
+  vi.mocked(openSync).mockClear();
+  for (const root of scratch.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+function noticePath(name = 'LICENSE.txt'): string {
+  const root = mkdtempSync(join(tmpdir(), 'ynot-notice-'));
+  scratch.push(root);
+  return join(root, name);
+}
+
 describe('artifact licence inventory', () => {
+  it.each(['missing', 'empty', 'whitespace', 'directory', 'unreadable'] as const)(
+    'blocks release when a LICENSE-named notice is %s',
+    (state) => {
+      const path = noticePath();
+      if (state === 'directory') mkdirSync(path);
+      else if (state !== 'missing')
+        writeFileSync(
+          path,
+          state === 'empty' ? '' : state === 'whitespace' ? ' \n\t' : 'Synthetic notice',
+        );
+      if (state === 'unreadable')
+        vi.mocked(openSync).mockImplementationOnce(() => {
+          throw new Error('EACCES: fault-injected notice access denial');
+        });
+      const inventory = collectPackageNotices({
+        'example@1': { licenses: 'MIT', licenseFile: path },
+      });
+      expect(inventory.components[0]?.completeNotice).toBe(false);
+      expect(inventory.components[0]?.noticeSha256).toBeNull();
+      expect(inventory.notices).toEqual([]);
+      expect(releaseProblems(inventory.components, [])).toEqual([
+        'example@1: complete licence notice not verified',
+      ]);
+    },
+  );
+  it('hashes and emits the same readable notice bytes without inferring completeness from README metadata', () => {
+    const bytes = 'Synthetic copyright and permission notice\n';
+    const path = noticePath();
+    const metadata = noticePath('README.md');
+    writeFileSync(path, bytes);
+    writeFileSync(metadata, 'MIT');
+    const inventory = collectPackageNotices({
+      'example@1': { licenses: 'MIT', licenseFile: path },
+      'metadata@1': { licenses: 'MIT', licenseFile: metadata },
+    });
+    expect(inventory.components[0]).toEqual({
+      id: 'example@1',
+      license: 'MIT',
+      completeNotice: true,
+      noticeSha256: createHash('sha256').update(bytes).digest('hex'),
+    });
+    expect(inventory.notices[0]).toBe('example@1\n\n\n' + bytes);
+    expect(inventory.components[1]?.completeNotice).toBe(false);
+    expect(releaseProblems(inventory.components, [])).toEqual([
+      'metadata@1: complete licence notice not verified',
+    ]);
+  });
   it('counts bundled dev dependencies and retains nested package locations', () => {
     expect(
       bundledPackageDirectories([

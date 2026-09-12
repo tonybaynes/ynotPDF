@@ -1,6 +1,15 @@
 /** Build-input coverage and distribution notice accounting, separate from SPDX policy. */
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from 'node:fs';
 import { basename, join, relative, resolve } from 'node:path';
 
 export interface LicenseEntry {
@@ -91,10 +100,22 @@ export function releaseProblems(
   ];
 }
 
-export function writeArtifactInventory(
-  packages: Readonly<Record<string, LicenseEntry>>,
-  inputs: ReadonlyArray<string>,
-): string[] {
+/** Read and hash the same regular file; missing/unreadable/empty text is incomplete. */
+function noticeBytes(path: string): Buffer | null {
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, 'r');
+    if (!fstatSync(fd).isFile()) return null;
+    const bytes = readFileSync(fd);
+    return bytes.toString('utf8').trim().length > 0 ? bytes : null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+export function collectPackageNotices(packages: Readonly<Record<string, LicenseEntry>>) {
   const notices: string[] = [];
   const components: {
     id: string;
@@ -104,19 +125,30 @@ export function writeArtifactInventory(
   }[] = [];
   for (const [id, entry] of Object.entries(packages).sort(([a], [b]) => a.localeCompare(b))) {
     const notice = entry.licenseFile;
+    const bytes = notice === undefined ? null : noticeBytes(notice);
     // license-checker may return a README containing only the word "MIT" or "ISC".
     // That is useful metadata, but not a verified redistribution notice.
     const completeNotice =
-      notice !== undefined && /^(licen[sc]e|copying|notice)/i.test(basename(notice));
+      bytes !== null &&
+      notice !== undefined &&
+      /^(licen[sc]e|copying|notice)/i.test(basename(notice));
     components.push({
       id,
       license: entry.licenses ?? 'UNKNOWN',
       completeNotice,
-      noticeSha256: notice && existsSync(notice) ? hash(notice) : null,
+      noticeSha256: bytes === null ? null : createHash('sha256').update(bytes).digest('hex'),
     });
-    if (notice && existsSync(notice))
-      notices.push(id + '\n' + (entry.repository ?? '') + '\n\n' + readFileSync(notice, 'utf8'));
+    if (bytes !== null)
+      notices.push(id + '\n' + (entry.repository ?? '') + '\n\n' + bytes.toString('utf8'));
   }
+  return { components, notices };
+}
+
+export function writeArtifactInventory(
+  packages: Readonly<Record<string, LicenseEntry>>,
+  inputs: ReadonlyArray<string>,
+): string[] {
+  const { components, notices } = collectPackageNotices(packages);
   const binaryManifest = JSON.parse(readFileSync('resources/binaries.json', 'utf8')) as {
     binaries: {
       name: string;
