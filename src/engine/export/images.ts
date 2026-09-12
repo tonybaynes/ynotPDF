@@ -99,6 +99,7 @@ export function encodeRaster(
     readonly dpi: number;
     readonly quality?: number;
     readonly level?: number;
+    readonly tiffCompression?: TiffCompression;
   },
 ): Uint8Array {
   const dpi = { x: options.dpi, y: options.dpi };
@@ -147,6 +148,7 @@ export function encodeRaster(
     case 'tiff':
       return encodeTiff([tiffFrame(reduced)], {
         dpi,
+        ...(options.tiffCompression === undefined ? {} : { compression: options.tiffCompression }),
         ...(options.level === undefined ? {} : { level: options.level }),
       });
     case 'bmp':
@@ -181,6 +183,13 @@ export async function exportImages(
   ctx: ExportContext = {},
 ): Promise<ExportResult> {
   const pages = options.pages;
+  if (
+    options.format === 'tiff' &&
+    options.tiffCompression === 'group4' &&
+    options.colour !== 'mono'
+  ) {
+    throw new ExportFailed('CCITT Group 4 requires black and white (1-bit) TIFF pages.');
+  }
   if (pages.length === 0) throw new ExportFailed('No pages were chosen to export.');
   if (!(options.dpi > 0) || !Number.isFinite(options.dpi)) {
     throw new ExportFailed(`${String(options.dpi)} is not a resolution.`);
@@ -227,6 +236,9 @@ export async function exportImages(
       bytes: encodeRaster(reduced, {
         format: options.format,
         dpi: options.dpi,
+        ...(options.tiffCompression === undefined
+          ? {}
+          : { tiffCompression: options.tiffCompression }),
         ...(options.quality === undefined ? {} : { quality: options.quality }),
         ...(options.level === undefined ? {} : { level: options.level }),
       }),

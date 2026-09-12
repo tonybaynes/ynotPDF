@@ -10,19 +10,21 @@
  *
  * What it writes: little-endian ("II"), one IFD per page chained through the next-IFD pointer,
  * one strip per page, and three sample layouts — 1-bit bilevel, 8-bit greyscale and 24-bit RGB.
- * Compression is None, PackBits (baseline TIFF 6) or Deflate (tag 8, the Adobe extension every
+ * Compression is None, PackBits (baseline TIFF 6), CCITT Group 4 for bilevel, or Deflate (tag 8, the Adobe extension every
  * reader worth the name supports, and what `pako` gives us for nothing). Resolution goes in
  * `XResolution` / `YResolution` with `ResolutionUnit = 2` (inches).
  *
- * CCITT Group 4 for bilevel scans is the one obvious omission: it would beat Deflate on a page of
- * text by a factor of two or so, and it is a whole encoder of its own. Deferred, and said so.
+ * Group 4 reuses M100's public encoder with unpacked samples; its TIFF photometric is WhiteIsZero.
  */
 
 import { deflate } from 'pako';
+import { encodeGroup4 } from '../../optimise';
+import { monoToGrey } from '../pixels';
+import { ExportFailed } from '../types';
 import type { GreyRaster, MonoRaster } from '../pixels';
 import { deflateLevel } from './png';
 
-export type TiffCompression = 'none' | 'packbits' | 'deflate';
+export type TiffCompression = 'none' | 'packbits' | 'deflate' | 'group4';
 
 export interface TiffOptions {
   readonly compression?: TiffCompression;
@@ -48,6 +50,7 @@ const TAG = {
   bitsPerSample: 258,
   compression: 259,
   photometric: 262,
+  fillOrder: 266,
   stripOffsets: 273,
   samplesPerPixel: 277,
   rowsPerStrip: 278,
@@ -55,6 +58,7 @@ const TAG = {
   xResolution: 282,
   yResolution: 283,
   planarConfig: 284,
+  t6Options: 293,
   resolutionUnit: 296,
   sampleFormat: 339,
 } as const;
@@ -65,6 +69,7 @@ const COMPRESSION_CODE: Readonly<Record<TiffCompression, number>> = {
   none: 1,
   packbits: 32773,
   deflate: 8,
+  group4: 4,
 };
 
 interface Entry {
@@ -178,9 +183,17 @@ export function encodeTiff(
 ): Uint8Array {
   if (frames.length === 0) throw new Error('a TIFF needs at least one frame');
   const compression = options.compression ?? 'deflate';
+  if (compression === 'group4' && frames.some((frame) => frame.kind !== 'mono')) {
+    throw new ExportFailed('CCITT Group 4 requires black and white (1-bit) TIFF pages.');
+  }
   const code = COMPRESSION_CODE[compression];
   const strips: Uint8Array[] = [];
   for (const frame of frames) {
+    if (compression === 'group4' && frame.kind === 'mono') {
+      // Ignore packed-row padding; the encoder takes one 0/255 sample per real pixel.
+      strips.push(encodeGroup4({ ...monoToGrey(frame.mono), components: 1 }));
+      continue;
+    }
     const shape = frameRows(frame);
     const raw = new Uint8Array(shape.stride * shape.height);
     const row = new Uint8Array(shape.stride);
@@ -234,7 +247,18 @@ export function encodeTiff(
         values: shape.bitsPerSample,
       },
       { tag: TAG.compression, type: TYPE.short, count: 1, values: [code] },
-      { tag: TAG.photometric, type: TYPE.short, count: 1, values: [shape.photometric] },
+      {
+        tag: TAG.photometric,
+        type: TYPE.short,
+        count: 1,
+        values: [compression === 'group4' ? 0 : shape.photometric],
+      },
+      ...(compression === 'group4'
+        ? [
+            { tag: TAG.fillOrder, type: TYPE.short, count: 1, values: [1] },
+            { tag: TAG.t6Options, type: TYPE.long, count: 1, values: [0] },
+          ]
+        : []),
       { tag: TAG.stripOffsets, type: TYPE.long, count: 1, values: [stripOffsets[i] ?? 0] },
       { tag: TAG.samplesPerPixel, type: TYPE.short, count: 1, values: [shape.samplesPerPixel] },
       { tag: TAG.rowsPerStrip, type: TYPE.long, count: 1, values: [shape.height] },

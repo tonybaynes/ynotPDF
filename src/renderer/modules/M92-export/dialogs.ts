@@ -207,8 +207,10 @@ export async function askImageOptions(
         const isTiff = chosenFormat === 'tiff';
         const isJpeg = chosenFormat === 'jpeg';
         const isMono = colour.input.value === 'mono';
+        const invalidGroup4 = isTiff && tiffCompression.input.value === 'group4' && !isMono;
         quality.element.hidden = !isJpeg;
-        level.element.hidden = chosenFormat === 'bmp' || isJpeg;
+        level.element.hidden =
+          chosenFormat !== 'png' && !(isTiff && tiffCompression.input.value === 'deflate');
         tiffCompression.element.hidden = !isTiff;
         multiPage.element.hidden = !isTiff;
         dither.element.hidden = !isMono;
@@ -222,12 +224,17 @@ export async function askImageOptions(
           pages.length === 0
             ? 'No pages chosen.'
             : `${String(files)} ${files === 1 ? 'file' : 'files'}, ${String(size.width)} × ${String(size.height)} pixels a page, as ${IMAGE_FORMATS[chosenFormat].label}.`;
-        dialog.setEnabled('export', pages.length > 0);
+        if (invalidGroup4) {
+          summary.textContent =
+            'CCITT Group 4 requires black and white (1-bit). Change Colour or choose another TIFF compression.';
+        }
+        dialog.setEnabled('export', pages.length > 0 && !invalidGroup4);
       };
 
       range.onChange(paint);
       format.input.addEventListener('change', paint);
       colour.input.addEventListener('change', paint);
+      tiffCompression.input.addEventListener('change', paint);
       dpi.input.addEventListener('input', paint);
       multiPage.input.addEventListener('change', paint);
 

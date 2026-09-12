@@ -239,6 +239,12 @@ colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
+- **Group 4 completion (2026-09-12).** Reuse M100's public `encodeGroup4` with unpacked
+  monochrome samples; TIFF uses Compression 4, WhiteIsZero, MSB-first fill order and
+  T6Options 0 (TIFF 6.0 section 11 / ITU-T T.6). Reject colour or grey frames, and explain
+  incompatible choices in the dialog. Pass the compression choice to both per-page and
+  multi-page output. Prove pixels with the independent utif decoder, including row padding.
+
 - **Everything that decides what a file contains is pure, and lives in `src/engine/export/`.**
   Bytes and pixels in, bytes out — no DOM, no engine handle, no Electron — exactly the shape
   M41's ops and M91's converters already have (`OpContext` = a progress callback and an
@@ -420,9 +426,8 @@ dependency to a real one), `docs/shortcuts.md` and `PLAN.md` §0. **No IPC chann
 **Deferred, and why:**
 
 - **Office formats** — M93's, explicitly out of scope.
-- **CCITT Group 4 for bilevel TIFF.** It would beat Deflate on a page of text by about a factor of
-  two and it is a whole encoder of its own. Deflate and PackBits are there, and both are read
-  everywhere.
+- **CCITT Group 4 for bilevel TIFF was deferred in the original build.** Completed in the
+  2026-09-12 follow-up below by reusing M100's public encoder.
 - **Greyscale and bilevel JPEG.** `jpeg-js` encodes 4:2:0 colour only, so a greyscale JPEG is grey
   pixels in three channels. The dialog says so in words rather than pretending otherwise; PNG and
   TIFF keep grey at one channel and mono at one bit.
@@ -438,3 +443,19 @@ dependency to a real one), `docs/shortcuts.md` and `PLAN.md` §0. **No IPC chann
   the Convert tab, in the palette and on a shortcut.
 - **Exporting a _selection_ rather than pages.** M13 owns the text selection and already copies it
   as text and RTF; "export the selection to a file" would be a third path to the same bytes.
+
+### Completion follow-up — 2026-09-12
+
+CCITT Group 4 now exports black-and-white TIFF pages, separately or in a multi-page file,
+with resolution tags, correct polarity and byte-aligned source-row handling. The export
+dialog and stored preferences expose the option and explain incompatible colour choices.
+Separate TIFFs now also honour the existing None/PackBits/Deflate choice; the original
+single-frame path had silently defaulted to Deflate.
+
+Independent decoder tests compare every pixel for odd widths, all-black/all-white pages,
+alternating pixels, shifted transitions and long runs; they verify strip bounds and IFD
+termination. A second decoder (PDFium) verifies the short-strip case affected by utif's
+existing dispatcher bug. Real UI journeys export files through the ribbon, options dialog,
+Worker and filesystem, check remembered settings, and exercise all themes at 200% scale.
+The detailed reading inventory, additional unfinished scope, decoder limitation and final
+validation are in [the completion review](../reviews/M92-completion-review.md).
