@@ -239,3 +239,45 @@ moment anyone writes a reproducibility test, caches output by hash, or asks why 
 document twice gives two different files. Owned by M10 (engine), M13 (print) and M42 (portfolios);
 each wants a deliberate choice about what date a generated document should carry, not a blanket
 edit from here.
+
+## 8. Cancelling a password prompt used to write the file in the clear
+
+Codex's audit of 11 September 2026 (`Codex_Audit.md`, finding 1) found the one defect in this
+repository that could quietly hand someone an unprotected copy of a protected document.
+
+The path: recover a document whose journal carries a password-protection intent, save it, and
+cancel the prompt asking for the password no longer held in memory. `secretsForSave()` returned
+null, the stage returned the plaintext it had been given, and `SaveService` wrote it — reporting
+success, with a warning that **nothing displays** (finding 2, still open).
+
+The old code's reasoning is in the test it shipped with: _"The document is still saved — losing
+the reader's edits would be the worse failure."_ That trade was never real. Stopping the save
+loses nothing: the edits stay in the model, the document stays dirty, and its recovery record
+stays on disk. Writing the file in the clear was a real loss, and a silent one.
+
+**The fix.** Cancelling a prompt throws `WriteCancelled` — the type the pipeline already used for
+an aborted save — which unwinds before the writer's bytes reach `writeBytes()`. So no file is
+written, `markSaved()` is not reached, the recovery record is not discarded, and `writeTo()`
+reports `reason: 'cancelled'` with a toast rather than an error dialog. Cancelling is a choice,
+not a failure.
+
+`null` is kept for the one case that is _not_ a cancellation: an intent naming no password at
+all, where nobody was asked anything and there is nothing to protect the file with. That still
+saves unprotected, and now says so in words that match what happened.
+
+**A half-given answer is deliberately forgotten.** Cancelling the second of the two prompts
+throws away the first. Keeping it looks kinder, but secrets are stored only once both prompts are
+answered, and the check that skips the prompts treats _any_ held password as the complete set —
+so half an answer left behind would protect the next save with the open password and silently
+without the permissions one. Asking twice is the cheaper mistake, and there is a test saying so.
+
+**Found on the way:** `runWriter()` declared its `progress` binding _after_ starting the writer,
+while `onProgress` closed over it. Any writer reporting progress synchronously — the in-process
+one, which runs wherever there is no `Worker` — hit the temporal dead zone and threw "Cannot
+access 'progress' before initialization" instead of saving. Latent in the shipping app, because
+the worker's progress always arrives asynchronously; fatal to any test that drives a real save.
+Declaration moved above the call.
+
+**Still open from the same audit, and load-bearing on this one:** finding 2 — `SaveOutcome.warnings`
+is collected after the document is marked clean and its recovery record discarded, and no ordinary
+Save path displays it. Until that is fixed, a warning is still a value nobody reads.

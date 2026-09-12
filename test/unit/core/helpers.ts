@@ -89,14 +89,22 @@ export const RICH_SPEC: FakeDocumentSpec = {
   metadata: { title: 'Rich fixture', author: 'M20' },
 };
 
-/** Opens a fake document. `support` narrows what the engine claims it can do. */
+/**
+ * Opens a fake document. `support` narrows what the engine claims it can do, and `options.path`
+ * gives it a file on disk — which M21 reads from `Document.state.path` to decide whether Save
+ * writes back over something or has to ask where to put it.
+ */
 export async function openFake(
   spec: FakeDocumentSpec = RICH_SPEC,
   support: Partial<FakeSupport> = {},
+  options: { path?: string } = {},
 ): Promise<{ doc: Document; engine: FakeEngine }> {
   const engine = new FakeEngine(support);
   const handle = engine.create(spec);
-  const doc = await Document.fromHandle(engine, handle, { name: 'fixture.pdf' });
+  const doc = await Document.fromHandle(engine, handle, {
+    name: 'fixture.pdf',
+    ...(options.path === undefined ? {} : { path: options.path }),
+  });
   // Merging is otherwise governed by a wall-clock idle gap, which would make "these two edits
   // collapse into one undo step" depend on how busy the machine is. Tests that want a break ask
   // for one with `breakMerge()`; the idle barrier itself has its own test with a fake clock.
