@@ -17,9 +17,10 @@ TASK EXECUTION — 2026-09-12
   usage limit. Their worktrees and committed PRs are preserved; no task was
   replaced or marked complete. All five owners subsequently resumed in the
   same tasks. CI continues independently; never create duplicate module tasks.
-  M13's last local integration command exited 0: all 20 checks passed before
-  its task stopped. M11 now owns the local UI slot for four baseline interaction
-  and performance tests; all other local UI work remains queued.
+  M13's 20 integration checks passed before the interruption. Its later tab fix
+  passed all 13 preview/guard tests with process exit 0. M11 has the local UI
+  allocation for PR67's full suite; audit PR68 is next after review/readiness.
+  The live lease file below is authoritative if this checkpoint becomes stale.
 
 ACTIVE REPAIRS (finish existing scope before new modules)
   M11 - Complete viewer interactions
@@ -27,17 +28,24 @@ ACTIVE REPAIRS (finish existing scope before new modules)
         PR59 Fit Visible/raster repair MERGED as 2696119, all 8 CI checks green.
         Full local viewer UI passed 561 tests (4 existing skips). Corrected
         actual page/border test geometry keeps the 1 CSS pixel raster tolerance.
-        Same-task follow-up: reproduce/repair potentially missing Escape exit
-        from full-screen/reading modes; exercise F11 and real ruler-drag guides.
-        Record measured frame rates: adaptive test passes do not prove 55 fps.
+        PR67 (a4f0eb6) repairs confirmed full-screen/reading Escape failures.
+        Six real-input checks pass, including F11/native state, palette/Loupe
+        Escape precedence and both ruler drags with save/reopen persistence.
+        The earlier 3-pixel guide failure measured its transparent grab border;
+        actual guide ink passes the unchanged 1 CSS pixel bound. Windows first
+        attempt: 59.9341 scroll fps, 60.3602 idle fps, 62.0524/64 MB cache.
+        Full local UI and final CI pending; these are Windows measurements.
   M13 - Preserve annotations in PDF printing
         Vector Print-to-PDF repair MERGED via PR58, all 8 CI checks green.
-        PR62 physical-print/preview repair has all 8 CI checks green and a local
+        PR62 physical-print/preview repair previously passed all 8 CI checks and a local
         full run of 567 passes/4 existing skips; integrated focused checks pass.
-        Merge held: both Linux runs retried the tile journey after a 29-pixel
-        body right-edge overflow. Output pixels passed; nine local diagnostics
-        did not reproduce it. Integrated head 3aa7d13 adds failure-only CI logs;
-        all 20 local print/viewer/guard checks pass, fresh CI pending.
+        CI diagnostics proved the overflow came from an absolute .sr-only span
+        inside an unpositioned tab, not print pixels or the status bar. A real
+        long-tab/edit regression failed at body width 2504 versus viewport1280;
+        position:relative on .tab fixes it. Final 13 preview/guard tests pass
+        after awaiting the typed edit's journal commit; pathless fixtures remain
+        path:null. Original window/accessibility/journal assertions retained.
+        Fresh CI on the final corrected head is required before merge.
         Same-task follow-up: reproduce/fix region snapshots omitting model-only
         unsaved edits; add genuine pointer/keyboard selection journeys where
         current tests bypass input. RTF RichEdit parsing is recorded; independent
@@ -45,12 +53,21 @@ ACTIVE REPAIRS (finish existing scope before new modules)
         for this check because WordPad is absent; record the actual application.
   M41 - Complete import and Combine workflows
         Crop ratios/geometry MERGED via PR55, all 8 CI checks green.
-        PR64 implements automatic deskew on image import, Combine Add folder
+        PR64 MERGED as 7c3d24d with all 8 CI checks green. Automatic deskew on
+        image import, Combine Add folder
         and external desktop file drops. Full local UI: 567 passed with zero
         skips/retries/failures; 4241 unit passes/9 existing skips. Integrated
         head 2e912c2 adds main's viewer repair: 617 affected units and all nine
-        import/Combine/Fit Visible journeys pass. Final CI pending.
+        import/Combine/Fit Visible journeys pass. New M41 CI journeys passed
+        first attempt; existing unrelated retries and platform skips disclosed.
         Coordinator inspected actual Combine and image-import screenshots.
+        Still incomplete: lossless forms, Names/attachments, layers and tags
+        during Combine/Split. The audit safely refuses seven original corpus
+        files, leaving 14 files/35 pages versus required 21 files/42 pages;
+        that supported subset does not complete the original acceptance.
+        Split keepForms currently does not copy AcroForm ownership. Same-task
+        next increment covers ordinary fields and Split using shared structural
+        copying; audit-owned Combine changes remain separately coordinated.
   M92 - Complete image export fidelity
         Group 4 TIFF repair MERGED via PR57, all 8 CI checks green.
         PR63 implements masks, intrinsic dimensions, nested images, original/PNG
@@ -63,6 +80,10 @@ ACTIVE REPAIRS (finish existing scope before new modules)
         check follows PR63 merge. Broader copy-permission gate is unmerged.
   All four are in isolated worktrees; none is marked complete before merge.
   Existing broader repair work: Codex_Audit.md and docs/open-work.md.
+  Audit PR68 is a draft: filesystem authority, authentication, worker failures,
+  annotation sanitising/readability, copy permission and build-notice inventory.
+  Review fixed attachment-basename truncation and worker-message hangs; a missing
+  notice-file gate correction and full local UI/CI remain before integration.
 
 QUEUED COMPLETION REPAIRS (confirmed original scope; no new tasks yet)
   M30 — demonstrate promised cross-renderer appearance equivalence.
@@ -93,6 +114,7 @@ MERGED REVIEW / REPAIR HISTORY
   PR55 — M41 fixed/custom crop ratios and rotated geometry; merge 214f7f4.
   PR61 — tracker for merged repairs and remaining acceptance; merge 5ec4c3e.
   PR59 — M11 Fit Visible bounds and browser tile scaling; merge 2696119.
+  PR64 — M41 image-import deskew and Combine folder/file-drop routes; merge 7c3d24d.
   All passed Windows, macOS, Ubuntu and Windows ARM installer checks.
   Required follow-ups remain active in all four existing module tasks.
 
