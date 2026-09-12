@@ -43,6 +43,8 @@ import {
 } from './selection/model';
 import { selectionToRtf } from './selection/rtf';
 import { PrintService } from './print/PrintService';
+import { printSnapshot } from './print/snapshot';
+import { PageGeometry } from '@engine/geometry';
 import { openPrintDialog } from './print/PrintDialog';
 import type { PrintPlan } from './print/plan';
 import {
@@ -468,7 +470,7 @@ export class SelectFindService {
   }
 
   /** Tool callbacks and direct service calls enforce the same policy as registered commands. */
-  private allowOutput(action: 'copy' | 'print'): boolean {
+  private allowOutput(action: 'copy' | 'print' | 'print-high'): boolean {
     if (!this.registry.hasService(PERMISSION_GATE)) return true;
     const gate = this.registry.service<PermissionGate>(PERMISSION_GATE);
     if (gate.allows(action)) return true;
@@ -1020,7 +1022,7 @@ export class SelectFindService {
     const document = this.activeDocument();
     const viewer = this.activeViewer();
     const pageSizes = (document?.state.pages ?? []).map((page) => {
-      const size = pageSizeOf(page);
+      const size = new PageGeometry(pageSizeOf(page));
       return { width: size.width, height: size.height };
     });
     return this.print.plan({
@@ -1067,6 +1069,7 @@ export class SelectFindService {
   /** Prints without asking — the dialog has already been answered, or a test drove it. */
   async runPrint(settings: PrintSettings, dryRun = false): Promise<'printed' | null> {
     if (!this.allowOutput('print')) return null;
+    if (settings.dpi > 150 && !this.allowOutput('print-high')) return null;
     const document = this.activeDocument();
     const source = this.activeSource();
     if (!document || !source) return null;
@@ -1143,9 +1146,15 @@ export class SelectFindService {
   /** "Print to PDF": the same imposition, written to a file. */
   async runPrintToPdf(settings: PrintSettings, path?: string): Promise<'saved' | null> {
     if (!this.allowOutput('print')) return null;
+    if (
+      ((!settings.printAsImage && !settings.grayscale) || settings.dpi > 150) &&
+      !this.allowOutput('print-high')
+    )
+      return null;
     const document = this.activeDocument();
     const source = this.activeSource();
     if (!document || !source) return null;
+    const revision = document.undo.revision;
     const plan = this.planFor(settings);
     if (plan.error) {
       await this.shell.dialogs.error('Print to PDF', plan.error);
@@ -1168,7 +1177,12 @@ export class SelectFindService {
     });
     try {
       const bytes = await this.print.toPdf({
-        source: { engine: this.engine, doc: source.handle, title: document.state.title },
+        source: {
+          engine: this.engine,
+          doc: source.handle,
+          title: document.state.title,
+          snapshot: (signal) => printSnapshot(document, signal, settings),
+        },
         plan,
         settings,
         signal: progress.signal,
@@ -1176,6 +1190,9 @@ export class SelectFindService {
           progress.set(done / total, `Sheet ${done} of ${total}`);
         },
       });
+      if (!document.undo.isCurrent(revision)) {
+        throw new Error('The document changed while preparing print. Please try again.');
+      }
       if (hasBridge()) await invoke('file:write', target, bytes);
       progress.close();
       this.shell.toasts.show({ kind: 'success', text: `Wrote ${plan.sheets.length} sheets` });

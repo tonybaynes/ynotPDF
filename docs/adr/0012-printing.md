@@ -68,11 +68,13 @@ something:
 
 - **off (the default): vector.** Each source page is embedded as a Form XObject (`pdf-lib`
   `embedPage`) and drawn into its place. The text stays text: the result is searchable, sharp at
-  any zoom, and small. The cost is that an embedded page carries the page's _content_ and not its
-  `/Annots`, so annotation and form-widget appearances do not come with it.
+  any zoom, and small. Since the M13 completion repair (2026-09-12), a separate print snapshot
+  materialises unsaved edits through M21 and bakes printable annotation/widget appearances into
+  page content before embedding. Source pages and undo history remain unchanged. M41's appearance
+  placement matrix is reused, with print-specific flags, resource isolation and strict failures.
 - **on: raster.** Each sheet is the same bitmap the printer would have received, embedded as a
   PNG. Everything visible on screen is in the file, including annotations and widgets. Bigger, and
-  no text.
+  no text. Greyscale also uses this route for PDFium colour conversion; the dialog says so.
 
 The dialog says which is which, in words, next to the switch.
 
