@@ -53,7 +53,8 @@ data, print).
   registered **batchable operation** (each module registers its
   operations with an options schema + UI fragment). Modules merged later
   (redaction, signing, PDF/A, Office) register themselves — M120 must not
-  hard-code the list. Ops available at build time: deskew (M41), OCR, watermark/header/
+  hard-code the list. Candidate operations, available only when their owning
+  service is implemented and registered: deskew (M41), OCR, watermark/header/
   Bates, encrypt/remove security, redact-by-pattern, optimise, PDF/A,
   export image/text, export form data, flatten, split, combine, convert
   from Office/images, rename/metadata set, print (M13), run saved action.
@@ -74,6 +75,10 @@ Scheduling/watch folders (nice-to-have later).
 ## Design notes & constraints
 
 - Everything batchable is defined by modules; M120 only orchestrates.
+- Validate imported actions against registered capabilities and runtime option
+  schemas. Report unavailable operations before execution, never silently skip
+  them or advertise later modules as already implemented. Add integration tests
+  as each later service registers itself.
 
 ## Files you will create or touch
 

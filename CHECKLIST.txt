@@ -1,34 +1,62 @@
 ynotPDF - MODULE CHECKLIST
 ==========================
-Tick a box when the module is merged to main with CI green.
-Start a module only when everything in its "needs" list is ticked.
-Modules in the same wave can run at the same time (3-4 conversations).
-Order is easiest-first, hardest-last: a usable app exists after wave 4,
-the hard modules (text editing, redaction, signatures...) are waves 8-9.
+Use [✔] only when required scope is complete, merged to main and CI green.
+Windows target: Intel/AMD x64 and ARM64 (not 32-bit x86).
+Other targets: macOS Intel/Apple Silicon and Ubuntu Desktop x64.
+
+LIVE STATUS — 2026-09-12
+  Original inventory: 44 modules; 27 previously ticked.
+  Current: 23 ticked, 4 reopened/in progress, 17 not started.
+  These are module counts, not percentage of effort or proof of product parity.
+  Four repair tasks are active. Tony permits up to TEN simultaneous tasks;
+  expand only when write ownership, dependencies and test capacity allow it.
+  Replace a slot only once its task is finished AND merged.
+
+ACTIVE REPAIRS (finish existing scope before new modules)
+  M11 - Complete Fit Visible
+        Content-aware fit, rotation/crop geometry, cache invalidation.
+  M13 - Preserve annotations in PDF printing
+        Printable annotations/widgets and consistent unsaved snapshots.
+  M41 - Complete crop aspect ratios
+        Fixed/custom ratios, rotated crop geometry, apply/undo/save/reopen.
+  M92 - Complete bilevel TIFF compression
+        Group 4 compression, single/multi-page export, independent decoding.
+  All four are in isolated worktrees; none is marked complete before merge.
+  Existing broader repair work: Codex_Audit.md and docs/open-work.md.
+
+NEXT COMPLETION TRIAGE (before dispatching new-feature work)
+  Check M31 custom-stamp editing, M32 authentic FDF/XFDF interoperability,
+  M50 object preservation when changing z-order, M53 multi-file Bates,
+  M60 image-field interaction and M70 per-recipient certificate permissions
+  against their original acceptance criteria. Record required unfinished scope
+  as reopened, assign one owner and preserve the original delivery history.
+  Findings and evidence: docs/plan-review-2026-09-12.md and module review reports.
 
 
 Full plan: PLAN.md    Briefs: docs\modules\
 
 
-HOW TO START A MODULE  (do exactly this every time)
+HOW TO START AND COMPLETE A MODULE
 ----------------------------------------------------
-1. Check the module's "needs" line. Every module named there must
-   already be ticked [✔] below. If not, wait - do not start it.
-2. Open a NEW Claude Code conversation.
-3. Set its working folder to  D:\Projects\ynotPDF
-   (in the app: choose the folder when creating the session, or run
-   /cwd D:\Projects\ynotPDF  if you are already in one).
-   The folder's CLAUDE.md then loads automatically.
-4. Select the model shown on the module's "model:" line (/model in the
-   conversation, or the model picker) BEFORE sending anything.
-5. Paste the module's "prompt:" line below as the first message, exactly
-   as written. Nothing else is needed - the .md file holds the full brief.
-6. Run up to 3-4 modules from the SAME wave at once, one conversation
-   each. Never two conversations on the same module.
-7. When a conversation reports "merged to main, CI green", tick the
-   module [✔] here AND check it shows as done in PLAN.md section 0.
-8. If a conversation says a dependency is not finished, it will stop by
-   itself - finish that dependency first, then re-run the prompt.
+1. Finish reopened required scope first. New modules need completed dependencies.
+   Bounded repairs can use already-merged dependency contracts while an unrelated
+   part is reopened; explicitly record the boundary and revalidate integration.
+2. Create one NEW task named "M<number> - <short description>" in an isolated
+   worktree from current main. Never duplicate an active module owner.
+3. Read CLAUDE.md, PLAN.md, the module brief and its dependency briefs. Use paths
+   in that task's worktree; old absolute prompt paths below are historical.
+4. Agree file ownership before parallel work. Same-wave modules are not
+   automatically independent. The old model lines are historical suggestions;
+   use the task's configured model unless Tony chooses another.
+5. Implement, test through real UI journeys, update the brief/build log and
+   commit coherent changes. Deferred required features keep the module open.
+6. Push a PR. The coordinator serialises merges, reviews changes and verifies
+   required CI on the proposed revision after integrating current main.
+7. After merge, the coordinator updates [✔] here AND PLAN.md section 0.
+   Keep active repairs and remaining limitations visible here as work changes.
+8. Remove only the finished task's own clean, merged worktree and local branch.
+   Start its replacement only after completion and merge. Cap: ten tasks;
+   current safe working capacity: four, with full local UI suites serialised.
 
 Special cases:
   M00 must run completely ALONE - nothing else until it is ticked.
@@ -78,7 +106,8 @@ WAVE 2
         Read D:\Projects\ynotPDF\docs\modules\M03-windows-arm.md and carry out the "Your task" section in full. I do not have a Windows-on-ARM machine; rely on CI and document what could not be tested.
       note:  can run at the same time as M11 - it only touches build config.
 
-[✔] M11  Viewer — rendering, navigation, zoom, layouts
+[ ] M11  Viewer — rendering, navigation, zoom, layouts
+      status: REOPENED — Fit Visible repair active; prior delivery retained in history.
       model:  Opus
       needs: M02 M10
       prompt: Read D:\Projects\ynotPDF\docs\modules\M11-viewer.md and carry out the "Your task" section in full.
@@ -106,7 +135,8 @@ WAVE 3
       needs: M11 M20
       prompt: Read D:\Projects\ynotPDF\docs\modules\M12-navigation-panels.md and carry out the "Your task" section in full.
 
-[✔] M13  Text selection, find, copy, snapshot & print
+[ ] M13  Text selection, find, copy, snapshot & print
+      status: REOPENED — printable annotation/widget preservation repair active.
       model:  Opus
       needs: M11
       prompt: Read D:\Projects\ynotPDF\docs\modules\M13-select-find-print.md and carry out the "Your task" section in full.
@@ -144,7 +174,8 @@ WAVE 4
       needs: M30
       prompt: Read D:\Projects\ynotPDF\docs\modules\M32-comments-panel.md and carry out the "Your task" section in full.
 
-[✔] M41  Merge, split, extract to files, crop, deskew & flatten
+[ ] M41  Merge, split, extract to files, crop, deskew & flatten
+      status: REOPENED — crop aspect-ratio completion active.
       model:  Opus
       needs: M40
       prompt: Read D:\Projects\ynotPDF\docs\modules\M41-merge-split-crop.md and carry out the "Your task" section in full.
@@ -180,7 +211,8 @@ WAVE 5
       needs: M21 M30
       prompt: Read D:\Projects\ynotPDF\docs\modules\M60-forms.md and carry out the "Your task" section in full.
 
-[✔] M92  Export to images, text, HTML & RTF
+[ ] M92  Export to images, text, HTML & RTF
+      status: REOPENED — bilevel TIFF compression completion active.
       model:  Opus
       needs: M11 M13
       prompt: Read D:\Projects\ynotPDF\docs\modules\M92-export.md and carry out the "Your task" section in full.
@@ -205,12 +237,14 @@ WAVE 6
 
 [ ] M82  Handwritten signatures & initials
       model:  Opus
-      needs: M30 M60
+      needs: M30 M31 M60
       prompt: Read D:\Projects\ynotPDF\docs\modules\M82-handwritten-signatures.md and carry out the "Your task" section in full.
 
 [ ] M90  OCR — searchable image, image+text, editable text
       model:  Opus
-      needs: M21
+      needs: M21 M41; M51 for editable-text output
+      note: Searchable/image output can ship first; keep full module unticked
+            until editable output and all other required scope are verified.
       prompt: Read D:\Projects\ynotPDF\docs\modules\M90-ocr.md and carry out the "Your task" section in full.
 
 [ ] M110  Compare documents

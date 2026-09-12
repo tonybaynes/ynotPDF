@@ -5,7 +5,7 @@
 | **Module id** | `M82` — folder `src/renderer/modules/M82-handwritten-signatures/`, branch `mod/M82-handwritten-signatures` |
 | **Earliest wave** | 6 (see `PLAN.md` §0/§12) |
 | **Tier** | Core |
-| **Depends on** | M30, M60 |
+| **Depends on** | M30, M31, M60 |
 | **Unlocks** | — |
 
 ## Your task — the prompt for this conversation

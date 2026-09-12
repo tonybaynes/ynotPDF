@@ -1,12 +1,20 @@
 # ynotPDF — Project Plan
 
-Cross-platform (Windows / macOS / Linux) PDF editor with the feature set of
-**Foxit PDF Editor 14**, four colour themes, dark by default.
+Cross-platform PDF editor for **Windows x64, Windows ARM64, macOS Intel and
+Apple Silicon, and Ubuntu Desktop x64**, with four colour themes and a dark default.
+Tony's target, clarified 2026-09-12, is a **best-in-class editor matching the
+relevant desktop functionality of Foxit, Adobe Acrobat Pro and Tungsten Power PDF**.
+Windows x86 means modern Intel/AMD x64 PCs; 32-bit Windows is not a target.
+
+The original Foxit 14 briefs describe the initial implementation, not proof of
+competitor parity. Read [the plan review](docs/plan-review-2026-09-12.md) for gaps,
+corrections and the completion-first execution policy. Finish reopened module
+work before starting new features. A module count is not a percentage of effort.
 
 This file is the master plan. Every build session starts here: read
-**§0 Progress**, pick the next unchecked module whose dependencies are done,
-open its spec in `docs/modules/`, build it to its acceptance test, tick it,
-commit. Sub-conversations working in parallel follow **§12**.
+**§0 Progress**, finish reopened scope first, then pick an unchecked module
+whose dependencies are done. Open its spec in `docs/modules/`, build and test,
+commit and merge, then update the completion tick. Parallel tasks follow **§12**.
 
 ---
 
@@ -20,26 +28,26 @@ commit. Sub-conversations working in parallel follow **§12**.
 | 1 | M10 PDF engine layer & PDFium adapter | [M10-engine-layer.md](docs/modules/M10-engine-layer.md) | ☑ |
 | 1 | M20 Document model, commands & undo stack | [M20-document-model.md](docs/modules/M20-document-model.md) | ☑ |
 | 2 | M03 Windows on ARM (arm64) support | [M03-windows-arm.md](docs/modules/M03-windows-arm.md) | ☑ |
-| 2 | M11 Viewer — rendering, navigation, zoom, layouts | [M11-viewer.md](docs/modules/M11-viewer.md) | ☑ |
+| 2 | M11 Viewer — rendering, navigation, zoom, layouts | [M11-viewer.md](docs/modules/M11-viewer.md) | ◐ |
 | 2 | M21 Save, Save As, autosave & recovery | [M21-save.md](docs/modules/M21-save.md) | ☑ |
 | 2 | M70 Encryption, permissions & certificate security | [M70-encryption.md](docs/modules/M70-encryption.md) | ☑ |
 | 2 | M91 Create PDF from images, web pages, clipboard, HTML/Markdown & text | [M91-create-pdf.md](docs/modules/M91-create-pdf.md) | ☑ |
 | 3 | M12 Navigation panels — thumbnails, bookmarks, layers, attachments, destinations | [M12-navigation-panels.md](docs/modules/M12-navigation-panels.md) | ☑ |
-| 3 | M13 Text selection, find, copy, snapshot & print | [M13-select-find-print.md](docs/modules/M13-select-find-print.md) | ☑ |
+| 3 | M13 Text selection, find, copy, snapshot & print | [M13-select-find-print.md](docs/modules/M13-select-find-print.md) | ◐ |
 | 3 | M30 Annotations — text markup, notes, typewriter, text box, callout | [M30-markup-annotations.md](docs/modules/M30-markup-annotations.md) | ☑ |
 | 3 | M40 Organise pages — insert, delete, extract, replace, rotate, move, labels | [M40-organise-pages.md](docs/modules/M40-organise-pages.md) | ☑ |
 | 4 | M04 UI-journey and layout test harness | [M04-ui-journey-tests.md](docs/modules/M04-ui-journey-tests.md) | ☑ |
 | 4 | M42 PDF Portfolios — create, edit, cover sheet, extract | [M42-portfolios.md](docs/modules/M42-portfolios.md) | ☑ |
 | 4 | M31 Annotations — shapes, ink & eraser, stamps, file attachments | [M31-shapes-ink-stamps.md](docs/modules/M31-shapes-ink-stamps.md) | ☑ |
 | 4 | M32 Comments panel, replies & status, FDF/XFDF, summarise | [M32-comments-panel.md](docs/modules/M32-comments-panel.md) | ☑ |
-| 4 | M41 Merge, split, extract to files, crop, deskew & flatten | [M41-merge-split-crop.md](docs/modules/M41-merge-split-crop.md) | ☑ |
+| 4 | M41 Merge, split, extract to files, crop, deskew & flatten | [M41-merge-split-crop.md](docs/modules/M41-merge-split-crop.md) | ◐ |
 | 4 | M72 Document properties, metadata & XMP, initial view | [M72-properties-metadata.md](docs/modules/M72-properties-metadata.md) | ☑ |
 | 4 | M130 Preferences, keyboard shortcuts editor, ribbon/QAT customisation, UI scale, i18n framework | [M130-preferences.md](docs/modules/M130-preferences.md) | ☑ |
 | | **MILESTONE 1 — usable viewer & annotator (v0.1)** — open, view, search, print, annotate, comment, organise pages, merge/split, deskew scans, save, encrypt, create PDFs, preferences | | |
 | 5 | M33 Measuring tools — distance, perimeter, area, calibration | [M33-measuring-tools.md](docs/modules/M33-measuring-tools.md) | ☑ |
 | 5 | M50 Page-object model — select, move, resize, align, arrange | [M50-object-model.md](docs/modules/M50-object-model.md) | ☑ |
 | 5 | M60 Form fill & AcroForm field designer | [M60-forms.md](docs/modules/M60-forms.md) | ☑ |
-| 5 | M92 Export to images, text, HTML & RTF | [M92-export.md](docs/modules/M92-export.md) | ☑ |
+| 5 | M92 Export to images, text, HTML & RTF | [M92-export.md](docs/modules/M92-export.md) | ◐ |
 | 5 | M100 Optimise (reduce size), linearise, repair, remove duplicates | [M100-optimise-repair.md](docs/modules/M100-optimise-repair.md) | ☑ |
 | 6 | M53 Header/footer, Bates numbering, watermark, background & links | [M53-headers-bates-watermarks-links.md](docs/modules/M53-headers-bates-watermarks-links.md) | ☑ |
 | 6 | M61 Field logic — validation, formatting, calculation, actions; data import/export; flatten | [M61-form-logic-data.md](docs/modules/M61-form-logic-data.md) | ☐ |
@@ -62,8 +70,23 @@ commit. Sub-conversations working in parallel follow **§12**.
 | 10 | M131 Installers, code signing, auto-update, crash reporting, help & first run | [M131-release.md](docs/modules/M131-release.md) | ☐ |
 | | **MILESTONE 3 — full editor (v1.0)** — text editing with reflow, redaction, digital signatures, incremental saves, PDF/A, Office bridge, CLI, signed installers & auto-update | | |
 
-Legend: ☐ not started · ◐ in progress (branch open) · ☑ merged to `main`,
-acceptance test green on all three OSes.
+Legend: ☐ not started · ◐ reopened/in progress · ☑ delivered and merged with
+required CI green. CHECKLIST.txt uses Tony's `✔` for the same completed state.
+Historical CI on three OS families does not establish every architecture or
+installer acceptance gate in §3.1.
+
+**2026-09-12 completion review:** 27 of the 44 original modules had delivery
+ticks. Four are reopened below: **23 remain ticked, four are being repaired,
+17 have not started**. These counts describe the original briefs, not effort
+remaining or competitor parity. Existing audit findings remain tracked in
+`Codex_Audit.md` and `docs/open-work.md`.
+
+| Reopened module | Required completion work | Task |
+|---|---|---|
+| M11 | Content-aware Fit Visible with rotated/cropped pages | M11 - Complete Fit Visible |
+| M13 | Preserve printable annotations and widgets in vector PDF output | M13 - Preserve annotations in PDF printing |
+| M41 | Implement the promised crop aspect ratios and rotated geometry | M41 - Complete crop aspect ratios |
+| M92 | Honour bilevel TIFF compression, including single-page export | M92 - Complete bilevel TIFF compression |
 
 **Ordering principle (Tony, 2026-09-07): easiest-first, hardest-last.**
 Waves 0–4 give an installable, usable viewer/annotator; waves 5–7 make it an
@@ -81,18 +104,26 @@ long before M131.
 architecture below is designed so every module ships working on its own and
 nothing has to be rewritten to add the next one.
 
-**"Same capabilities as Foxit 14", exactly: no — and it is worth saying why
-up front.** Foxit is ~20 years of a large team on a proprietary engine. Three
-tiers:
+**The initial scope is insufficient for Tony's current parity target.** The
+tiers below record the original delivery boundaries. They do not waive features
+needed for the current goal, and an initial implementation must not be marketed
+as full parity. Maintain a feature-by-feature comparison with named product
+editions, platforms, evidence, acceptance criteria and explicit remaining work.
 
 | Tier | Meaning | Examples |
 |---|---|---|
 | **Core** | Build fully; parity with Foxit is realistic | View, annotate, organise pages, forms, protect, redact, sign, OCR, optimise, compare, batch, watermarks/Bates, create-from-image/web |
-| **Pro** | Build, but expect ~80 % of Foxit's polish | Text editing with reflow (see §8), auto form-field recognition, PDF/A conversion, OCR "editable text" mode |
+| **Pro** | Build with a feasibility gate and measured quality criteria; an initial fallback remains incomplete for parity | Text editing with reflow (see §8), auto form-field recognition, PDF/A conversion, OCR "editable text" mode |
 | **Un-parked 2026-09-08** | PDF Portfolios — create/edit/cover/extract, Tony's daily workflow | **M42** (wave 4); opening/extracting already in M12 |
 | **Parked** | Not planned unless asked — cost far exceeds value for one user | XFA forms, Acrobat-JavaScript compatibility, PDF→Word/Excel with layout fidelity, 3D/video/rich media, tag-tree accessibility editor, full preflight, cloud/ECM connectors, virtual printer driver, scanner drivers |
 
-Anything Parked can be promoted later; the engine layer does not block it.
+The current parity backlog includes full tag-tree/reading-order remediation,
+high-fidelity PDF-to-Office conversion, preflight/print production, broader form
+compatibility, scanner/virtual-printer integration, collaboration/e-signature
+workflows and enterprise deployment/integration. These need explicit briefs and
+acceptance evidence; they are not covered by ticking the original 44 modules.
+Cloud services and add-ons must be identified separately in the comparison.
+Do not assume an engine interface makes every missing feature inexpensive.
 
 ---
 
@@ -134,7 +165,7 @@ No Python in the app. (Python 3.11 stays useful for one-off tooling.)
 ### PDF engine libraries (all licences permit commercial use, no copyleft)
 | Library | Licence | Role |
 |---|---|---|
-| **PDFium** (`@hyzyla/pdfium` WASM; later `pdfium-binaries` native via `koffi` FFI if needed) | BSD-3 | Rendering, text extraction/positions, page objects (text/image/path) read + edit, AcroForm fill/draw, annotations. **PDFium is the engine Foxit donated to Google** — Foxit's own core, the strongest possible base for a "Foxit-like" editor. |
+| **PDFium** (`@hyzyla/pdfium` WASM; later `pdfium-binaries` native via `koffi` FFI if needed) | BSD-3 | Rendering, text extraction/positions, page objects (text/image/path) read + edit, AcroForm fill/draw, annotations. PDFium provides low-level PDF operations. Its editing API does not supply paragraph layout, font reconstruction or the complete behaviour of any current commercial editor; prove those capabilities in their own modules. |
 | **pdf-lib** | MIT | Writing: page ops, embedding fonts/images, forms, metadata, drawing content streams. |
 | **qpdf** (`@jspawn/qpdf-wasm` or bundled CLI) | Apache-2.0 | Encryption/decryption, linearisation, repair, object-stream optimisation, structural surgery. |
 | **fontkit** | MIT | Font metrics, glyph lookup, subsetting for text editing. |
@@ -154,9 +185,15 @@ the UI.
 ## 3. Product requirements
 
 ### 3.1 Platforms
-Windows 10/11 **x64 and arm64** (Windows on ARM is a first-class target —
-M03) · macOS 12+ (universal) · Linux x64 (AppImage, .deb, .rpm). CI builds all three on every push; a module is "done" only when its
-tests pass on all three.
+Windows **x64 and arm64** (Windows on ARM is a first-class target — M03),
+macOS **x64 and arm64** (universal installer), and **Ubuntu Desktop x64**.
+Pin supported OS versions against the actual Electron/runtime release before
+shipping; the former Windows 10/11 and macOS 12+ claims need verification.
+Use an explicit OS/architecture test matrix, including both macOS slices,
+Windows ARM native installed builds, and Ubuntu Wayland and X11 sessions.
+Packaging an architecture or running one ARM smoke test is not a full feature
+pass on it. Track NSIS, MSI, DMG, AppImage and .deb installation/update evidence
+separately; .rpm is an additional distribution artifact, not Ubuntu coverage.
 
 ### 3.2 Themes — four, dark default
 All colours are **semantic tokens** (`--bg-app`, `--bg-panel`, `--bg-ribbon`,
@@ -197,8 +234,9 @@ own requirements):
   now never fainter than the theme's own muted text, which the tests enforce as
   a relative rule so it cannot drift when a surface moves. The italics carry
   the "this is a hint" signal instead of low contrast.
-- **Modals and overlays are fully opaque.** No `rgba()` with alpha < 1, no
-  `opacity` < 1, no `backdrop-filter`. Lint rule.
+- **Application modals and overlays are fully opaque.** No `rgba()` with alpha
+  < 1, no `opacity` < 1, no `backdrop-filter`. Lint rule. PDF object transparency,
+  soft masks and blend modes remain document features; preserve and edit them.
 - `color-scheme: <scheme> only` declared per theme. The `only` keyword is what
   actually stops a browser-level auto-dark feature repainting the app (Chrome's
   Auto Dark Mode ignores a bare `light`); the tests assert it.
@@ -310,11 +348,14 @@ streams rendered by PDFium; our own SVG only while an annotation is being
 created/edited, then baked to an appearance stream.
 
 ### 4.3 Save strategy
-- **M21:** full rewrite via pdf-lib. Simple, correct, invalidates existing
-  signatures (Foxit warns about this too — we do the same).
-- **M80:** incremental update — append-only, preserves everything before it.
-  Required for signing; makes saves of large files instant. Once M80 exists it
-  is the default; full rewrite is "Save As (optimised)".
+- **M21:** full rewrite via pdf-lib, with explicit preservation checks and
+  warnings before any lossy write. Existing signatures can be invalidated.
+- **M80:** incremental update preserves prior bytes for eligible edits, with
+  measured latency rather than an "instant" guarantee. A save-policy decision
+  must consider signatures, DocMDP/FieldMDP, encryption changes, redaction,
+  sanitisation and optimisation. Redaction/sanitisation must produce a clean
+  rewrite without recoverable prior revisions. Preserving signed bytes alone
+  does not establish that a later edit is permitted by the signature policy.
 - Autosave every N minutes to `<userData>/recovery/<hash>.ynot`; offered on
   next launch after a crash.
 
@@ -393,7 +434,7 @@ Full per-module detail is in each `docs/modules/*.md`.
 - **Wave 4:** M04 (M02, M11, M12, M13, M30) · M31 (M30) · M32 (M30) · M41 (M40) · M42 (M12, M21) · M72 (M21) · M130 (M02, M01)
   - → *MILESTONE 1 — usable viewer & annotator (v0.1)*
 - **Wave 5:** M33 (M31) · M50 (M21, M11) · M60 (M21, M30) · M92 (M11, M13) · M100 (M21)
-- **Wave 6:** M53 (M50, M21) · M61 (M60) · M82 (M30, M60) · M90 (M21) · M110 (M11, M13)
+- **Wave 6:** M53 (M50, M21) · M61 (M60) · M82 (M30, M31, M60) · M90 (M21, M41; M51 for editable output) · M110 (M11, M13)
 - **Wave 7:** M52 (M50) · M111 (M13) · M120 (M21, M41, M53, M61, M70, M90, M92, M100)
   - → *MILESTONE 2 — everyday editor (v0.5)*
 - **Wave 8:** M51 (M50, M13) · M62 (M60) · M80 (M21, M20) · M93 (M21, M91) · M121 (M120)
@@ -443,7 +484,9 @@ D:\Projects\ynotPDF\
    the corpus proving (a) paragraph detection from PDFium text runs, (b)
    re-layout of edited text with fontkit metrics, (c) writing the replaced
    content stream + font subset so extraction still works. If the spike fails
-   on typical files, fall back to Foxit-like "edit within a line" scope.
+   on typical files, line editing is a useful initial delivery, but paragraph
+   reflow remains open for the parity target. Record the unsupported corpus
+   classes and follow-up work rather than silently lowering acceptance.
 2. **PDFium API surface in WASM.** `@hyzyla/pdfium` exports render/text APIs
    but may not export every edit/form/annotation function. Two fixes, no
    Docker: (a) prebuilt native PDFium from `pdfium-binaries` called through
@@ -538,12 +581,20 @@ component is credited on the generated Help → Open-source software page.
 
 ## 12. Parallel sub-conversation protocol
 
-Tony runs 3–4 Claude Code conversations at once, one module each.
-To make that safe:
+Tony has authorised separate Codex tasks named `M<number> - <short description>`.
+Start with **four** independent completion repairs; never exceed **ten active
+new module tasks**, including tasks still awaiting integration. Create a
+replacement only after an existing task has finished, its work is merged, and
+the next module's dependencies and file ownership have been rechecked.
+Existing audit repairs retain their own owner. To make that safe:
 
 1. **Waves.** Start a module only when every module it depends on is ☑ on
-   `main`. The wave number in §0 is the earliest wave it can start; modules
-   in the same wave are independent of each other. **M00 runs alone first** —
+   `main`. Waves are rough ordering guidance, not an independence guarantee:
+   even the original waves contain within-wave dependencies. Reopened completion
+   work takes priority. Check actual contracts and write ownership as well as
+   the dependency list. Bounded repairs may use already-merged contracts while
+   an unrelated dependency feature is reopened; document that boundary and
+   revalidate integration. **M00 runs alone first** —
    it creates the repo, the folder skeleton and, crucially, the **stubbed
    contracts** (`PdfEngine`, `Document`, `Command`, `ModuleManifest`, IPC
    types) that every later module codes against.
@@ -572,3 +623,19 @@ To make that safe:
    unit + e2e tests green on all three OSes in CI · no new lint violations ·
    commands appear in the palette · undo/redo works for every change ·
    theme test still passes · §0 ticked.
+
+7. **Integration owner.** Module tasks commit coherent work, push PRs and make
+   required CI green. The coordinating task merges one at a time, checks the
+   exact PR head against current main, handles integration/revalidation, then
+   updates `CHECKLIST.txt` and §0. Module tasks do not race to edit the trackers
+   or merge shared contracts. Finish and remove only their own merged worktrees.
+8. **Completion means evidence.** Record implemented, verified, deferred and
+   blocked scope separately. A placeholder, unavailable option, skipped test
+   or build-log promise to another module is not completed functionality.
+   Reopen a module when a required repair is found; record the original delivery
+   in its history. Include save/reopen, undo/redo, recovery, permissions and
+   cross-module preservation where applicable, not only isolated unit tests.
+9. **Machine contention.** Use distinct output directories and synthetic fixtures.
+   Coordinate full local Electron e2e runs; multiple hidden suites still compete
+   for CPU/GPU and can race on OS clipboard state. Shared-file exceptions must be
+   agreed with their owner before edits, then listed in the PR.

@@ -5,7 +5,7 @@
 | **Module id** | `M90` — folder `src/renderer/modules/M90-ocr/`, branch `mod/M90-ocr` |
 | **Earliest wave** | 6 (see `PLAN.md` §0/§12) |
 | **Tier** | Core |
-| **Depends on** | M21 |
+| **Depends on** | M21, M41; M51 for editable-text output |
 | **Unlocks** | [M62 Automatic form-field recognition](./M62-field-recognition.md), [M120 Batch processing & action wizard](./M120-batch-actions.md) |
 
 ## Your task — the prompt for this conversation
@@ -67,9 +67,12 @@ correct).
   text**: create text objects with a substitute font via M51's writer and
   optionally drop the image (Pro; warn about fidelity). **M51 is deliberately
   scheduled after this module**: ship modes 1 and 2 now; show mode 3 in the
-  dialog as "available once text editing (M51) is installed" and register a
+  dialog as "Editable output is not available yet" and register a
   follow-up task in the Build log. When M51 is ☑, a short follow-up session
-  completes mode 3 using this brief.
+  completes mode 3 using this brief. Track searchable/image output and editable
+  output separately in CHECKLIST.txt; the full module remains incomplete until
+  its required modes are verified. Do not put internal module numbers into
+  product-facing labels.
 - Suspects UI: list of low-confidence words, jump, accept/correct inline
   (edits the invisible text), confidence threshold setting.
 - Ribbon: OCR current, OCR page range, OCR multiple files (M120 hook);
@@ -81,8 +84,9 @@ Handwriting recognition (Parked).
 
 ## Design notes & constraints
 
-- **Windows on ARM (M03):** Tesseract's official Windows builds are x64
-  only. On `process.arch === 'arm64'` Windows the app must use the
+- **Windows on ARM (M03):** verify the provenance and target architecture of
+  the pinned Tesseract distribution. Use the existing target-architecture
+  helpers, not a fresh `process.arch` decision. ARM Windows must use the
   `tesseract.js` WASM engine automatically (same output, slower) unless an
   arm64 native build is pinned in `resources/binaries.json`. The OCR dialog
   shows which engine is in use (word, not colour). Never let the arm64
@@ -119,8 +123,12 @@ tesseract.js (Apache-2.0).
   find + selection rects align with words (visual test).
 - Skewed fixture is deskewed (angle within 0.5°).
 - Editable-text mode yields real text objects; extraction reads them.
-- WASM fallback produces the same output (slower) when the binary is
-  absent.
+- WASM fallback meets the same text-accuracy and geometry tolerances when the
+  binary is absent. Pin engine and language-data versions; byte-identical
+  recognition across different builds is not an unmeasured acceptance promise.
+- Test mixed text/scanned pages, rotated CropBoxes, Unicode search/selection,
+  cancellation and repeat OCR without duplicate text. Benchmark memory and time
+  on multi-page scans. Expose offline language availability and verify downloads.
 
 ---
 

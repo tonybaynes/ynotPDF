@@ -91,6 +91,17 @@ writer).
   render identically outside the edited block (test enforces).
 - Keep original text objects untouched when not edited — do not
   re-serialise a whole page's content unless necessary.
+- Separate font inspection, shaping, PDF encoding and subset writing in the
+  spike. M100's glyph blanking is useful for safe optimisation of existing
+  content, but cannot restore glyphs missing from an existing subset. New
+  fonts/subsets need correctly regenerated encoding, widths, CID/GID mapping
+  and ToUnicode together. A blanket ban on remapped subsets is not a complete
+  design for inserting arbitrary new text.
+- Treat Unicode, IME, bidi and complex-script shaping as measured editor
+  requirements. An initial line-only or limited-script implementation remains
+  incomplete for parity. Extract reusable font services early to unblock
+  Unicode in M30/M32/M53/M91 and editable OCR; do not defer every font fix
+  until the entire paragraph editor is complete.
 - **fontkit: use it for reading, not for writing a subset — and check what
   M100 already built before adding it at all.** (M100, 2026-09-10.) M100
   needed to cut embedded fonts down and did *not* use fontkit, for one
@@ -151,7 +162,9 @@ for the spike, not a foregone conclusion.
 
 - Edit one word in the middle of a justified paragraph in the fixture:
   extraction of the saved file reads the new paragraph exactly; render diff
-  is confined to that block's bbox; other pages byte-identical.
+  is confined to that block's bbox; untouched pages preserve content/resources
+  and appearance. Define byte preservation at the object/stream boundary for
+  a full rewrite; require literal prior-byte preservation only for M80 output.
 - Change font size for a block ⇒ reflow keeps the box width; overflow
   behaviour per setting.
 - Edit text in a non-embedded-font block ⇒ substitution prompt, result
