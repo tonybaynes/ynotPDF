@@ -7,19 +7,16 @@
  * at 300 DPI never exists all at once in either process.
  */
 
-import type { DocHandle, PdfEngine } from '@engine/PdfEngine';
 import { hasBridge, invoke, type PrintJobResult, type PrinterInfo } from '@shared/ipc';
 import type { PrintSettings } from '../settings';
 import { buildPrintPlan, type PrintPlan, type PrintPlanInput } from './plan';
 import { printToPdf } from './printToPdf';
 import { renderSheet } from './render';
 import type { Sheet } from './imposition';
+import { withRasterSnapshot, type RasterPrintSource } from './rasterSnapshot';
 
-export interface PrintSource {
-  readonly engine: PdfEngine;
-  readonly doc: DocHandle;
+export interface PrintSource extends RasterPrintSource {
   readonly title: string;
-  readonly snapshot?: (signal?: AbortSignal) => Promise<Uint8Array>;
 }
 
 export interface PrintRunOptions {
@@ -60,26 +57,51 @@ export class PrintService {
         error: 'Printing needs the desktop app',
       };
     }
-    const jobId = await invoke('print:begin', {
-      widthPt: plan.paper.width,
-      heightPt: plan.paper.height,
-      printer: settings.printer,
-      copies: settings.copies,
-      collate: settings.collate,
-      grayscale: settings.grayscale,
-      title: source.title,
-      ...(options.dryRun ? { dryRun: true } : {}),
-    });
+    let jobId: string | undefined;
     try {
-      for (const [index, sheet] of plan.sheets.entries()) {
-        options.signal?.throwIfAborted();
-        const png = await this.renderSheet(sheet, source, settings);
-        await invoke('print:sheet', jobId, png);
-        options.onProgress?.(index + 1, plan.sheets.length);
-      }
-      return await invoke('print:finish', jobId);
+      return await withRasterSnapshot(
+        source,
+        new Set(
+          plan.sheets.flatMap((sheet) =>
+            sheet.placements.filter((p) => p.page >= 0).map((p) => p.page),
+          ),
+        ),
+        settings,
+        options.signal,
+        async (doc) => {
+          const check = (): void => {
+            options.signal?.throwIfAborted();
+            source.assertCurrent?.();
+          };
+          check();
+          jobId = await invoke('print:begin', {
+            widthPt: plan.paper.width,
+            heightPt: plan.paper.height,
+            printer: settings.printer,
+            copies: settings.copies,
+            collate: settings.collate,
+            grayscale: settings.grayscale,
+            title: source.title,
+            ...(options.dryRun ? { dryRun: true } : {}),
+          });
+          for (const [index, sheet] of plan.sheets.entries()) {
+            check();
+            const png = await this.renderSheet(
+              sheet,
+              { ...source, doc },
+              { ...settings, annotations: false, forms: false },
+              options.signal,
+            );
+            check();
+            await invoke('print:sheet', jobId, png);
+            options.onProgress?.(index + 1, plan.sheets.length);
+          }
+          check();
+          return await invoke('print:finish', jobId);
+        },
+      );
     } catch (error) {
-      await invoke('print:cancel', jobId).catch(() => undefined);
+      if (jobId) await invoke('print:cancel', jobId).catch(() => undefined);
       return {
         sheets: 0,
         printed: false,
@@ -93,7 +115,9 @@ export class PrintService {
   async toPdf(options: PrintRunOptions): Promise<Uint8Array> {
     const { plan, settings, source } = options;
     if (plan.error) throw new Error(plan.error);
-    return await printToPdf({
+    options.signal?.throwIfAborted();
+    source.assertCurrent?.();
+    const bytes = await printToPdf({
       engine: source.engine,
       doc: source.doc,
       sheets: plan.sheets,
@@ -109,10 +133,18 @@ export class PrintService {
       ...(options.onProgress ? { onProgress: options.onProgress } : {}),
       ...(options.signal ? { signal: options.signal } : {}),
     });
+    options.signal?.throwIfAborted();
+    source.assertCurrent?.();
+    return bytes;
   }
 
   /** One sheet as PNG bytes, at the job's DPI. */
-  renderSheet(sheet: Sheet, source: PrintSource, settings: PrintSettings): Promise<Uint8Array> {
+  renderSheet(
+    sheet: Sheet,
+    source: PrintSource,
+    settings: PrintSettings,
+    signal?: AbortSignal,
+  ): Promise<Uint8Array> {
     return renderSheet(sheet, {
       engine: source.engine,
       doc: source.doc,
@@ -120,6 +152,7 @@ export class PrintService {
       annotations: settings.annotations,
       forms: settings.forms,
       grayscale: settings.grayscale,
+      ...(signal ? { signal } : {}),
     });
   }
 
@@ -127,16 +160,27 @@ export class PrintService {
    * A preview sheet as an object URL, rendered at screen resolution rather than the job's DPI —
    * a 300-DPI A4 preview thumbnail would be a 2 500-pixel image scaled into a 200-pixel box.
    */
-  async previewUrl(sheet: Sheet, source: PrintSource, settings: PrintSettings): Promise<string> {
-    const png = await renderSheet(sheet, {
-      engine: source.engine,
-      doc: source.doc,
-      dpi: 96,
-      annotations: settings.annotations,
-      forms: settings.forms,
-      grayscale: settings.grayscale,
-      maxEdge: 1400,
-    });
+  async previewUrl(
+    sheet: Sheet,
+    source: PrintSource,
+    settings: PrintSettings,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const pages = new Set(sheet.placements.filter((p) => p.page >= 0).map((p) => p.page));
+    const png = await withRasterSnapshot(source, pages, settings, signal, (doc) =>
+      renderSheet(sheet, {
+        engine: source.engine,
+        doc,
+        dpi: 96,
+        annotations: false,
+        forms: false,
+        grayscale: settings.grayscale,
+        maxEdge: 1400,
+        ...(signal ? { signal } : {}),
+      }),
+    );
+    signal?.throwIfAborted();
+    source.assertCurrent?.();
     return URL.createObjectURL(new Blob([png.slice()], { type: 'image/png' }));
   }
 }

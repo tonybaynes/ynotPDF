@@ -464,3 +464,26 @@ above 150, in addition to the existing print permission gate.
 Validation and remaining limits are recorded in
 [`docs/reviews/M13-completion-review.md`](../reviews/M13-completion-review.md). No dependency,
 shared engine/writer contract, shared IPC, clipboard, theme or central tracker is changed.
+
+### Printer and preview snapshot follow-up — 2026-09-12
+
+**Design:** all raster print consumers use `withRasterSnapshot`: materialise the current model
+and engine bytes, bake only the requested printable marks on pages actually placed on sheets,
+open one temporary engine handle, then close it in `finally`. A printer job uses that same handle
+for every sheet. The existing source document, undo journal and recovery state are never replaced.
+The shared engine/writer/IPC contracts are unchanged; M11's unrelated reopened Fit Visible work
+is not a dependency of this snapshot lifecycle.
+
+The dialog cancels obsolete preview requests and closes outstanding work on dismissal. It shows
+plain loading/error text and only reveals an image after decoding. The print plan is bound to the
+document revision; queued edits or authority changes stop preparation before printer delivery.
+Preview is always 96 DPI; physical/dry-run output above 150 DPI requires high-quality print
+permission. Raster Print to PDF uses the same appearance preparation and cancellation checks.
+
+**Validation in progress:** unit coverage checks real PDFium content at all source rotations,
+independent annotation/form switches, selected pages, cancellation before capture and after open,
+handle disposal, one snapshot per multi-sheet job, and spool cancellation on source changes.
+Actual-dialog journeys compare settled preview PNGs against the real prepared print-window PNGs,
+with native delivery intercepted so no physical printer receives a test job. Synthetic screenshots
+are inspected, and encrypted fixtures exercise no/low/full print authority. Final lint, full unit,
+full UI and platform CI results will be recorded before handoff; this entry does not mark M13 done.

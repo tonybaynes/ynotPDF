@@ -21,6 +21,7 @@ export interface SheetRenderOptions {
   readonly grayscale: boolean;
   /** Largest allowed edge in pixels, so a 1200-DPI A0 cannot ask for a bitmap that will not fit. */
   readonly maxEdge?: number;
+  readonly signal?: AbortSignal;
 }
 
 const DEFAULT_MAX_EDGE = 12000;
@@ -39,6 +40,7 @@ export function sheetScale(sheet: Sheet, dpi: number, maxEdge = DEFAULT_MAX_EDGE
 
 /** Renders one sheet to PNG bytes. */
 export async function renderSheet(sheet: Sheet, options: SheetRenderOptions): Promise<Uint8Array> {
+  options.signal?.throwIfAborted();
   const scale = sheetScale(sheet, options.dpi, options.maxEdge ?? DEFAULT_MAX_EDGE);
   const width = Math.max(1, Math.round(sheet.width * scale));
   const height = Math.max(1, Math.round(sheet.height * scale));
@@ -50,9 +52,11 @@ export async function renderSheet(sheet: Sheet, options: SheetRenderOptions): Pr
   ctx.fillRect(0, 0, width, height);
 
   for (const placement of sheet.placements) {
+    options.signal?.throwIfAborted();
     if (placement.page < 0) continue;
     await drawPlacement(ctx, sheet, placement, scale, options);
   }
+  options.signal?.throwIfAborted();
   return await canvasToPng(canvas);
 }
 
@@ -90,8 +94,12 @@ async function drawPlacement(
   const dy = (sheet.height - placement.y - placement.height) * scale;
   const dw = placement.width * scale;
   const dh = placement.height * scale;
-  ctx.drawImage(result.bitmap, dx, dy, dw, dh);
-  result.bitmap.close();
+  try {
+    options.signal?.throwIfAborted();
+    ctx.drawImage(result.bitmap, dx, dy, dw, dh);
+  } finally {
+    result.bitmap.close();
+  }
 
   if (placement.border) {
     ctx.save();
