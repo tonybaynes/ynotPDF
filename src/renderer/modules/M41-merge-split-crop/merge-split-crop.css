@@ -27,6 +27,15 @@
   font-size: var(--fs-2);
 }
 
+.ops-input-problems {
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.ops-input-problems:empty {
+  display: none;
+}
+
 .ops-empty {
   margin: var(--sp-5) auto;
   color: var(--fg-muted);

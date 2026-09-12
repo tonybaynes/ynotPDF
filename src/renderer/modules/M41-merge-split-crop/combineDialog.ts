@@ -21,6 +21,7 @@ import type { PdfEngine } from '@engine/PdfEngine';
 import { formatRange, parseRange } from '@modules/M40-organise-pages/range';
 import { PAGE_SIZE_PRESETS, choiceToPortraitPoints, findPreset } from '@shared/pageSizes';
 import { checkbox, select } from './fields';
+import type { CombineAddResult, CombineReadHooks } from './combineInputs';
 
 /** One row of the list, as the dialog holds it. */
 export interface CombineEntry {
@@ -52,7 +53,12 @@ export interface CombineDialogOptions {
   readonly keepBookmarks: boolean;
   readonly toNewTab: boolean;
   /** Opens the OS file picker and answers with what it read. */
-  readonly addFiles: () => Promise<ReadonlyArray<CombineEntry>>;
+  readonly addFiles: (hooks: CombineReadHooks) => Promise<CombineAddResult>;
+  readonly addFolder: (recursive: boolean, hooks: CombineReadHooks) => Promise<CombineAddResult>;
+  readonly addDropped: (
+    files: ReadonlyArray<File>,
+    hooks: CombineReadHooks,
+  ) => Promise<CombineAddResult>;
   /** Whether an output file can be written at all (a browser run cannot). */
   readonly canSaveToFile: boolean;
 }
@@ -75,14 +81,32 @@ export async function askCombine(options: CombineDialogOptions): Promise<Combine
   let focused = 0;
   let sizeChoice: SizeChoice = 'keep';
   let handle: DialogHandle | null = null;
+  const controller = new AbortController();
+  let pending = 0;
+  let queue = Promise.resolve();
 
   const list = el('div.ops-files', {
     role: 'listbox',
     'aria-label': 'Files to combine',
     tabindex: '0',
   });
-  const empty = el('p.ops-empty', null, 'No files yet. Add some, or drop them on this window.');
+  const empty = el('p.ops-empty', null, 'No files yet. Add files or a folder, or drop files here.');
   const totalLine = el('p.field-hint.ops-summary', { role: 'status' });
+  const reading = el('p.ops-summary', { role: 'status' });
+  const problems = el('div.ops-input-problems', { role: 'alert' });
+  const includeSubfolders = checkbox({ label: 'Include subfolders', checked: true });
+
+  const validate = (): void => {
+    handle?.setEnabled(
+      'ok',
+      pending === 0 &&
+        entries.length > 0 &&
+        entries.every(
+          (entry) =>
+            (entry.pageCount ?? 0) > 0 && (entry.rangeText.trim() === '' || entry.pages !== null),
+        ),
+    );
+  };
 
   const bookmarkPerFile = checkbox({
     label: 'Add a bookmark for each file, named after the file',
@@ -134,7 +158,7 @@ export async function askCombine(options: CombineDialogOptions): Promise<Combine
       entries.length === 0
         ? ''
         : `${String(entries.length)} ${entries.length === 1 ? 'file' : 'files'}, ${String(pages)} ${pages === 1 ? 'page' : 'pages'}`;
-    handle?.setEnabled('ok', entries.length > 0);
+    validate();
   };
 
   const move = (from: number, to: number): void => {
@@ -191,6 +215,7 @@ export async function askCombine(options: CombineDialogOptions): Promise<Combine
         rangeInput.setAttribute('aria-invalid', 'true');
         rangeNote.textContent = parsed.error;
         entry.pages = null;
+        validate();
         return;
       }
       rangeInput.removeAttribute('aria-invalid');
@@ -219,6 +244,7 @@ export async function askCombine(options: CombineDialogOptions): Promise<Combine
       focused = index;
     });
     row.addEventListener('keydown', (event) => {
+      if (event.target !== row) return;
       if (event.key === 'ArrowDown' && !event.altKey) {
         event.preventDefault();
         focusRow(Math.min(entries.length - 1, index + 1));
@@ -256,7 +282,9 @@ export async function askCombine(options: CombineDialogOptions): Promise<Combine
       delete row.dataset['dropTarget'];
       if (raw === undefined || raw === '') return;
       event.preventDefault();
-      move(Number(raw), index);
+      event.stopPropagation();
+      const from = Number(raw);
+      if (Number.isInteger(from) && from >= 0 && from < entries.length) move(from, index);
     });
 
     const meta = el('div.ops-file-meta');
@@ -265,7 +293,11 @@ export async function askCombine(options: CombineDialogOptions): Promise<Combine
       el(
         'span.ops-file-count',
         null,
-        entry.pageCount === null ? 'Reading…' : `${String(entry.pageCount)} pages`,
+        entry.pageCount === null
+          ? 'Reading…'
+          : entry.pageCount === 0
+            ? 'Cannot read this PDF'
+            : `${String(entry.pageCount)} pages`,
       ),
     );
     const controls = el('div.ops-file-controls');
@@ -281,35 +313,75 @@ export async function askCombine(options: CombineDialogOptions): Promise<Combine
       entries.length === 0
         ? ''
         : `${String(entries.length)} ${entries.length === 1 ? 'file' : 'files'}, ${String(pages)} ${pages === 1 ? 'page' : 'pages'}`;
+    validate();
   };
 
   /** Fills in every entry's page count; one at a time, so a big list does not open the file
    * handles all at once. */
   const countEvery = async (): Promise<void> => {
-    for (const entry of entries) await countPagesOf(options.engine, entry);
+    for (const entry of entries) {
+      if (controller.signal.aborted) return;
+      await countPagesOf(options.engine, entry);
+    }
   };
 
   const add = button('btn', null, icon('file-plus'), ' Add files…');
-  add.addEventListener('click', () => {
-    void (async () => {
-      const added = await options.addFiles();
-      entries.push(...added.map((e) => ({ ...e })));
-      await countEvery();
-      refresh();
-    })();
-  });
+  const addFolder = button('btn', null, icon('folder-open'), ' Add folder…');
   const clearAll = button('btn', null, 'Remove all');
+  const enqueue = (read: (hooks: CombineReadHooks) => Promise<CombineAddResult>): void => {
+    pending++;
+    add.disabled = addFolder.disabled = clearAll.disabled = true;
+    validate();
+    queue = queue.then(async () => {
+      try {
+        if (controller.signal.aborted) return;
+        const added = await read({
+          signal: controller.signal,
+          progress: (message) => {
+            if (!controller.signal.aborted) reading.textContent = message;
+          },
+        });
+        if (controller.signal.aborted) return;
+        entries.push(...added.entries.map((entry) => ({ ...entry })));
+        await countEvery();
+        if (controller.signal.aborted) return;
+        for (const problem of added.problems) problems.append(el('p', null, problem));
+        refresh();
+      } catch (error) {
+        if (!controller.signal.aborted)
+          problems.append(el('p', null, error instanceof Error ? error.message : String(error)));
+      } finally {
+        pending--;
+        if (!controller.signal.aborted) {
+          add.disabled = addFolder.disabled = clearAll.disabled = pending > 0;
+          if (pending === 0) reading.textContent = '';
+          validate();
+        }
+      }
+    });
+  };
+  add.addEventListener('click', () => {
+    enqueue(options.addFiles);
+  });
+  addFolder.addEventListener('click', () => {
+    const recursive = includeSubfolders.input.checked;
+    enqueue((hooks) => options.addFolder(recursive, hooks));
+  });
   clearAll.addEventListener('click', () => {
     entries.length = 0;
+    problems.replaceChildren();
     refresh();
   });
 
   const body = el('div.ops-dialog');
   const toolbar = el('div.ops-toolbar');
-  toolbar.append(add, clearAll);
+  toolbar.append(add, addFolder, clearAll);
   body.append(
     toolbar,
+    includeSubfolders.element,
+    reading,
     list,
+    problems,
     totalLine,
     formGrid(
       field({ label: 'Bookmarks', input: bookmarkPerFile.element }),
@@ -320,9 +392,19 @@ export async function askCombine(options: CombineDialogOptions): Promise<Combine
   );
 
   // Files dropped from the desktop onto the dialog are the same thing as pressing Add.
-  body.addEventListener('dragover', (event) => {
-    if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
-  });
+  const dragover = (event: DragEvent): void => {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+  const drop = (event: DragEvent): void => {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length > 0) enqueue((hooks) => options.addDropped(files, hooks));
+  };
 
   await countEvery();
 
@@ -337,9 +419,12 @@ export async function askCombine(options: CombineDialogOptions): Promise<Combine
       { id: 'ok', label: 'Combine', primary: true },
     ],
   });
+  handle.element.addEventListener('dragover', dragover);
+  handle.element.addEventListener('drop', drop);
   refresh();
 
   const result = await handle.result;
+  controller.abort();
   if (result !== 'ok' || entries.length === 0) return null;
   return {
     entries: entries.map((e) => ({ ...e })),
