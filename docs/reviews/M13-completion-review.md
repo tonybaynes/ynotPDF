@@ -76,9 +76,9 @@ NeedAppearances use pdf-lib's built-in providers, with failures propagated.
 - Unsupported/malformed marks are reported, not guessed. For example, an unsigned signature widget
   with no appearance may require its author to provide one or the user to exclude forms. This
   repair does not implement M61's custom appearance providers or repair every malformed PDF.
-- **Unfinished original M13 scope:** physical printer delivery and preview still use engine-only
+- **PR58 checkpoint — unfinished original M13 scope:** physical printer delivery and preview used engine-only
   rasters and can omit writer-only unsaved FreeText, custom stamps and form designs. Only
-  `runPrintToPdf` supplies the materialised snapshot in this bounded repair. A follow-up must
+  `runPrintToPdf` supplied the materialised snapshot in that bounded repair. The follow-up below must
   render the snapshot for both paths and add a printer dry-run/preview journey before the whole
   M13 module is closed. No shared IPC change is needed to demonstrate the missing raster marks.
   They have no vector driver route. Hardware printing, arbitrary third-party appearance fidelity, very large
@@ -130,3 +130,38 @@ fixture skips); both focused invisible UI journeys passed. Required final lint, 
 full e2e and CI/platform results will be recorded before reporting merge readiness. No new test
 skips, dependencies or private fixtures were introduced. The coordinator owns central trackers
 and the eventual merge; this review is not a claim that an unmerged module is complete.
+
+## Printer and preview follow-up
+
+The follow-up uses the materialised model/engine snapshot for printer sheets, preview and raster
+PDF output. It bakes only requested printable appearances on pages actually placed on the sheets,
+then opens an isolated engine handle. One handle serves a complete printer job; preview requests
+own their individual handles and abort obsolete work. Handles close in `finally`, including when
+cancellation arrives during an asynchronous open or a render fails. The source and its undo and
+recovery state remain untouched. Loading/error text replaces the former broken-image placeholder.
+
+Independent source review found a production race after the print dialog: remembering settings
+awaited storage, then output re-resolved the active tab. The follow-up revalidates the captured
+document/revision after that await. Deterministic deferred-storage tests switch tabs and prove
+neither print nor PDF dispatch occurs. A separate test edits the document while the PDF destination
+dialog is open and proves rejection before source bytes are materialised or a file is written.
+
+Test fixture corrections are separate from product defects: the custom-stamp journey initially
+waited on an author-identity prompt before setting its identity; the first pixel probe attempted
+a blob fetch disallowed by the existing CSP; the encrypted-fixture helper initially omitted its
+requested output filename. The corrected probe samples decoded canvas pixels and compares them
+with native-decoded prepared printer sheets. No CSP or shared contract was changed.
+
+The follow-up checkpoint on integrated main `c492bfd` passes 4,139 unit tests with coverage
+(24 existing optional skips), and all 11 focused invisible UI journeys. The printer probe resets
+its capture for each job and waits for that job's unique completion serial before exact decoded
+pixel comparisons; repeated status toasts cannot substitute an earlier job's sheets. Settled
+preview, actual prepared sheet, error, n-up, booklet and tile screenshots were inspected: unsaved
+text/stamp/field content survives, intended source rotations and crop placement remain visible,
+and no new dialog layout defect was found. Screenshots are retained outside the worktree.
+
+Full local UI and platform CI results will be recorded in the follow-up PR before handoff, against
+its final head (discovery currently lists 571 tests in 42 files). Physical printer
+hardware and driver fidelity require hardware testing; automated journeys intercept only the
+native delivery boundary after main has prepared its actual HTML and sheet images. No physical
+test jobs are sent, and no existing hardware limitation is presented as automated evidence.

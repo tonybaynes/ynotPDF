@@ -42,7 +42,7 @@ import {
   type SelectionState,
 } from './selection/model';
 import { selectionToRtf } from './selection/rtf';
-import { PrintService } from './print/PrintService';
+import { PrintService, type PrintSource } from './print/PrintService';
 import { printSnapshot } from './print/snapshot';
 import { PageGeometry } from '@engine/geometry';
 import { openPrintDialog } from './print/PrintDialog';
@@ -1017,6 +1017,33 @@ export class SelectFindService {
 
   // ---- printing ---------------------------------------------------------------------------------
 
+  /** Bind a print plan to its document revision, including authority checks before output. */
+  private printSource(
+    document: Document,
+    settings: PrintSettings,
+    high = settings.dpi > 150,
+    revision = document.undo.revision,
+  ): PrintSource {
+    const assertCurrent = (): void => {
+      if (this.activeDocument() !== document || !document.undo.isCurrent(revision))
+        throw new Error('The document changed while preparing print. Please try again.');
+      if (!this.allowOutput('print') || (high && !this.allowOutput('print-high')))
+        throw new Error('The document permissions do not allow this print quality.');
+    };
+    return {
+      engine: this.engine,
+      doc: document.handle,
+      title: document.state.title,
+      assertCurrent,
+      snapshot: async (signal) => {
+        assertCurrent();
+        const bytes = await printSnapshot(document, signal, settings);
+        assertCurrent();
+        return bytes;
+      },
+    };
+  }
+
   /** The plan for the active document under some settings — the dialog and the tests read it. */
   planFor(settings: PrintSettings): PrintPlan {
     const document = this.activeDocument();
@@ -1039,6 +1066,7 @@ export class SelectFindService {
     const document = this.activeDocument();
     const source = this.activeSource();
     if (!document || !source) return null;
+    const revision = document.undo.revision;
     const printers = await this.print.printers();
     const start: PrintSettings = {
       ...(this.settingsValue.rememberPrint ? this.printSettings : DEFAULT_PRINT_SETTINGS),
@@ -1051,16 +1079,31 @@ export class SelectFindService {
       pageCount: document.pageCount,
       hasSelection: this.hasSelection(),
       plan: (settings) => this.planFor(settings),
-      preview: (sheet, settings) =>
+      preview: (sheet, settings, signal) =>
         this.print.previewUrl(
           sheet,
-          { engine: this.engine, doc: source.handle, title: document.state.title },
+          this.printSource(document, settings, false, revision),
           settings,
+          signal,
         ),
     });
     if (!result) return null;
+    if (this.activeDocument() !== document || !document.undo.isCurrent(revision)) {
+      await this.shell.dialogs.error(
+        'Print',
+        'The document changed while the print dialog was open. Please try again.',
+      );
+      return null;
+    }
     this.printSettings = result.settings;
     if (this.settingsValue.rememberPrint) await writePrintSettings(this.storage, result.settings);
+    if (this.activeDocument() !== document || !document.undo.isCurrent(revision)) {
+      await this.shell.dialogs.error(
+        'Print',
+        'The document changed while remembering print settings. Please try again.',
+      );
+      return null;
+    }
     return result.action === 'print'
       ? await this.runPrint(result.settings)
       : await this.runPrintToPdf(result.settings);
@@ -1085,7 +1128,7 @@ export class SelectFindService {
     });
     try {
       const result = await this.print.print({
-        source: { engine: this.engine, doc: source.handle, title: document.state.title },
+        source: this.printSource(document, settings),
         plan,
         settings,
         signal: progress.signal,
@@ -1125,13 +1168,14 @@ export class SelectFindService {
     error: string | null;
   } | null> {
     if (!this.allowOutput('print')) return null;
+    if (settings.dpi > 150 && !this.allowOutput('print-high')) return null;
     const document = this.activeDocument();
     const source = this.activeSource();
     if (!document || !source) return null;
     const plan = this.planFor(settings);
     if (plan.error) return { sheets: 0, documentPath: null, error: plan.error };
     const result = await this.print.print({
-      source: { engine: this.engine, doc: source.handle, title: document.state.title },
+      source: this.printSource(document, settings),
       plan,
       settings,
       dryRun: true,
@@ -1177,12 +1221,12 @@ export class SelectFindService {
     });
     try {
       const bytes = await this.print.toPdf({
-        source: {
-          engine: this.engine,
-          doc: source.handle,
-          title: document.state.title,
-          snapshot: (signal) => printSnapshot(document, signal, settings),
-        },
+        source: this.printSource(
+          document,
+          settings,
+          (!settings.printAsImage && !settings.grayscale) || settings.dpi > 150,
+          revision,
+        ),
         plan,
         settings,
         signal: progress.signal,

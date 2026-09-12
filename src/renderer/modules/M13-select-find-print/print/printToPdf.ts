@@ -24,6 +24,7 @@ import type { DocHandle, PdfEngine } from '@engine/PdfEngine';
 import { yieldMacrotask } from '@engine/yield';
 import type { Placement, Sheet } from './imposition';
 import { renderSheet, type SheetRenderOptions } from './render';
+import { withRasterSnapshot } from './rasterSnapshot';
 
 export interface PrintToPdfOptions {
   readonly engine: PdfEngine;
@@ -50,14 +51,28 @@ export async function printToPdf(options: PrintToPdfOptions): Promise<Uint8Array
   if (options.asImage || options.render.grayscale) {
     // PDFium performs colour conversion; arbitrary ICC/pattern colours cannot be converted by
     // changing a handful of content operators. The dialog explicitly describes this raster route.
-    if (options.bytes) {
-      const snapshot = await options.engine.open(options.bytes.slice());
-      try {
-        await drawRasterSheets(out, { ...options, doc: snapshot });
-      } finally {
-        await options.engine.close(snapshot);
-      }
-    } else await drawRasterSheets(out, options);
+    const pages = new Set(
+      options.sheets.flatMap((sheet) =>
+        sheet.placements.filter((p) => p.page >= 0).map((p) => p.page),
+      ),
+    );
+    const snapshotBytes = options.bytes;
+    await withRasterSnapshot(
+      {
+        engine: options.engine,
+        doc: options.doc,
+        ...(snapshotBytes ? { snapshot: () => Promise.resolve(snapshotBytes.slice()) } : {}),
+      },
+      pages,
+      options.render,
+      options.signal,
+      (doc) =>
+        drawRasterSheets(out, {
+          ...options,
+          doc,
+          render: { ...options.render, annotations: false, forms: false },
+        }),
+    );
   } else {
     await drawVectorSheets(out, options);
   }
@@ -72,6 +87,7 @@ async function drawRasterSheets(out: PDFDocument, options: PrintToPdfOptions): P
       ...options.render,
       engine: options.engine,
       doc: options.doc,
+      ...(options.signal ? { signal: options.signal } : {}),
     });
     const image = await out.embedPng(png);
     const page = out.addPage([sheet.width, sheet.height]);

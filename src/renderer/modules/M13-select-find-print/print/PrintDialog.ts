@@ -34,7 +34,7 @@ export interface PrintDialogOptions {
   /** Rebuilds the plan for the settings as they now stand. */
   readonly plan: (settings: PrintSettings) => PrintPlan;
   /** Renders one sheet for the preview; the dialog revokes the URL when it is done with it. */
-  readonly preview: (sheet: Sheet, settings: PrintSettings) => Promise<string>;
+  readonly preview: (sheet: Sheet, settings: PrintSettings, signal: AbortSignal) => Promise<string>;
 }
 
 type Mode = PrintSettings['mode'];
@@ -117,9 +117,12 @@ export async function openPrintDialog(
   let sheetIndex = 0;
   let previewUrl: string | null = null;
   let previewToken = 0;
+  let previewAbort: AbortController | undefined;
 
   const summary = el('p.print-summary', { role: 'status' });
   const previewImage = el('img.print-preview-image', { alt: 'Print preview' });
+  previewImage.hidden = true;
+  const previewStatus = el('p.print-preview-status', { role: 'status' });
   const previewLabel = el('span.print-preview-label', { 'aria-live': 'polite' });
   const previousSheet = button(
     'icon-btn',
@@ -165,12 +168,20 @@ export async function openPrintDialog(
   const updatePreview = async (): Promise<void> => {
     const sheet = plan.sheets[sheetIndex];
     const token = ++previewToken;
+    previewAbort?.abort();
+    previewAbort = new AbortController();
+    previewImage.hidden = true;
+    previewImage.removeAttribute('src');
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = null;
+    previewStatus.hidden = false;
+    previewStatus.textContent = sheet ? 'Preparing preview…' : 'Nothing to preview';
     if (!sheet) {
       previewImage.removeAttribute('src');
       return;
     }
     try {
-      const url = await options.preview(sheet, settings);
+      const url = await options.preview(sheet, settings, previewAbort.signal);
       if (token !== previewToken) {
         URL.revokeObjectURL(url);
         return;
@@ -178,8 +189,14 @@ export async function openPrintDialog(
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       previewUrl = url;
       previewImage.src = url;
-    } catch {
+      await previewImage.decode();
+      if (token !== previewToken) return;
+      previewImage.hidden = false;
+      previewStatus.hidden = true;
+    } catch (error) {
+      if (token !== previewToken) return;
       previewImage.removeAttribute('src');
+      previewStatus.textContent = `Preview unavailable: ${error instanceof Error ? error.message : String(error)}`;
     }
   };
 
@@ -469,7 +486,7 @@ export async function openPrintDialog(
     const right = el(
       'div.print-columns-right',
       null,
-      el('div.print-preview', null, previewImage),
+      el('div.print-preview', null, previewImage, previewStatus),
       el('div.print-preview-bar', null, previousSheet, previewLabel, nextSheet),
       summary,
     );
@@ -508,6 +525,8 @@ export async function openPrintDialog(
   });
 
   const result = await handle.result;
+  ++previewToken;
+  previewAbort?.abort();
   if (previewUrl) URL.revokeObjectURL(previewUrl);
   if (result !== 'print' && result !== 'pdf') return null;
   return { action, settings };
