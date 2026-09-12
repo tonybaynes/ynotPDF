@@ -197,12 +197,19 @@ export interface PageObjectPath {
  */
 export type EmbeddedImageEncoding = 'jpeg' | 'jp2' | 'rgba';
 
+/** ADR 0027: omission retains original JPEG/JP2 streams; PNG requests decoded RGBA for all. */
+export interface PageImagesOptions {
+  readonly output?: 'original' | 'png';
+  /** Internal HTML consumer: render each placement with its page/form graphics state. */
+  readonly purpose?: 'intrinsic' | 'appearance';
+}
+
 /** One image XObject drawn on a page, with its own bytes (M92, ADR 0019). */
 export interface EmbeddedImage {
   readonly page: PageIndex;
-  /** Index into `pageObjects(page)`, so a caller can tie it back to the object it came from. */
+  /** Index into `pageObjects(page)`; nested images name their containing top-level form. */
   readonly index: number;
-  /** The image's **stored** pixel size, not the size it is drawn at. */
+  /** Stored pixel size; `purpose: 'appearance'` instead reports the rendered RGBA size. */
   readonly width: number;
   readonly height: number;
   /** Where it is drawn, in page space. */
@@ -759,7 +766,11 @@ export interface PdfEngine {
    * `FPDFImageObj_*` exports simply does not declare it, and "export all images" then says so
    * rather than writing something that is not the picture in the file.
    */
-  pageImages?(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<EmbeddedImage>>;
+  pageImages?(
+    doc: DocHandle,
+    page: PageIndex,
+    options?: PageImagesOptions,
+  ): Promise<ReadonlyArray<EmbeddedImage>>;
   annotations(doc: DocHandle, page: PageIndex): Promise<ReadonlyArray<Annotation>>;
   formFields(doc: DocHandle): Promise<ReadonlyArray<FormField>>;
   /** Links on a page with their destination / URI resolved (ADR 0005). */

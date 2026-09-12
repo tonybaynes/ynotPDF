@@ -26,6 +26,7 @@ import {
   DITHER_OPTIONS,
   DPI_PRESETS,
   ENCODING_OPTIONS,
+  EMBEDDED_OUTPUT_OPTIONS,
   FORMAT_OPTIONS,
   LAYOUT_OPTIONS,
   LINE_ENDING_OPTIONS,
@@ -288,6 +289,7 @@ export async function askImageOptions(
 // ---- pictures inside a document ------------------------------------------------------------
 
 export interface EmbeddedDialogAnswer {
+  readonly output: ExportSettings['embeddedOutput'];
   readonly namePattern: string;
   readonly minPixels: number;
   readonly keepDuplicates: boolean;
@@ -304,6 +306,11 @@ export async function askEmbeddedOptions(
     width: 560,
     buttons: [...BUTTONS],
     content: (body, dialog) => {
+      const output = select({
+        label: 'Output',
+        value: settings.embeddedOutput,
+        choices: EMBEDDED_OUTPUT_OPTIONS,
+      });
       const name = textField({
         label: 'Name for each picture',
         value: settings.embeddedNamePattern,
@@ -325,8 +332,9 @@ export async function askEmbeddedOptions(
         el(
           'p.export-note',
           null,
-          'Pictures are written in the format the document stores them in: a JPEG comes out as a JPEG, byte for byte. Anything in another format is written as a PNG.',
+          'Original formats keep JPEG and JPEG 2000 bytes unchanged; external PDF masks may be omitted. PNG with transparency applies image masks and keeps each picture’s stored dimensions. Page clipping and drawing opacity are excluded.',
         ),
+        output.element,
         name.element,
         minPixels.element,
         keepDuplicates.element,
@@ -335,6 +343,7 @@ export async function askEmbeddedOptions(
         .then((pressed) => {
           if (pressed !== 'export') return;
           answer = {
+            output: output.input.value as ExportSettings['embeddedOutput'],
             namePattern: name.input.value,
             minPixels: minPixels.value(),
             keepDuplicates: keepDuplicates.input.checked,

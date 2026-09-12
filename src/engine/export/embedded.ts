@@ -9,12 +9,11 @@
  * **Duplicates matter more here than anywhere else in the module.** A letterhead logo drawn on
  * every page of a 200-page document is *one* XObject referenced 200 times, and PDFium reports it
  * once per page; writing 200 identical files would be the wrong answer to "export all images".
- * They are matched on their bytes (length plus an FNV-1a hash of them), which is exact for the
- * `jpeg`/`jp2` case — the same stream really is the same bytes — and for the decoded case is a
- * hash of the pixels, which is the same picture by any definition a reader has.
+ * Encoding, dimensions and a byte hash select a candidate bucket; full byte comparison decides
+ * equality. RGBA comparisons include alpha, and a hash collision never discards a picture.
  */
 
-import { encodePngRgb } from './codecs/png';
+import { encodePngRgba } from './codecs/png';
 import { fillImageName, uniqueNames } from './naming';
 import { checkCancelled, type ExportContext, type ExportedFile, type ExportResult } from './types';
 
@@ -71,9 +70,8 @@ export function contentKey(bytes: Uint8Array): string {
 /**
  * Turns the images the engine reported into files.
  *
- * `images` is everything from every page, in page order; the caller streams them a page at a time
- * so a scanned document never has all of its pictures in memory at once, and hands the whole list
- * here once it has them.
+ * `images` contains all selected placements in page order. The caller accumulates this list,
+ * and this function retains encoded output files and exact deduplication candidates until return.
  */
 export function exportEmbeddedImages(
   images: ReadonlyArray<EmbeddedImageLike>,
@@ -87,7 +85,7 @@ export function exportEmbeddedImages(
   const warnings: string[] = [];
   const files: ExportedFile[] = [];
   const names: string[] = [];
-  const seen = new Map<string, number>();
+  const seen = new Map<string, Uint8Array[]>();
   let skippedSmall = 0;
   let skippedDuplicate = 0;
   /** Per page, so `{index}` counts pictures on the page rather than in the document. */
@@ -100,17 +98,22 @@ export function exportEmbeddedImages(
       skippedSmall++;
       continue;
     }
-    const key = contentKey(image.data);
-    if (options.keepDuplicates !== true && seen.has(key)) {
+    const key = `${image.encoding}:${String(image.width)}:${String(image.height)}:${contentKey(image.data)}`;
+    const bucket = seen.get(key) ?? [];
+    if (
+      options.keepDuplicates !== true &&
+      bucket.some((data) => data.every((v, at) => v === image.data[at]))
+    ) {
       skippedDuplicate++;
       continue;
     }
-    seen.set(key, i);
+    bucket.push(image.data);
+    seen.set(key, bucket);
     const at = (perPage.get(image.page) ?? 0) + 1;
     perPage.set(image.page, at);
     const bytes =
       image.encoding === 'rgba'
-        ? encodePngRgb(image.data, image.width, image.height, {
+        ? encodePngRgba(image.data, image.width, image.height, {
             dpi: { x: image.dpiX || 72, y: image.dpiY || 72 },
             ...(options.level === undefined ? {} : { level: options.level }),
           })

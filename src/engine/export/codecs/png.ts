@@ -12,8 +12,8 @@
  * sum of absolute differences over the five filter types, per row). It costs one pass over the
  * row per filter and typically saves a fifth of the file on a page of text.
  *
- * Colour types written here: 0 (grey, 1 or 8 bits) and 2 (truecolour, 8 bits). Alpha is never
- * written — a page render is opaque and `pixels.ts` has already flattened anything that was not.
+ * Colour types: 0 (grey, 1 or 8 bits), 2 (RGB) and 6 (RGBA). Page exports use opaque
+ * rasters; extracted embedded pictures use RGBA so their image masks survive in PNG.
  */
 
 import { deflate } from 'pako';
@@ -145,7 +145,7 @@ function filterRow(row: Uint8Array, previous: Uint8Array, bpp: number, out: Uint
 function encode(
   width: number,
   height: number,
-  colourType: 0 | 2,
+  colourType: 0 | 2 | 6,
   bitDepth: 1 | 8,
   rows: (y: number) => Uint8Array,
   rowBytes: number,
@@ -186,7 +186,26 @@ function encode(
   return out;
 }
 
-/** 8-bit truecolour PNG from RGBA pixels; the alpha channel is dropped (see the file header). */
+/** 8-bit RGBA PNG preserving straight (unassociated) alpha, including transparent pixels. */
+export function encodePngRgba(
+  rgba: Uint8Array,
+  width: number,
+  height: number,
+  options: PngOptions = {},
+): Uint8Array {
+  return encode(
+    width,
+    height,
+    6,
+    8,
+    (y) => rgba.subarray(y * width * 4, (y + 1) * width * 4),
+    width * 4,
+    4,
+    options,
+  );
+}
+
+/** 8-bit truecolour PNG from opaque RGBA pixels; the alpha channel is dropped. */
 export function encodePngRgb(
   rgba: Uint8Array,
   width: number,
