@@ -73,8 +73,18 @@ are included.
 
 ## Validation
 
-Pending final integration and CI. New unit tests cover content unions, CropBox clipping,
+Integrated main `d322de7` (PR 54). The full unit suite passed 4,050 tests with its 24 existing
+fixture skips; lint passed before the final split-pane input correction. Full local e2e and
+CI verification remain pending. New unit tests cover content unions, CropBox clipping,
 hidden layers, invalid bounds, blank fallback, page/view rotations with real PDFium, facing
 spacing, LRU eviction, deduplication, retry and stale-cache completion. New real-user journeys
 cover the visible content edges, zoom controls, layouts, navigation, resizing, editing and undo.
 All fixtures added for this repair are generated synthetic documents; no private PDFs copied.
+
+The split-pane journey found a viewer input defect: `PageView` stops propagation when a tool
+handles pointer-down, so the scroller's bubbling focus handler never activated the clicked
+pane. The repair selects the pane in the capture phase, before tool dispatch. This is needed
+for independent fitting and zoom. An additional M50 observation was passed to the coordinator:
+the Delete Object ribbon click cleared a selected object without incrementing document
+revision, whereas the Delete key performed the edit and undo correctly. No M50 repair or
+claim that its broader acceptance scope passed is included here.

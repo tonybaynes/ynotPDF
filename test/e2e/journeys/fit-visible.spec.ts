@@ -215,10 +215,18 @@ test('M11 — continuous and book navigation fit the current row, and split pane
     })
     .toBe(true);
   await panes.nth(1).click({ position: { x: 50, y: 50 } });
+  await expect(app.page.locator('.viewer-pane[data-pane="1"]')).toHaveAttribute(
+    'data-active',
+    'true',
+  );
   await j.clickRibbon('view', 'Actual Size (100 %)');
   expect((await state()).zoom).toBe(1);
   await panes.nth(0).click({ position: { x: 50, y: 50 } });
-  expect((await state()).fit).toBe('visible');
+  await expect(app.page.locator('.viewer-pane[data-pane="0"]')).toHaveAttribute(
+    'data-active',
+    'true',
+  );
+  await expect.poll(async () => (await state()).fit).toBe('visible');
   expect((await state()).zoom).toBeGreaterThan(1);
   await expectWindowSound(app.page);
 });

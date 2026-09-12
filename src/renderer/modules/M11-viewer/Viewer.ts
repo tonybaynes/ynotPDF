@@ -546,7 +546,8 @@ export class Viewer {
     const focus = (): void => {
       if (this.splitMode !== 'off' && this.activePane !== index) this.setActivePane(index);
     };
-    scroller.addEventListener('pointerdown', focus);
+    // Page tools consume pointer-down; choose the pane before their bubbling handlers run.
+    scroller.addEventListener('pointerdown', focus, { capture: true });
     scroller.addEventListener('focusin', focus);
 
     const onWheel = (event: WheelEvent): void => {
@@ -635,7 +636,7 @@ export class Viewer {
     scroller.addEventListener('keydown', onKey);
 
     this.disposers.push(() => {
-      scroller.removeEventListener('pointerdown', focus);
+      scroller.removeEventListener('pointerdown', focus, { capture: true });
       scroller.removeEventListener('focusin', focus);
       scroller.removeEventListener('wheel', onWheel);
       scroller.removeEventListener('pointerdown', onMiddleDown);
