@@ -341,7 +341,14 @@ test.describe('flatten', () => {
 
     // And the file on disk really loses its form: flattened, saved, reopened, no fields.
     await app.run('edit.redo');
-    const saved = (await app.run('file.save')) as { saved: boolean };
+    const saving = app.run('file.save');
+    const warning = app.page.locator('#save-warnings-dialog');
+    await expect(warning).toBeVisible();
+    await expect(warning).toContainText(
+      'The form was removed: none of its fields is on a page any more',
+    );
+    await warning.getByRole('button', { name: 'Save with these warnings', exact: true }).click();
+    const saved = (await saving) as { saved: boolean };
     expect(saved.saved).toBe(true);
     await closeAll();
     await openPath(path);

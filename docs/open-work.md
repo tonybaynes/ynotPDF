@@ -278,6 +278,27 @@ access 'progress' before initialization" instead of saving. Latent in the shippi
 the worker's progress always arrives asynchronously; fatal to any test that drives a real save.
 Declaration moved above the call.
 
-**Still open from the same audit, and load-bearing on this one:** finding 2 — `SaveOutcome.warnings`
+**Follow-up from the same audit, now addressed in section 9:** finding 2 — `SaveOutcome.warnings`
 is collected after the document is marked clean and its recovery record discarded, and no ordinary
 Save path displays it. Until that is fixed, a warning is still a value nobody reads.
+
+## 9. Save warnings now require a decision before writing
+
+Codex audit finding 2, implemented on `fix/save-warning-review`, on top of finding 1's
+`WriteCancelled` handling. Plan warnings are shown before engine/writer work; new writer and
+pipeline warnings are shown before the filesystem write. A persistent, opaque dialog names the
+destination and lists the warnings as text. Cancel is the default button and Escape result.
+
+Choosing **Save with these warnings** explicitly permits writing that result. The document stays
+marked unsaved and existing recovery records are retained, because string warnings cannot reliably
+distinguish an optional optimization from an omitted edit. Closing after this write does not discard
+the model automatically. A subsequent warning-free save can mark it clean, or Tony can explicitly
+choose Don't save on close. ADR 0021 records this policy and its limits; the separate recovery-base
+and revision findings remain open.
+
+Regression tests first produced six failures against the previous implementation, with the
+warning-free control passing. The service tests cover both decision points, cancellation, retention,
+close and Save As. UI tests cover the actual ribbon Save action and the certificate-protection-loss
+warning, checking the destination remains unchanged until consent. New dialog wording is in the
+i18n catalogue. Validation results and merge status are recorded with the PR; this note describes
+the implementation, not a claim that all audit findings have been resolved.

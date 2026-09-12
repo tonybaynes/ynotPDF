@@ -480,14 +480,13 @@ describe('a stage that cancels the save', () => {
     }
   });
 
-  it('leaves a stage that merely warns alone: that save still happens', async () => {
-    // The boundary of the rule above. A stage returning a warning is saying "I did the job, with
-    // something worth mentioning" — it must not be confused with one that stopped.
+  it('allows a warning stage to save after the reader accepts its warnings', async () => {
+    // Warning review (audit 2) is a separate decision from cancelling a protection prompt.
     const bridge = fakeBridge();
     try {
       const { service, doc } = await makeService({
         path: PATH,
-        answers: ANSWERS,
+        answers: { ...ANSWERS, 'save-warnings-dialog': 'save' },
         writer: passThroughWriter(),
       });
       service.addStage({
@@ -503,7 +502,7 @@ describe('a stage that cancels the save', () => {
       expect(outcome.saved).toBe(true);
       expect(outcome.warnings).toContain('something to mention');
       expect(bridge.writes).toEqual([PATH]);
-      expect(doc.undo.isDirty).toBe(false);
+      expect(doc.undo.isDirty).toBe(true);
       service.dispose();
       await doc.close();
     } finally {

@@ -13,6 +13,59 @@
 import { el } from '@app/dom';
 import type { Dialogs } from '@app/dialog/Dialogs';
 import type { RecoveryRecord } from './recovery';
+import { t } from '@modules/M130-preferences/i18n';
+
+/** Warnings are literal document data, never HTML. Cancel is the default and Escape result. */
+export async function askAboutSaveWarnings(
+  dialogs: Dialogs,
+  options: { title: string; path: string; warnings: ReadonlyArray<string> },
+): Promise<boolean> {
+  const answer = await dialogs.open({
+    id: 'save-warnings-dialog',
+    kind: 'warning',
+    title: t('save.warnings.title', 'Review before saving'),
+    width: 620,
+    escapeResult: 'cancel',
+    content: (body) => {
+      body.append(
+        el(
+          'p.dlg-text',
+          null,
+          t('save.warnings.destination', 'Nothing has been written to {path} yet.', {
+            path: options.path,
+          }),
+        ),
+        el(
+          'p.dlg-text',
+          null,
+          t(
+            'save.warnings.explain',
+            'Saving "{title}" may omit content, changes or protection. Review these warnings before continuing.',
+            { title: options.title },
+          ),
+        ),
+      );
+      const list = el('ul.save-warning-list');
+      for (const warning of options.warnings) list.append(el('li', null, warning));
+      body.append(
+        list,
+        el(
+          'p.dlg-text',
+          null,
+          t(
+            'save.warnings.unsaved',
+            'If you continue, the file at this path will be replaced. The document will stay marked unsaved and existing recovery records will be kept so you can review it before closing.',
+          ),
+        ),
+      );
+    },
+    buttons: [
+      { id: 'cancel', label: t('save.warnings.cancel', 'Cancel'), primary: true },
+      { id: 'save', label: t('save.warnings.continue', 'Save with these warnings') },
+    ],
+  }).result;
+  return answer === 'save';
+}
 
 /** What the reader chose when asked about a document with unsaved changes. */
 export type CloseAnswer = 'save' | 'discard' | 'cancel';
