@@ -99,7 +99,7 @@ export function isReplayable(entry: JournalEntry): boolean {
 
 /** The whole undo history of a document, oldest first. */
 export function serialiseJournal(doc: Document): JournalFile {
-  const entries = doc.undo.journal.map(serialiseCommand);
+  const entries = [...doc.recoveryJournal, ...doc.undo.journal.map(serialiseCommand)];
   return {
     version: JOURNAL_VERSION,
     documentId: doc.id,
@@ -169,9 +169,15 @@ export async function replayJournal(
       continue;
     }
     // Each recorded entry is one undo step; merging would collapse two of them into one.
+    const before = JSON.stringify({ ...doc.state, revision: 0, writeIntents: [] });
     doc.breakMerge();
     await doc.apply(command);
-    applied++;
+    const after = JSON.stringify({ ...doc.state, revision: 0, writeIntents: [] });
+    // Missing lazy targets used to return quietly and were reported as recovered. A completed
+    // apply is not evidence that it changed the document. Checkpoints avoid replay altogether;
+    // legacy journals and batch callers still need an honest result here.
+    if (before !== after) applied++;
+    else if (!skippedTypes.includes(entry.type)) skippedTypes.push(entry.type);
   }
   return { applied, skipped: entries.length - applied, skippedTypes };
 }

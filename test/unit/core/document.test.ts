@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Document, familyOf, pageBox, pageSizeOf, type DocumentEvent } from '@core/Document';
-import { SetCustomCommand, SetPageLabelCommand } from '@core/commands';
+import { DeletePagesCommand, SetCustomCommand, SetPageLabelCommand } from '@core/commands';
 import type { ModelId } from '@core/Ids';
 import { command } from '@core/Command';
 import { FakeEngine } from './fakeEngine';
@@ -132,6 +132,26 @@ describe('page geometry helpers', () => {
 });
 
 describe('annotations', () => {
+  it('does not resurrect annotations when their page is deleted during a lazy read', async () => {
+    const { doc, engine } = await openFake();
+    const page = doc.page(0).id;
+    const annotations = await engine.annotations(doc.handle, 0);
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(engine, 'annotations').mockImplementation(async () => {
+      await gate;
+      return annotations;
+    });
+    const loading = doc.loadAnnotations(page);
+    await doc.apply(new DeletePagesCommand(doc, [page]));
+    release();
+    expect(await loading).toEqual([]);
+    expect(doc.validate().map((issue) => issue.code)).not.toContain('annotation.orphan-page');
+    await doc.undo.undo();
+    expect(await doc.loadAnnotations(page)).toHaveLength(annotations.length);
+  });
   it('classifies subtypes into families and keeps the family fields', async () => {
     const { doc } = await openFake();
     const list = await doc.loadAnnotations(doc.page(0).id);

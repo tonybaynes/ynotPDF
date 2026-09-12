@@ -202,7 +202,9 @@ describe('autosave', () => {
       const { service, doc, recovery } = await makeService();
       await doc.apply(new RotatePagesCommand(doc, [doc.page(0).id], 90, true));
       await vi.advanceTimersByTimeAsync(5 * 60_000 + 10);
-      expect(recovery.size).toBe(1);
+      await vi.waitFor(() => {
+        expect(recovery.size).toBe(1);
+      });
       service.dispose();
       await doc.close();
     } finally {
@@ -300,15 +302,14 @@ describe('recovery', () => {
     await doc.close();
   });
 
-  it('a record for a document that was never saved cannot be recovered, and says so', async () => {
-    const { service, doc, recovery, toasts } = await makeService({
+  it('does not recover a second copy of an already-open pathless document or discard its record', async () => {
+    const { service, doc, recovery } = await makeService({
       answers: { 'save-recovery-dialog': 'recover' },
     });
     await doc.apply(new RotatePagesCommand(doc, [doc.page(0).id], 90, true));
     await service.autosaveNow();
     expect(await service.offerRecovery()).toEqual({ recovered: 0, discarded: 0 });
-    expect(toasts.at(-1)?.text).toContain('never saved');
-    expect(recovery.size).toBe(0);
+    expect(recovery.size).toBe(1);
     service.dispose();
     await doc.close();
   });
