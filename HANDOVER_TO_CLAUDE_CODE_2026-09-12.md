@@ -47,7 +47,7 @@ The following changes were reviewed and merged to `main`:
 
 PR64 passed all eight platform checks, including Windows x64, macOS, Ubuntu and both Windows ARM installer-smoke jobs. Its ARM qualification uses the existing MSI fallback because NSIS did not produce an executable; this is documented and is not proof of every ARM installer path.
 
-The current primary `main` is `cc01decf591f35e8138b3df37874a60bb6aa76f7`, which includes this handover and the synchronized plan/checklist. The primary worktree is clean.
+The current primary `main` includes this handover and the synchronized plan/checklist; verify its exact hash with `git rev-parse main`. The primary worktree is clean.
 
 The coordinator also prepared PR66, **Serialize session replay renders and record module progress**, at `1d50f335fe376b0a2fa9edc77d7e9e2c3bd415c0`. It changes the coordinator tracker and fixes a real unit-test misuse: two `Promise.all` render batches could call the non-reentrant PDFium renderer concurrently when progressive rendering yielded, so the checks now render sequentially while preserving hash and undo assertions. Sixteen core integration tests, focused lint/format and diff checks passed. PR66 CI was still pending; review and merge it only after all required checks are green.
 
