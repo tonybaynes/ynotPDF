@@ -44,7 +44,7 @@ and shapes as page content (not annotations).
 ## Foxit 14 reference — what to emulate
 
 Foxit Edit → Edit Object / Add Image / Add Shapes; image context: Replace
-Image, Extract Image, Crop, Rotate/Flip, Set Transparency ✗, Image
+Image, Extract Image, Crop, Rotate/Flip, Set Transparency, Image
 adjustments (brightness/contrast — Pro), Edit with external editor; shapes
 with fill/stroke properties; path point editing.
 
@@ -62,6 +62,10 @@ with fill/stroke properties; path point editing.
   stroke width/colour/dash/cap/join, fill colour/rule, convert to shape
   annotation; Add Shape tools (rect/ellipse/line/polygon) as content.
 - Properties panel sections for image and path.
+- Preserve and edit PDF content opacity separately from application UI opacity.
+  Test fill/stroke alpha, existing soft masks and blend modes with save/reopen
+  and undo/redo; unsupported combinations remain explicit follow-up scope.
+  The opaque-controls accessibility rule does not forbid document transparency.
 
 ## Out of scope
 
