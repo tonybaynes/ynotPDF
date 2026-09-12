@@ -15,8 +15,8 @@ LIVE STATUS — 2026-09-12
 ACTIVE REPAIRS (finish existing scope before new modules)
   M11 - Complete Fit Visible
         Content-aware fit, rotation/crop geometry, cache invalidation.
-        PR59 remains open: settled screenshots exposed bucket/display tile
-        scaling mismatch; pixel-based regression and repair now in progress.
+        PR59 remains open: corrected tile scaling and layer refresh pass eight
+        affected UI tests; final screenshots inspected, full-suite signoff running.
   M13 - Preserve annotations in PDF printing
         Vector Print-to-PDF repair MERGED via PR58, all 8 CI checks green.
         Same task now completing physical-print/preview snapshots; full M13
@@ -25,9 +25,9 @@ ACTIVE REPAIRS (finish existing scope before new modules)
         Fixed/custom ratios, rotated crop geometry, apply/undo/save/reopen.
         Follow-up required: automatic deskew on image import is not connected.
         Combine also still needs its promised Add folder and desktop file drop.
-  M92 - Complete bilevel TIFF compression
-        Group 4 compression, single/multi-page export, independent decoding.
-        Follow-up required: extracted-image masks and stored pixel dimensions.
+  M92 - Complete image export fidelity
+        Group 4 TIFF repair MERGED via PR57, all 8 CI checks green.
+        Same task now completing extracted-image masks and stored dimensions.
         Visual follow-up: native selection text clips at 200% in export dialog;
         audit owns shared text-fit checks and will coordinate the layout fix.
   All four are in isolated worktrees; none is marked complete before merge.
@@ -55,8 +55,16 @@ NEXT COMPLETION TRIAGE (before dispatching new-feature work)
 MERGED REVIEW / REPAIR HISTORY
   PR56 — plan review, corrected briefs and reopened tracker; merge 1a7fd44.
   PR58 — M13 vector print appearances/snapshot; merge 753f5cb.
-  Both passed Windows, macOS, Ubuntu and Windows ARM installer checks.
-  Required physical-print/preview scope remains active in the same M13 task.
+  PR60 — live plan/checklist and visual completion findings; merge dba7db3.
+  PR57 — M92 Group 4 TIFF and single-page compression; merge c492bfd.
+  All passed Windows, macOS, Ubuntu and Windows ARM installer checks.
+  Required follow-ups remain active in the same M13 and M92 tasks.
+
+LOCAL UI TEST COORDINATION
+  All local Electron runs, including focused tests, use one coordinator-owned
+  slot. Read C:\Users\tonyb\AppData\Local\Temp\ynotpdf-ui-slot.json before
+  launching; only its named owner with a current grant may run. The coordinator
+  changes ownership after confirming the prior process exited. CI is separate.
 
 VISUAL QUALITY (Tony, 2026-09-12)
   Strengthen real end-to-end tests and occasionally capture representative
@@ -85,11 +93,12 @@ HOW TO START AND COMPLETE A MODULE
    commit coherent changes. Deferred required features keep the module open.
 6. Push a PR. The coordinator serialises merges, reviews changes and verifies
    required CI on the proposed revision after integrating current main.
-7. After merge, the coordinator updates [✔] here AND PLAN.md section 0.
+7. After all required module scope is complete and merged, the coordinator
+   updates [✔] here AND PLAN.md section 0. Bounded partial merges stay unticked.
    Keep active repairs and remaining limitations visible here as work changes.
 8. Remove only the finished task's own clean, merged worktree and local branch.
    Start its replacement only after completion and merge. Cap: ten tasks;
-   current safe working capacity: four, with full local UI suites serialised.
+   current safe working capacity: four, with all local UI runs serialised.
 
 Special cases:
   M00 must run completely ALONE - nothing else until it is ticked.

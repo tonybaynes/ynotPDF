@@ -84,10 +84,10 @@ remaining or competitor parity. Existing audit findings remain tracked in
 
 | Reopened module | Required completion work | Task |
 |---|---|---|
-| M11 | Content-aware Fit Visible; repair confirmed bucket/display tile-scaling mismatch | M11 - Complete Fit Visible (PR59 open) |
+| M11 | Content-aware Fit Visible; corrected tile scaling/layer refresh passes eight affected journeys, final screenshots inspected, full-suite signoff running | M11 - Complete Fit Visible (PR59 open) |
 | M13 | Vector appearances merged in PR58; same task now completing physical-print/preview snapshots | M13 - Preserve annotations in PDF printing |
 | M41 | Crop ratios/geometry; import deskew and Combine folder/desktop-drop routes remain follow-ups | M41 - Complete crop aspect ratios (PR55 open) |
-| M92 | Bilevel TIFF; extracted-image masks/dimensions and native selection-text clipping remain follow-ups | M92 - Complete bilevel TIFF compression (PR57 open) |
+| M92 | Group 4 TIFF merged in PR57 (c492bfd), all eight CI checks green; same task continues extracted-image masks/dimensions, audit coordinates selection-text clipping | M92 - Complete image export fidelity |
 | M30 | Cross-renderer appearance acceptance evidence | Queued validation work; no visual defect assumed |
 | M32 | Genuine Acrobat/Foxit XFDF fixture acceptance | Queued interoperability validation; no importer defect assumed |
 | M50 | Preserve unknown page operators during object z-order changes | Queued after active repairs and shared-code ownership clears |
