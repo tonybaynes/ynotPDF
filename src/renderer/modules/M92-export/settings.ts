@@ -143,7 +143,8 @@ export const TIFF_COMPRESSION_OPTIONS: ReadonlyArray<{
   readonly value: TiffCompression;
   readonly label: string;
 }> = [
-  { value: 'deflate', label: 'Deflate — smallest' },
+  { value: 'deflate', label: 'Deflate — lossless compression' },
+  { value: 'group4', label: 'CCITT Group 4 — black and white (1-bit) only' },
   { value: 'packbits', label: 'PackBits — widest support' },
   { value: 'none', label: 'None — largest, opens anywhere' },
 ];
