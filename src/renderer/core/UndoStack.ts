@@ -33,6 +33,30 @@ export class UndoStack {
   private undoList: Command[] = [];
   private redoList: Command[] = [];
   private savedIndex = 0;
+  private mutationRevision = 0;
+  private pendingMutations = 0;
+
+  /** Changes for queued edits too, so a pending edit cannot be marked saved. */
+  get revision(): number {
+    return this.mutationRevision;
+  }
+
+  isCurrent(revision: number): boolean {
+    return revision === this.mutationRevision && this.pendingMutations === 0 && !this.inTransaction;
+  }
+
+  /** Reads engine and model together between commands; never call apply from inside this. */
+  capture<T>(read: () => T | Promise<T>): Promise<T> {
+    const run = this.chain.then(() => {
+      if (this.inTransaction) throw new Error('Finish the current edit before saving.');
+      return read();
+    });
+    this.chain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
   private readonly listeners = new Set<UndoListener>();
   private chain: Promise<void> = Promise.resolve();
   private groupStack: { label: string; id: string; commands: Command[] }[] = [];
@@ -52,7 +76,7 @@ export class UndoStack {
       canRedo: this.redoList.length > 0,
       undoLabel: top?.label ?? null,
       redoLabel: next?.label ?? null,
-      isDirty: this.savedIndex !== this.undoList.length,
+      isDirty: this.isDirty,
       length: this.undoList.length,
     };
   }
@@ -66,7 +90,9 @@ export class UndoStack {
   }
 
   get isDirty(): boolean {
-    return this.savedIndex !== this.undoList.length;
+    return (
+      this.pendingMutations > 0 || this.inTransaction || this.savedIndex !== this.undoList.length
+    );
   }
 
   subscribe(listener: UndoListener): () => void {
@@ -89,7 +115,6 @@ export class UndoStack {
         return;
       }
       this.record(cmd);
-      this.notify();
     });
   }
 
@@ -106,7 +131,6 @@ export class UndoStack {
       }
       this.redoList.push(cmd);
       this.mergeBarrier = true;
-      this.notify();
     });
   }
 
@@ -123,7 +147,6 @@ export class UndoStack {
       }
       this.undoList.push(cmd);
       this.mergeBarrier = true;
-      this.notify();
     });
   }
 
@@ -155,7 +178,6 @@ export class UndoStack {
     }
     await this.enqueue(() => {
       this.record(composite);
-      this.notify();
     });
   }
 
@@ -194,7 +216,6 @@ export class UndoStack {
     }
     await this.enqueue(() => {
       this.record(composite);
-      this.notify();
     });
   }
 
@@ -219,8 +240,9 @@ export class UndoStack {
   }
 
   /** Marks the current position as saved (`isDirty` becomes false). */
-  markSaved(): void {
-    this.savedIndex = this.undoList.length;
+  markSaved(revision?: number): void {
+    this.savedIndex =
+      revision === undefined || this.isCurrent(revision) ? this.undoList.length : -1;
     this.notify();
   }
 
@@ -274,7 +296,13 @@ export class UndoStack {
   }
 
   private enqueue(task: () => void | Promise<void>): Promise<void> {
-    const run = this.chain.then(task);
+    this.pendingMutations++;
+    this.mutationRevision++;
+    const run = this.chain.then(task).finally(() => {
+      this.pendingMutations--;
+      this.mutationRevision++;
+      this.notify();
+    });
     // Keep the chain alive even when a task rejects.
     this.chain = run.catch(() => undefined);
     return run;

@@ -141,6 +141,24 @@ describe('probeFile', () => {
 });
 
 describe('the recovery store', () => {
+  it('persists binary inputs across store instances, detects corruption and discards them', async () => {
+    const store = new RecoveryStore(dir);
+    const bytes = new Uint8Array([0, 255, 23, 99]);
+    const hash = await store.putBlob('doc', bytes);
+    expect(await store.putBlob('doc', bytes)).toBe(hash);
+    await store.save('doc', JSON.stringify({ engine: hash }));
+    const reopened = new RecoveryStore(dir);
+    expect(await reopened.readBlob('doc', hash)).toEqual(bytes);
+    await expect(reopened.readBlob('doc', '../escape')).rejects.toThrow();
+    writeFileSync(join(store.path, 'doc.blobs', hash), 'corrupt');
+    await expect(reopened.readBlob('doc', hash)).rejects.toThrow(/integrity/);
+    expect(await reopened.read('doc')).not.toBeNull();
+    await store.putBlob('doc', bytes);
+    expect(await reopened.readBlob('doc', hash)).toEqual(bytes);
+    await reopened.discard('doc');
+    await expect(reopened.readBlob('doc', hash)).rejects.toThrow();
+  });
+
   it('saves, reads, lists and discards', async () => {
     const store = new RecoveryStore(dir);
     await store.save('doc-1', '{"a":1}');

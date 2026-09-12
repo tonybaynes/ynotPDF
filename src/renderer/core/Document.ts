@@ -62,6 +62,16 @@ import {
 } from './model';
 import { createStore, type Store, type Unsubscribe } from './Store';
 import { UndoStack } from './UndoStack';
+import { contentIdentity } from '@shared/contentIdentity';
+import { serialiseJournal, type JournalEntry } from './Journal';
+
+/** Engine bytes accompanying this state must be captured in the same undo read barrier. */
+export interface DocumentCheckpoint {
+  readonly state: Omit<DocumentState, 'revision'>;
+  readonly ids: Record<string, number>;
+  readonly bindings: ReturnType<IdTable['toJSON']>;
+  readonly journal: ReadonlyArray<JournalEntry>;
+}
 
 export * from './model';
 export type { DocumentEvent, DocumentEventType, PageChange } from './events';
@@ -157,6 +167,42 @@ export class Document {
   mergeIdleMs = 600;
   private lastEditAt = 0;
   private closed = false;
+  private initialSource: ReturnType<typeof contentIdentity> | null = null;
+
+  get sourceIdentity(): ReturnType<typeof contentIdentity> | null {
+    return this.initialSource;
+  }
+  private recoveredIntents: ReadonlyArray<WriteIntent> = [];
+  private recoveredEntries: ReadonlyArray<JournalEntry> = [];
+
+  /** Writer provenance from the restored checkpoint; never replay these commands. */
+  get recoveryJournal(): ReadonlyArray<JournalEntry> {
+    return this.recoveredEntries;
+  }
+
+  checkpoint(): DocumentCheckpoint {
+    return JSON.parse(
+      JSON.stringify({
+        state: this.snapshot(),
+        ids: this.ids.toJSON(),
+        bindings: this.idTable.toJSON(),
+        journal: serialiseJournal(this).entries,
+      }),
+    ) as DocumentCheckpoint;
+  }
+
+  /** Called before attaching a freshly opened checkpoint engine to any UI or module. */
+  restoreCheckpoint(checkpoint: DocumentCheckpoint): void {
+    this.ids.restore(checkpoint.ids);
+    this.idTable.restore(checkpoint.bindings);
+    this.recoveredIntents = checkpoint.state.writeIntents;
+    this.recoveredEntries = checkpoint.journal;
+    this.store.set({ ...checkpoint.state, revision: 0 });
+    const issues = this.validate();
+    if (issues.length) throw new Error(`Invalid recovery model: ${issues[0]?.message}`);
+    this.undo.clear();
+    this.undo.markUnsaved();
+  }
 
   private constructor(
     engine: PdfEngine,
@@ -184,9 +230,12 @@ export class Document {
     options: OpenOptions & { readonly path?: string | null } = {},
   ): Promise<Document> {
     const { path, ...openOptions } = options;
+    const source = contentIdentity(bytes);
     const handle = await engine.open(bytes, openOptions);
     try {
-      return await Document.build(engine, handle, path ?? null, options.name ?? null);
+      const document = await Document.build(engine, handle, path ?? null, options.name ?? null);
+      document.initialSource = source;
+      return document;
     } catch (error) {
       await engine.close(handle).catch(() => undefined);
       throw error;
@@ -516,6 +565,11 @@ export class Document {
     const index = this.enginePage(pageId);
     if (index === undefined) return this.annotations(pageId);
     const list = await this.engine.annotations(this.handle, index);
+    // A page can be removed or rebound while its lazy engine read is in flight.
+    // Never publish old annotations onto a deleted page (or after document closure).
+    if (this.closed || this.pageIndex(pageId) < 0 || this.enginePage(pageId) !== index) {
+      return this.annotations(pageId);
+    }
     const model = this.adoptAnnotations(pageId, list);
     this.store.set((s) => ({ annotations: { ...s.annotations, [pageId]: model } }));
     return model;
@@ -1133,7 +1187,7 @@ export class Document {
   /** Bumps `revision` and recomputes the write intents from the undo journal. */
   private touch(): void {
     const before = this.state.writeIntents;
-    const intents = collectIntents(this.undo.journal);
+    const intents = [...new Set([...this.recoveredIntents, ...collectIntents(this.undo.journal)])];
     this.store.set((s) => {
       const changed =
         intents.length !== s.writeIntents.length || intents.some((i, n) => s.writeIntents[n] !== i);

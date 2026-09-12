@@ -45,17 +45,20 @@ export class SetSecurityCommand implements DocumentCommand {
   readonly secrets: Secrets;
   /** The secrets that were in force before, so undo puts those back too. */
   readonly previousSecrets: Secrets;
+  private readonly setSecrets: ((secrets: Secrets) => void) | undefined;
 
   constructor(
     doc: Document,
     next: SecurityIntent,
     secrets: Secrets = {},
     previousSecrets: Secrets = {},
+    setSecrets?: (secrets: Secrets) => void,
   ) {
     this.doc = doc;
+    this.setSecrets = setSecrets;
     this.next = next;
-    this.secrets = secrets;
-    this.previousSecrets = previousSecrets;
+    this.secrets = { ...secrets };
+    this.previousSecrets = { ...previousSecrets };
     this.before = sliceOf(doc);
     this.label =
       next.kind === 'none'
@@ -74,11 +77,13 @@ export class SetSecurityCommand implements DocumentCommand {
   }
 
   do(): Promise<void> {
+    this.setSecrets?.({ ...this.secrets });
     writeIntent(this.doc, this.next);
     return Promise.resolve();
   }
 
   undo(): Promise<void> {
+    this.setSecrets?.({ ...this.previousSecrets });
     restoreSlice(this.doc, this.before);
     return Promise.resolve();
   }

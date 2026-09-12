@@ -3,9 +3,10 @@
  *
  * A save that is interrupted — the machine loses power, the process is killed, the disk fills —
  * must never leave a half-written PDF where the user's document was. So the bytes go to a
- * temporary file beside the target, are flushed to the platter, and only then does a rename put
+ * temporary file beside the target, are flushed with fsync, and only then does a rename put
  * them in place. A rename within one directory is atomic on every filesystem we support, so at
- * every instant the target path holds either the whole old file or the whole new one.
+ * every instant the target path holds either the whole old file or the whole new one. Hardware,
+ * network filesystems and directory-entry persistence after power loss remain OS guarantees.
  *
  * The temporary file is a sibling rather than one in the OS temp directory, because a rename
  * across devices is a copy, and a copy is not atomic.
@@ -21,6 +22,8 @@ export interface AtomicWriteOptions {
    * A previous `.bak` is replaced.
    */
   readonly backup?: boolean;
+  /** Private application-data files use 0600; ordinary saved PDFs keep the OS default. */
+  readonly mode?: number;
 }
 
 export interface AtomicWriteResult {
@@ -49,35 +52,42 @@ export async function writeAtomic(
   bytes: Uint8Array,
   options: AtomicWriteOptions = {},
 ): Promise<AtomicWriteResult> {
-  await mkdir(dirname(path), { recursive: true }).catch(() => undefined);
+  await mkdir(dirname(path), { recursive: true });
   const temp = tempPathFor(path);
   let handle;
   try {
-    handle = await open(temp, 'wx');
-    await handle.write(bytes);
-    // Without the flush the rename can land before the data does, and a power cut then leaves an
-    // empty file where the document was — the exact failure this whole dance exists to prevent.
-    await handle.sync().catch(() => undefined);
-  } finally {
-    await handle?.close().catch(() => undefined);
-  }
-
-  let backupPath: string | null = null;
-  try {
+    handle = await open(temp, 'wx', options.mode);
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      const { bytesWritten } = await handle.write(bytes, offset, bytes.byteLength - offset, offset);
+      if (
+        !Number.isInteger(bytesWritten) ||
+        bytesWritten <= 0 ||
+        bytesWritten > bytes.byteLength - offset
+      ) {
+        throw new Error('The filesystem did not complete the write.');
+      }
+      offset += bytesWritten;
+    }
+    await handle.sync();
+    await handle.close();
+    handle = undefined;
+    let backupPath: string | null = null;
     if (options.backup && (await exists(path))) {
-      backupPath = `${path}.bak`;
-      // A copy, not a rename: if the write below fails we must not have moved the original away.
+      backupPath = path + '.bak';
+      // Copy keeps the original in place even if making the backup or replacing it fails.
       await copyFile(path, backupPath);
     }
     await renameWithRetry(temp, path);
+    return { path, backupPath, bytesWritten: bytes.byteLength };
   } catch (error) {
+    await handle?.close().catch(() => undefined);
     await unlink(temp).catch(() => undefined);
     throw error;
   }
-  return { path, backupPath, bytesWritten: bytes.byteLength };
 }
 
-/** Errors that mean "someone has the file open for a moment", rather than "you may not do this". */
+/** Windows can report EEXIST during a transient rename-over lock, as well as EBUSY/EPERM. */
 const TRANSIENT = new Set(['EPERM', 'EBUSY', 'EACCES', 'EEXIST']);
 const RENAME_ATTEMPTS = 12;
 const RENAME_BACKOFF_MS = 25;

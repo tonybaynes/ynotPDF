@@ -707,6 +707,7 @@ export function touchedEntities(doc: Document): Touched {
     }
   };
   for (const command of doc.undo.journal) visit(serialiseCommand(command));
+  for (const entry of doc.recoveryJournal) visit(entry);
   return { annotations, fields };
 }
 

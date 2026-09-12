@@ -1,18 +1,9 @@
-/**
- * Crash recovery (M21).
- *
- * A recovery record is the document's journal plus a fingerprint of the file it came from. That
- * is all it needs to be: the journal is already the complete, replayable description of
- * everything the user did (M20, ADR 0007), so recovery is "open the source again and replay",
- * not "restore a copy of the bytes". The records are therefore tiny — kilobytes for an hour's
- * work — and they can be written every few minutes without the reader ever noticing.
- *
- * The fingerprint is what keeps it honest. If the source has changed since the crash, replaying
- * page-3 edits onto a document whose pages have moved would produce a plausible-looking wrong
- * answer, so the mismatch is stated in words and the reader decides.
- */
+/** Self-contained engine/model recovery checkpoints (ADR 0023), plus legacy journal parsing. */
 
-import type { Document } from '@core/Document';
+import type { Document, DocumentCheckpoint } from '@core/Document';
+import { contentIdentity } from '@shared/contentIdentity';
+export { hashBytes } from '@shared/contentIdentity';
+import type { SecurityInfo } from '@engine/security/types';
 import { replayJournal, serialiseJournal, type JournalFile } from '@core/Journal';
 import { hasBridge, invoke, type RecoveryEntry } from '@shared/ipc';
 
@@ -41,46 +32,50 @@ export interface RecoveryRecord {
   readonly journal: JournalFile;
   /** Number of changes in the journal, so the dialog can say how much is at stake. */
   readonly changes: number;
+  readonly checkpoint?: {
+    readonly document: DocumentCheckpoint;
+    readonly engine: string;
+    readonly blobs: Readonly<Record<string, string>>;
+    readonly security?: { readonly info: SecurityInfo; readonly openedAs: string | null };
+  };
 }
 
-/**
- * A 64-bit change detector over the bytes, as hex.
- *
- * Two independent 32-bit FNV-1a passes with different offset bases, concatenated — rather than
- * one true 64-bit FNV, which JavaScript cannot do without splitting every multiply by hand for
- * no gain here. This answers "is this the same file?", runs while the reader waits for a document
- * to open, and has no adversary; a cryptographic hash would be slower and no more use.
- */
-export function hashBytes(bytes: Uint8Array): string {
-  const PRIME = 0x0100_0193;
-  let a = 0x811c_9dc5;
-  let b = 0x1000_0193;
-  for (let i = 0; i < bytes.length; i++) {
-    const byte = bytes[i] ?? 0;
-    a = Math.imul(a ^ byte, PRIME);
-    // The second pass folds in the position as well, so a transposition changes the hash.
-    b = Math.imul(b ^ (byte + (i & 0xff)), PRIME);
+/** Captures one coherent engine/model pair, then publishes its binary inputs before the JSON. */
+export async function checkpointRecord(
+  doc: Document,
+  storage: RecoveryStorage,
+  options: { id: string; source: SourceFingerprint | null; now: number },
+  security?: { readonly info: SecurityInfo; readonly openedAs: string | null },
+): Promise<RecoveryRecord> {
+  const captured = await doc.undo.capture(async () => {
+    const bytes = await doc.engine.save(doc.handle);
+    return {
+      bytes,
+      document: doc.checkpoint(),
+      record: buildRecoveryRecord(doc, options),
+      blobs: [...doc.blobs].map(([key, value]) => [key, value.slice()] as const),
+    };
+  });
+  const engine = await storage.putBlob(options.id, captured.bytes);
+  const blobs: [string, string][] = [];
+  for (const [key, bytes] of captured.blobs) {
+    blobs.push([key, await storage.putBlob(options.id, bytes)]);
   }
-  return `${(a >>> 0).toString(16).padStart(8, '0')}${(b >>> 0).toString(16).padStart(8, '0')}`;
+  return {
+    ...captured.record,
+    version: 2,
+    checkpoint: {
+      document: captured.document,
+      engine,
+      blobs: Object.fromEntries(blobs),
+      ...(security ? { security } : {}),
+    },
+  };
 }
 
-/** How much of a large file is hashed at each end. */
-const SAMPLE_BYTES = 1024 * 1024;
-
-/**
- * A fingerprint of a document's bytes. Files up to 4 MB are hashed whole; larger ones are hashed
- * at both ends together with their exact length, which catches every edit a PDF writer makes
- * (the header, the trailer and the length all move) without reading hundreds of megabytes while
- * the reader waits.
- */
+/** Complete source identity: an in-place edit can leave both file ends and its length unchanged. */
 export function fingerprintBytes(bytes: Uint8Array, modifiedAt = 0): SourceFingerprint {
-  const size = bytes.byteLength;
-  if (size <= SAMPLE_BYTES * 4) {
-    return { size, modifiedAt, hash: hashBytes(bytes) };
-  }
-  const head = bytes.subarray(0, SAMPLE_BYTES);
-  const tail = bytes.subarray(size - SAMPLE_BYTES);
-  return { size, modifiedAt, hash: `${hashBytes(head)}-${hashBytes(tail)}` };
+  return { ...contentIdentity(bytes), modifiedAt };
 }
 
 /** Whether two fingerprints describe the same file. A missing one on either side means "unknown". */
@@ -111,12 +106,17 @@ export function buildRecoveryRecord(
 export function parseRecoveryRecord(payload: string): RecoveryRecord | null {
   try {
     const data = JSON.parse(payload) as Partial<RecoveryRecord>;
-    if (data.version !== RECOVERY_VERSION) return null;
+    if (data.version !== RECOVERY_VERSION && data.version !== 2) return null;
     if (typeof data.id !== 'string' || !data.journal || !Array.isArray(data.journal.entries)) {
       return null;
     }
+    if (
+      data.version === 2 &&
+      (!data.checkpoint?.document || !data.checkpoint.engine || !data.checkpoint.blobs)
+    )
+      return null;
     return {
-      version: RECOVERY_VERSION,
+      version: data.version,
       id: data.id,
       path: typeof data.path === 'string' ? data.path : null,
       title: typeof data.title === 'string' ? data.title : 'Untitled',
@@ -124,6 +124,7 @@ export function parseRecoveryRecord(payload: string): RecoveryRecord | null {
       source: data.source ?? null,
       journal: data.journal,
       changes: data.journal.entries.length,
+      ...(data.version === 2 && data.checkpoint ? { checkpoint: data.checkpoint } : {}),
     };
   } catch {
     return null;
@@ -145,6 +146,9 @@ export async function replayRecord(
   record: RecoveryRecord,
   currentSource: SourceFingerprint | null,
 ): Promise<RecoveryOutcome> {
+  const sourceChanged = !sameSource(record.source, currentSource);
+  if (sourceChanged)
+    return { applied: 0, skipped: record.changes, skippedTypes: [], sourceChanged: true };
   const result = await replayJournal(doc, record.journal.entries);
   return {
     applied: result.applied,
@@ -176,10 +180,14 @@ export interface RecoveryStorage {
   save(id: string, payload: string): Promise<void>;
   discard(id: string): Promise<void>;
   clear(): Promise<void>;
+  putBlob(id: string, bytes: Uint8Array): Promise<string>;
+  readBlob(id: string, hash: string): Promise<Uint8Array>;
 }
 
 export function ipcRecoveryStorage(): RecoveryStorage {
   return {
+    putBlob: (id, bytes) => invoke('recovery:putBlob', id, bytes),
+    readBlob: (id, hash) => invoke('recovery:readBlob', id, hash),
     list: async () => (hasBridge() ? await invoke('recovery:list') : []),
     save: async (id, payload) => {
       if (hasBridge()) await invoke('recovery:save', id, payload);
@@ -195,7 +203,19 @@ export function ipcRecoveryStorage(): RecoveryStorage {
 
 export function memoryRecoveryStorage(): RecoveryStorage & { readonly size: number } {
   const map = new Map<string, { payload: string; savedAt: number }>();
+  const binaries = new Map<string, Uint8Array>();
   return {
+    putBlob: async (id, bytes) => {
+      const digest = await crypto.subtle.digest('SHA-256', bytes.slice());
+      const hash = [...new Uint8Array(digest)].map((n) => n.toString(16).padStart(2, '0')).join('');
+      binaries.set(`${id}/${hash}`, bytes.slice());
+      return hash;
+    },
+    readBlob: (id, hash) => {
+      const bytes = binaries.get(`${id}/${hash}`);
+      if (!bytes) return Promise.reject(new Error('Missing recovery content'));
+      return Promise.resolve(bytes.slice());
+    },
     get size() {
       return map.size;
     },
@@ -216,10 +236,12 @@ export function memoryRecoveryStorage(): RecoveryStorage & { readonly size: numb
     },
     discard: (id) => {
       map.delete(id);
+      for (const key of binaries.keys()) if (key.startsWith(`${id}/`)) binaries.delete(key);
       return Promise.resolve();
     },
     clear: () => {
       map.clear();
+      binaries.clear();
       return Promise.resolve();
     },
   };
@@ -233,7 +255,7 @@ export async function listRecoverable(storage: RecoveryStorage): Promise<Recover
     const record = parseRecoveryRecord(entry.payload);
     // A record we cannot read is dropped rather than shown as an empty row the reader cannot act
     // on; an unreadable record has nothing in it we could restore anyway.
-    if (record && record.journal.entries.length > 0) records.push(record);
+    if (record && (record.checkpoint || record.journal.entries.length > 0)) records.push(record);
   }
   return records;
 }

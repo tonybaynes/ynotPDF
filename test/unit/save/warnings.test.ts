@@ -8,7 +8,7 @@ import { SaveService } from '@modules/M21-save/SaveService';
 import { memoryRecoveryStorage } from '@modules/M21-save/recovery';
 import { memorySettingsStorage } from '@modules/M21-save/settings';
 import type { WriterClient } from '@modules/M21-save/WriterClient';
-import { openFake } from '../core/helpers';
+import { openFake, must } from '../core/helpers';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -53,7 +53,7 @@ async function setup(
     }),
     cancel: () => undefined,
   }));
-  const invoke = vi.fn((channel: string) => {
+  const invoke = vi.fn((channel: string): Promise<unknown> => {
     if (channel === 'file:probe')
       return Promise.resolve({
         path,
@@ -89,6 +89,8 @@ async function setup(
     review,
     recovery,
     write,
+    invoke,
+    documents,
     writes,
     toasts,
     close: async () => {
@@ -99,6 +101,81 @@ async function setup(
 }
 
 describe('review warnings before saving', () => {
+  it('cancels stale output when edits arrive while the writer is pending', async () => {
+    const f = await setup();
+    try {
+      let release!: () => void;
+      const barrier = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      f.write.mockImplementation((job) => ({
+        promise: barrier.then(() => ({
+          bytes: job.bytes,
+          warnings: [],
+          applied: [],
+          appearances: 0,
+        })),
+        cancel: () => undefined,
+      }));
+      const saving = f.service.save(f.doc);
+      await vi.waitFor(() => {
+        expect(f.write).toHaveBeenCalledTimes(1);
+      });
+      // Undo and branch to the SAME length: a savedIndex comparison alone misses this.
+      await f.doc.undoLast();
+      await f.doc.apply(new SetMetadataCommand(f.doc, { title: 'Different edit' }));
+      release();
+      expect((await saving).reason).toBe('cancelled');
+      expect(f.writes()).toHaveLength(0);
+      expect(f.doc.isDirty).toBe(true);
+      expect(f.recovery.size).toBe(1);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('keeps newer edits dirty when they arrive during the filesystem write', async () => {
+    const f = await setup();
+    try {
+      const original = must(f.invoke.getMockImplementation());
+      let release!: () => void;
+      const barrier = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      f.invoke.mockImplementation(async (channel) => {
+        if (channel === 'file:writeAtomic') await barrier;
+        return original(channel);
+      });
+      const saving = f.service.save(f.doc);
+      await vi.waitFor(() => {
+        expect(f.writes()).toHaveLength(1);
+      });
+      await f.doc.apply(new SetMetadataCommand(f.doc, { title: 'Edit during write' }));
+      release();
+      expect((await saving).saved).toBe(true);
+      expect(f.doc.isDirty).toBe(true);
+      expect(f.recovery.size).toBe(1);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('serializes overlapping saves and updates the model, tab and watcher on Save As', async () => {
+    const f = await setup();
+    try {
+      const outcomes = await Promise.all([f.service.saveAs(f.doc), f.service.save(f.doc)]);
+      expect(outcomes.map((outcome) => outcome.saved)).toEqual([true, false]);
+      expect(outcomes[1]?.reason).toBe('clean');
+      expect(f.writes()).toHaveLength(1);
+      expect(f.doc.state.path).toBe('C:/audit/copy.pdf');
+      expect(f.documents.get(f.tab.id)?.path).toBe(f.doc.state.path);
+      expect(f.invoke).toHaveBeenCalledWith('file:watch', 'C:/audit/warnings.pdf', false);
+      expect(f.invoke).toHaveBeenCalledWith('file:watch', 'C:/audit/copy.pdf', true);
+    } finally {
+      await f.close();
+    }
+  });
+
   it('cancels plan warnings before running the engine or writer and preserves recovery', async () => {
     const f = await setup();
     try {
