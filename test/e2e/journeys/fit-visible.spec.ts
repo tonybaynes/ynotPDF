@@ -72,19 +72,21 @@ async function go(page: number): Promise<void> {
 
 // These positions come directly from the synthetic PDF, independently of production helpers.
 const rotatedInk = [
-  { x: 100, y: 200, width: 200 },
-  { x: 100, y: 100, width: 300 },
-  { x: 200, y: 100, width: 200 },
-  { x: 200, y: 200, width: 300 },
+  { x: 100, y: 200, width: 200, height: 300 },
+  { x: 100, y: 100, width: 300, height: 200 },
+  { x: 200, y: 100, width: 200, height: 300 },
+  { x: 200, y: 200, width: 300, height: 200 },
 ];
-async function expectInk(page: number, rotation: number): Promise<void> {
+async function expectInk(page: number, rotation: number, pane?: number): Promise<void> {
   const ink = rotatedInk[rotation / 90];
   if (!ink) throw new Error('Unexpected rotation');
+  const scrollers = app.page.locator('.viewer-scroll:visible');
+  const scroller = pane === undefined ? scrollers : scrollers.nth(pane);
   await expect
     .poll(
       async () => {
         const s = await state();
-        return app.page.locator('.viewer-scroll:visible').evaluate(
+        return scroller.evaluate(
           (scroll, args) => {
             const page = scroll.querySelector<HTMLElement>(`.page[data-page="${args.page}"]`);
             if (!page) return false;
@@ -106,6 +108,85 @@ async function expectInk(page: number, rotation: number): Promise<void> {
       { message: 'Fit Visible must put the ink edges at the viewport padding', timeout: 15000 },
     )
     .toBe(true);
+  // Geometry alone cannot detect a bucket bitmap painted at the wrong display scale.
+  await expect
+    .poll(async () => {
+      const perf = (await app.run('dev.viewerPerf')) as { queued: number; inFlight: number };
+      return perf.queued + perf.inFlight;
+    })
+    .toBe(0);
+  const zoom = (await state()).zoom;
+  const raster = await scroller.evaluate(
+    (scroll, args) => {
+      const pageElement = scroll.querySelector<HTMLElement>(`.page[data-page="${args.page}"]`);
+      const canvas = pageElement?.querySelector<HTMLCanvasElement>('canvas');
+      const context = canvas?.getContext('2d');
+      if (!pageElement || !canvas || !context) throw new Error('Fitted page raster is missing');
+      const c = canvas.getBoundingClientRect(),
+        v = scroll.getBoundingClientRect();
+      const sx = canvas.width / c.width,
+        sy = canvas.height / c.height;
+      const row = context.getImageData(
+        0,
+        Math.round((v.top + 32 - c.top) * sy),
+        canvas.width,
+        1,
+      ).data;
+      const col = context.getImageData(
+        Math.round((v.left + 32 - c.left) * sx),
+        0,
+        1,
+        canvas.height,
+      ).data;
+      const black = (pixels: Uint8ClampedArray, p: number, threshold = 16): boolean =>
+        (pixels[p] ?? 255) < threshold &&
+        (pixels[p + 1] ?? 255) < threshold &&
+        (pixels[p + 2] ?? 255) < threshold &&
+        (pixels[p + 3] ?? 0) > 240;
+      let left = -1,
+        right = -1,
+        top = -1;
+      for (let x = 0; x < canvas.width; x++)
+        if (black(row, x * 4, 128)) {
+          if (left < 0) left = x;
+          right = x + 1;
+        }
+      for (let y = 0; y < canvas.height; y++)
+        if (black(col, y * 4, 128)) {
+          top = y;
+          break;
+        }
+      // Every interior pixel must remain opaque black, including tile seams and clipped tiles.
+      const width = Math.floor(Math.min(args.width * args.zoom - 4, scroll.clientWidth - 36) * sx);
+      const height = Math.floor(
+        Math.min(args.height * args.zoom - 4, scroll.clientHeight - 36) * sy,
+      );
+      const interior = context.getImageData(
+        Math.round((v.left + 18 - c.left) * sx),
+        Math.round((v.top + 18 - c.top) * sy),
+        width,
+        height,
+      ).data;
+      let holes = 0;
+      for (let p = 0; p < interior.length; p += 4) if (!black(interior, p)) holes++;
+      return {
+        left: c.left - v.left + left / sx,
+        right: c.left - v.left + right / sx,
+        top: c.top - v.top + top / sy,
+        borderLeft: pageElement.clientLeft,
+        borderTop: pageElement.clientTop,
+        holes,
+      };
+    },
+    { page, zoom, width: ink.width, height: ink.height },
+  );
+  // Locate the midpoint of the antialiased edge; interior pixels must still be solid black.
+  expect(Math.abs(raster.left - (16 + raster.borderLeft))).toBeLessThanOrEqual(1);
+  expect(Math.abs(raster.top - (16 + raster.borderTop))).toBeLessThanOrEqual(1);
+  expect(Math.abs(raster.right - (16 + raster.borderLeft + ink.width * zoom))).toBeLessThanOrEqual(
+    1,
+  );
+  expect(raster.holes, 'solid ink must have no transparent or white tile seams').toBe(0);
 }
 
 test('M11 — Fit Visible finds cropped content, follows every view rotation and restores manual zoom', async () => {
@@ -236,6 +317,8 @@ test('M11 — continuous and book navigation fit the current row, and split pane
   );
   await expect.poll(async () => (await state()).fit).toBe('visible');
   expect((await state()).zoom).toBeGreaterThan(1);
+  await j.clickRibbon('view', 'Fit Visible');
+  await expectInk(0, 0, 0);
   await expectWindowSound(app.page);
 });
 

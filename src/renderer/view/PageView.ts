@@ -18,6 +18,7 @@ import type { ToolPointerEvent, ToolSpec } from '@shared/module';
 import { createPageLayers, resizeLayers, type PageLayers } from './Layers';
 import { PageTransform } from './Viewport';
 import { TILE_SIZE, tileRect, tilesForRect, type PxRect, type TileCoord } from './tiles';
+import { bucketZoom } from './zoom';
 
 export interface PageViewOptions {
   readonly index: PageIndex;
@@ -170,7 +171,17 @@ export class PageView {
 
   /** The tiles that would cover the current canvas window. */
   visibleTiles(): TileCoord[] {
-    return tilesForRect(this.window, this.widthPx, this.heightPx);
+    const ratio = bucketZoom(this.scale) / this.scale;
+    return tilesForRect(
+      {
+        x: this.window.x * ratio,
+        y: this.window.y * ratio,
+        width: this.window.width * ratio,
+        height: this.window.height * ratio,
+      },
+      this.widthPx * ratio,
+      this.heightPx * ratio,
+    );
   }
 
   /** Draws the low-resolution whole-page bitmap under whatever tiles exist. */
@@ -193,23 +204,33 @@ export class PageView {
   paintTile(coord: TileCoord, bitmap: ImageBitmap, id: string): void {
     const ctx = this.context();
     if (!ctx) return;
-    const rect = tileRect(coord, this.widthPx, this.heightPx);
+    const bucket = bucketZoom(this.scale);
+    const ratio = this.scale / bucket;
+    const rect = tileRect(coord, this.geometry.width * bucket, this.geometry.height * bucket);
     if (rect.width <= 0 || rect.height <= 0) return;
-    const x = (rect.x - this.window.x) * this.dpr;
-    const y = (rect.y - this.window.y) * this.dpr;
+    const source = this.geometry.tile(
+      this.geometry.rectToPage(rect, bucket),
+      bucket * this.dpr,
+    ).device;
+    const x = source.x * ratio - this.window.x * this.dpr;
+    const y = source.y * ratio - this.window.y * this.dpr;
+    const width = bitmap.width * ratio;
+    const height = bitmap.height * ratio;
     if (
-      x + bitmap.width < 0 ||
-      y + bitmap.height < 0 ||
+      x + width < 0 ||
+      y + height < 0 ||
       x > this.layers.raster.width ||
       y > this.layers.raster.height
     ) {
       return;
     }
     ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    // The engine snaps tiles to whole device pixels, so the bitmap may be a pixel bigger than
-    // the nominal tile; draw it at its own size rather than stretching it.
-    ctx.drawImage(bitmap, Math.round(x), Math.round(y));
+    ctx.imageSmoothingEnabled = ratio !== 1;
+    // Tiles live in bucket pixels; overlays and the canvas window live at the exact zoom.
+    // Snap destination edges together so neighbouring tiles cannot leave transparent seams.
+    const left = Math.round(x);
+    const top = Math.round(y);
+    ctx.drawImage(bitmap, left, top, Math.round(x + width) - left, Math.round(y + height) - top);
     ctx.restore();
     this.painted.add(id);
   }

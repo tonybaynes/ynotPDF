@@ -97,3 +97,25 @@ M50's `ObjectController` also consumes pointer-down in capture phase at its oute
 before the viewer receives it. With Edit Object active, a click in another split pane therefore
 does not activate that pane. The viewer journey explicitly selects the Hand tool; the object-tool
 interaction remains assigned to M50 and was reported to the coordinator with its source location.
+
+## Raster verification follow-up
+
+Tony requested actual screenshot inspection as well as automated journeys. Settled captures
+at 510% zoom exposed a real M11 dependency: the geometric left/top edges were 16px, but the
+canvas ink appeared at 26/35px and extended beyond the viewport. Both queued and in-flight
+render counts were zero. `DocumentView` requested bucketed tiles while `PageView` painted
+them at the exact zoom without the promised scale compensation.
+
+The follow-up maps visible tile requests into bucket coordinates and maps each bitmap back
+into exact display coordinates, snapping shared destination edges to avoid seams. Tiles for
+another pane's zoom, rotation or flags cannot paint into the current pane. A late placeholder
+stays behind detailed tiles. Synchronized panes remember mirrored positions so asynchronous,
+rounded scroll events cannot echo back and shift the fitted source pane.
+
+The six journeys now also inspect actual canvas pixels after rendering drains: raster edges
+must match geometry plus the page border within one CSS pixel, and every interior pixel must
+be opaque black, including tile seams and clipped tiles. The split journey checks this with
+the other pane at a different zoom. All six pass together. These product changes touch only
+`Viewer.ts`, `DocumentView.ts` and `PageView.ts`; the engine contract stays unchanged.
+Main `753f5cb` (PR 58's print repair) is integrated. Earlier head `61d0c2e` and its passing
+full suite are superseded; final integrated unit/UI/platform results remain tracked in PR 59.

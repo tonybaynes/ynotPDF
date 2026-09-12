@@ -161,6 +161,12 @@ export class DocumentView {
     this.disposers.push(
       this.renderer.onTile((id, request) => {
         if (request.docKey !== this.docKey) return;
+        if (
+          request.bucket !== bucketKey(this.zoomFactor) ||
+          request.rotation !== this.viewRotation ||
+          !flagsEqual(request.flags, this.flags)
+        )
+          return;
         const view = this.views.get(request.page);
         if (!view || view.hasPainted(id)) return;
         const bitmap = this.renderer.peek(id);
@@ -709,8 +715,8 @@ export class DocumentView {
       if (moved || options.force) this.repaintFromCache(view, bucketId);
 
       const focus = {
-        x: visible.x + visible.width / 2,
-        y: visible.y + visible.height / 2,
+        x: ((visible.x + visible.width / 2) * bucket) / this.zoomFactor,
+        y: ((visible.y + visible.height / 2) * bucket) / this.zoomFactor,
       };
       const distanceToViewport = Math.max(0, rect.y - (top + height), top - (rect.y + rect.height));
       for (const coord of orderByDistance(view.visibleTiles(), focus)) {
@@ -777,18 +783,29 @@ export class DocumentView {
 
   private async ensurePlaceholder(view: PageView, page: number): Promise<void> {
     if (view.hasPlaceholder) return;
+    const geometry = view.geometry;
+    const flags = this.flags;
     const bitmap = await this.renderer.placeholder({
       doc: this.doc,
       docKey: this.docKey,
       page,
-      geometry: view.geometry,
+      geometry,
       rotation: this.viewRotation,
       flags: this.flags,
       maxEdge: 400,
     });
     if (!bitmap || this.disposed) return;
     const live = this.views.get(page);
-    if (live === view && !view.hasPlaceholder) view.paintPlaceholder(bitmap);
+    if (
+      live === view &&
+      view.geometry === geometry &&
+      flagsEqual(flags, this.flags) &&
+      !view.hasPlaceholder
+    ) {
+      view.paintPlaceholder(bitmap);
+      // A late placeholder is the background, even when detailed tiles finished first.
+      this.repaintFromCache(view, bucketKey(this.zoomFactor));
+    }
   }
 
   /** Warms the neighbouring pages when the machine has a moment to spare. */
@@ -811,12 +828,13 @@ export class DocumentView {
         // building one just to ask which tiles it would need is a page's worth of elements for
         // a calculation that is three lines of arithmetic.
         const geometry = new PageGeometry(size, this.viewRotation);
-        const height = Math.min(rect.height, this.scroller.clientHeight);
-        for (const coord of tilesForRect(
-          { x: 0, y: 0, width: rect.width, height },
-          rect.width,
-          rect.height,
-        )) {
+        const width = geometry.width * bucket;
+        const pageHeight = geometry.height * bucket;
+        const height = Math.min(
+          pageHeight,
+          (this.scroller.clientHeight * bucket) / this.zoomFactor,
+        );
+        for (const coord of tilesForRect({ x: 0, y: 0, width, height }, width, pageHeight)) {
           requests.push(
             this.tileRequest(geometry, page, coord, bucket, bucketId, 1e6, {
               x: 0,

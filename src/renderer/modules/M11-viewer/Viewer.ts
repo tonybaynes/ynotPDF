@@ -71,6 +71,7 @@ export class Viewer {
   private autoScrollSpeed: number;
   private autoScrollDirection = 1;
   private syncing = false;
+  private readonly mirroredScroll = new Map<number, { left: number; top: number }>();
 
   constructor(options: ViewerOptions) {
     this.tabId = options.tabId;
@@ -263,6 +264,7 @@ export class Viewer {
 
   setSplit(orientation: SplitOrientation, options: ViewerOptions): void {
     if (orientation === this.splitMode) return;
+    this.mirroredScroll.clear();
     if (orientation === 'off') {
       const [, second] = this.panes;
       second?.dispose();
@@ -301,6 +303,7 @@ export class Viewer {
 
   setSyncScroll(sync: boolean): void {
     this.syncScroll = sync;
+    this.mirroredScroll.clear();
     if (sync) this.mirrorScroll(this.activePane);
   }
 
@@ -480,13 +483,25 @@ export class Viewer {
   /** Copies the active pane's scroll fraction to the other one. */
   private mirrorScroll(from: number): void {
     if (this.syncing) return;
+    const source = this.panes[from];
+    if (!source) return;
+    const mirrored = this.mirroredScroll.get(from);
+    if (mirrored?.left === source.state.scrollLeft && mirrored.top === source.state.scrollTop)
+      return;
+    this.mirroredScroll.delete(from);
     this.syncing = true;
     try {
-      const source = this.panes[from];
-      if (!source) return;
       const fraction = source.scrollFraction;
       for (const [index, pane] of this.panes.entries()) {
-        if (index !== from) pane.setScrollFraction(fraction);
+        if (index !== from) {
+          pane.setScrollFraction(fraction);
+          // Scroll events arrive after this guard is released. Do not echo their rounded
+          // positions back into the source pane and move its fitted content a few pixels.
+          this.mirroredScroll.set(index, {
+            left: pane.state.scrollLeft,
+            top: pane.state.scrollTop,
+          });
+        }
       }
     } finally {
       this.syncing = false;
