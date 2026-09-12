@@ -1,8 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { PDFDocument, PDFName } from 'pdf-lib';
+import { PDFBool, PDFDocument, PDFName } from 'pdf-lib';
 import { combine } from '@engine/ops/combine';
 
 describe('combine catalogue policy', () => {
+  it('follows indirect accessibility flags before deciding that MarkInfo is harmless', async () => {
+    const pdf = await PDFDocument.create();
+    pdf.addPage();
+    pdf.catalog.set(
+      PDFName.of('MarkInfo'),
+      pdf.context.obj({
+        Marked: pdf.context.register(PDFBool.True),
+      }),
+    );
+    await expect(
+      combine([{ name: 'indirect-tagging.pdf', bytes: await pdf.save() }]),
+    ).rejects.toThrow(/accessibility marking/);
+  });
   it.each(['AcroForm', 'Names', 'OCProperties', 'StructTreeRoot', 'MarkInfo'])(
     'refuses loss of %s before producing output',
     async (key) => {

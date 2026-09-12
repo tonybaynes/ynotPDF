@@ -129,7 +129,7 @@ export async function combine(
       return (
         !(info instanceof PDFDict) ||
         ['Marked', 'UserProperties', 'Suspects'].some(
-          (flag) => info.get(PDFName.of(flag)) === PDFBool.True,
+          (flag) => info.lookup(PDFName.of(flag)) === PDFBool.True,
         )
       );
     });
