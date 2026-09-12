@@ -219,17 +219,22 @@ Validation evidence for this continuation:
   inline images, nested/repeated resources, exact collisions, buffer transfer, encryption,
   current edits and read-only saves. The appearance tests independently specify rotation,
   inner and ancestor clipping, group opacity, sibling isolation and CropBox/page rotation.
-- Full local unit/coverage run: 200 files passed / 8 skipped; 4,142 tests passed / 24
-  existing skips, including the inline named-colour and ancestor-clip refinements.
+- After clean integration of main `214f7f4` (M41 crop repair), full local unit/coverage
+  run on `dc2ab6c`: 202 files passed / 8 skipped; 4,170 tests passed / 24 existing skips,
+  including the inline named-colour and ancestor-clip refinements.
   Lint/type checks, build and licenses (44 permissive production packages) passed.
   CI must validate the final committed head after integration.
 - Real Export All Images ribbon/dialog/Worker/filesystem journey passed: original byte
   equality, decoded PNG masks, repeated placements, remembered options and explicit
   headless override. Three Graphite screenshots at 200% scale were inspected and readable.
-- The second focused UI test exports HTML through its dialog, opens that actual file in
-  Chromium and checks decoded canvas pixels plus computed positions. Its run and inspected
-  screenshot, final lint/build, full UI and cross-platform results are recorded on the PR
-  before handoff; implementation or extraction tests alone are not HTML UI evidence.
+- Both focused UI tests passed (5.4 seconds) on the same integrated production revision.
+  The second exports HTML through its dialog, opens that actual file in Chromium and checks
+  decoded canvas pixels plus computed positions. The actual screenshot was inspected: the
+  clipped green/red Indexed picture and lighter nested red RGB picture appear correctly,
+  without sibling shapes. Initial test setup used a folder picker for single-file HTML;
+  the corrected test substitutes its Save dialog. No production fix or pixel/position
+  assertion weakening was needed. Full UI and final-head cross-platform results are recorded
+  on the PR before handoff.
 
 UPNG (already supplied through pdf-lib) and jpeg-js independently decode output; expected
 samples are synthetic constants. The tiny lossless JP2 and sRGB profile fixtures were

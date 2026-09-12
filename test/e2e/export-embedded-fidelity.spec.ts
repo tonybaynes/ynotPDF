@@ -143,9 +143,12 @@ test('M92 — positioned HTML in Chromium keeps rotated/clipped colour images an
   try {
     const j = journey(app);
     await j.openDocument(source);
-    await app.electron.evaluate(({ dialog }, destination) => {
-      dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [destination] });
-    }, directory);
+    await app.electron.evaluate(
+      ({ dialog }, destination) => {
+        dialog.showSaveDialog = () => Promise.resolve({ canceled: false, filePath: destination });
+      },
+      join(directory, 'appearance.html'),
+    );
     await j.clickRibbon('convert', 'Export');
     await j.clickMenuItem('Export as HTML…');
     const dialog = app.page.locator('#export-html-dialog');
