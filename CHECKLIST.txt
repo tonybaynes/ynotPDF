@@ -15,15 +15,21 @@ LIVE STATUS — 2026-09-12
 ACTIVE REPAIRS (finish existing scope before new modules)
   M11 - Complete Fit Visible
         Content-aware fit, rotation/crop geometry, cache invalidation.
+        PR59 remains open: settled screenshots exposed bucket/display tile
+        scaling mismatch; pixel-based regression and repair now in progress.
   M13 - Preserve annotations in PDF printing
-        Printable annotations/widgets and consistent unsaved snapshots.
-        Follow-up required: physical print/preview still use engine-only state.
+        Vector Print-to-PDF repair MERGED via PR58, all 8 CI checks green.
+        Same task now completing physical-print/preview snapshots; full M13
+        stays unticked until those paths preserve writer-only unsaved edits.
   M41 - Complete crop aspect ratios
         Fixed/custom ratios, rotated crop geometry, apply/undo/save/reopen.
         Follow-up required: automatic deskew on image import is not connected.
+        Combine also still needs its promised Add folder and desktop file drop.
   M92 - Complete bilevel TIFF compression
         Group 4 compression, single/multi-page export, independent decoding.
         Follow-up required: extracted-image masks and stored pixel dimensions.
+        Visual follow-up: native selection text clips at 200% in export dialog;
+        audit owns shared text-fit checks and will coordinate the layout fix.
   All four are in isolated worktrees; none is marked complete before merge.
   Existing broader repair work: Codex_Audit.md and docs/open-work.md.
 
@@ -45,6 +51,19 @@ NEXT COMPLETION TRIAGE (before dispatching new-feature work)
   M31 reopened-custom-stamp rotation is a documented limitation beyond literal
   placement/rotation scope; do not reopen that module solely on this evidence.
   Findings and evidence: docs/plan-review-2026-09-12.md and module review reports.
+
+MERGED REVIEW / REPAIR HISTORY
+  PR56 — plan review, corrected briefs and reopened tracker; merge 1a7fd44.
+  PR58 — M13 vector print appearances/snapshot; merge 753f5cb.
+  Both passed Windows, macOS, Ubuntu and Windows ARM installer checks.
+  Required physical-print/preview scope remains active in the same M13 task.
+
+VISUAL QUALITY (Tony, 2026-09-12)
+  Strengthen real end-to-end tests and occasionally capture representative
+  screenshots. Actually inspect the images; geometry-only checks missed real
+  raster scaling, statusbar overlap and native-selection text clipping.
+  Use synthetic fixtures, wait for relevant rendering to settle, and retain
+  artifact evidence. Do not weaken assertions or update baselines to hide defects.
 
 
 Full plan: PLAN.md    Briefs: docs\modules\
@@ -152,7 +171,7 @@ WAVE 3
       prompt: Read D:\Projects\ynotPDF\docs\modules\M12-navigation-panels.md and carry out the "Your task" section in full.
 
 [ ] M13  Text selection, find, copy, snapshot & print
-      status: REOPENED — printable annotation/widget preservation repair active.
+      status: REOPENED — vector repair merged PR58; physical-print/preview work active.
       model:  Opus
       needs: M11
       prompt: Read D:\Projects\ynotPDF\docs\modules\M13-select-find-print.md and carry out the "Your task" section in full.
