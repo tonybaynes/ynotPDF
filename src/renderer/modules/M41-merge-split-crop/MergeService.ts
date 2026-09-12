@@ -228,8 +228,14 @@ export class MergeService {
   // ---- combining --------------------------------------------------------------------------------
 
   /** Turns whatever the reader chose into PDF bytes, routing non-PDFs through M91's converters. */
-  async sourceFor(file: OpenedFile | { name: string; bytes: Uint8Array }): Promise<OpSource> {
-    return { name: file.name, bytes: await this.organise.pdfBytesOf(file) };
+  async sourceFor(
+    file: OpenedFile | { name: string; bytes: Uint8Array },
+    hooks: {
+      readonly signal?: AbortSignal;
+      readonly progress?: (fraction: number | null, message: string) => void;
+    } = {},
+  ): Promise<OpSource> {
+    return { name: file.name, bytes: await this.organise.pdfBytesOf(file, hooks) };
   }
 
   async combine(

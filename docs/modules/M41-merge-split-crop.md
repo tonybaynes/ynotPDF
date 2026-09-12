@@ -514,3 +514,23 @@ page-box/geometry contracts; no competitor assets or code used.
   Crop in the review dialog. See the PR for completed lint/unit/e2e/platform runs
   and [the completion review](../reviews/M41-completion-review.md) for the full
   assigned Markdown reading record and remaining scope outside this repair.
+
+### Import and Combine completion design — September 2026
+
+The image-only `scan.autoDeskew` preference is read once by M91's common conversion
+path. A private M41 worker measures the completed image PDF with PDFium, then uses
+the existing deskew operation to rotate content. This accounts for EXIF orientation,
+TIFF pages, anisotropic DPI and the selected page layout before measuring angles.
+Stored image streams are preserved. Clear angles above 0.2° are corrected; straight,
+blank and uncertain pages are retained. The disabled path returns the exact original
+converter result. Cancellation terminates the private worker and its temporary engine;
+progress spans conversion and straightening.
+
+Combine opens its empty list first. Add files, Add folder (with an Include subfolders
+choice) and external desktop File drops feed the same sequential reader. Folder
+selection uses the existing native picker and descendant-read authority; dropped
+files supply their own bytes without granting filesystem paths. Failed inputs are
+named alongside readable entries, invalid ranges prevent confirmation, and cancelling
+the dialog cancels active conversion and discards late results. Internal list
+reordering remains separate from external file ingestion. No document changes until
+Combine is confirmed. Validation and final completion are recorded in the PR.

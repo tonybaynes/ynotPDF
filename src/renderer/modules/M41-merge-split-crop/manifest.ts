@@ -31,6 +31,7 @@ import { VIEWER_SERVICE, type ViewerService } from '@modules/M11-viewer/ViewerSe
 import { MERGE_SERVICE, MergeService, renderRaster } from './MergeService';
 import { registerMergeCodecs } from './commands';
 import { askCombine, entryFor, type CombineEntry } from './combineDialog';
+import { addCombineFiles, addCombineFolder, addCombineDrop } from './combineInputs';
 import { askSplit } from './splitDialog';
 import { askCrop } from './cropDialog';
 import { askFlatten } from './flattenDialog';
@@ -160,7 +161,7 @@ const COMBINE: CommandSpec = {
     const service = ops(ctx);
     const engine = service.document?.engine ?? ctx.service('engine');
     const given = ctx.args['files'];
-    let entries: CombineEntry[] = [];
+    const entries: CombineEntry[] = [];
     if (Array.isArray(given)) {
       // The e2e path: `{ files: [{ name, bytes }] }`, no picker and no dialog.
       for (const file of given as ReadonlyArray<{ name?: unknown; bytes?: unknown }>) {
@@ -184,12 +185,6 @@ const COMBINE: CommandSpec = {
       });
     }
 
-    const chosen = await service.chooseFiles();
-    entries = [];
-    for (const file of chosen) {
-      const source = await service.sourceFor(file);
-      entries.push(entryFor(source.name, source.bytes, file.path));
-    }
     const answer = await askCombine({
       dialogs: service.dialogs,
       engine: engine as never,
@@ -198,15 +193,27 @@ const COMBINE: CommandSpec = {
       keepBookmarks: service.settings.keepSourceBookmarks,
       toNewTab: service.settings.combineToNewTab,
       canSaveToFile: typeof window !== 'undefined',
-      addFiles: async () => {
+      addFiles: async (hooks) => {
         const more = await service.chooseFiles();
-        const built: CombineEntry[] = [];
-        for (const file of more) {
-          const source = await service.sourceFor(file);
-          built.push(entryFor(source.name, source.bytes, file.path));
-        }
-        return built;
+        return addCombineFiles(
+          more,
+          (file, conversion) => service.sourceFor(file, conversion),
+          hooks,
+        );
       },
+      addFolder: async (recursive, hooks) => {
+        const folder = await service.chooseFolder('Add a folder to Combine');
+        return folder === null
+          ? { entries: [], problems: [] }
+          : addCombineFolder(
+              folder,
+              recursive,
+              (file, conversion) => service.sourceFor(file, conversion),
+              hooks,
+            );
+      },
+      addDropped: (files, hooks) =>
+        addCombineDrop(files, (file, conversion) => service.sourceFor(file, conversion), hooks),
     });
     if (!answer) return null;
     await service.setSetting('bookmarkPerFile', answer.bookmarkPerFile);

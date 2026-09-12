@@ -1,5 +1,14 @@
 # M91 — Create PDF from images, web pages, clipboard, HTML/Markdown & text
 
+M41 import completion (September 2026): the common image conversion path reads
+`scan.autoDeskew`. When enabled, a private M41 worker measures the final PDF pages
+and rotates clearly skewed content while preserving embedded image bytes, page count
+and DPI/layout geometry. Clipboard images, image drops, image creation, M40 insertion
+and Combine share this path. Other converter families do not read the preference;
+disabled image conversion returns its original result. Optional renderer-side abort
+and progress hooks now pass through `convertFile` to conversion and straightening.
+See [M41's completion design](M41-merge-split-crop.md) for detection and lifecycle details.
+
 | | |
 |---|---|
 | **Module id** | `M91` — folder `src/renderer/modules/M91-create-pdf/`, branch `mod/M91-create-pdf` |
