@@ -34,8 +34,8 @@ One self-contained brief per module. Tell a conversation:
 | 5 | [M100 Optimise (reduce size), linearise, repair, remove duplicates](./M100-optimise-repair.md) | Core | M21 |
 | 6 | [M53 Header/footer, Bates numbering, watermark, background & links](./M53-headers-bates-watermarks-links.md) | Core | M50, M21 |
 | 6 | [M61 Field logic — validation, formatting, calculation, actions; data import/export; flatten](./M61-form-logic-data.md) | Core | M60 |
-| 6 | [M82 Handwritten signatures & initials](./M82-handwritten-signatures.md) | Core | M30, M60 |
-| 6 | [M90 OCR — searchable image, image+text, editable text](./M90-ocr.md) | Core | M21 |
+| 6 | [M82 Handwritten signatures & initials](./M82-handwritten-signatures.md) | Core | M30, M31, M60 |
+| 6 | [M90 OCR — searchable image, image+text, editable text](./M90-ocr.md) | Core | M21, M41; M51 for editable output |
 | 6 | [M110 Compare documents](./M110-compare.md) | Core | M11, M13 |
 | 7 | [M52 Image & path object editing](./M52-image-path-editing.md) | Core | M50 |
 | 7 | [M111 Read aloud, accessibility check & alt text](./M111-read-aloud-accessibility.md) | Core | M13 |

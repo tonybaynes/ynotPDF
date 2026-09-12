@@ -397,7 +397,7 @@ export async function openPrintDialog(
     el(
       'p.print-note',
       null,
-      'Print to PDF keeps the text searchable unless “Print as image” is on; as an image it also carries comments and form fields.',
+      'Print to PDF preserves printable comments and form fields according to these options. Text stays searchable; Print as image or Greyscale produces a bitmap at the chosen DPI.',
     ),
     number(
       'Resolution (DPI)',

@@ -1,7 +1,19 @@
 # CLAUDE.md — ynotPDF
 
 Cross-platform PDF editor (Electron + TypeScript, PDFium engine). Target:
-Foxit PDF Editor 14 feature parity. Four themes, dark ("Graphite") default.
+best-in-class desktop functionality against Foxit, Adobe Acrobat Pro and
+Tungsten Power PDF, on Windows x64/ARM64, macOS Intel/Apple Silicon and
+Ubuntu Desktop x64. Four themes, dark ("Graphite") default.
+
+**Current coordination (Tony, 2026-09-12):** finish incomplete existing modules
+before new features. Name tasks `M<number> - <short description>`. Four new
+repair tasks are the current capacity; ten is the hard ceiling, not a target.
+Replace a slot only after its preceding work is finished and merged. Keep
+`PLAN.md` and `CHECKLIST.txt` current; `✔` means completed and merged with
+required CI green. The coordinator owns those trackers and serialises merges.
+Use Codex-supplied isolated worktrees and `codex/` branches for new Codex work;
+older `mod/` names remain historical. Attribute commits to their actual author,
+not automatically to Claude. See `docs/plan-review-2026-09-12.md`.
 
 **Who you are working for: Tony.** Call him Tony — in replies, in commit
 messages, in briefs and in comments. Not "the operator" (2026-09-11). Older
@@ -21,6 +33,8 @@ brief. Otherwise pick the next unchecked module whose dependencies are ☑.
   red/green or gold/green differentiation), low vision. Text ≥ 4.5:1,
   icons ≥ 3:1, no grey-on-dark text, status = word + icon. Modals/overlays
   fully opaque: no `rgba()` alpha < 1, no `opacity` < 1, no `backdrop-filter`.
+  This rule governs application controls and overlays, not PDF artwork:
+  preserve and edit document transparency, masks and blend modes accurately.
 - Every document change is an undoable `Command`.
 - Data that can change (stamps, font substitutes, presets) lives in
   `resources/` data files, not in code.

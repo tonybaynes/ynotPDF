@@ -49,11 +49,16 @@ Foxit Convert → PDF/A, PDF/E, PDF/X (we do PDF/A only); Preflight ✗.
 ## Scope — build all of this
 
 - Conversion pipeline (`engine/pdfa/`): embed all non-embedded fonts
-  (substitution table), subset, remove/flatten transparency (1b/2b rules),
+  (substitution table), subset, remove/flatten transparency for PDF/A-1b
+  while retaining compliant transparency for PDF/A-2b and PDF/A-3b,
   convert or tag colour spaces with an sRGB `OutputIntent` (bundled ICC —
   free sRGB profile), remove JavaScript/actions not allowed, flatten or
-  drop encryption, embedded files (allowed in 3b, else remove/warn), XMP
-  `pdfaid:part/conformance`, document ID, remove LZW/external streams,
+  remove encryption only with appropriate authority and an explicit decision;
+  embedded files are prohibited in 1b, restricted to permitted PDF/A files in
+  2b, and may use arbitrary formats in 3b with required associated-file
+  relationships and metadata. Validate each target's own rules. Set XMP
+  `pdfaid:part/conformance` to the validated target, retain a valid document ID,
+  remove LZW/external streams,
   annotation appearance completeness, `/Lang` prompt.
 - Validator: rule set for the common clauses (fonts, colour, XMP, structure
   presence for -a levels not attempted), report dialog with fix-it links.
@@ -92,8 +97,12 @@ None new (sRGB ICC profile — verify licence).
 
 ## Acceptance tests — the module is done when these pass on all three OSes
 
-- Convert 10 fixtures to PDF/A-2b ⇒ veraPDF passes in CI; our validator
-  agrees on those and flags a deliberately broken file.
+- Validate outputs for every offered profile (1b, 2b and 3b) with pinned
+  veraPDF in CI, using transparency, font, colour and attachment fixtures.
+  Include negative fixtures per profile; a 2b-only pass does not complete 1b/3b.
+- The in-app checker states its limited coverage and never labels a partial
+  check as full conformance certification. Substitution and removed content
+  are reviewed before writing; failure leaves the original intact.
 
 ---
 
@@ -238,7 +247,10 @@ colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+2026-09-12: corrected per-profile transparency and attachment rules using the
+[PDF Association PDF/A FAQ](https://pdfa.org/pdfa-faq/). Font substitution can
+change layout; an sRGB output intent alone cannot convert arbitrary colour
+spaces. Prove appearance preservation and complete validation separately.
 
 ## Build log (fill in at merge)
 

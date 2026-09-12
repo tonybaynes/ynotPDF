@@ -62,20 +62,28 @@ JavaScript ✗).
 - **Apply (the real work, in `engine/redact/`):** for each region: remove
   glyphs of text objects intersecting it (split `TJ` arrays; drop runs;
   keep the remainder positioned exactly — needs M51's text writer); for
-  images, rasterise the intersecting region black (re-encode image with the
-  area filled); for paths, clip away the region (or remove objects fully
-  inside); remove annotations, links, form widgets intersecting; remove
+  images, replace affected image samples and masks with sanitised data;
+  for paths, physically remove/reconstruct the affected geometry or remove
+  the object with an explicit fidelity warning. Clipping alone is not redaction.
+  Traverse shared/nested XObjects without damaging unaffected uses; remove
+  annotations, links, form widgets intersecting; remove
   the region from the text layer/structure; then draw the overlay (fill
   colour, optional text, repeat) as new content; strip `/Redact` annots;
   update `/ToUnicode` subsets. Whitelist mode inverts (remove everything
   outside marks).
-- Safety: apply forces Save As to a new file by default (Foxit asks);
-  "Redaction applied" is not undoable after save (make that explicit).
+- Safety: apply produces a new fully rewritten file with unreachable objects
+  and prior revisions removed, never an incremental update. Keep marking
+  undoable before finalisation, then establish an explicit new baseline so
+  undo cannot reintroduce removed content into the sanitised document.
+  Explain which original files, backups and recovery records remain outside
+  that output; never claim to erase copies elsewhere on Tony's machine.
 - Sanitise dialog: checkboxes per category, "select all", applies via
   writer ops; report of what was removed.
-- Forensic verification test tool (`scripts/redact-verify.ts`): scans raw
-  objects (uncompressed via qpdf `--qdf`) for the redacted strings and
-  image bytes.
+- Forensic verification (`scripts/redact-verify.ts`): inspect the final object
+  graph and decoded streams, text under font encodings, OCR/ActualText/Alt,
+  metadata, hidden layers, attachments, image masks and previous revisions.
+  Use an independent extractor/renderer in addition to structural tests.
+  Searching raw strings or original compressed image bytes alone is insufficient.
 
 ## Out of scope
 
@@ -85,6 +93,9 @@ text once it exists).
 ## Design notes & constraints
 
 - Never trust the visual; the acceptance test is the forensic scan.
+- If an object cannot be safely removed, refuse finalisation or offer an
+  explicit destructive raster rebuild with the fidelity/accessibility loss
+  explained. Never report a partially redacted file as sanitised.
 - Content-stream operations via the M50 model; never regex the raw
   stream.
 
@@ -117,6 +128,11 @@ None new.
   extraction of surrounding text is intact and correctly positioned; the
   page renders with the overlays.
 - Whitelist mode leaves only the marked areas.
+- Nested/shared XObjects, clipped paths, ligatures, encoded text, OCR layers,
+  soft masks and a PDF with prior incremental revisions retain no target
+  content in the final output. Unaffected shared-object uses remain correct.
+- Saved output has no original revision chain; reopening and recovery of the
+  sanitised result cannot restore redacted content through the undo journal.
 - Sanitise removes metadata/attachments/comments/bookmarks/hidden layers
   as ticked and reports counts.
 

@@ -73,6 +73,15 @@ Full tagging/autotag, tag editing (Parked).
 
 - Structure tree parsing in `engine/structure/` — read-only except the
   figure-alt writer.
+- A figure-only structure tree is not a fully accessible document. Preserve
+  existing tags and maintain MCID/MCR associations, parent-tree links and page
+  structure references correctly when writing alt text; never set a global
+  conformance claim merely because `/StructTreeRoot` exists.
+- Full tag editing, reading-order repair and PDF/UA validation are required
+  parity follow-ups under the revised PLAN.md, even though the original module
+  deliberately implements a quick check. Track them as unfinished scope.
+- Verify real speech availability and screen-reader behaviour on each target;
+  observing an utterance string in a test does not prove that audio is produced.
 
 ## Files you will create or touch
 
