@@ -618,6 +618,7 @@ export default defineModule({
           split: v.split,
           synced: v.synced,
           readingMode: s.isReadingMode,
+          fullScreen: s.isFullScreen,
           overlays: v.overlays,
           flags: v.renderFlags,
           guides: v.guides.toJSON(),

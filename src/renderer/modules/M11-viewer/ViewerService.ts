@@ -16,6 +16,7 @@
 import { icon } from '@app/icons';
 import type { ShellServices } from '@app/services';
 import { SERVICE } from '@app/services';
+import { isTypingTarget } from '@app/shortcuts';
 import type { Documents, DocumentTab } from '@app/tabs/Documents';
 import type { Registry } from '@core/Registry';
 import { shallowEqual } from '@core/Store';
@@ -79,6 +80,7 @@ export class ViewerService {
   private overlayState: OverlayState = DEFAULT_OVERLAY_STATE;
   private readingMode = false;
   private readingBar: HTMLElement | null = null;
+  private fullScreenRequest = 0;
   private pushingState = false;
   private applying = false;
   private invalidatePending = false;
@@ -466,7 +468,7 @@ export class ViewerService {
    * the palette all end up in the same place.
    */
   install(): () => void {
-    const stop = this.shell.ui.select(
+    const stopView = this.shell.ui.select(
       (s) => s.view,
       (view) => {
         if (this.pushingState || this.applying) return;
@@ -499,6 +501,40 @@ export class ViewerService {
       // identity comparison would fire this on writes that changed nothing.
       { immediate: false, equals: shallowEqual },
     );
+    const onModeEscape = (event: KeyboardEvent): void => {
+      if (
+        event.key !== 'Escape' ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      )
+        return;
+      // Dialogs and editors own Escape while they are active. Popups stop the event in their
+      // capture listener before it reaches here, and viewer tools get the target/bubble phase
+      // first; an idle non-Hand tool is left for M02's `tool.none` shortcut on `window`.
+      if (isTypingTarget(event.target) || document.querySelector('dialog[open]')) return;
+      const activeTool = this.shell.ui.get().activeTool;
+      if (activeTool && activeTool !== 'tool.hand') return;
+
+      if (this.readingMode) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.setReadingMode(false);
+        return;
+      }
+      if (!this.shell.ui.get().window.fullScreen) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void this.shell.run('view.fullScreen.toggle', { on: false });
+    };
+    document.addEventListener('keydown', onModeEscape);
+    const stop = (): void => {
+      stopView();
+      document.removeEventListener('keydown', onModeEscape);
+    };
     this.disposers.push(stop);
     return stop;
   }
@@ -528,8 +564,28 @@ export class ViewerService {
 
   async setFullScreen(on?: boolean): Promise<boolean> {
     if (!hasBridge()) return false;
-    const next = await invoke('window:setFullScreen', on);
-    return next;
+    const request = ++this.fullScreenRequest;
+    const previous = this.shell.ui.get().window.fullScreen;
+    const requested = on ?? !previous;
+    this.setFullScreenState(requested);
+    try {
+      const next = await invoke('window:setFullScreen', on);
+      if (request === this.fullScreenRequest) this.setFullScreenState(next);
+      return next;
+    } catch (error) {
+      if (request === this.fullScreenRequest) this.setFullScreenState(previous);
+      throw error;
+    }
+  }
+
+  get isFullScreen(): boolean {
+    return this.shell.ui.get().window.fullScreen;
+  }
+
+  private setFullScreenState(on: boolean): void {
+    const windowState = this.shell.ui.get().window;
+    if (windowState.fullScreen === on) return;
+    this.shell.ui.set({ window: { ...windowState, fullScreen: on } });
   }
 
   get isReadingMode(): boolean {
