@@ -12,6 +12,13 @@ let workspace: string;
 let serial = 0;
 let bytes: Uint8Array;
 
+interface HeldBounds {
+  held: number;
+  replies: number;
+  release(): void;
+}
+type BoundsWindow = Window & { m11Bounds?: HeldBounds };
+
 test.beforeAll(async () => {
   workspace = mkdtempSync(join(tmpdir(), 'ynot-fit-visible-'));
   const pdf = await PDFDocument.create();
@@ -230,4 +237,81 @@ test('M11 — continuous and book navigation fit the current row, and split pane
   await expect.poll(async () => (await state()).fit).toBe('visible');
   expect((await state()).zoom).toBeGreaterThan(1);
   await expectWindowSound(app.page);
+});
+
+test('M11 — a delayed content read cannot override a newer zoom command', async () => {
+  await open();
+  const j = journey(app);
+  await j.clickRibbon('view', 'Tool: Hand');
+  await j.clickRibbon('view', 'Actual Size (100 %)');
+  // Fault injection only: hold the real worker request, not a fabricated bounds result.
+  // The action under test still comes from the reader's visible ribbon controls.
+  await app.page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Restored verbatim; Reflect.apply below supplies the original worker receiver.
+    const original = Worker.prototype.postMessage;
+    const pending: Array<() => void> = [];
+    const state: HeldBounds = {
+      held: 0,
+      replies: 0,
+      release: () => {
+        Worker.prototype.postMessage = original;
+        for (const send of pending.splice(0)) send();
+      },
+    };
+    (window as BoundsWindow).m11Bounds = state;
+    Worker.prototype.postMessage = function (
+      message: unknown,
+      options: Transferable[] | StructuredSerializeOptions = [],
+    ): void {
+      const send = (): void => {
+        Reflect.apply(original, this, [message, options]);
+      };
+      const request = message as { kind?: string; method?: string; id?: number } | null;
+      if (request?.kind !== 'request' || request.method !== 'pageObjects') {
+        send();
+        return;
+      }
+      state.held++;
+      const reply = (event: MessageEvent): void => {
+        const response = event.data as { id?: number };
+        if (response.id !== request.id) return;
+        state.replies++;
+        this.removeEventListener('message', reply);
+      };
+      this.addEventListener('message', reply);
+      pending.push(send);
+    };
+  });
+  try {
+    await j.clickRibbon('view', 'Fit Visible');
+    await expect
+      .poll(() => app.page.evaluate(() => (window as BoundsWindow).m11Bounds?.held ?? 0))
+      .toBeGreaterThan(0);
+    await j.clickRibbon('view', 'Actual Size (100 %)');
+    await app.page.evaluate(() => {
+      (window as BoundsWindow).m11Bounds?.release();
+    });
+    await expect
+      .poll(() => app.page.evaluate(() => (window as BoundsWindow).m11Bounds?.replies ?? 0))
+      .toBeGreaterThan(0);
+    // Drain the completion's layout frame before checking the user-visible state.
+    await app.page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              resolve();
+            }),
+          ),
+        ),
+    );
+    expect((await state()).zoom).toBe(1);
+    expect((await state()).fit).toBeNull();
+    await expectWindowSound(app.page);
+  } finally {
+    await app.page.evaluate(() => {
+      (window as BoundsWindow).m11Bounds?.release();
+      delete (window as BoundsWindow).m11Bounds;
+    });
+  }
 });

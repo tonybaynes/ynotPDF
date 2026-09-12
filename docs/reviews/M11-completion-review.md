@@ -74,11 +74,15 @@ are included.
 ## Validation
 
 Integrated main `d322de7` (PR 54). The full unit suite passed 4,050 tests with its 24 existing
-fixture skips; lint passed before the final split-pane input correction. Full local e2e and
-CI verification remain pending. New unit tests cover content unions, CropBox clipping,
+fixture skips; lint and licences passed. Full local e2e and all CI/platform checks are required
+merge gates, with exact-head results tracked in [PR 59](https://github.com/tonybaynes/ynotPDF/pull/59).
+New unit tests cover content unions, CropBox clipping,
 hidden layers, invalid bounds, blank fallback, page/view rotations with real PDFium, facing
 spacing, LRU eviction, deduplication, retry and stale-cache completion. New real-user journeys
 cover the visible content edges, zoom controls, layouts, navigation, resizing, editing and undo.
+Six new journeys pass together, including a controlled delayed real-worker bounds request:
+the test holds the request, selects Actual Size through the ribbon, releases the request, and
+checks that its eventual result cannot override the newer zoom command.
 All fixtures added for this repair are generated synthetic documents; no private PDFs copied.
 
 The split-pane journey found a viewer input defect: `PageView` stops propagation when a tool
