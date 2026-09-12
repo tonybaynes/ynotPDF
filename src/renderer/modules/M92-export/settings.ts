@@ -124,10 +124,10 @@ export const FORMAT_OPTIONS: ReadonlyArray<{
   readonly value: ImageFormat;
   readonly label: string;
 }> = [
-  { value: 'png', label: 'PNG — lossless, keeps text sharp' },
-  { value: 'jpeg', label: 'JPEG — smaller, best for photographs' },
-  { value: 'tiff', label: 'TIFF — lossless, can hold every page in one file' },
-  { value: 'bmp', label: 'BMP — uncompressed, for older software' },
+  { value: 'png', label: 'PNG' },
+  { value: 'jpeg', label: 'JPEG' },
+  { value: 'tiff', label: 'TIFF' },
+  { value: 'bmp', label: 'BMP' },
 ];
 
 export const COLOUR_OPTIONS: ReadonlyArray<{ readonly value: ColourMode; readonly label: string }> =
@@ -143,18 +143,18 @@ export const EMBEDDED_OUTPUT_OPTIONS = [
 ] as const;
 
 export const DITHER_OPTIONS: ReadonlyArray<{ readonly value: Dither; readonly label: string }> = [
-  { value: 'floyd-steinberg', label: 'Diffuse the error (better for photographs)' },
-  { value: 'none', label: 'Plain threshold (better for text)' },
+  { value: 'floyd-steinberg', label: 'Error diffusion' },
+  { value: 'none', label: 'Plain threshold' },
 ];
 
 export const TIFF_COMPRESSION_OPTIONS: ReadonlyArray<{
   readonly value: TiffCompression;
   readonly label: string;
 }> = [
-  { value: 'deflate', label: 'Deflate — lossless compression' },
-  { value: 'group4', label: 'CCITT Group 4 — black and white (1-bit) only' },
-  { value: 'packbits', label: 'PackBits — widest support' },
-  { value: 'none', label: 'None — largest, opens anywhere' },
+  { value: 'deflate', label: 'Deflate' },
+  { value: 'group4', label: 'CCITT Group 4' },
+  { value: 'packbits', label: 'PackBits' },
+  { value: 'none', label: 'None' },
 ];
 
 export const ENCODING_OPTIONS: ReadonlyArray<{
@@ -202,6 +202,8 @@ export const EXPORT_SETTINGS_SCHEMA: SettingsSchema = {
     'image.format': {
       type: 'enum',
       title: 'Image format',
+      description:
+        'PNG keeps text sharp; JPEG suits photographs; TIFF can hold multiple pages; BMP supports older software.',
       section: 'Images',
       default: DEFAULT_EXPORT_SETTINGS.imageFormat,
       options: FORMAT_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
@@ -230,7 +232,7 @@ export const EXPORT_SETTINGS_SCHEMA: SettingsSchema = {
     'image.dither': {
       type: 'enum',
       title: 'Black and white method',
-      description: 'How a colour page is turned into one bit a pixel.',
+      description: 'Error diffusion retains photographic shading; plain threshold suits text.',
       section: 'Images',
       advanced: true,
       default: DEFAULT_EXPORT_SETTINGS.imageDither,
@@ -271,6 +273,8 @@ export const EXPORT_SETTINGS_SCHEMA: SettingsSchema = {
     'image.tiffCompression': {
       type: 'enum',
       title: 'TIFF compression',
+      description:
+        'CCITT Group 4 requires black and white (1-bit). Deflate and PackBits are lossless; None produces larger files.',
       section: 'Images',
       advanced: true,
       default: DEFAULT_EXPORT_SETTINGS.tiffCompression,
@@ -534,3 +538,21 @@ export async function writeExportSettings(
     }),
   );
 }
+
+/** Explanations wrap below the native choices instead of being cut off inside them. */
+export const FORMAT_HINTS: Readonly<Record<ImageFormat, string>> = {
+  png: 'Lossless compression keeps text sharp.',
+  jpeg: 'Smaller files, best suited to photographs.',
+  tiff: 'Lossless output that can hold every page in one file.',
+  bmp: 'Uncompressed output for older software.',
+};
+export const DITHER_HINTS: Readonly<Record<Dither, string>> = {
+  'floyd-steinberg': 'Spreads black and white dots to retain shading in photographs.',
+  none: 'Uses a single brightness cutoff, best suited to text.',
+};
+export const TIFF_COMPRESSION_HINTS: Readonly<Record<TiffCompression, string>> = {
+  deflate: 'Lossless compression for colour, greyscale or black and white.',
+  group4: 'Lossless compression for black and white (1-bit) pages only.',
+  packbits: 'Lossless compression with wide software support.',
+  none: 'No compression; produces the largest files.',
+};

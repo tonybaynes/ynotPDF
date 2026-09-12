@@ -1,7 +1,8 @@
 /* Status bar (M02): three slots, editable page/zoom fields, layout buttons, theme switch. */
 .statusbar {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
   gap: var(--sp-4);
   padding: var(--sp-1) var(--sp-3);
@@ -13,28 +14,33 @@
 
 .status-slot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-4);
   min-width: 0;
+  max-width: 100%;
 }
 
 .status-right {
   justify-content: flex-end;
+  margin-left: auto;
 }
 
 .status-centre {
   justify-content: center;
+  margin-inline: auto;
 }
 
 .status-message {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  max-width: 26ch;
+  overflow-wrap: anywhere;
   color: var(--fg);
 }
 
 .status-item {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   align-items: center;
   gap: var(--sp-2);
 }
@@ -52,8 +58,8 @@
   padding: 0 var(--sp-1);
 }
 
-.status-zoom-input {
-  width: 8ch;
+.status-field input.status-zoom-input {
+  width: 11ch;
 }
 
 .status-field input[type='range'] {

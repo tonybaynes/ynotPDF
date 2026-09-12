@@ -314,6 +314,37 @@ export async function expectNoOverlap(a: Locator, b: Locator): Promise<void> {
 
 // ---- readable ------------------------------------------------------------------------------------
 
+/** Native controls may paint clipped values even when scrollWidth reports no overflow. */
+export async function expectNativeValueFits(field: Locator): Promise<void> {
+  await expect(field).toBeVisible();
+  const result = await field.evaluate((node) => {
+    if (!(node instanceof HTMLInputElement) && !(node instanceof HTMLSelectElement))
+      throw new Error('Text-fit checks require an input or select');
+    const style = getComputedStyle(node);
+    const value =
+      node instanceof HTMLSelectElement ? (node.selectedOptions[0]?.textContent ?? '') : node.value;
+    const context = document.createElement('canvas').getContext('2d');
+    if (!context) throw new Error('No text measurement context');
+    context.font = style.font;
+    const spacing = Number.parseFloat(style.letterSpacing) || 0;
+    // Reserve room for the native dropdown arrow as well as the CSS padding.
+    const arrow = node instanceof HTMLSelectElement ? Number.parseFloat(style.fontSize) * 1.5 : 0;
+    return {
+      value,
+      text: context.measureText(value).width + spacing * Math.max(0, value.length - 1),
+      available:
+        node.clientWidth -
+        Number.parseFloat(style.paddingLeft) -
+        Number.parseFloat(style.paddingRight) -
+        arrow,
+    };
+  });
+  expect(
+    result.text,
+    `Native value "${result.value}" needs ${result.text.toFixed(1)}px; ${result.available.toFixed(1)}px available`,
+  ).toBeLessThanOrEqual(result.available);
+}
+
 /**
  * Text inside `scope` clears the contrast floor, and nothing anywhere in it is translucent.
  *
