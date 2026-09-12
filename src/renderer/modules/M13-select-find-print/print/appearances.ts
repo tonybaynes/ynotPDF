@@ -29,9 +29,21 @@ export function bakePrintAppearances(
   if (options.forms && doc.catalog.has(PDFName.of('AcroForm'))) {
     const form = doc.getForm();
     const needs = pick(doc.context, form.acroForm.dict.get(PDFName.of('NeedAppearances')), PDFBool);
-    if (needs === PDFBool.True)
-      for (const field of form.getFields()) form.markFieldAsDirty(field.ref);
-    form.updateFieldAppearances();
+    const wantedWidgets = new Set<PDFDict>();
+    for (const index of pages) {
+      const annots = doc.getPage(index).node.Annots();
+      for (const raw of annots?.asArray() ?? []) {
+        const dict = pick(doc.context, raw, PDFDict);
+        if (!dict) continue;
+        const flags = pick(doc.context, dict.get(PDFName.of('F')), PDFNumber)?.asNumber() ?? 0;
+        if (flags & 4 && !(flags & 2)) wantedWidgets.add(dict);
+      }
+    }
+    for (const field of form.getFields()) {
+      if (!field.acroField.getWidgets().some((widget) => wantedWidgets.has(widget.dict))) continue;
+      if (needs === PDFBool.True) form.markFieldAsDirty(field.ref);
+      if (field.needsAppearancesUpdate()) field.defaultUpdateAppearances(form.getDefaultFont());
+    }
   }
   for (const index of pages) {
     const page = doc.getPage(index);

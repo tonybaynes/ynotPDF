@@ -76,8 +76,12 @@ NeedAppearances use pdf-lib's built-in providers, with failures propagated.
 - Unsupported/malformed marks are reported, not guessed. For example, an unsigned signature widget
   with no appearance may require its author to provide one or the user to exclude forms. This
   repair does not implement M61's custom appearance providers or repair every malformed PDF.
-- Physical printer delivery and preview retain their existing engine-raster path. They have no
-  vector driver route. Hardware printing, arbitrary third-party appearance fidelity, very large
+- **Unfinished original M13 scope:** physical printer delivery and preview still use engine-only
+  rasters and can omit writer-only unsaved FreeText, custom stamps and form designs. Only
+  `runPrintToPdf` supplies the materialised snapshot in this bounded repair. A follow-up must
+  render the snapshot for both paths and add a printer dry-run/preview journey before the whole
+  M13 module is closed. No shared IPC change is needed to demonstrate the missing raster marks.
+  They have no vector driver route. Hardware printing, arbitrary third-party appearance fidelity, very large
   documents and macOS Intel runtime remain outside what a Windows local test can establish.
 
 ## Other modules: required evidence versus intentional limits

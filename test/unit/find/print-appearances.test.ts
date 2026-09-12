@@ -4,7 +4,7 @@ import { printToPdf } from '@modules/M13-select-find-print/print/printToPdf';
 import { bakePrintAppearances } from '@modules/M13-select-find-print/print/appearances';
 import { imposePages, DEFAULT_IMPOSITION } from '@modules/M13-select-find-print/print/imposition';
 import { must } from './helpers';
-import { engine } from '../engine/helpers';
+import { engine, fixture as corpusFixture } from '../engine/helpers';
 import { Document } from '@core/Document';
 import { AddAnnotationCommand, draftAnnotation, DEFAULT_ANNOTATION_FLAGS } from '@core/commands';
 import { printSnapshot } from '@modules/M13-select-find-print/print/snapshot';
@@ -274,6 +274,21 @@ describe('vector print appearances', () => {
     expect(await textOf(await printed(await doc.save()))).toContain('Printable stamp');
   });
 
+  it('does not regenerate an unencodable field on an unselected page', async () => {
+    const doc = await PDFDocument.load(await fixture());
+    const extra = doc.addPage([200, 300]);
+    const field = doc.getForm().createTextField('unselected');
+    field.addToPage(extra, { x: 10, y: 10, width: 120, height: 30 });
+    field.setText('不可编码');
+    for (const widget of field.acroField.getWidgets()) widget.dict.delete(PDFName.of('AP'));
+    const bytes = await doc.save({ updateFieldAppearances: false });
+    expect(await textOf(await printed(bytes))).toContain('Current field value');
+    const direct = await PDFDocument.load(bytes);
+    expect(() => {
+      bakePrintAppearances(direct, new Set([1]), { annotations: true, forms: true });
+    }).toThrow('WinAnsi');
+  });
+
   it('prints blank pages even when they have no content streams or annotations', async () => {
     const pdf = await PDFDocument.create();
     pdf.addPage([200, 300]);
@@ -394,6 +409,26 @@ describe('vector print appearances', () => {
       expect(save).not.toHaveBeenCalled();
     } finally {
       save.mockRestore();
+      await doc.close();
+    }
+  });
+
+  it('materialises an authenticated encrypted document without changing its protection or dirty state', async () => {
+    const doc = await Document.open(pdfium, corpusFixture('encrypted-aes256.pdf'), {
+      password: 'ynot',
+    });
+    try {
+      const permissions = await pdfium.permissions(doc.handle);
+      expect(permissions.print).toBe(true);
+      const original = doc.snapshot();
+      const text = (await pdfium.textRuns(doc.handle, 0)).map((run) => run.text).join('');
+      expect(text.trim()).not.toBe('');
+      const output = await printed(await printSnapshot(doc));
+      expect((await textOf(output)).replace(/\s/g, '')).toBe(text.replace(/\s/g, ''));
+      expect(doc.snapshot()).toEqual(original);
+      expect(doc.isDirty).toBe(false);
+      expect(await pdfium.permissions(doc.handle)).toEqual(permissions);
+    } finally {
       await doc.close();
     }
   });
