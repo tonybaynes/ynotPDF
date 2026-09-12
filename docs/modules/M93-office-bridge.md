@@ -37,10 +37,11 @@ end without waiting to be asked for the next step:
 
 ## Purpose
 
-Convert Word/Excel/PowerPoint (and other LibreOffice-supported formats)
-to PDF and PDF to DOCX/XLSX/PPTX by driving a detected LibreOffice
-installation, with clear guidance when it is missing. The app never
-depends on it to run.
+Convert Word/Excel/PowerPoint and supported source formats to PDF through
+a detected LibreOffice installation. PDF-to-DOCX/XLSX/PPTX requires a separate
+feasibility gate for each direction; it is not established by the existence of
+`--convert-to`. The app never depends on the optional bridge to run, but that
+optional bridge alone does not satisfy the best-in-class conversion target.
 
 ## Foxit 14 reference — what to emulate
 
@@ -53,14 +54,17 @@ has its own converters; ours delegate).
   user-configured path in Preferences; version check; "Install LibreOffice"
   guidance dialog with a link (opened via confirmation) when absent —
   never auto-download.
-- Conversion runner: `soffice --headless --convert-to pdf|docx|xlsx|pptx
-  --outdir <tmp>` with a per-job profile dir (`-env:UserInstallation`) so
+- Conversion runner: use verified input/output filter combinations for each
+  document family, with a per-job profile dir (`-env:UserInstallation`) so
   parallel jobs work, timeouts, cancellation (kill), stderr capture into a
   worded error.
 - To-PDF: Office/ODF/RTF/CSV/etc. registered as converters in M91's
   registry, so drag-drop/insert/combine gain Office support automatically.
-- From-PDF: PDF→DOCX via LibreOffice's PDF import (Draw) with a fidelity
-  warning; PDF→XLSX for tabular pages (best effort); PDF→PPTX.
+- From-PDF: first prove supported import/export filter pairs and validate real
+  editable DOCX, XLSX and PPTX outputs separately. Do not assume a Draw import
+  can use Writer or Calc exporters. Unsupported directions remain incomplete
+  and require a dedicated reconstruction/conversion approach; a generic
+  fidelity warning is not a substitute for a working converter.
 - Batch hook.
 
 ## Out of scope
@@ -97,8 +101,11 @@ None (LibreOffice external, MPL-2.0 — not linked, invoked as a process).
 
 ## Acceptance tests — the module is done when these pass on all three OSes
 
-- With LibreOffice (Ubuntu CI job): DOCX fixture → PDF with expected page
-  count; PDF → DOCX opens and contains the text.
+- With LibreOffice: Office-to-PDF fixtures preserve text, pages, tables and
+  layout within documented tolerances. Every exposed reverse direction must
+  produce a valid editable target file, verified in its consuming application.
+  Test supported bridge versions on all promised platforms; Ubuntu-only
+  success establishes only that configuration.
 - Without: commands show the guidance dialog; no crash; unit tests skip
   with reason.
 
@@ -245,7 +252,11 @@ colourblind: black and red read as the same colour):**
 
 ## Design decisions (fill in before coding; keep current)
 
-_None yet._
+2026-09-12: conversion-direction feasibility is required before implementation.
+LibreOffice's [filter tables](https://help.libreoffice.org/latest/en-GB/text/shared/guide/convertfilters.html)
+list filters by application family; they are not a guarantee of arbitrary
+format-to-format conversion. Tony's decision about an external LibreOffice
+dependency remains open. Full self-contained conversion needs its own design.
 
 ## Build log (fill in at merge)
 

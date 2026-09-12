@@ -19,6 +19,7 @@ export interface PrintSource {
   readonly engine: PdfEngine;
   readonly doc: DocHandle;
   readonly title: string;
+  readonly snapshot?: (signal?: AbortSignal) => Promise<Uint8Array>;
 }
 
 export interface PrintRunOptions {
@@ -104,6 +105,7 @@ export class PrintService {
         grayscale: settings.grayscale,
       },
       title: source.title,
+      ...(source.snapshot ? { bytes: await source.snapshot(options.signal) } : {}),
       ...(options.onProgress ? { onProgress: options.onProgress } : {}),
       ...(options.signal ? { signal: options.signal } : {}),
     });
