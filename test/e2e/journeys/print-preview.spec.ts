@@ -479,3 +479,40 @@ for (const [mode, rotation] of [
     await expectWindowSoundWithDiagnostics();
   });
 }
+
+test('M13 — scrolling and switching a long tab strip contains screen-reader status without hiding it', async () => {
+  const pdf = await PDFDocument.create();
+  pdf.addPage([400, 500]).drawText('Tab overflow regression', { x: 30, y: 450, size: 16 });
+  const bytes = [...(await pdf.save())];
+  const names = Array.from(
+    { length: 12 },
+    (_, index) => `Long synthetic document ${index + 1} for tab overflow.pdf`,
+  );
+  for (const name of names) {
+    await app.run('file.openBytes', { file: { path: fixturePath(name), name, bytes } });
+  }
+  const strip = app.page.locator('#tabstrip');
+  expect(await strip.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  const first = strip.getByRole('tab').filter({ hasText: names[0] ?? '' });
+  const last = strip.getByRole('tab').filter({ hasText: names.at(-1) ?? '' });
+  await first.click();
+  await expect(first).toHaveAttribute('aria-selected', 'true');
+  const j = journey(app);
+  await app.run('annot.identity', { name: 'Tab reviewer', initials: 'TR', email: '' });
+  await j.clickRibbon('comment', 'Text Box');
+  await j.dragOnPageAt([0.2, 0.2], [0.6, 0.3]);
+  await app.page.locator('.annot-editor').fill('Unsaved accessible status');
+  await app.page.keyboard.press('Control+Enter');
+  await expect(first).toHaveAccessibleName(/Modified/);
+  const journal = await app.run('dev.documentJournal');
+  for (const tab of [last, first, last, first]) {
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+    await expectWindowSoundWithDiagnostics();
+  }
+  await expect(first).toHaveAccessibleName(/Modified/);
+  await expect(first.locator('.sr-only')).toHaveText(' (Modified)');
+  expect(await app.run('dev.documentJournal')).toEqual(journal);
+  await app.page.screenshot({ path: test.info().outputPath('overflowed-tabs.png') });
+  await expectWindowSoundWithDiagnostics();
+});

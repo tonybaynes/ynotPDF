@@ -13,6 +13,8 @@
 }
 
 .tab {
+  /* Keep absolute screen-reader status inside the scrolling tab strip. */
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
