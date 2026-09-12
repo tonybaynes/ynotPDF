@@ -31,7 +31,7 @@ commit and merge, then update the completion tick. Parallel tasks follow **§12*
 | 2 | M11 Viewer — rendering, navigation, zoom, layouts | [M11-viewer.md](docs/modules/M11-viewer.md) | ◐ |
 | 2 | M21 Save, Save As, autosave & recovery | [M21-save.md](docs/modules/M21-save.md) | ☑ |
 | 2 | M70 Encryption, permissions & certificate security | [M70-encryption.md](docs/modules/M70-encryption.md) | ◐ |
-| 2 | M91 Create PDF from images, web pages, clipboard, HTML/Markdown & text | [M91-create-pdf.md](docs/modules/M91-create-pdf.md) | ☑ |
+| 2 | M91 Create PDF from images, web pages, clipboard, HTML/Markdown & text | [M91-create-pdf.md](docs/modules/M91-create-pdf.md) | ◐ |
 | 3 | M12 Navigation panels — thumbnails, bookmarks, layers, attachments, destinations | [M12-navigation-panels.md](docs/modules/M12-navigation-panels.md) | ☑ |
 | 3 | M13 Text selection, find, copy, snapshot & print | [M13-select-find-print.md](docs/modules/M13-select-find-print.md) | ◐ |
 | 3 | M30 Annotations — text markup, notes, typewriter, text box, callout | [M30-markup-annotations.md](docs/modules/M30-markup-annotations.md) | ◐ |
@@ -76,8 +76,8 @@ Historical CI on three OS families does not establish every architecture or
 installer acceptance gate in §3.1.
 
 **2026-09-12 completion review:** 27 of the 44 original modules had delivery
-ticks. Further reading confirmed ten incomplete modules: **17 remain ticked,
-four have active repair tasks, six are queued, and 17 have not started**.
+ticks. Further reading confirmed eleven incomplete modules: **16 remain ticked,
+four have active repair tasks, seven are queued, and 17 have not started**.
 These counts describe the original briefs, not effort
 remaining or competitor parity. Existing audit findings remain tracked in
 `Codex_Audit.md` and `docs/open-work.md`.
@@ -85,15 +85,16 @@ remaining or competitor parity. Existing audit findings remain tracked in
 | Reopened module | Required completion work | Task |
 |---|---|---|
 | M11 | Content-aware Fit Visible with rotated/cropped pages | M11 - Complete Fit Visible |
-| M13 | Preserve printable annotations and widgets in vector PDF output | M13 - Preserve annotations in PDF printing |
+| M13 | Vector PDF appearances; physical print/preview snapshot remains a follow-up | M13 - Preserve annotations in PDF printing |
 | M41 | Crop aspect ratios/rotated geometry; automatic deskew import hook remains a follow-up | M41 - Complete crop aspect ratios |
-| M92 | Honour bilevel TIFF compression, including single-page export | M92 - Complete bilevel TIFF compression |
+| M92 | Bilevel TIFF compression; extracted-image masks/dimensions remain a follow-up | M92 - Complete bilevel TIFF compression |
 | M30 | Cross-renderer appearance acceptance evidence | Queued validation work; no visual defect assumed |
 | M32 | Genuine Acrobat/Foxit XFDF fixture acceptance | Queued interoperability validation; no importer defect assumed |
 | M50 | Preserve unknown page operators during object z-order changes | Queued after active repairs and shared-code ownership clears |
 | M53 | Multi-file Bates workflow | Queued after an active task finishes and merges |
 | M60 | Image-field picture selection/button icons | Queued after active repairs and shared-code ownership clears |
 | M70 | Per-recipient certificate permission editing | Queued after active repairs and shared-code ownership clears |
+| M91 | Correct pixel decoding for valid compressed TIFF inputs | Queued after active repairs and audit ownership clears |
 
 **Ordering principle (Tony, 2026-09-07): easiest-first, hardest-last.**
 Waves 0–4 give an installable, usable viewer/annotator; waves 5–7 make it an

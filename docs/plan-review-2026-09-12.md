@@ -32,9 +32,9 @@ baseline file and its reviewing task.
 ## First repair batch
 
 The original checklist had 27 delivered modules and 17 unstarted modules. The
-first four confirmed gaps started repair tasks. Further reading established six
-more required implementation or validation gaps: **17 ticked, four active
-repairs, six queued completions, 17 unstarted**. Counts are not an estimate of
+first four confirmed gaps started repair tasks. Further reading established seven
+more required implementation or validation gaps: **16 ticked, four active
+repairs, seven queued completions, 17 unstarted**. Counts are not an estimate of
 effort remaining. `CHECKLIST.txt` is the live status window; this document records
 the review baseline and reasoning.
 
@@ -73,15 +73,25 @@ certificate rights. Their briefs require these workflows; deferring them to
 another module did not complete them. M30 also lacks its promised cross-renderer
 appearance comparison, and M32 lacks genuine Acrobat/Foxit-exported XFDF fixtures.
 These two are missing acceptance evidence, not demonstrated renderer/importer
-defects. All six rows are reopened and queued without creating duplicate tasks.
+defects. These rows are reopened and queued without creating duplicate tasks.
 
 M41's crop PR will not close its entire row: automatic deskew on image import
 is another confirmed omission. The setting is declared in M41, but M91 does not
 read it or invoke deskew. Assign that follow-up after the crop task merges and
-the audit's M91 ownership clears. M91 Unicode/import fidelity and M100 font
+the audit's M91 ownership clears. M91's production TIFF decoder is also reopened:
+a valid 17 × 2 black Group 4 image decodes 27 of its 34 pixels incorrectly when
+compressed and decoded strip lengths happen to match. A focused production-adapter
+probe reproduced it; an independent PDFium decode verifies the encoded strip.
+M92's TIFF repair does not fix that importer. M91 Unicode text quality and M100 font
 subsetting breadth still need triage. M31's inability to rotate an externally
 reopened custom stamp is a documented limitation beyond its literal original
 placement requirement, so that finding alone does not reopen M31.
+
+Two active modules also retain follow-ups after their first PRs: M13 physical
+printing/preview still use engine-only state and can omit writer-only unsaved
+edits; M92's decoded embedded-image export drops alpha and can substitute
+placement dimensions for stored pixel dimensions despite the ADR contract.
+Keep those rows open until their required scope is repaired and validated.
 
 ## Corrections applied to the plan and briefs
 

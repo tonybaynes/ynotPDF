@@ -6,7 +6,7 @@ Other targets: macOS Intel/Apple Silicon and Ubuntu Desktop x64.
 
 LIVE STATUS — 2026-09-12
   Original inventory: 44 modules; 27 previously ticked.
-  Current: 17 ticked, 10 reopened (4 active, 6 queued), 17 not started.
+  Current: 16 ticked, 11 reopened (4 active, 7 queued), 17 not started.
   These are module counts, not percentage of effort or proof of product parity.
   Four repair tasks are active. Tony permits up to TEN simultaneous tasks;
   expand only when write ownership, dependencies and test capacity allow it.
@@ -17,11 +17,13 @@ ACTIVE REPAIRS (finish existing scope before new modules)
         Content-aware fit, rotation/crop geometry, cache invalidation.
   M13 - Preserve annotations in PDF printing
         Printable annotations/widgets and consistent unsaved snapshots.
+        Follow-up required: physical print/preview still use engine-only state.
   M41 - Complete crop aspect ratios
         Fixed/custom ratios, rotated crop geometry, apply/undo/save/reopen.
         Follow-up required: automatic deskew on image import is not connected.
   M92 - Complete bilevel TIFF compression
         Group 4 compression, single/multi-page export, independent decoding.
+        Follow-up required: extracted-image masks and stored pixel dimensions.
   All four are in isolated worktrees; none is marked complete before merge.
   Existing broader repair work: Codex_Audit.md and docs/open-work.md.
 
@@ -32,12 +34,13 @@ QUEUED COMPLETION REPAIRS (confirmed original scope; no new tasks yet)
   M53 — implement the promised multi-file Bates workflow.
   M60 — implement image-field picture selection/button icons.
   M70 — edit certificate permissions separately for each recipient.
+  M91 — correct valid TIFF decoding when compressed/decoded byte lengths match.
   Start only after an active slot has finished and merged and shared ownership
   is clear. M50/M60/M70 currently interact with audit-owned shared code.
 
 NEXT COMPLETION TRIAGE (before dispatching new-feature work)
-  Check M91 Unicode/import fidelity and M100 font-subsetting limits against original
-  acceptance criteria. Record required unfinished scope as reopened, assign
+  Check M91 Unicode text quality and M100 font-subsetting limits against original
+  acceptance criteria. Record additional required unfinished scope, assign
   one owner and preserve original delivery history.
   M31 reopened-custom-stamp rotation is a documented limitation beyond literal
   placement/rotation scope; do not reopen that module solely on this evidence.
@@ -134,7 +137,8 @@ WAVE 2
       needs: M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M70-encryption.md and carry out the "Your task" section in full.
 
-[✔] M91  Create PDF from images, web pages, clipboard, HTML/Markdown & text
+[ ] M91  Create PDF from images, web pages, clipboard, HTML/Markdown & text
+      status: REOPENED/QUEUED — valid Group 4 TIFF input decodes incorrect pixels.
       model:  Opus
       needs: M21
       prompt: Read D:\Projects\ynotPDF\docs\modules\M91-create-pdf.md and carry out the "Your task" section in full.
